@@ -1,0 +1,145 @@
+# Frontend hosting decision
+
+- Status: accepted
+- Date: 2026-11-14
+- Scope: where the standalone web interface lives, how it is built and when a
+  separate web repository would be justified
+
+## Short version
+
+The standalone web interface belongs to this repository. The host app lives in
+`ui/`, its built bundle is committed under `public/ui/`, and it is mounted at
+`/app` by the PHP host. That stays here.
+
+`SchBenedikt/web` is not used for it. Checked on 2026-11-14, that public
+repository contains a single commit (`b6b8776 Initial commit`) with a
+`README.md` containing only `# web`; it has no application code.
+
+The reusable presentation layer is not in this repository. It is
+`@alohasocial/ui` in the upstream core repository (`SchBenedikt/core`, `ui/`)
+and is consumed here from the Composer-installed core package.
+
+## The three layers
+
+| Layer | Path | Responsibility |
+| --- | --- | --- |
+| Shared UI | `SchBenedikt/core` → `ui/` (`@alohasocial/ui`); installed here at `vendor/alohasocial/core/ui` | Vue 3 components, composables, typed core API client and the `HostBridge` contract. No host page, session, CSRF handling, URL policy or persistence. |
+| Standalone host | this repository → `ui/` (`@alohasocial/server-ui`, private) and `public/ui/` | The standalone `HostBridge`, the mount page and the committed browser build. |
+| Nextcloud host | `AlohaSocial/social` | Its own Nextcloud bridge and mount. It is not part of this repository. |
+
+The layer boundary and the `HostBridge` contract are defined by
+[ADR 0005](https://github.com/SchBenedikt/core/blob/main/docs/adr/0005-shared-ui.md)
+and the [shared UI guide](https://github.com/SchBenedikt/core/blob/main/docs/guides/shared-ui.md).
+Accounts, sessions and CSRF are host-owned per
+[ADR 0006](https://github.com/SchBenedikt/core/blob/main/docs/adr/0006-host-owned-accounts.md).
+
+## What the current implementation actually does
+
+- **Dependency.** `ui/package.json` declares the private host app
+  `@alohasocial/server-ui` and depends on
+  `"@alohasocial/ui": "file:../vendor/alohasocial/core/ui"`. Vue 3 is a direct
+  dependency; the shared package declares Vue as a peer dependency.
+- **Build.** `npm run build` runs `vite build`. `ui/vite.config.ts` writes to
+  `../public/ui` with stable names: `app.js`, `app.css` and `app-[name].js`.
+  `npm run build:shared` builds the shared package in the installed core
+  checkout. The documented full rebuild is
+  `(cd vendor/alohasocial/core/ui && npm ci && npm run build)` followed by
+  `(cd ui && npm install && npm run build)`.
+- **Committed artifact.** `public/ui/app.js` and `public/ui/app.css` are tracked
+  in Git. A deployment serves them from `public/` and does not need Node; Node
+  is only required to rebuild the UI.
+- **Route.** `FrontController::appPage()` serves `GET /app` through
+  `resources/views/app.php`. The view mounts `#aloha-social`, references
+  `/ui/app.js` and `/ui/app.css`, and passes the handle, display name and CSRF
+  token as data attributes (`data-user`, `data-display-name`, `data-csrf`,
+  `data-signed-in`). Signed-out visitors get the page with an empty handle; the
+  shell still mounts and can read the public timeline.
+- **Bridge.** `ui/src/bridge.ts` implements the `HostBridge` with
+  `apiBase: ''` (core paths are absolute, same-origin `/api/v1/...`). It sends
+  the session cookie with `credentials: 'same-origin'`, adds `X-CSRF-Token`
+  from the page's data attribute, posts logout to `/logout` with `_csrf`, and
+  uses `/login` for login. The host login currently redirects to `/` after a
+  successful sign-in; the `return_to` parameter built by `loginUrl()` is not
+  consumed yet.
+- **CSP.** The `/app` response uses
+  `script-src 'self'`, `style-src 'self' 'unsafe-inline'`,
+  `img-src 'self' data: https:` and `connect-src 'self'`, so the bundle and the
+  API must be served from the instance origin.
+- **Static delivery.** A production web server serves `public/` directly. With
+  `php -S ... public/index.php`, `public/index.php` returns `false` for an
+  existing file under `public/`, so the built-in server serves the bundle.
+- **Tests.** `tests/UiMountTest.php` runs in the normal PHPUnit suite
+  (`composer test`). It asserts the `/app` page and its data attributes, the
+  presence of `/ui/app.js` and `/ui/app.css`, markers in the committed bundle,
+  and the dashboard link to `/app`.
+
+The operational summary is also in [the README](../README.md#shared-ui).
+
+## Decision
+
+Keep the standalone web interface in this repository. Do not create or use a
+separate `web` repository for it now.
+
+Reasons, in order of importance:
+
+1. **The bridge is authentication code.** It depends on this server's session
+   cookie, CSRF token, `/login`, `/logout` and same-origin API. Splitting the
+   mount across repositories would make every auth or CSRF change a two-repo
+   release, which is exactly the coupling the `HostBridge` boundary is meant to
+   contain, not spread.
+2. **One deployment artifact.** `public/ui/` is committed and served by the same
+   PHP application. There is no second build pipeline, no asset upload and no
+   cross-repository version pin. A fresh checkout without Node can serve `/app`.
+3. **Version coupling.** `composer.json` requires `alohasocial/core: ^0.7`; the
+   shared UI is versioned with that core line (`@alohasocial/ui` 0.7.0 in the
+   installed package). At the time of writing, `@alohasocial/ui` is not
+   published on the public npm registry (`npm view @alohasocial/ui version`
+   returns 404), so an external web repository could not consume it as a normal
+   semver dependency yet.
+4. **Tests stay together.** The UI mount is covered by the same PHPUnit run as
+   the server routes and the API it calls. A separate repository would add an
+   integration boundary and a second test setup for one mount page.
+5. **Low overhead.** The standalone layer is deliberately small: a bridge, a
+   mount view and a build config. The reusable code already lives in the core
+   package, so a third repository would add CI, release and issue overhead
+   without removing host-specific code.
+
+## When a separate `web` repository becomes justified
+
+Revisit this decision when at least one of these is true:
+
+- the frontend becomes a real SPA with its own router and many screens, rather
+  than a mount page for the shared screens;
+- it must be deployed independently of `server` (separate CDN, caching or
+  release cadence);
+- several backends should use the same web client;
+- `@alohasocial/ui` is published as a semver npm package and the web app can
+  depend on it normally.
+
+If that happens, the split should look like this:
+
+1. Publish `@alohasocial/ui` from `SchBenedikt/core` as a real npm artifact.
+2. Move the standalone app (`ui/`) into `SchBenedikt/web`, consuming the
+   published package instead of a `file:` path.
+3. Keep the `HostBridge` host-specific, or replace it with a documented,
+   versioned auth contract; the server continues to expose the API and session
+   handling.
+4. Decide whether `server` serves the resulting bundle or `web` deploys it
+   separately, and document the chosen release artifact.
+5. Move the UI mount tests to `web`; keep API contract tests in `core` and
+   `server`. Shared component changes still go to `core/ui` first
+   ([ADR 0005](https://github.com/SchBenedikt/core/blob/main/docs/adr/0005-shared-ui.md)).
+
+This document changes when that decision changes; it is not a substitute for
+the core ADR.
+
+## How to verify this document
+
+```shell
+git ls-files ui public/ui
+grep -n 'file:../vendor/alohasocial/core/ui' ui/package.json
+grep -n 'outDir' ui/vite.config.ts
+grep -n 'appPage\|/app' src/Http/FrontController.php
+php vendor/bin/phpunit --filter UiMountTest
+npm view @alohasocial/ui version
+```
