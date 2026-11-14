@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Http;
 
+use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
@@ -82,7 +83,57 @@ final class FrontController
             }
         }
 
+        $rateLimited = $this->enforceRateLimit($request, $userId);
+        if ($rateLimited !== null) {
+            return $rateLimited;
+        }
+
         return $this->runtime->app->handle($request->withUserId($userId));
+    }
+
+    /**
+     * The core declares a budget per route and leaves enforcement to the
+     * host. The identity is the signed-in account, or the client address for
+     * anonymous requests.
+     */
+    private function enforceRateLimit(Request $request, ?string $userId): ?Response
+    {
+        try {
+            $match = $this->runtime->router->match($request->method, $request->path);
+        } catch (HttpException) {
+            // Unknown path or wrong method: the kernel owns that answer.
+            return null;
+        }
+
+        $spec = $match->route->rateLimit;
+        if ($spec === null) {
+            return null;
+        }
+
+        $parts = explode('/', $spec, 2);
+        $limit = (int) ($parts[0] ?? 0);
+        $window = (int) ($parts[1] ?? 0);
+        if ($limit < 1 || $window < 1) {
+            return null;
+        }
+
+        $identity = $userId ?? $request->remoteAddress ?? 'unknown';
+        $retryAfter = $this->runtime->rateLimiter->attempt($match->route->name, $identity, $limit, $window);
+
+        if ($retryAfter === null) {
+            return null;
+        }
+
+        return Response::json(
+            [
+                'error' => [
+                    'code' => 'rate_limited',
+                    'message' => 'Too many requests; retry in ' . $retryAfter . ' seconds.',
+                ],
+            ],
+            429,
+            ['Retry-After' => (string) $retryAfter, 'Cache-Control' => 'no-store'],
+        );
     }
 
     private function loginForm(

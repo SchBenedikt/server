@@ -25,6 +25,7 @@ final class Migrations
         return [
             new Version202611140001CoreSchema(),
             new Version202611140002HostSchema(),
+            new Version202611140003RateLimitSchema(),
         ];
     }
 }

@@ -7,11 +7,11 @@ declare(strict_types=1);
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Server\Bootstrap\ApplicationFactory;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Http\FrontController;
+use AlohaSocial\Server\Http\GlobalsRequestFactory;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -24,7 +24,7 @@ try {
 
     $runtime = (new ApplicationFactory($config, $root))->boot();
 
-    $request = Request::fromGlobals();
+    $request = GlobalsRequestFactory::create();
     $response = (new FrontController($runtime))->handle(
         $request,
         $_COOKIE,

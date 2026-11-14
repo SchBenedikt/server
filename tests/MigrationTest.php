@@ -52,7 +52,7 @@ final class MigrationTest extends TestCase
         $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
 
         self::assertSame([], $runner->migrate());
-        self::assertCount(2, $runner->applied());
+        self::assertCount(count(Migrations::all()), $runner->applied());
     }
 
     public function testChangedChecksumIsRejected(): void

@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Bootstrap;
 
 use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
+use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Jobs\PdoJobQueue;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Http\CurlHttpClient;
@@ -28,6 +29,7 @@ use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Auth\SessionRepository;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
+use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
@@ -58,7 +60,7 @@ final class ApplicationFactory
 
         // 2. Database
         $database = PdoFactory::connect($this->config);
-        $this->assertSchemaInstalled($database);
+        $this->assertSchemaCurrent($database);
 
         // 4. Instance keys, sealed at rest
         $signingKey = (new KeyStore($database, $this->secretBox(), $clock))->loadOrCreate();
@@ -98,6 +100,8 @@ final class ApplicationFactory
             config: $this->config,
             database: $database,
             app: $app,
+            router: new Router($app->routes),
+            rateLimiter: new RateLimiter($database, $clock),
             accounts: $accounts,
             directory: $directory,
             sessions: new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock),
@@ -113,11 +117,29 @@ final class ApplicationFactory
         return $this->root;
     }
 
-    private function assertSchemaInstalled(\AlohaSocial\Core\Platform\Db\Connection $database): void
+    private function assertSchemaCurrent(\AlohaSocial\Core\Platform\Db\Connection $database): void
     {
-        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        $migrations = Migrations::all();
+        $runner = new MigrationRunner($database, new SystemClock(), $migrations);
+
         if (!$runner->isInstalled()) {
             throw new RuntimeException('The database schema is not installed. Run: php bin/migrate.php');
+        }
+
+        // A new migration that nobody ran would otherwise surface as a 500 on
+        // the first request that touches the missing table.
+        $applied = $runner->applied();
+        $pending = [];
+        foreach ($migrations as $migration) {
+            if (!isset($applied[$migration->version()])) {
+                $pending[] = $migration->version();
+            }
+        }
+
+        if ($pending !== []) {
+            throw new RuntimeException(
+                'Pending migrations: ' . implode(', ', $pending) . '. Run: php bin/migrate.php',
+            );
         }
     }
 

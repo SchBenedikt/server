@@ -95,7 +95,9 @@ final readonly class HostConfig
             throw new RuntimeException('The instance URL must be an absolute http(s) URL, got: ' . $instanceUrl);
         }
 
-        $varDirectory = rtrim((string) $pick('var_directory', 'ALOHASOCIAL_VAR_DIRECTORY', $root . '/var'), '/');
+        // Relative paths resolve against the project root, not the process
+        // working directory: PHP-FPM starts in public/, the CLI in the root.
+        $varDirectory = self::resolvePath((string) $pick('var_directory', 'ALOHASOCIAL_VAR_DIRECTORY', $root . '/var'), $root);
         $secureDefault = str_starts_with(strtolower($instanceUrl), 'https://');
         $secure = $secureDefault;
         $secureValue = $pick('secure_cookies', 'ALOHASOCIAL_SECURE_COOKIES', null);
@@ -115,12 +117,12 @@ final readonly class HostConfig
             instanceName: trim((string) $pick('instance_name', 'ALOHASOCIAL_INSTANCE_NAME', 'Aloha Social')),
             instanceDescription: trim((string) $pick('instance_description', 'ALOHASOCIAL_INSTANCE_DESCRIPTION', '')),
             contactEmail: trim((string) $pick('contact_email', 'ALOHASOCIAL_CONTACT_EMAIL', '')),
-            databaseDsn: (string) $pick('database_dsn', 'ALOHASOCIAL_DB_DSN', 'sqlite:' . $varDirectory . '/server.sqlite'),
+            databaseDsn: self::resolveSqliteDsn((string) $pick('database_dsn', 'ALOHASOCIAL_DB_DSN', 'sqlite:' . $varDirectory . '/server.sqlite'), $root),
             databaseUser: self::nullable($pick('database_user', 'ALOHASOCIAL_DB_USER', null)),
             databasePassword: self::nullable($pick('database_password', 'ALOHASOCIAL_DB_PASSWORD', null)),
             varDirectory: $varDirectory,
-            blobDirectory: rtrim((string) $pick('blob_directory', 'ALOHASOCIAL_BLOB_DIRECTORY', $varDirectory . '/blobs'), '/'),
-            secretKeyFile: (string) $pick('secret_key_file', 'ALOHASOCIAL_SECRET_KEY_FILE', $varDirectory . '/secret.key'),
+            blobDirectory: self::resolvePath((string) $pick('blob_directory', 'ALOHASOCIAL_BLOB_DIRECTORY', $varDirectory . '/blobs'), $root),
+            secretKeyFile: self::resolvePath((string) $pick('secret_key_file', 'ALOHASOCIAL_SECRET_KEY_FILE', $varDirectory . '/secret.key'), $root),
             secretKey: self::nullable($secret),
             debug: $bool($pick('debug', 'ALOHASOCIAL_DEBUG', false)),
             secureCookies: $secure,
@@ -164,6 +166,42 @@ final readonly class HostConfig
         $host = parse_url($this->instanceUrl, PHP_URL_HOST);
 
         return is_string($host) && $host !== '' ? $host : 'localhost';
+    }
+
+    /**
+     * Turns a relative path into a root-relative one. Absolute paths (POSIX or
+     * Windows) are returned unchanged.
+     */
+    private static function resolvePath(string $path, string $root): string
+    {
+        $path = rtrim(trim($path), '/');
+        if ($path === '') {
+            return rtrim($root, '/');
+        }
+
+        if (str_starts_with($path, '/') || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1) {
+            return $path;
+        }
+
+        return rtrim($root, '/') . '/' . $path;
+    }
+
+    /**
+     * `sqlite:var/server.sqlite` must not depend on the process working
+     * directory either.
+     */
+    private static function resolveSqliteDsn(string $dsn, string $root): string
+    {
+        if (!str_starts_with($dsn, 'sqlite:')) {
+            return $dsn;
+        }
+
+        $path = substr($dsn, 7);
+        if ($path === '' || $path === ':memory:' || str_starts_with($path, '/') || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1) {
+            return $dsn;
+        }
+
+        return 'sqlite:' . rtrim($root, '/') . '/' . $path;
     }
 
     private static function nullable(mixed $value): ?string
