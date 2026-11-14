@@ -10,6 +10,7 @@ import type {
 	FollowedTag,
 	InstanceInfo,
 	NotificationPageData,
+	PostInteraction,
 	Relationship,
 	TimelineItem,
 } from './types';
@@ -37,6 +38,7 @@ export interface Api {
 	tagTimeline(tag: string, limit?: number, before?: string | null): Promise<TimelineItem[]>;
 	followedTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
 	post(id: string): Promise<TimelineItem>;
+	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	account(id: string): Promise<Account>;
 	hostProfiles(): Promise<Record<string, string>>;
 	followAccount(id: string): Promise<Relationship>;
@@ -49,6 +51,10 @@ export interface Api {
 	deletePost(id: string): Promise<void>;
 	boostPost(id: string): Promise<void>;
 	unboostPost(id: string): Promise<void>;
+	interactions(ids: string[]): Promise<Record<string, PostInteraction>>;
+	likePost(id: string): Promise<PostInteraction>;
+	unlikePost(id: string): Promise<PostInteraction>;
+	updateProfile(displayName: string): Promise<string>;
 	followedTags(): Promise<FollowedTag[]>;
 	followTag(tag: string): Promise<void>;
 	unfollowTag(tag: string): Promise<void>;
@@ -151,6 +157,44 @@ function normalizePosts(value: unknown): TimelineItem[] {
 		.filter((item): item is TimelineItem => item !== null);
 }
 
+/**
+ * Home timeline entries for boosts carry the boost wrapper, not the original
+ * post's attachments. Resolve those originals in one batch so media survives
+ * a reload instead of disappearing until the post is opened.
+ */
+export async function hydrateTimelineBoosts(posts: TimelineItem[]): Promise<TimelineItem[]> {
+	const ids = [...new Set(posts
+		.filter((post) => post.kind === 'boost' && post.object_id !== null && (post.attachments?.length ?? 0) === 0)
+		.map((post) => post.object_id as string))];
+
+	if (ids.length === 0) {
+		return posts;
+	}
+
+	try {
+		const originals = await getApi().posts(ids);
+		return posts.map((post) => {
+			if (post.kind !== 'boost' || post.object_id === null) {
+				return post;
+			}
+			const original = originals[post.object_id];
+			if (original === undefined) {
+				return post;
+			}
+
+			return {
+				...post,
+				attachments: original.attachments ?? [],
+				content_warning: post.content_warning ?? original.content_warning,
+				in_reply_to_id: post.in_reply_to_id ?? original.in_reply_to_id,
+				poll: post.poll ?? original.poll,
+			};
+		});
+	} catch {
+		return posts;
+	}
+}
+
 function normalizeAccount(value: unknown): Account | null {
 	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.handle !== 'string') {
 		return null;
@@ -173,6 +217,20 @@ function normalizeAccount(value: unknown): Account | null {
 		followers_count: typeof value.followers_count === 'number' ? value.followers_count : 0,
 		following_count: typeof value.following_count === 'number' ? value.following_count : 0,
 		relationship,
+	};
+}
+
+function normalizeInteraction(value: unknown): PostInteraction | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	return {
+		favourites_count: typeof value.favourites_count === 'number' ? value.favourites_count : 0,
+		favourited: value.favourited === true,
+		reblogs_count: typeof value.reblogs_count === 'number' ? value.reblogs_count : 0,
+		reblogged: value.reblogged === true,
+		replies_count: typeof value.replies_count === 'number' ? value.replies_count : 0,
 	};
 }
 
@@ -277,6 +335,30 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return post;
+		},
+
+		async posts(ids: string[]): Promise<Record<string, TimelineItem>> {
+			const unique = [...new Set(ids.filter((id) => id !== ''))].slice(0, 80);
+			if (unique.length === 0) {
+				return {};
+			}
+
+			const data = await request<{ posts?: unknown }>(
+				'GET',
+				'/api/v1/host/posts',
+				{ ids: unique.join(',') },
+			);
+			const result: Record<string, TimelineItem> = {};
+			if (isRecord(data?.posts)) {
+				for (const [id, value] of Object.entries(data.posts)) {
+					const post = normalizeTimelineItem(value);
+					if (post !== null) {
+						result[id] = post;
+					}
+				}
+			}
+
+			return result;
 		},
 
 		async account(id: string): Promise<Account> {
@@ -391,6 +473,64 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		async unboostPost(id: string): Promise<void> {
 			await request<unknown>('DELETE', `/api/v1/posts/${encodeURIComponent(id)}/boost`);
+		},
+
+		async interactions(ids: string[]): Promise<Record<string, PostInteraction>> {
+			const unique = [...new Set(ids.filter((id) => id !== ''))].slice(0, 80);
+			if (unique.length === 0) {
+				return {};
+			}
+
+			const data = await request<{ interactions?: unknown }>(
+				'GET',
+				'/api/v1/host/interactions',
+				{ ids: unique.join(',') },
+			);
+			const result: Record<string, PostInteraction> = {};
+			if (isRecord(data?.interactions)) {
+				for (const [id, value] of Object.entries(data.interactions)) {
+					const interaction = normalizeInteraction(value);
+					if (interaction !== null) {
+						result[id] = interaction;
+					}
+				}
+			}
+
+			return result;
+		},
+
+		async likePost(id: string): Promise<PostInteraction> {
+			const data = await request<{ interaction?: unknown }>('POST', `/api/v1/posts/${encodeURIComponent(id)}/like`);
+			const interaction = normalizeInteraction(data?.interaction);
+			if (interaction === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Like-Status.');
+			}
+
+			return interaction;
+		},
+
+		async unlikePost(id: string): Promise<PostInteraction> {
+			const data = await request<{ interaction?: unknown }>('DELETE', `/api/v1/posts/${encodeURIComponent(id)}/like`);
+			const interaction = normalizeInteraction(data?.interaction);
+			if (interaction === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Like-Status.');
+			}
+
+			return interaction;
+		},
+
+		async updateProfile(displayName: string): Promise<string> {
+			const data = await request<{ account?: unknown }>(
+				'PATCH',
+				'/api/v1/host/profile',
+				undefined,
+				{ display_name: displayName },
+			);
+			if (!isRecord(data?.account) || typeof data.account.display_name !== 'string') {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält kein aktualisiertes Profil.');
+			}
+
+			return data.account.display_name;
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {

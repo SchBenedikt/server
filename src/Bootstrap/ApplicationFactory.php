@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Bootstrap;
 
 use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
+use AlohaSocial\Core\Domain\Notification\PdoNotificationRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Jobs\PdoJobQueue;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
@@ -20,6 +21,7 @@ use AlohaSocial\Core\Platform\Storage\LocalBlobStore;
 use AlohaSocial\Core\Protocol\ActivityPub\HttpActorResolver;
 use AlohaSocial\Core\Security\OpenSslSecretBox;
 use AlohaSocial\Core\Security\SecretBox;
+use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
@@ -32,6 +34,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Mail\LogMailer;
 use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\MigrationRunner;
@@ -111,6 +114,12 @@ final class ApplicationFactory
             : new LogMailer($this->config->mailLogDirectory, $this->config->mailFrom);
 
         $passwordHasher = new PasswordHasher();
+        $interactions = new PostInteractions(
+            $app->posts,
+            $database,
+            $clock,
+            new NotificationService(new PdoNotificationRepository($database), $clock, new ErrorLogLogger()),
+        );
 
         return new Runtime(
             config: $this->config,
@@ -134,6 +143,7 @@ final class ApplicationFactory
             mailer: $mailer,
             view: new View($this->root . '/resources/views'),
             clock: $clock,
+            interactions: $interactions,
         );
     }
 

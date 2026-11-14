@@ -101,6 +101,18 @@ final class AccountRepository
         );
     }
 
+    public function updateDisplayName(string $id, ?string $displayName): void
+    {
+        $name = $displayName === null ? null : trim($displayName);
+        $this->db->execute(
+            'UPDATE account SET display_name = :display_name WHERE id = :id',
+            [
+                'display_name' => $name === '' ? null : $name,
+                'id' => $id,
+            ],
+        );
+    }
+
     public function disable(string $id): void
     {
         $this->db->execute(

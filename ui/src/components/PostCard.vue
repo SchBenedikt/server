@@ -12,6 +12,7 @@ import { accountName, handleLabel, isRemoteId, postRouteId, relativeTime, visibi
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
+import { ensureInteractions, interactionFor, patchInteraction, rememberInteraction } from '../lib/interactions';
 import { appState, openComposer, showToast } from '../lib/state';
 import type { TimelineItem } from '../lib/types';
 
@@ -57,7 +58,7 @@ const profileHref = computed(() => isRemoteAuthor.value
 	: `#/u/${encodeURIComponent(authorId.value)}`);
 const time = computed(() => relativeTime(props.post.published_at));
 const absolute = computed(() => new Date(props.post.published_at).toLocaleString('de-DE'));
-const isMine = computed(() => appState.session.user?.handle === props.post.author_id);
+const isMine = computed(() => appState.session.user?.handle === authorId.value);
 const localId = computed(() => postRouteId(props.post));
 const detailHref = computed(() => localId.value === null ? null : `#/p/${encodeURIComponent(localId.value)}`);
 const external = computed(() => (props.post.object_id && isRemoteId(props.post.object_id) ? props.post.object_id : null));
@@ -73,8 +74,15 @@ const replyContext = computed(() => props.post.in_reply_to_id
 	? `#/p/${encodeURIComponent(props.post.in_reply_to_id)}`
 	: null);
 
+const interaction = computed(() => interactionFor(localId.value));
+const liked = computed(() => interaction.value?.favourited === true);
+const likeCount = computed(() => interaction.value?.favourites_count ?? 0);
+const boostCount = computed(() => interaction.value?.reblogs_count ?? 0);
+const replyCount = computed(() => interaction.value?.replies_count ?? 0);
+
 const boosted = ref(false);
 const boosting = ref(false);
+const liking = ref(false);
 const sharing = ref(false);
 const deleting = ref(false);
 const confirmingDelete = ref(false);
@@ -92,9 +100,16 @@ function readBoosted(): boolean {
 	}
 }
 
-watch(localId, () => {
+watch(localId, (id) => {
 	boosted.value = readBoosted();
+	ensureInteractions([id]);
 }, { immediate: true });
+
+watch(() => interaction.value?.reblogged, (value) => {
+	if (value !== undefined) {
+		boosted.value = value;
+	}
+});
 
 const pollTotal = computed(() => {
 	const poll = props.post.poll;
@@ -132,10 +147,18 @@ async function toggleBoost(): Promise<void> {
 		if (boosted.value) {
 			await getApi().unboostPost(localId.value);
 			boosted.value = false;
+			patchInteraction(localId.value, {
+				reblogged: false,
+				reblogs_count: Math.max(0, boostCount.value - 1),
+			});
 			showToast('Boost entfernt.', 'success');
 		} else {
 			await getApi().boostPost(localId.value);
 			boosted.value = true;
+			patchInteraction(localId.value, {
+				reblogged: true,
+				reblogs_count: boostCount.value + 1,
+			});
 			showToast('Beitrag geboostet.', 'success');
 		}
 		try {
@@ -147,6 +170,45 @@ async function toggleBoost(): Promise<void> {
 		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht geboostet werden.', 'error');
 	} finally {
 		boosting.value = false;
+	}
+}
+
+async function toggleLike(): Promise<void> {
+	if (localId.value === null || liking.value) {
+		return;
+	}
+	if (appState.session.user === null) {
+		window.location.assign('/login');
+		return;
+	}
+
+	const id = localId.value;
+	const before = interaction.value ?? {
+		favourites_count: 0,
+		favourited: false,
+		reblogs_count: 0,
+		reblogged: false,
+		replies_count: 0,
+	};
+	const next = {
+		...before,
+		favourited: !before.favourited,
+		favourites_count: Math.max(0, before.favourites_count + (before.favourited ? -1 : 1)),
+	};
+
+	rememberInteraction(id, next);
+	liking.value = true;
+	try {
+		const saved = next.favourited
+			? await getApi().likePost(id)
+			: await getApi().unlikePost(id);
+		rememberInteraction(id, saved);
+		showToast(saved.favourited ? 'Beitrag gefällt dir.' : 'Like entfernt.', 'success');
+	} catch (error) {
+		rememberInteraction(id, before);
+		showToast(error instanceof Error ? error.message : 'Der Like konnte nicht gespeichert werden.', 'error');
+	} finally {
+		liking.value = false;
 	}
 }
 
@@ -345,7 +407,10 @@ onUnmounted(() => {
 		<footer class="a-post__actions">
 			<button type="button" class="a-post__action" aria-label="Antworten" title="Antworten" @click="reply">
 				<AppIcon name="reply" :size="18" />
-				<span>Antworten</span>
+				<span>
+					Antworten
+					<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
+				</span>
 			</button>
 
 			<button
@@ -359,7 +424,28 @@ onUnmounted(() => {
 				@click="toggleBoost"
 			>
 				<AppIcon name="repeat" :size="18" />
-				<span>{{ boosted ? 'Geboostet' : 'Boosten' }}</span>
+				<span>
+					{{ boosted ? 'Geboostet' : 'Boosten' }}
+					<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
+				</span>
+			</button>
+
+			<button
+				v-if="localId"
+				type="button"
+				class="a-post__action a-post__action--like"
+				:class="{ 'a-post__action--liked': liked }"
+				:aria-label="liked ? 'Like entfernen' : 'Beitrag liken'"
+				:aria-pressed="liked"
+				:title="liked ? 'Like entfernen' : 'Gefällt mir'"
+				:disabled="liking"
+				@click="toggleLike"
+			>
+				<AppIcon name="heart" :size="18" />
+				<span>
+					Gefällt mir
+					<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
+				</span>
 			</button>
 
 			<button type="button" class="a-post__action" aria-label="Link teilen" title="Link teilen" @click="share">

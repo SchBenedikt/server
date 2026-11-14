@@ -128,3 +128,16 @@ export function setAccount(account: Account): void {
 	const name = hostDisplayName(account.id);
 	directory.accounts[account.id] = name === '' ? account : { ...account, display_name: name };
 }
+
+export function setHostDisplayName(id: string, name: string): void {
+	if (name === '') {
+		delete hostNames[id];
+	} else {
+		hostNames[id] = name;
+	}
+
+	const account = directory.accounts[id];
+	if (account !== null && account !== undefined) {
+		account.display_name = name;
+	}
+}

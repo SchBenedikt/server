@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { ApiError, getApi } from './api';
+import { ApiError, getApi, hydrateTimelineBoosts } from './api';
 import { onPostCreated, onPostDeleted } from './events';
 import type { TimelineItem } from './types';
 
@@ -104,7 +104,7 @@ export function useTimeline(source: () => TimelineSource) {
 		error.value = '';
 
 		try {
-			const batch = await fetchPage(before);
+			const batch = await hydrateTimelineBoosts(await fetchPage(before));
 			if (currentGeneration !== generation) {
 				return;
 			}

@@ -22,6 +22,7 @@ use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Mail\Mailer;
 
 /**
@@ -47,6 +48,7 @@ final readonly class Runtime
         public Mailer $mailer,
         public View $view,
         public Clock $clock,
+        public PostInteractions $interactions,
     ) {
     }
 }

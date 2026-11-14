@@ -11,8 +11,8 @@ import FollowButton from '../components/FollowButton.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { hostDisplayName, setAccount } from '../lib/account';
-import { getApi } from '../lib/api';
+import { hostDisplayName, refreshAccount, setAccount, setHostDisplayName } from '../lib/account';
+import { getApi, hydrateTimelineBoosts } from '../lib/api';
 import { onPostCreated, onPostDeleted } from '../lib/events';
 import { accountName, avatarStyle, formatCount, handleLabel, isRemoteId } from '../lib/format';
 import { route } from '../lib/router';
@@ -34,6 +34,10 @@ const tab = ref<'posts' | 'media'>('posts');
 const posts = ref<TimelineItem[]>([]);
 const postsLoading = ref(false);
 const postsError = ref('');
+const editing = ref(false);
+const editName = ref('');
+const editSaving = ref(false);
+const editError = ref('');
 const cursor = ref<string | null>(null);
 const hasMore = ref(true);
 const loadedOnce = ref(false);
@@ -161,9 +165,9 @@ async function loadPosts(reset: boolean): Promise<void> {
 			}
 		}
 
-		posts.value = collected.sort((left, right) => (
+		posts.value = await hydrateTimelineBoosts(collected.sort((left, right) => (
 			new Date(right.published_at).getTime() - new Date(left.published_at).getTime()
-		));
+		)));
 		loadedOnce.value = true;
 	} catch (caught) {
 		postsError.value = caught instanceof Error ? caught.message : 'Die Beiträge konnten nicht geladen werden.';
@@ -183,6 +187,56 @@ async function share(): Promise<void> {
 
 function compose(): void {
 	openComposer();
+}
+
+function openEdit(): void {
+	editName.value = appState.session.user?.displayName
+		|| appState.session.profile?.display_name
+		|| account.value?.display_name
+		|| handle.value;
+	editError.value = '';
+	editing.value = true;
+}
+
+function closeEdit(): void {
+	if (!editSaving.value) {
+		editing.value = false;
+	}
+}
+
+async function saveProfile(): Promise<void> {
+	const name = editName.value.trim();
+	if (name === '') {
+		editError.value = 'Bitte gib einen Anzeigenamen ein.';
+		return;
+	}
+	if (Array.from(name).length > 80) {
+		editError.value = 'Der Anzeigename darf höchstens 80 Zeichen lang sein.';
+		return;
+	}
+
+	editSaving.value = true;
+	editError.value = '';
+	try {
+		const saved = await getApi().updateProfile(name);
+		if (appState.session.user !== null) {
+			appState.session.user.displayName = saved;
+		}
+		if (appState.session.profile !== null) {
+			appState.session.profile.display_name = saved;
+		}
+		setHostDisplayName(handle.value, saved);
+		if (account.value !== null) {
+			account.value.display_name = saved;
+		}
+		void refreshAccount(handle.value);
+		editing.value = false;
+		showToast('Profil aktualisiert.', 'success');
+	} catch (caught) {
+		editError.value = caught instanceof Error ? caught.message : 'Das Profil konnte nicht gespeichert werden.';
+	} finally {
+		editSaving.value = false;
+	}
 }
 
 function onFollowChanged(following: boolean): void {
@@ -254,9 +308,14 @@ onUnmounted(() => {
 					<div class="a-profile__top">
 						<Avatar :id="handle" :name="displayName" :size="94" ring class="a-profile__avatar" />
 						<div class="a-profile__actions">
-							<button v-if="isSelf" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-								<AppIcon name="pen" :size="15" /> Beitrag schreiben
-							</button>
+							<template v-if="isSelf">
+								<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="openEdit">
+									<AppIcon name="settings" :size="15" /> Profil bearbeiten
+								</button>
+								<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
+									<AppIcon name="pen" :size="15" /> Beitrag schreiben
+								</button>
+							</template>
 							<FollowButton v-else :account="account" @changed="onFollowChanged" />
 						</div>
 					</div>
@@ -354,4 +413,52 @@ onUnmounted(() => {
 			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error">{{ postsError }}</p>
 		</template>
 	</div>
+
+	<Teleport to="body">
+		<div
+			v-if="editing"
+			class="a-modal-overlay"
+			role="presentation"
+			@click.self="closeEdit"
+			@keydown.esc="closeEdit"
+		>
+			<form
+				class="a-profile-edit"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="a-profile-edit-title"
+				@submit.prevent="saveProfile"
+			>
+				<header class="a-profile-edit__head">
+					<div>
+						<p class="a-profile-edit__eyebrow">Dein Profil</p>
+						<h2 id="a-profile-edit-title">Profil bearbeiten</h2>
+					</div>
+					<button type="button" class="a-icon-btn" aria-label="Bearbeiten schließen" @click="closeEdit">
+						<AppIcon name="x" :size="19" />
+					</button>
+				</header>
+
+				<label class="a-profile-edit__label" for="a-profile-display-name">Anzeigename</label>
+				<input
+					id="a-profile-display-name"
+					v-model="editName"
+					type="text"
+					maxlength="80"
+					autocomplete="name"
+					required
+				/>
+				<p class="a-profile-edit__hint">So erscheinst du in Beiträgen und Benachrichtigungen. Dein Handle @{{ handleText }} bleibt unverändert.</p>
+				<p v-if="editError" class="a-form-error" role="alert">{{ editError }}</p>
+
+				<footer class="a-profile-edit__actions">
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="editSaving" @click="closeEdit">Abbrechen</button>
+					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="editSaving">
+						<AppIcon v-if="editSaving" name="refresh" :size="15" class="a-spin" />
+						{{ editSaving ? 'Wird gespeichert…' : 'Speichern' }}
+					</button>
+				</footer>
+			</form>
+		</div>
+	</Teleport>
 </template>
