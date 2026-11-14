@@ -1,0 +1,30 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace AlohaSocial\Server\Migrations;
+
+/**
+ * The ordered migration list.
+ *
+ * Adding a migration means adding a class and appending it here; never edit an
+ * applied migration, the runner rejects a changed checksum.
+ */
+final class Migrations
+{
+    /**
+     * @return list<Migration>
+     */
+    public static function all(): array
+    {
+        return [
+            new Version202611140001CoreSchema(),
+            new Version202611140002HostSchema(),
+        ];
+    }
+}
