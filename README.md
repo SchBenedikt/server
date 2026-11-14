@@ -10,6 +10,16 @@ owns everything a process needs. Built against
 [the server blueprint](https://github.com/SchBenedikt/core/blob/main/docs/guides/server-architecture.md)
 and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/main/docs/operations/standalone-host.md).
 
+## Documentation
+
+| Guide | Contents |
+| --- | --- |
+| [Installation and setup](docs/installation.md) | Local SQLite setup, production PostgreSQL/Nginx/PHP-FPM, accounts, worker and verification |
+| [Configuration](docs/configuration.md) | Every environment variable, config-file key, secrets and upload/mail settings |
+| [Operations](docs/operations.md) | Backups, restore, upgrades, monitoring, security and troubleshooting |
+| [Frontend hosting](docs/frontend.md) | Where the Vue app lives, how it is built and the HostBridge boundary |
+| [Documentation index](docs/README.md) | A short route through all guides |
+
 **Status: phases 0–3 of the blueprint plus account mail, the shared UI and a
 federation smoke test** — a standalone instance that signs, delivers and
 accepts ActivityPub, resets passwords by email and serves the shared Vue app.
@@ -45,22 +55,30 @@ fix belongs in the core package, not in this host.
 
 ## Quick start
 
+For the complete local and production procedure use
+[Installation and setup](docs/installation.md). The short path is:
+
 ```shell
 composer install
 cp .env.example .env          # adjust the instance URL and database
 php bin/migrate.php           # creates the core and host schema
 php bin/create-account.php alice alice@example.com --admin
-php -S 127.0.0.1:3000 -t public public/index.php
+php -S localhost:3000 -t public public/index.php
 ```
 
-Open `http://127.0.0.1:3000/`, sign in, and the dashboard links the actor
+Open `http://localhost:3000/`, sign in, and the dashboard links the actor
 document, `/api/v1/instance` and the public timeline. `/app` mounts the shared
 Vue interface; without SMTP the password-reset mail is written to
 `var/mail/*.eml`.
 
+Registration is disabled by design (`instance.registrations=false`). Create
+each account with `bin/create-account.php`; the command prompts for a password
+unless `--password=…` is supplied.
+
 For a production instance, point the web server at `public/` and run PHP-FPM;
 serve every request through `public/index.php` (the core route manifest lives
-at the root, including `/@handle` and `/.well-known/webfinger`).
+at the root, including `/@handle` and `/.well-known/webfinger`). Use
+`ALOHASOCIAL_INSTANCE_URL` with the exact public HTTPS origin.
 
 ### Worker and maintenance
 
@@ -120,8 +138,28 @@ cookie and `X-CSRF-Token`, and the shared screens consume only `/api/v1`.
 ```shell
 # Only needed after changing the shared package or the host app.
 (cd vendor/alohasocial/core/ui && npm ci && npm run build)
-(cd ui && npm install && npm run build)   # writes public/ui/app.js + app.css
+(cd ui && npm ci && npm run build)   # writes public/ui/app.js + app.css
 ```
+
+The hosting decision is recorded in [docs/frontend.md](docs/frontend.md).
+
+### Host UI extensions
+
+The shared screens need four things the core's anonymous v1 timeline does not
+expose directly. The host adds them as same-origin routes; they are not part of
+the core route contract:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and the viewer's own like/boost state. |
+| `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
+| `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
+| `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
+
+All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
+posts the viewer may already see; private posts still go through the core's
+visibility rules. The implementation lives in `src/Interactions/` and
+`FrontController`.
 
 The bundle is committed, so a fresh clone serves `/app` without Node. The
 production web server serves `public/`; the PHP built-in server serves the
@@ -146,6 +184,7 @@ Precedence: defaults < `config/server.php` < environment (and `.env`).
 | `ALOHASOCIAL_BLOB_DIRECTORY` | `var/blobs` | Media originals and thumbnails |
 | `ALOHASOCIAL_SECURE_COOKIES` | on for https | `Secure` flag on the session cookie |
 | `ALOHASOCIAL_SESSION_LIFETIME` | `604800` | Session lifetime in seconds |
+| `ALOHASOCIAL_SESSION_COOKIE_NAME` | `alohasocial_session` | Session cookie name |
 | `ALOHASOCIAL_REMOTE_MEDIA` | `true` | `social/media.remote_fetch` |
 | `ALOHASOCIAL_MASTODON_API` | `false` | Enables the compatibility prefix |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `/api/mastodon/v1` | Prefix for the compatibility routes |
@@ -160,6 +199,9 @@ Precedence: defaults < `config/server.php` < environment (and `.env`).
 Secrets do not belong in `config/server.php` or in the repository. The instance
 private key is sealed with `OpenSslSecretBox` and stored in `instance_key`; the
 encryption key stays in the environment or in `var/secret.key` (`0600`).
+
+See [Configuration](docs/configuration.md) for the full reference, precedence
+rules and production examples.
 
 ## Architecture
 
@@ -183,6 +225,7 @@ src/Accounts/             account table, core LocalActorDirectory/Search/Count
 src/Auth/                 sessions, rotation, CSRF, password hashing, reset, throttle
 src/Mail/                 log and SMTP transports
 src/Http/                 plain-PHP views, front controller, rate limiter, globals adapter
+src/Interactions/         host-side likes, boost/read counts and post hydration
 resources/views/          login, dashboard, password reset, shared-app mount
 tests/                    migrations, auth, rate limits, media, worker and route parity
 ```
@@ -193,6 +236,7 @@ Request flow:
 Browser → public/index.php → HostConfig → ApplicationFactory::boot()
         → FrontController (session cookie → Request::$userId, CSRF)
         → /, /login, /logout, /forgot-password, /reset-password, /app  (host pages)
+        → /api/v1/host/*                                      (host UI extensions)
         → $app->kernel->handle(Request)   (the core's 84 routes)
 ```
 
@@ -245,9 +289,10 @@ composer test
 The suite boots the real `Application::forHost()` assembly on a throwaway
 SQLite database and drives the real front controller: migrations twice,
 login/rotation/CSRF/logout/throttle, route budgets, a post written and read
-over HTTP, media upload/serving/attachment, password reset by mailed token, the
-UI mount and its bundle, actor document and WebFinger, the cleanup job through
-the worker, and route parity against the core manifest.
+over HTTP, media upload/serving/attachment, batched host interactions, likes,
+profile updates, post hydration, password reset by mailed token, the UI mount
+and its bundle, actor document and WebFinger, the cleanup job through the
+worker, and route parity against the core manifest.
 
 ```shell
 composer smoke:federation      # or: php bin/federation-smoke.php

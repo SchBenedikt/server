@@ -44,7 +44,7 @@ Accounts, sessions and CSRF are host-owned per
   `npm run build:shared` builds the shared package in the installed core
   checkout. The documented full rebuild is
   `(cd vendor/alohasocial/core/ui && npm ci && npm run build)` followed by
-  `(cd ui && npm install && npm run build)`.
+  `(cd ui && npm ci && npm run build)`.
 - **Committed artifact.** `public/ui/app.js` and `public/ui/app.css` are tracked
   in Git. A deployment serves them from `public/` and does not need Node; Node
   is only required to rebuild the UI.
@@ -60,7 +60,9 @@ Accounts, sessions and CSRF are host-owned per
   from the page's data attribute, posts logout to `/logout` with `_csrf`, and
   uses `/login` for login. The host login currently redirects to `/` after a
   successful sign-in; the `return_to` parameter built by `loginUrl()` is not
-  consumed yet.
+  consumed yet. In addition to the core API, the host serves the four
+  same-origin UI extensions for likes, interaction counts, batch post
+  hydration and profile updates (see the README).
 - **CSP.** The `/app` response uses
   `script-src 'self'`, `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: https:` and `connect-src 'self'`, so the bundle and the
@@ -71,7 +73,9 @@ Accounts, sessions and CSRF are host-owned per
 - **Tests.** `tests/UiMountTest.php` runs in the normal PHPUnit suite
   (`composer test`). It asserts the `/app` page and its data attributes, the
   presence of `/ui/app.js` and `/ui/app.css`, markers in the committed bundle,
-  and the dashboard link to `/app`.
+  and the dashboard link to `/app`. `tests/HostExtensionTest.php` covers the
+  likes API, viewer-specific interaction batch, post hydration and profile
+  update, including authentication and CSRF rejection.
 
 The operational summary is also in [the README](../README.md#shared-ui).
 
