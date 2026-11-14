@@ -18,16 +18,19 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 | 1 | Config, PDO, migration runner, every core schema | fresh install creates the tables, a second run is a no-op |
 | 2 | Accounts, sessions, login, CSRF, `LocalActorDirectory` | login/logout, session rotation, CSRF rejection |
 | 3 | `Application::forHost()` and route parity | served routes equal `Routes::manifest()`; a post is written and read over HTTP |
+| 3b | Host hardening: declared rate limits, media upload/serving, cleanup job, password CLI | 429 with `Retry-After`; image upload and fetch; worker drains `cleanup` |
 
 Not implemented yet (later blueprint phases): federation smoke tests with a
-real peer, AT Protocol account linking, media publishing, the shared Vue UI
-mount, installer/container, API rate limiting beyond the login throttle, and
-password reset (needs a mail transport).
+real peer, AT Protocol account linking, the shared Vue UI mount,
+installer/container and password reset by email (the CLI resets a password;
+sending mail needs a transport this server does not ship).
 
 ## Requirements
 
 - PHP 8.3 or newer with `pdo_sqlite` or `pdo_pgsql`, `gd`, `mbstring`,
   `curl`, `openssl` and `json`
+- `upload_max_filesize` and `post_max_size` at least the media limit (5 MiB
+  by default); PHP rejects a larger upload before the application sees it
 - Composer 2
 - PostgreSQL (preferred for a real instance) or SQLite (small installs, tests)
 
@@ -48,14 +51,22 @@ For a production instance, point the web server at `public/` and run PHP-FPM;
 serve every request through `public/index.php` (the core route manifest lives
 at the root, including `/@handle` and `/.well-known/webfinger`).
 
-### Worker
+### Worker and maintenance
 
 ```shell
 php bin/worker.php            # supervised loop, SIGTERM stops between batches
 php bin/worker.php --once     # one batch, for cron
+php bin/cleanup.php           # queue the bounded retention job
+php bin/cleanup.php --now     # run it once, without the queue
+php bin/set-password.php bob  # change a password and revoke its sessions
 ```
 
-Cron alternative: `* * * * * php /srv/aloha/bin/worker.php --once`.
+Cron alternatives:
+
+```cron
+* * * * * php /srv/aloha/bin/worker.php --once
+0 3 * * * php /srv/aloha/bin/cleanup.php
+```
 
 ### Route parity
 
@@ -97,7 +108,9 @@ encryption key stays in the environment or in `var/secret.key` (`0600`).
 public/index.php          one entry point: boot, authenticate, dispatch
 bin/migrate.php           migration runner
 bin/worker.php            core worker loop (`runOnce`)
+bin/cleanup.php           queue or run the bounded retention job
 bin/create-account.php    account creation (installer step, CLI)
+bin/set-password.php      password reset by CLI, revokes the account's sessions
 bin/routes.php            served route manifest
 
 src/Bootstrap/            boot sequence 1-9: config, PDO, keys, ports, assembly
@@ -106,9 +119,9 @@ src/Db/                   PDO factory (sqlite/pgsql)
 src/Migrations/           schema_migration runner + core schema adoption
 src/Accounts/             account table, core LocalActorDirectory/Search/Count
 src/Auth/                 sessions, rotation, CSRF, password hashing, throttle
-src/Http/                 plain-PHP views and the front controller
+src/Http/                 plain-PHP views, front controller, rate limiter, globals adapter
 resources/views/          login, dashboard, error pages
-tests/                    migration, auth, post-over-HTTP and route-parity tests
+tests/                    migrations, auth, rate limits, media, worker and route parity
 ```
 
 Request flow:
@@ -142,8 +155,15 @@ The core is a Composer VCS dependency pinned to the `0.7.x` line
   the caller is authenticated by a session cookie. The core's JSON API clients
   that send `X-CSRF-Token` work unchanged; peer-to-peer `/inbox` requests carry
   no session and are authenticated by HTTP signatures instead.
+- **Rate limits** are the ones the core declares per route (`30/900` and so
+  on). The host enforces them per account, or per client address for anonymous
+  requests, and answers `429` with `Retry-After`.
 - **Migrations** record version, timestamp and checksum. Editing an applied
-  migration is refused; add a new one.
+  migration is refused; add a new one. The server refuses to boot with a
+  pending migration instead of failing on the first request that needs it.
+- **Relative paths** in the configuration resolve against the project root, so
+  `sqlite:var/server.sqlite` and `var/blobs` behave the same under PHP-FPM
+  (working directory `public/`) and in the CLI.
 
 ## Tests
 
@@ -153,8 +173,14 @@ composer test
 
 The suite boots the real `Application::forHost()` assembly on a throwaway
 SQLite database and drives the real front controller: migrations twice,
-login/rotation/CSRF/logout/throttle, a post written and read over HTTP, actor
-document and WebFinger, and route parity against the core manifest.
+login/rotation/CSRF/logout/throttle, route budgets, a post written and read
+over HTTP, media upload/serving/attachment, actor document and WebFinger, the
+cleanup job through the worker, and route parity against the core manifest.
+
+The PostgreSQL path is exercised separately: migrations twice, account
+creation, login, post write/read, media upload/serve and WebFinger against a
+real PostgreSQL server. The automated suite stays on SQLite so it runs without
+a database service.
 
 ## License
 

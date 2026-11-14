@@ -25,7 +25,7 @@ declare(strict_types=1);
 
     <dl>
         <dt>Actor</dt>
-        <dd><a href="<?= $escape($actorUrl) ?>"><?= $escape($actorUrl) ?></a></dd>
+        <dd><a href="/@<?= $escape(rawurlencode($handle)) ?>"><?= $escape($actorUrl) ?></a></dd>
         <dt>Instanz</dt>
         <dd><?= $escape($instanceUrl) ?></dd>
         <dt>Core</dt>
