@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useHostBridge } from '@alohasocial/ui';
 import type { AlohaHostBridge } from './bridge';
 import AppIcon from './components/AppIcon.vue';
@@ -33,6 +33,7 @@ initTheme();
 
 let stopRouter: (() => void) | null = null;
 let unreadTimer = 0;
+const loggingOut = ref(false);
 
 const currentView = computed(() => {
 	switch (route.value.name) {
@@ -120,6 +121,19 @@ function onVisibilityChange(): void {
 	}
 }
 
+async function logout(): Promise<void> {
+	if (loggingOut.value) {
+		return;
+	}
+
+	loggingOut.value = true;
+	try {
+		await getApi().logout();
+	} finally {
+		loggingOut.value = false;
+	}
+}
+
 onMounted(async () => {
 	stopRouter = initRouter();
 	await bootstrap();
@@ -171,6 +185,17 @@ watch(() => appState.instance?.name, (name) => {
 				</span>
 			</a>
 			<div class="a-mobile-head__actions">
+				<button
+					v-if="appState.session.user !== null"
+					type="button"
+					class="a-icon-btn"
+					aria-label="Abmelden"
+					title="Abmelden"
+					:disabled="loggingOut"
+					@click="logout"
+				>
+					<AppIcon name="logout" :size="19" />
+				</button>
 				<button type="button" class="a-icon-btn" aria-label="Farbschema wechseln" @click="toggleTheme">
 					<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="19" />
 				</button>

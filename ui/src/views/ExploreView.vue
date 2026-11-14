@@ -127,7 +127,7 @@ function isFollowingTag(tag: string): boolean {
 			<input
 				v-model="query"
 				type="search"
-				placeholder="Suche nach Worten, Menschen oder #hashtags …"
+				placeholder="Worte, Menschen, #Tags …"
 				aria-label="Öffentliche Beiträge durchsuchen"
 			/>
 			<button v-if="query !== ''" type="button" class="a-icon-btn" aria-label="Suche leeren" @click="query = ''">

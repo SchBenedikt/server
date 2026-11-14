@@ -21,6 +21,14 @@ export interface PollOption {
 	votes_count: number;
 }
 
+export interface PostInteraction {
+	favourites_count: number;
+	favourited: boolean;
+	reblogs_count: number;
+	reblogged: boolean;
+	replies_count: number;
+}
+
 export interface Poll {
 	options: PollOption[];
 	multiple: boolean;
@@ -50,6 +58,7 @@ export interface TimelineItem {
 	object_id?: string | null;
 	object_author_id?: string | null;
 	boosted_by?: string | null;
+	interaction?: PostInteraction;
 }
 
 export interface Relationship {

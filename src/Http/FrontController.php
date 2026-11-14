@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Http;
 
+use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
@@ -102,6 +103,35 @@ final class FrontController
             ]);
         }
 
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/interactions') {
+            $ids = array_slice(explode(',', (string) ($request->queryParam('ids') ?? '')), 0, 80);
+
+            return Response::json([
+                'interactions' => $this->runtime->interactions->forPosts($ids, $session?->userId()),
+            ]);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/posts') {
+            $ids = array_slice(explode(',', (string) ($request->queryParam('ids') ?? '')), 0, 80);
+            $posts = [];
+            foreach ($ids as $id) {
+                $id = trim($id);
+                if ($id === '' || mb_strlen($id) > 64) {
+                    continue;
+                }
+
+                try {
+                    $post = $this->runtime->app->posts->getVisible($id, $session?->userId());
+                } catch (PostNotFoundException) {
+                    continue;
+                }
+
+                $posts[$id] = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
+            }
+
+            return Response::json(['posts' => $posts]);
+        }
+
         $userId = $session?->userId();
 
         if ($userId !== null && in_array($request->method, self::MUTATING_METHODS, true)) {
@@ -117,6 +147,51 @@ final class FrontController
                     403,
                 );
             }
+        }
+
+        if ($request->method === 'PATCH' && $request->path === '/api/v1/host/profile') {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+            }
+
+            $body = json_decode($request->body, true);
+            if (!is_array($body) || !array_key_exists('display_name', $body) || !is_string($body['display_name'])) {
+                return $this->apiError(422, 'invalid_profile', 'Der Anzeigename fehlt.', ['display_name' => 'Bitte gib einen Anzeigenamen ein.']);
+            }
+
+            $displayName = trim($body['display_name']);
+            if (mb_strlen($displayName) > 80) {
+                return $this->apiError(422, 'invalid_profile', 'Der Anzeigename ist zu lang.', ['display_name' => 'Höchstens 80 Zeichen.']);
+            }
+
+            $this->runtime->accounts->updateDisplayName($userId, $displayName === '' ? null : $displayName);
+            $account = $this->runtime->accounts->find($userId);
+
+            return Response::json([
+                'account' => [
+                    'handle' => $userId,
+                    'display_name' => $account?->name() ?? $userId,
+                ],
+            ]);
+        }
+
+        if (preg_match('#^/api/v1/posts/([^/]+)/like$#', $request->path, $matches) === 1
+            && in_array($request->method, ['POST', 'DELETE'], true)
+        ) {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+            }
+
+            $postId = rawurldecode($matches[1]);
+            try {
+                $interaction = $request->method === 'POST'
+                    ? $this->runtime->interactions->like($userId, $postId)
+                    : $this->runtime->interactions->unlike($userId, $postId);
+            } catch (PostNotFoundException) {
+                return $this->apiError(404, 'post_not_found', 'Dieser Beitrag ist nicht verfügbar.');
+            }
+
+            return Response::json(['interaction' => $interaction]);
         }
 
         $rateLimited = $this->enforceRateLimit($request, $userId);
@@ -487,6 +562,19 @@ final class FrontController
         }
 
         return new Response($status, $headers, $body);
+    }
+
+    /**
+     * @param array<string, string> $fields
+     */
+    private function apiError(int $status, string $code, string $message, array $fields = []): Response
+    {
+        $error = ['code' => $code, 'message' => $message];
+        if ($fields !== []) {
+            $error['fields'] = $fields;
+        }
+
+        return Response::json(['error' => $error], $status);
     }
 
     private function redirect(string $location, ?SessionIssue $issue = null, bool $clearCookie = false): Response
