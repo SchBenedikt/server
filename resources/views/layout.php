@@ -99,6 +99,15 @@ declare(strict_types=1);
             font-size: 0.92rem;
         }
 
+        .notice {
+            color: var(--accent);
+            border: 1px solid currentColor;
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            margin: 0.75rem 0;
+            font-size: 0.92rem;
+        }
+
         label { display: block; margin: 0.9rem 0 0.3rem; font-size: 0.9rem; font-weight: 600; }
 
         input {

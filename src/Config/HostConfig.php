@@ -44,6 +44,14 @@ final readonly class HostConfig
         public bool $remoteMedia,
         public bool $mastodonApi,
         public string $mastodonPrefix,
+        public string $mailTransport,
+        public string $mailFrom,
+        public string $mailLogDirectory,
+        public ?string $smtpHost,
+        public int $smtpPort,
+        public ?string $smtpUser,
+        public ?string $smtpPassword,
+        public string $smtpEncryption,
     ) {
     }
 
@@ -112,6 +120,33 @@ final readonly class HostConfig
 
         $secret = $pick('secret_key', 'ALOHASOCIAL_SECRET_KEY', null);
 
+        $mailTransport = strtolower(trim((string) $pick('mail_transport', 'ALOHASOCIAL_MAIL_TRANSPORT', 'log')));
+        if (!in_array($mailTransport, ['log', 'smtp'], true)) {
+            throw new RuntimeException('mail_transport must be log or smtp, got: ' . $mailTransport);
+        }
+
+        $smtpEncryption = strtolower(trim((string) $pick('smtp_encryption', 'ALOHASOCIAL_SMTP_ENCRYPTION', 'starttls')));
+        if (!in_array($smtpEncryption, ['none', 'starttls', 'tls'], true)) {
+            throw new RuntimeException('smtp_encryption must be none, starttls or tls, got: ' . $smtpEncryption);
+        }
+
+        $smtpHost = self::nullable($pick('smtp_host', 'ALOHASOCIAL_SMTP_HOST', null));
+        if ($mailTransport === 'smtp' && $smtpHost === null) {
+            throw new RuntimeException('mail_transport smtp needs ALOHASOCIAL_SMTP_HOST.');
+        }
+
+        $mailFrom = trim((string) $pick(
+            'mail_from',
+            'ALOHASOCIAL_MAIL_FROM',
+            'no-reply@' . (parse_url($instanceUrl, PHP_URL_HOST) ?: 'localhost'),
+        ));
+        // A local development instance has a host like "localhost" or an IP,
+        // which FILTER_VALIDATE_EMAIL rejects. Check the shape instead; a real
+        // SMTP server still validates the envelope it accepts.
+        if ($mailFrom === '' || preg_match('/^[^@\s]+@[^@\s]+$/', $mailFrom) !== 1 || str_contains($mailFrom, "\n") || str_contains($mailFrom, "\r")) {
+            throw new RuntimeException('mail_from must be an email address, got: ' . $mailFrom);
+        }
+
         return new self(
             instanceUrl: $instanceUrl,
             instanceName: trim((string) $pick('instance_name', 'ALOHASOCIAL_INSTANCE_NAME', 'Aloha Social')),
@@ -131,6 +166,14 @@ final readonly class HostConfig
             remoteMedia: $bool($pick('remote_media', 'ALOHASOCIAL_REMOTE_MEDIA', true)),
             mastodonApi: $bool($pick('mastodon_api', 'ALOHASOCIAL_MASTODON_API', false)),
             mastodonPrefix: (string) $pick('mastodon_prefix', 'ALOHASOCIAL_MASTODON_PREFIX', '/api/mastodon/v1'),
+            mailTransport: $mailTransport,
+            mailFrom: $mailFrom,
+            mailLogDirectory: self::resolvePath((string) $pick('mail_log_directory', 'ALOHASOCIAL_MAIL_LOG_DIR', $varDirectory . '/mail'), $root),
+            smtpHost: $smtpHost,
+            smtpPort: (int) $pick('smtp_port', 'ALOHASOCIAL_SMTP_PORT', 587),
+            smtpUser: self::nullable($pick('smtp_user', 'ALOHASOCIAL_SMTP_USER', null)),
+            smtpPassword: self::nullable($pick('smtp_password', 'ALOHASOCIAL_SMTP_PASSWORD', null)),
+            smtpEncryption: $smtpEncryption,
         );
     }
 

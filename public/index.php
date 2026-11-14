@@ -14,6 +14,19 @@ use AlohaSocial\Server\Http\FrontController;
 use AlohaSocial\Server\Http\GlobalsRequestFactory;
 
 $root = dirname(__DIR__);
+
+// With `php -S ... public/index.php` the built-in server calls this router for
+// every request, including files under public/. Returning false lets it serve
+// the file itself; a production web server serves public/ directly.
+if (PHP_SAPI === 'cli-server') {
+    $requested = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+    $file = realpath(__DIR__ . (is_string($requested) ? $requested : '/'));
+
+    if ($file !== false && str_starts_with($file, __DIR__ . DIRECTORY_SEPARATOR) && is_file($file)) {
+        return false;
+    }
+}
+
 require $root . '/vendor/autoload.php';
 
 $debug = false;

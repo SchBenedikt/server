@@ -1,0 +1,74 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+#aloha-social {
+	display: block;
+	color: var(--text, #1c1b19);
+}
+
+#aloha-social a {
+	color: var(--accent, #2f6f5e);
+}
+
+.aloha-app {
+	display: grid;
+	gap: 1.5rem;
+}
+
+.aloha-app__header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	border-bottom: 1px solid var(--border, #e2ded7);
+	padding-bottom: 0.75rem;
+}
+
+.aloha-app__header h2 {
+	margin: 0;
+	font-size: 1.15rem;
+}
+
+.aloha-app__identity {
+	margin: 0.15rem 0 0;
+	color: var(--muted, #6b6862);
+	font-size: 0.9rem;
+}
+
+.aloha-app__nav {
+	display: flex;
+	align-items: center;
+	gap: 0.85rem;
+	font-size: 0.9rem;
+}
+
+.aloha-app__nav button {
+	margin: 0;
+	padding: 0.4rem 0.7rem;
+	border: 1px solid var(--border, #e2ded7);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--text, #1c1b19);
+	font: inherit;
+	cursor: pointer;
+}
+
+.aloha-app__panel {
+	border: 1px solid var(--border, #e2ded7);
+	border-radius: 12px;
+	padding: 1rem;
+	background: var(--card, #ffffff);
+}
+
+.aloha-app__panel h2 {
+	margin-top: 0;
+}
+
+.aloha-app__status {
+	margin: 0.6rem 0 0;
+	color: var(--muted, #6b6862);
+	font-size: 0.9rem;
+}

@@ -41,8 +41,10 @@
     },
     "scripts": {
         "test": "@php vendor/bin/phpunit",
+        "smoke:federation": "@php bin/federation-smoke.php",
         "check": [
-            "@test"
+            "@test",
+            "@smoke:federation"
         ]
     },
     "config": {

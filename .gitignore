@@ -1,4 +1,5 @@
 /vendor/
+/ui/node_modules/
 /.env
 /var/
 /storage/
