@@ -96,6 +96,12 @@ final class FrontController
             return Response::empty(204);
         }
 
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/profiles') {
+            return Response::json([
+                'profiles' => $this->runtime->accounts->displayNames(),
+            ]);
+        }
+
         $userId = $session?->userId();
 
         if ($userId !== null && in_array($request->method, self::MUTATING_METHODS, true)) {
@@ -429,8 +435,9 @@ final class FrontController
             'csrf' => $session?->session->csrfToken ?? '',
             'handle' => $account?->handle ?? '',
             'displayName' => $account?->name() ?? '',
+            'appShell' => true,
         ], 'App', 200, null, [
-            'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+            'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
         ]);
     }
 
@@ -472,7 +479,7 @@ final class FrontController
             'Cache-Control' => 'no-store',
             'X-Content-Type-Options' => 'nosniff',
             'Referrer-Policy' => 'same-origin',
-            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
         ], $overrides);
 
         if ($issue !== null) {

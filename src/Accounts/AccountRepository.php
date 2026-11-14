@@ -117,6 +117,31 @@ final class AccountRepository
     }
 
     /**
+     * Public display names for the shared UI directory.
+     *
+     * Email addresses and other account fields never leave the host.
+     *
+     * @return array<string, string>
+     */
+    public function displayNames(): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT id, display_name FROM account WHERE disabled_at IS NULL AND display_name IS NOT NULL'
+            . ' ORDER BY handle ASC LIMIT 500',
+        );
+
+        $names = [];
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['display_name'] ?? ''));
+            if ($name !== '') {
+                $names[(string) $row['id']] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
      * @param list<string>|null $allowedIds
      *
      * @return list<string>

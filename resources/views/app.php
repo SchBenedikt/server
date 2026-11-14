@@ -14,20 +14,30 @@ declare(strict_types=1);
  */
 
 ?>
+<link rel="icon" href="/ui/brand/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/ui/app.css">
-<section class="card">
-    <h1><?= $escape($instance) ?></h1>
-    <p class="muted">Die gemeinsame Aloha-Oberfläche, gemountet über den HostBridge dieses Servers.</p>
-
-    <div
-        id="aloha-social"
-        data-instance="<?= $escape($instance) ?>"
-        data-user="<?= $escape($handle) ?>"
-        data-display-name="<?= $escape($displayName) ?>"
-        data-csrf="<?= $escape($csrf) ?>"
-        data-signed-in="<?= $handle !== '' ? '1' : '0' ?>"
-    >
-        <noscript>Die App braucht JavaScript. Die API und die klassischen Seiten funktionieren ohne.</noscript>
+<div
+    id="aloha-social"
+    class="aloha-root"
+    data-instance="<?= $escape($instance) ?>"
+    data-user="<?= $escape($handle) ?>"
+    data-display-name="<?= $escape($displayName) ?>"
+    data-csrf="<?= $escape($csrf) ?>"
+    data-signed-in="<?= $handle !== '' ? '1' : '0' ?>"
+>
+    <div class="aloha-boot" aria-hidden="true">
+        <span class="aloha-boot__mark"><img src="/ui/brand/aloha-mark.svg" alt=""></span>
+        <span class="aloha-boot__text"><?= $escape($instance) ?> wird geöffnet …</span>
     </div>
-</section>
+    <noscript>
+        <section class="card">
+            <h1><?= $escape($instance) ?></h1>
+            <p class="muted">
+                Die Aloha-Oberfläche braucht JavaScript. Die klassischen Seiten und die API
+                funktionieren auch ohne.
+            </p>
+            <p><a href="/">Zum Dashboard</a></p>
+        </section>
+    </noscript>
+</div>
 <script type="module" src="/ui/app.js"></script>
