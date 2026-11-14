@@ -10,7 +10,9 @@ owns everything a process needs. Built against
 [the server blueprint](https://github.com/SchBenedikt/core/blob/main/docs/guides/server-architecture.md)
 and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/main/docs/operations/standalone-host.md).
 
-**Status: phases 0–3 of the blueprint** — the "server exists" milestone.
+**Status: phases 0–3 of the blueprint plus account mail, the shared UI and a
+federation smoke test** — a standalone instance that signs, delivers and
+accepts ActivityPub, resets passwords by email and serves the shared Vue app.
 
 | Phase | Delivered | Check |
 | --- | --- | --- |
@@ -19,11 +21,16 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 | 2 | Accounts, sessions, login, CSRF, `LocalActorDirectory` | login/logout, session rotation, CSRF rejection |
 | 3 | `Application::forHost()` and route parity | served routes equal `Routes::manifest()`; a post is written and read over HTTP |
 | 3b | Host hardening: declared rate limits, media upload/serving, cleanup job, password CLI | 429 with `Retry-After`; image upload and fetch; worker drains `cleanup` |
+| 4 | Password reset by email | hashed single-use token, mail via log/SMTP, sessions revoked |
+| 5 | Shared Vue UI mounted at `/app` | `HostBridge` page, timeline, composer, notifications; built assets committed |
+| 6 | Federation smoke against a real peer | two instances, signed Follow, follower edge, delivered Create |
 
-Not implemented yet (later blueprint phases): federation smoke tests with a
-real peer, AT Protocol account linking, the shared Vue UI mount,
-installer/container and password reset by email (the CLI resets a password;
-sending mail needs a transport this server does not ship).
+Not implemented yet (later blueprint phases): AT Protocol account linking,
+installer/container, and the Nextcloud host. The federation smoke also shows a
+core-level gap: an inbound `Accept` is not in the core's supported activity
+list, so the `Accept` a core instance queues for an inbound `Follow` is retried
+by the worker. The follower edge and the `Create` delivery are unaffected; the
+fix belongs in the core package, not in this host.
 
 ## Requirements
 
@@ -33,6 +40,8 @@ sending mail needs a transport this server does not ship).
   by default); PHP rejects a larger upload before the application sees it
 - Composer 2
 - PostgreSQL (preferred for a real instance) or SQLite (small installs, tests)
+- Node 20+ only to rebuild the shared UI; the built bundle in `public/ui/` is
+  committed, so a deployment does not need Node
 
 ## Quick start
 
@@ -45,7 +54,9 @@ php -S 127.0.0.1:3000 -t public public/index.php
 ```
 
 Open `http://127.0.0.1:3000/`, sign in, and the dashboard links the actor
-document, `/api/v1/instance` and the public timeline.
+document, `/api/v1/instance` and the public timeline. `/app` mounts the shared
+Vue interface; without SMTP the password-reset mail is written to
+`var/mail/*.eml`.
 
 For a production instance, point the web server at `public/` and run PHP-FPM;
 serve every request through `public/index.php` (the core route manifest lives
@@ -74,6 +85,48 @@ Cron alternatives:
 parity test compares them with the core's manifest, so a missing or renamed
 route fails the build instead of showing up in production.
 
+### Password reset mail
+
+The reset flow lives in the host (accounts are host-owned). A request creates a
+single-use token, stores only its SHA-256 and mails a link that expires after
+one hour; a completed reset revokes every session of the account.
+
+```shell
+# Development default: complete messages as files, no mail server needed.
+ALOHASOCIAL_MAIL_TRANSPORT=log
+php bin/cleanup.php --now --dry-run   # unrelated, but the CLI is the same boot
+ls var/mail/                          # open the .eml and use the link
+
+# Production: SMTP with STARTTLS and AUTH LOGIN.
+ALOHASOCIAL_MAIL_TRANSPORT=smtp
+ALOHASOCIAL_MAIL_FROM=aloha@example.org
+ALOHASOCIAL_SMTP_HOST=mail.example.org
+ALOHASOCIAL_SMTP_PORT=587
+ALOHASOCIAL_SMTP_USER=aloha
+ALOHASOCIAL_SMTP_PASSWORD=secret
+ALOHASOCIAL_SMTP_ENCRYPTION=starttls
+```
+
+`ALOHASOCIAL_SMTP_ENCRYPTION` also accepts `tls` (implicit TLS, usually port
+465) and `none`. A mail that cannot be handed off answers `503`, so the
+operator sees the failure instead of a silent drop.
+
+### Shared UI
+
+The page at `/app` is a small host app that mounts `@alohasocial/ui` through
+the standalone `HostBridge` (`src` under `ui/`). The bridge attaches the session
+cookie and `X-CSRF-Token`, and the shared screens consume only `/api/v1`.
+
+```shell
+# Only needed after changing the shared package or the host app.
+(cd vendor/alohasocial/core/ui && npm ci && npm run build)
+(cd ui && npm install && npm run build)   # writes public/ui/app.js + app.css
+```
+
+The bundle is committed, so a fresh clone serves `/app` without Node. The
+production web server serves `public/`; the PHP built-in server serves the
+bundle through the router fallback in `public/index.php`.
+
 ## Configuration
 
 Precedence: defaults < `config/server.php` < environment (and `.env`).
@@ -96,6 +149,12 @@ Precedence: defaults < `config/server.php` < environment (and `.env`).
 | `ALOHASOCIAL_REMOTE_MEDIA` | `true` | `social/media.remote_fetch` |
 | `ALOHASOCIAL_MASTODON_API` | `false` | Enables the compatibility prefix |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `/api/mastodon/v1` | Prefix for the compatibility routes |
+| `ALOHASOCIAL_MAIL_TRANSPORT` | `log` | `log` writes `.eml` files; `smtp` sends them |
+| `ALOHASOCIAL_MAIL_FROM` | `no-reply@<instance host>` | Envelope and `From` address |
+| `ALOHASOCIAL_MAIL_LOG_DIR` | `var/mail` | Directory of the `log` transport |
+| `ALOHASOCIAL_SMTP_HOST` / `ALOHASOCIAL_SMTP_PORT` | empty / `587` | SMTP server |
+| `ALOHASOCIAL_SMTP_USER` / `ALOHASOCIAL_SMTP_PASSWORD` | empty | AUTH LOGIN credentials; empty skips AUTH |
+| `ALOHASOCIAL_SMTP_ENCRYPTION` | `starttls` | `starttls`, `tls` or `none` |
 | `ALOHASOCIAL_DEBUG` | `false` | Debug messages in error responses; never enable in production |
 
 Secrets do not belong in `config/server.php` or in the repository. The instance
@@ -112,15 +171,19 @@ bin/cleanup.php           queue or run the bounded retention job
 bin/create-account.php    account creation (installer step, CLI)
 bin/set-password.php      password reset by CLI, revokes the account's sessions
 bin/routes.php            served route manifest
+bin/federation-smoke.php  two real instances exchanging a signed Follow + Create
+ui/                       host Vue app and HostBridge for @alohasocial/ui
+public/ui/                committed bundle served at /app
 
 src/Bootstrap/            boot sequence 1-9: config, PDO, keys, ports, assembly
 src/Config/               host config + the `social/*` config the core reads
 src/Db/                   PDO factory (sqlite/pgsql)
 src/Migrations/           schema_migration runner + core schema adoption
 src/Accounts/             account table, core LocalActorDirectory/Search/Count
-src/Auth/                 sessions, rotation, CSRF, password hashing, throttle
+src/Auth/                 sessions, rotation, CSRF, password hashing, reset, throttle
+src/Mail/                 log and SMTP transports
 src/Http/                 plain-PHP views, front controller, rate limiter, globals adapter
-resources/views/          login, dashboard, error pages
+resources/views/          login, dashboard, password reset, shared-app mount
 tests/                    migrations, auth, rate limits, media, worker and route parity
 ```
 
@@ -129,7 +192,7 @@ Request flow:
 ```
 Browser → public/index.php → HostConfig → ApplicationFactory::boot()
         → FrontController (session cookie → Request::$userId, CSRF)
-        → /, /login, /logout  (host pages)
+        → /, /login, /logout, /forgot-password, /reset-password, /app  (host pages)
         → $app->kernel->handle(Request)   (the core's 84 routes)
 ```
 
@@ -164,6 +227,14 @@ The core is a Composer VCS dependency pinned to the `0.7.x` line
 - **Relative paths** in the configuration resolve against the project root, so
   `sqlite:var/server.sqlite` and `var/blobs` behave the same under PHP-FPM
   (working directory `public/`) and in the CLI.
+- **Password reset** stores only a token hash; the plain token exists solely in
+  the mail. The request form answers the same for unknown identifiers, so it
+  cannot enumerate accounts, and five requests per address and fifteen minutes
+  are tolerated.
+- **The shared UI** talks to the host through one `HostBridge`; the host page
+  injects the handle and CSRF token as data attributes, never into
+  `localStorage`. Signed-out visitors get the public timeline, signed-in ones
+also get the composer and notifications.
 
 ## Tests
 
@@ -174,8 +245,20 @@ composer test
 The suite boots the real `Application::forHost()` assembly on a throwaway
 SQLite database and drives the real front controller: migrations twice,
 login/rotation/CSRF/logout/throttle, route budgets, a post written and read
-over HTTP, media upload/serving/attachment, actor document and WebFinger, the
-cleanup job through the worker, and route parity against the core manifest.
+over HTTP, media upload/serving/attachment, password reset by mailed token, the
+UI mount and its bundle, actor document and WebFinger, the cleanup job through
+the worker, and route parity against the core manifest.
+
+```shell
+composer smoke:federation      # or: php bin/federation-smoke.php
+```
+
+The smoke starts two real `php -S` instances with separate databases and keys,
+lets bob follow alice, checks the follower edge on alice's instance, posts as
+alice and asserts that bob receives the signed `Create` in his home timeline.
+It runs on loopback with `PHP_CLI_SERVER_WORKERS=4`, because the synchronous
+Follow makes each server fetch the other's actor document. `--keep` keeps the
+temporary directories for inspection.
 
 The PostgreSQL path is exercised separately: migrations twice, account
 creation, login, post write/read, media upload/serve and WebFinger against a

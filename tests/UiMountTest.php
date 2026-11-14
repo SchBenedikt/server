@@ -1,0 +1,66 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace AlohaSocial\Server\Tests;
+
+use AlohaSocial\Server\Tests\Support\TestServer;
+use PHPUnit\Framework\TestCase;
+
+final class UiMountTest extends TestCase
+{
+    public function testSignedOutAppPageMountsTheSharedBundle(): void
+    {
+        $server = new TestServer();
+
+        $response = $server->send('GET', '/app');
+
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('id="aloha-social"', $response->body);
+        self::assertStringContainsString('/ui/app.js', $response->body);
+        self::assertStringContainsString('/ui/app.css', $response->body);
+        self::assertStringContainsString('data-signed-in="0"', $response->body);
+        self::assertStringContainsString("script-src 'self'", (string) $response->header('Content-Security-Policy'));
+    }
+
+    public function testSignedInAppPageCarriesUserAndCsrfForTheBridge(): void
+    {
+        $server = new TestServer();
+        $server->createAccount();
+        $session = $server->signIn();
+
+        $response = $server->send('GET', '/app', ['cookies' => $session['cookies']]);
+
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('data-user="alice"', $response->body);
+        self::assertStringContainsString('data-signed-in="1"', $response->body);
+        self::assertStringContainsString('data-csrf="' . $session['csrf'] . '"', $response->body);
+    }
+
+    public function testTheBuiltSharedBundleIsInTheRepository(): void
+    {
+        $root = dirname(__DIR__);
+
+        self::assertFileExists($root . '/public/ui/app.js');
+        self::assertFileExists($root . '/public/ui/app.css');
+
+        $script = (string) file_get_contents($root . '/public/ui/app.js');
+        self::assertStringContainsString('aloha-app', $script);
+        self::assertStringContainsString('Neuer Beitrag', $script);
+        self::assertStringContainsString('/api/v1/timelines/public', $script);
+    }
+
+    public function testDashboardLinksTheSharedApp(): void
+    {
+        $server = new TestServer();
+        $server->createAccount();
+        $session = $server->signIn();
+
+        self::assertStringContainsString('href="/app"', $session['home']->body);
+    }
+}

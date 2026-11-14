@@ -17,10 +17,12 @@ use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Mail\Mailer;
 
 /**
  * Everything one request or worker tick needs, already wired.
@@ -41,6 +43,8 @@ final readonly class Runtime
         public SessionManager $sessions,
         public LoginThrottle $throttle,
         public PasswordHasher $passwordHasher,
+        public PasswordResetService $passwordReset,
+        public Mailer $mailer,
         public View $view,
         public Clock $clock,
     ) {

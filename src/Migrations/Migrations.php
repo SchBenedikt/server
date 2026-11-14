@@ -26,6 +26,7 @@ final class Migrations
             new Version202611140001CoreSchema(),
             new Version202611140002HostSchema(),
             new Version202611140003RateLimitSchema(),
+            new Version202611140004PasswordResetSchema(),
         ];
     }
 }

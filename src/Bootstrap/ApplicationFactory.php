@@ -25,12 +25,15 @@ use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Auth\SessionRepository;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Mail\LogMailer;
+use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Support\ErrorLogLogger;
@@ -96,6 +99,19 @@ final class ApplicationFactory
             hostResolver: $hostResolver,
         );
 
+        $mailer = $this->config->mailTransport === 'smtp'
+            ? new SmtpMailer(
+                (string) $this->config->smtpHost,
+                $this->config->smtpPort,
+                $this->config->smtpEncryption,
+                $this->config->smtpUser,
+                $this->config->smtpPassword,
+                $this->config->mailFrom,
+            )
+            : new LogMailer($this->config->mailLogDirectory, $this->config->mailFrom);
+
+        $passwordHasher = new PasswordHasher();
+
         return new Runtime(
             config: $this->config,
             database: $database,
@@ -106,7 +122,16 @@ final class ApplicationFactory
             directory: $directory,
             sessions: new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock),
             throttle: new LoginThrottle($database, $clock),
-            passwordHasher: new PasswordHasher(),
+            passwordHasher: $passwordHasher,
+            passwordReset: new PasswordResetService(
+                $database,
+                $accounts,
+                $passwordHasher,
+                $mailer,
+                $clock,
+                $this->config->instanceUrl,
+            ),
+            mailer: $mailer,
             view: new View($this->root . '/resources/views'),
             clock: $clock,
         );

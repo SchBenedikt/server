@@ -9,6 +9,7 @@ declare(strict_types=1);
  * @var callable $escape
  * @var string $csrf
  * @var string|null $error
+ * @var string|null $notice
  * @var string $handle
  */
 
@@ -16,6 +17,10 @@ declare(strict_types=1);
 <section class="card">
     <h1>Anmelden</h1>
     <p class="muted">Melde dich mit deinem Handle oder deiner E-Mail-Adresse an.</p>
+
+    <?php if ($notice !== null): ?>
+        <p class="notice"><?= $escape($notice) ?></p>
+    <?php endif; ?>
 
     <?php if ($error !== null): ?>
         <p class="error"><?= $escape($error) ?></p>
@@ -32,4 +37,6 @@ declare(strict_types=1);
 
         <button type="submit">Anmelden</button>
     </form>
+
+    <p class="muted"><a href="/forgot-password">Passwort vergessen?</a></p>
 </section>

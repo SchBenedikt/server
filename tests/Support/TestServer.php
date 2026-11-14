@@ -73,6 +73,9 @@ final class TestServer
             'remote_media' => false,
             'mastodon_api' => false,
             'mastodon_prefix' => '/api/mastodon/v1',
+            'mail_transport' => 'log',
+            'mail_from' => 'no-reply@example.test',
+            'mail_log_directory' => $this->directory . '/mail',
         ], $overrides));
 
         $database = PdoFactory::connect($this->config);

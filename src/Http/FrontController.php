@@ -13,8 +13,10 @@ use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
+use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\SessionIssue;
 use AlohaSocial\Server\Bootstrap\Runtime;
+use AlohaSocial\Server\Mail\MailException;
 
 /**
  * The server's only HTTP entry point.
@@ -47,7 +49,15 @@ final class FrontController
         $session = $this->runtime->sessions->resolve($rawCookie);
 
         if ($request->method === 'GET' && $request->path === '/login') {
-            return $this->loginForm($session, $rawCookie, $userAgent, $ip);
+            return $this->loginForm(
+                $session,
+                $rawCookie,
+                $userAgent,
+                $ip,
+                $request->queryParam('reset') === '1'
+                    ? 'Dein Passwort wurde geändert. Bitte melde dich neu an.'
+                    : null,
+            );
         }
 
         if ($request->method === 'POST' && $request->path === '/login') {
@@ -60,6 +70,26 @@ final class FrontController
 
         if ($request->method === 'GET' && $request->path === '/') {
             return $this->home($session);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/forgot-password') {
+            return $this->forgotPasswordForm($session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/forgot-password') {
+            return $this->forgotPassword($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/reset-password') {
+            return $this->resetPasswordForm($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/reset-password') {
+            return $this->resetPassword($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/app') {
+            return $this->appPage($session);
         }
 
         if ($request->method === 'GET' && $request->path === '/favicon.ico') {
@@ -141,18 +171,15 @@ final class FrontController
         ?string $rawCookie,
         ?string $userAgent,
         ?string $ip,
+        ?string $notice = null,
     ): Response {
         if ($session?->isSignedIn() === true) {
             return $this->redirect('/');
         }
 
-        $issue = null;
-        if ($session === null) {
-            $issue = $this->runtime->sessions->issue(null, $rawCookie, $userAgent, $ip);
-            $session = new AuthenticatedSession($issue->session, null);
-        }
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
 
-        return $this->loginResponse($session, null, 200, $issue);
+        return $this->loginResponse($session, null, 200, $issue, $notice);
     }
 
     private function login(
@@ -241,16 +268,184 @@ final class FrontController
         ], 'Übersicht');
     }
 
+    /**
+     * Routes outside the core need a session only for CSRF. A visitor without
+     * a cookie gets an anonymous one, exactly like the login form does.
+     *
+     * @return array{0: AuthenticatedSession, 1: ?SessionIssue}
+     */
+    private function anonymousSession(
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): array {
+        if ($session !== null) {
+            return [$session, null];
+        }
+
+        $issue = $this->runtime->sessions->issue(null, $rawCookie, $userAgent, $ip);
+
+        return [new AuthenticatedSession($issue->session, null), $issue];
+    }
+
+    private function forgotPasswordForm(
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+
+        return $this->page('forgot-password', [
+            'instance' => $this->runtime->config->instanceName,
+            'csrf' => $session->session->csrfToken,
+            'sent' => false,
+            'error' => null,
+            'value' => '',
+        ], 'Passwort zurücksetzen', 200, $issue);
+    }
+
+    private function forgotPassword(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+        $params = $this->formParams($request);
+        $value = trim((string) ($params['identifier'] ?? ''));
+
+        if (!$this->runtime->sessions->csrfMatches($session, $this->csrfToken($request))) {
+            return $this->page('forgot-password', [
+                'instance' => $this->runtime->config->instanceName,
+                'csrf' => $session->session->csrfToken,
+                'sent' => false,
+                'error' => 'Die Sitzung ist abgelaufen. Bitte erneut versuchen.',
+                'value' => $value,
+            ], 'Passwort zurücksetzen', 403, $issue);
+        }
+
+        $retryAfter = $this->runtime->rateLimiter->attempt(
+            'host.password_reset',
+            $ip ?? $request->remoteAddress ?? 'unknown',
+            5,
+            900,
+        );
+
+        if ($retryAfter !== null) {
+            return $this->page('forgot-password', [
+                'instance' => $this->runtime->config->instanceName,
+                'csrf' => $session->session->csrfToken,
+                'sent' => false,
+                'error' => 'Zu viele Anfragen. Bitte in ' . $retryAfter . ' Sekunden erneut versuchen.',
+                'value' => $value,
+            ], 'Passwort zurücksetzen', 429, $issue);
+        }
+
+        $error = null;
+        try {
+            $this->runtime->passwordReset->request($value);
+        } catch (MailException) {
+            $error = 'Die E-Mail konnte nicht versendet werden. Bitte später erneut versuchen.';
+        }
+
+        return $this->page('forgot-password', [
+            'instance' => $this->runtime->config->instanceName,
+            'csrf' => $session->session->csrfToken,
+            'sent' => $error === null,
+            'error' => $error,
+            'value' => $value,
+        ], 'Passwort zurücksetzen', $error === null ? 200 : 503, $issue);
+    }
+
+    private function resetPasswordForm(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+        $token = (string) ($request->queryParam('token') ?? '');
+        $valid = $token !== '' && $this->runtime->passwordReset->isValid($token);
+
+        return $this->page('reset-password', [
+            'instance' => $this->runtime->config->instanceName,
+            'csrf' => $session->session->csrfToken,
+            'token' => $token,
+            'valid' => $valid,
+            'error' => $valid ? null : 'Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.',
+        ], 'Neues Passwort', $valid ? 200 : 400, $issue);
+    }
+
+    private function resetPassword(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+        $params = $this->formParams($request);
+        $token = (string) ($params['token'] ?? '');
+        $password = (string) ($params['password'] ?? '');
+        $confirm = (string) ($params['password_confirm'] ?? '');
+
+        $render = function (string $error, int $status) use ($session, $issue, $token): Response {
+            return $this->page('reset-password', [
+                'instance' => $this->runtime->config->instanceName,
+                'csrf' => $session->session->csrfToken,
+                'token' => $token,
+                'valid' => false,
+                'error' => $error,
+            ], 'Neues Passwort', $status, $issue);
+        };
+
+        if (!$this->runtime->sessions->csrfMatches($session, $this->csrfToken($request))) {
+            return $render('Die Sitzung ist abgelaufen. Bitte erneut versuchen.', 403);
+        }
+
+        if ($password !== $confirm) {
+            return $render('Die Passwörter stimmen nicht überein.', 422);
+        }
+
+        try {
+            $this->runtime->passwordReset->reset($token, $password);
+        } catch (PasswordResetException $exception) {
+            return $render($exception->getMessage(), 422);
+        }
+
+        return $this->redirect('/login?reset=1');
+    }
+
+    private function appPage(?AuthenticatedSession $session): Response
+    {
+        $account = $session?->account;
+
+        return $this->page('app', [
+            'instance' => $this->runtime->config->instanceName,
+            'csrf' => $session?->session->csrfToken ?? '',
+            'handle' => $account?->handle ?? '',
+            'displayName' => $account?->name() ?? '',
+        ], 'App', 200, null, [
+            'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+        ]);
+    }
+
     private function loginResponse(
         ?AuthenticatedSession $session,
         ?string $error,
         int $status,
         ?SessionIssue $issue = null,
+        ?string $notice = null,
     ): Response {
         return $this->page('login', [
             'instance' => $this->runtime->config->instanceName,
             'csrf' => $session?->session->csrfToken ?? '',
             'error' => $error,
+            'notice' => $notice,
             'handle' => '',
         ], 'Anmelden', $status, $issue);
     }
@@ -258,21 +453,27 @@ final class FrontController
     /**
      * @param array<string, mixed> $data
      */
-    private function page(string $template, array $data, string $title, int $status = 200, ?SessionIssue $issue = null): Response
-    {
+    private function page(
+        string $template,
+        array $data,
+        string $title,
+        int $status = 200,
+        ?SessionIssue $issue = null,
+        array $overrides = [],
+    ): Response {
         $data['title'] = $title;
         $data['instance'] = $data['instance'] ?? $this->runtime->config->instanceName;
         $data['content'] = $this->runtime->view->render($template, $data);
 
         $body = $this->runtime->view->render('layout', $data);
 
-        $headers = [
+        $headers = array_merge([
             'Content-Type' => 'text/html; charset=utf-8',
             'Cache-Control' => 'no-store',
             'X-Content-Type-Options' => 'nosniff',
             'Referrer-Policy' => 'same-origin',
             'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-        ];
+        ], $overrides);
 
         if ($issue !== null) {
             $headers['Set-Cookie'] = $this->cookie($issue);
