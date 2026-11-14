@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import type { HostBridge, UiRequest, UiResponse, UiUser } from '@alohasocial/ui';
+import type { Attachment, HostBridge, UiRequest, UiResponse, UiUser } from '@alohasocial/ui';
 
 const mount = document.getElementById('aloha-social');
 
@@ -25,7 +25,11 @@ function apiUrl(path: string, query?: Record<string, string>): string {
  * The standalone host owns its session cookie and its CSRF header. The shared
  * components only ever see core paths and the raw response.
  */
-export const bridge: HostBridge = {
+export interface AlohaHostBridge extends HostBridge {
+	uploadMedia(file: File, altText: string): Promise<Attachment>;
+}
+
+export const bridge: AlohaHostBridge = {
 	apiBase: '',
 
 	async currentUser(): Promise<UiUser | null> {
@@ -89,6 +93,35 @@ export const bridge: HostBridge = {
 
 	capabilities() {
 		return { media: true, atproto: false };
+	},
+
+	async uploadMedia(file: File, altText: string): Promise<Attachment> {
+		const body = new FormData();
+		body.append('file', file);
+		if (altText !== '') {
+			body.append('alt_text', altText);
+		}
+
+		const headers: Record<string, string> = { Accept: 'application/json' };
+		if (csrf !== '') {
+			headers['X-CSRF-Token'] = csrf;
+		}
+
+		const response = await fetch('/api/v1/media', {
+			method: 'POST',
+			headers,
+			credentials: 'same-origin',
+			body,
+		});
+
+		const text = await response.text();
+		const payload = text.trim() === '' ? null : JSON.parse(text) as { attachment?: Attachment; error?: { message?: string } };
+
+		if (!response.ok || payload?.attachment === undefined) {
+			throw new Error(payload?.error?.message ?? 'Das Bild konnte nicht hochgeladen werden.');
+		}
+
+		return payload.attachment;
 	},
 };
 

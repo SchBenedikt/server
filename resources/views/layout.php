@@ -10,7 +10,10 @@ declare(strict_types=1);
  * @var string $title
  * @var string $instance
  * @var string $content
+ * @var bool $appShell
  */
+
+$appShell = $appShell ?? false;
 
 ?>
 <!DOCTYPE html>
@@ -19,27 +22,73 @@ declare(strict_types=1);
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $escape($title) ?> · <?= $escape($instance) ?></title>
+    <link rel="icon" href="/ui/brand/favicon.svg" type="image/svg+xml">
+    <?php if (!$appShell): ?>
     <style>
+        @font-face {
+            font-family: 'Fredoka';
+            font-style: normal;
+            font-weight: 300 700;
+            font-display: swap;
+            src: url('/ui/brand/fonts/Fredoka-Variable.woff2') format('woff2');
+        }
+
+        @font-face {
+            font-family: 'Public Sans';
+            font-style: normal;
+            font-weight: 100 900;
+            font-display: swap;
+            src: url('/ui/brand/fonts/PublicSans-Variable.woff2') format('woff2');
+        }
+
+        @font-face {
+            font-family: 'IBM Plex Mono';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url('/ui/brand/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+        }
+
         :root {
-            color-scheme: light dark;
-            --bg: #f6f5f2;
+            color-scheme: light;
+            --bg: #fbf4ea;
             --card: #ffffff;
-            --text: #1c1b19;
-            --muted: #6b6862;
-            --accent: #2f6f5e;
-            --border: #e2ded7;
-            --error: #a4351f;
+            --soft: #f7efe3;
+            --text: #1c2f37;
+            --strong: #0f4c5c;
+            --muted: #5f7078;
+            --faint: #7c898e;
+            --accent: #b14330;
+            --accent-strong: #963a2b;
+            --accent-ink: #ffffff;
+            --border: #e9dfd1;
+            --border-strong: #d9cdba;
+            --error: #a53232;
+            --error-soft: #f8e3df;
+            --success: #1d6b55;
+            --font-sans: 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+            --font-brand: 'Fredoka', 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+            --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
         }
 
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #17181a;
-                --card: #1f2124;
-                --text: #ececec;
-                --muted: #a5a39e;
-                --accent: #7fd3ba;
-                --border: #2e3135;
-                --error: #ff8f76;
+                color-scheme: dark;
+                --bg: #0d2029;
+                --card: #132b35;
+                --soft: #17323e;
+                --text: #f4eee4;
+                --strong: #fdf8ef;
+                --muted: #a0b2b9;
+                --faint: #83979e;
+                --accent: #ef7a66;
+                --accent-strong: #f5917f;
+                --accent-ink: #0d2029;
+                --border: rgb(255 255 255 / 0.11);
+                --border-strong: rgb(255 255 255 / 0.22);
+                --error: #ff9b8c;
+                --error-soft: rgb(255 155 140 / 0.14);
+                --success: #8ad5bd;
             }
         }
 
@@ -52,26 +101,58 @@ declare(strict_types=1);
             flex-direction: column;
             background: var(--bg);
             color: var(--text);
-            font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            font: 15.5px/1.6 var(--font-sans);
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
         }
 
         header, main, footer { width: min(760px, 100% - 2rem); margin-inline: auto; }
 
-        header { padding: 1.5rem 0 0.5rem; }
+        header { padding: 2rem 0 1rem; }
 
-        header a {
-            color: var(--text);
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            color: var(--strong);
             text-decoration: none;
-            font-weight: 650;
-            letter-spacing: -0.01em;
         }
 
-        main { flex: 1; padding: 0.5rem 0 2rem; }
+        .brand img { width: 38px; height: 38px; }
+
+        .brand-copy { display: grid; line-height: 1.1; }
+
+        .brand-copy strong {
+            color: var(--strong);
+            font-family: var(--font-brand);
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-copy small {
+            color: var(--muted);
+            font-family: var(--font-mono);
+            font-size: 0.55rem;
+            font-weight: 500;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        main { flex: 1; padding: 0.75rem 0 2.5rem; }
 
         footer {
-            padding: 1rem 0 2rem;
-            color: var(--muted);
-            font-size: 0.85rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 0.5rem 1rem;
+            padding: 1.25rem 0 2.5rem;
+            border-top: 1px solid var(--border);
+            color: var(--faint);
+            font-family: var(--font-mono);
+            font-size: 0.62rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
 
         footer a { color: var(--muted); }
@@ -79,12 +160,18 @@ declare(strict_types=1);
         .card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 1.5rem;
+            border-radius: 1rem;
+            padding: 1.75rem;
         }
 
-        h1 { font-size: 1.45rem; margin: 0 0 0.35rem; letter-spacing: -0.02em; }
-        h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
+        h1, h2 {
+            font-family: var(--font-brand);
+            font-weight: 500;
+            letter-spacing: -0.025em;
+        }
+
+        h1 { margin: 0 0 0.4rem; color: var(--strong); font-size: 2rem; line-height: 1.1; }
+        h2 { margin: 1.6rem 0 0.55rem; color: var(--strong); font-size: 1.25rem; }
 
         p { margin: 0.4rem 0; }
 
@@ -92,61 +179,110 @@ declare(strict_types=1);
 
         .error {
             color: var(--error);
-            border: 1px solid currentColor;
-            border-radius: 8px;
-            padding: 0.6rem 0.75rem;
-            margin: 0.75rem 0;
-            font-size: 0.92rem;
+            background: var(--error-soft);
+            border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
+            border-radius: 0.7rem;
+            padding: 0.65rem 0.8rem;
+            margin: 0.8rem 0;
+            font-size: 0.9rem;
         }
 
         .notice {
-            color: var(--accent);
-            border: 1px solid currentColor;
-            border-radius: 8px;
-            padding: 0.6rem 0.75rem;
-            margin: 0.75rem 0;
-            font-size: 0.92rem;
+            color: var(--success);
+            background: color-mix(in srgb, var(--success) 10%, transparent);
+            border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
+            border-radius: 0.7rem;
+            padding: 0.65rem 0.8rem;
+            margin: 0.8rem 0;
+            font-size: 0.9rem;
         }
 
-        label { display: block; margin: 0.9rem 0 0.3rem; font-size: 0.9rem; font-weight: 600; }
+        label {
+            display: block;
+            margin: 0.95rem 0 0.35rem;
+            color: var(--strong);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
 
         input {
             width: 100%;
-            padding: 0.6rem 0.7rem;
+            padding: 0.7rem 0.85rem;
             border: 1px solid var(--border);
-            border-radius: 8px;
-            background: var(--bg);
+            border-radius: 0.65rem;
+            background: var(--soft);
             color: var(--text);
             font: inherit;
         }
 
+        input:focus-visible,
+        button:focus-visible,
+        a:focus-visible {
+            outline: 3px solid color-mix(in srgb, var(--accent) 62%, transparent);
+            outline-offset: 2px;
+        }
+
         button {
-            margin-top: 1.1rem;
-            padding: 0.6rem 1rem;
-            border: 0;
-            border-radius: 8px;
+            margin-top: 1.15rem;
+            padding: 0.65rem 1.15rem;
+            border: 1px solid var(--accent);
+            border-radius: 999px;
             background: var(--accent);
-            color: var(--card);
+            color: var(--accent-ink);
             font: inherit;
             font-weight: 600;
             cursor: pointer;
         }
 
-        button.secondary { background: transparent; color: var(--accent); border: 1px solid currentColor; }
+        button:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
 
-        dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 1rem; margin: 1rem 0 0; }
-        dt { color: var(--muted); }
+        button.secondary {
+            background: transparent;
+            color: var(--muted);
+            border-color: var(--border-strong);
+        }
+
+        button.secondary:hover { background: var(--soft); color: var(--text); }
+
+        dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.45rem 1rem; margin: 1.1rem 0 0; }
+
+        dt {
+            color: var(--faint);
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
         dd { margin: 0; overflow-wrap: anywhere; }
 
         ul { padding-left: 1.1rem; }
-        a { color: var(--accent); }
 
-        code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+        a { color: var(--accent); text-underline-offset: 0.18em; }
+
+        code { font-family: var(--font-mono); font-size: 0.9em; }
+
     </style>
+    <?php endif; ?>
 </head>
-<body>
-    <header><a href="/"><?= $escape($instance) ?></a></header>
+<body<?= $appShell ? ' class="app-shell"' : '' ?>>
+    <?php if (!$appShell): ?>
+        <header>
+            <a class="brand" href="/" aria-label="<?= $escape($instance) ?> — Startseite">
+                <img src="/ui/brand/aloha-mark.svg" alt="">
+                <span class="brand-copy">
+                    <strong><?= $escape($instance) ?></strong>
+                    <small>Offen &amp; föderiert</small>
+                </span>
+            </a>
+        </header>
+    <?php endif; ?>
     <main><?= $content ?></main>
-    <footer>Aloha Social server · core <?= $escape(\AlohaSocial\Server\Support\CoreVersion::current()) ?></footer>
+    <?php if (!$appShell): ?>
+        <footer>
+            <span>Aloha Social · Core <?= $escape(\AlohaSocial\Server\Support\CoreVersion::current()) ?></span>
+            <span><a href="/app">App öffnen</a> · <a href="/api/v1/instance">API</a></span>
+        </footer>
+    <?php endif; ?>
 </body>
 </html>

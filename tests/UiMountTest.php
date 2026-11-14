@@ -25,6 +25,7 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('/ui/app.js', $response->body);
         self::assertStringContainsString('/ui/app.css', $response->body);
         self::assertStringContainsString('data-signed-in="0"', $response->body);
+        self::assertStringContainsString('class="app-shell"', $response->body);
         self::assertStringContainsString("script-src 'self'", (string) $response->header('Content-Security-Policy'));
     }
 
@@ -50,9 +51,11 @@ final class UiMountTest extends TestCase
         self::assertFileExists($root . '/public/ui/app.css');
 
         $script = (string) file_get_contents($root . '/public/ui/app.js');
-        self::assertStringContainsString('aloha-app', $script);
-        self::assertStringContainsString('Neuer Beitrag', $script);
+        self::assertStringContainsString('a-shell', $script);
+        self::assertStringContainsString('Für dich', $script);
+        self::assertStringContainsString('/api/v1/timelines/home', $script);
         self::assertStringContainsString('/api/v1/timelines/public', $script);
+        self::assertStringContainsString('/api/v1/media', $script);
     }
 
     public function testDashboardLinksTheSharedApp(): void
