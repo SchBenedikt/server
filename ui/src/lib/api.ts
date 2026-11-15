@@ -21,8 +21,12 @@ import type {
 	PostInteraction,
 	Relationship,
 	RemoteConnectionsData,
+	RemoteEngagementData,
 	RemotePostData,
 	RemoteProfileData,
+	RemoteSearchData,
+	RemoteSearchNetwork,
+	RemoteSearchType,
 	ScheduledPost,
 	ScheduledPostPayload,
 	SearchResults,
@@ -55,10 +59,13 @@ export interface Api {
 	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
 	post(id: string): Promise<TimelineItem>;
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
+	quotedPosts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	account(id: string): Promise<Account>;
 	remoteProfile(handle: string, cursor?: string | null): Promise<RemoteProfileData>;
 	remotePost(id: string): Promise<RemotePostData>;
 	remoteConnections(handle: string, type: 'followers' | 'following', cursor?: string | null): Promise<RemoteConnectionsData>;
+	remoteEngagement(id: string, type: 'likes' | 'reposts', cursor?: string | null): Promise<RemoteEngagementData>;
+	remoteSearch(query: string, type?: RemoteSearchType, network?: RemoteSearchNetwork, cursor?: string | null): Promise<RemoteSearchData>;
 	followRemote(actor: string, inbox: string): Promise<void>;
 	hostProfiles(): Promise<Record<string, string>>;
 	followAccount(id: string): Promise<Relationship>;
@@ -194,6 +201,11 @@ export function normalizeTimelineItem(value: unknown): TimelineItem | null {
 		recipient_ids: Array.isArray(value.recipient_ids)
 			? value.recipient_ids.filter((id): id is string => typeof id === 'string')
 			: [],
+		quoted_object_id: typeof value.quoted_object_id === 'string' ? value.quoted_object_id : null,
+		quote_state: value.quote_state === 'pending' || value.quote_state === 'accepted'
+			|| value.quote_state === 'rejected' || value.quote_state === 'revoked'
+			? value.quote_state
+			: null,
 		attachments,
 		poll: isRecord(value.poll) ? (value.poll as unknown as TimelineItem['poll']) : null,
 		kind: value.kind === 'boost' ? 'boost' : 'post',
@@ -247,6 +259,8 @@ export async function hydrateTimelineBoosts(posts: TimelineItem[]): Promise<Time
 				attachments: original.attachments ?? [],
 				content_warning: post.content_warning ?? original.content_warning,
 				in_reply_to_id: post.in_reply_to_id ?? original.in_reply_to_id,
+				quoted_object_id: post.quoted_object_id ?? original.quoted_object_id,
+				quote_state: post.quote_state ?? original.quote_state,
 				poll: post.poll ?? original.poll,
 			};
 		});
@@ -792,6 +806,30 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return result;
 		},
 
+		async quotedPosts(ids: string[]): Promise<Record<string, TimelineItem>> {
+			const unique = [...new Set(ids.filter((id) => id !== ''))].slice(0, 40);
+			if (unique.length === 0) {
+				return {};
+			}
+
+			const data = await request<{ quoted?: unknown }>(
+				'GET',
+				'/api/v1/host/quoted',
+				{ ids: unique.join(',') },
+			);
+			const result: Record<string, TimelineItem> = {};
+			if (isRecord(data?.quoted)) {
+				for (const [id, value] of Object.entries(data.quoted)) {
+					const post = normalizeTimelineItem(value);
+					if (post !== null) {
+						result[id] = post;
+					}
+				}
+			}
+
+			return result;
+		},
+
 		async account(id: string): Promise<Account> {
 			const data = await request<{ account?: unknown }>(
 				'GET',
@@ -898,6 +936,88 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			};
 		},
 
+		async remoteEngagement(
+			id: string,
+			type: 'likes' | 'reposts',
+			cursor: string | null = null,
+		): Promise<RemoteEngagementData> {
+			if (id === '') {
+				return { network: 'activitypub', type, profiles: [], cursor: null };
+			}
+
+			const query: Record<string, string> = { id, type };
+			if (cursor !== null && cursor !== '') {
+				query.cursor = cursor;
+			}
+
+			const data = await request<{
+				network?: unknown;
+				profiles?: unknown;
+				cursor?: unknown;
+			}>('GET', '/api/v1/host/remote-engagement', query);
+
+			return {
+				network: data?.network === 'bluesky' ? 'bluesky' : 'activitypub',
+				type: data?.type === 'reposts' ? 'reposts' : type,
+				profiles: Array.isArray(data?.profiles)
+					? data.profiles
+						.map(normalizeAccount)
+						.filter((profile): profile is Account => profile !== null)
+					: [],
+				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : null,
+			};
+		},
+
+		async remoteSearch(
+			query: string,
+			type: RemoteSearchType = 'all',
+			network: RemoteSearchNetwork = 'all',
+			cursor: string | null = null,
+		): Promise<RemoteSearchData> {
+			const parameters: Record<string, string> = { q: query, type, network };
+			if (cursor !== null && cursor !== '') {
+				parameters.cursor = cursor;
+			}
+
+			const data = await request<{
+				query?: unknown;
+				accounts?: unknown;
+				posts?: unknown;
+				cursor?: unknown;
+				notes?: unknown;
+			}>('GET', '/api/v1/host/search', parameters);
+
+			const accounts = Array.isArray(data?.accounts)
+				? data.accounts
+					.map(normalizeAccount)
+					.filter((account): account is Account => account !== null)
+					.map((account) => ({
+						...account,
+						relationship: account.relationship ?? {
+							following: false,
+							followed_by: false,
+							blocking: false,
+							muting: false,
+						},
+					}))
+				: [];
+			const posts = Array.isArray(data?.posts)
+				? data.posts
+					.map(normalizeTimelineItem)
+					.filter((post): post is TimelineItem => post !== null)
+				: [];
+
+			return {
+				query: typeof data?.query === 'string' ? data.query : query,
+				accounts,
+				posts,
+				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : null,
+				notes: Array.isArray(data?.notes)
+					? data.notes.filter((note): note is string => typeof note === 'string')
+					: [],
+			};
+		},
+
 		async followAccount(id: string): Promise<Relationship> {
 			const data = await request<{ relationship?: unknown }>(
 				'POST',
@@ -986,6 +1106,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 			if (payload.in_reply_to_id !== undefined && payload.in_reply_to_id !== null && payload.in_reply_to_id !== '') {
 				body.in_reply_to_id = payload.in_reply_to_id;
+			}
+			if (payload.quoted_post_id !== undefined && payload.quoted_post_id !== null && payload.quoted_post_id !== '') {
+				body.quoted_post_id = payload.quoted_post_id;
 			}
 			if (payload.attachment_ids !== undefined && payload.attachment_ids.length > 0) {
 				body.attachment_ids = payload.attachment_ids;

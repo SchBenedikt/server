@@ -62,6 +62,8 @@ export interface TimelineItem {
 	deleted_at?: string | null;
 	in_reply_to_id?: string | null;
 	recipient_ids?: string[];
+	quoted_object_id?: string | null;
+	quote_state?: 'pending' | 'accepted' | 'rejected' | 'revoked' | null;
 	attachments?: Attachment[];
 	poll?: Poll | null;
 	kind?: 'post' | 'boost';
@@ -124,6 +126,24 @@ export interface RemoteConnectionsData {
 	cursor: string | null;
 }
 
+export interface RemoteEngagementData {
+	network: 'activitypub' | 'bluesky';
+	type: 'likes' | 'reposts';
+	profiles: Account[];
+	cursor: string | null;
+}
+
+export type RemoteSearchType = 'all' | 'accounts' | 'posts';
+export type RemoteSearchNetwork = 'all' | 'activitypub' | 'bluesky';
+
+export interface RemoteSearchData {
+	query: string;
+	accounts: Account[];
+	posts: TimelineItem[];
+	cursor: string | null;
+	notes: string[];
+}
+
 export interface NotificationItem {
 	id: string;
 	type: string;
@@ -184,6 +204,7 @@ export interface CreatePostPayload {
 	visibility: 'public' | 'unlisted' | 'followers' | 'direct';
 	content_warning?: string | null;
 	in_reply_to_id?: string | null;
+	quoted_post_id?: string | null;
 	attachment_ids?: string[];
 	recipient_ids?: string[];
 }

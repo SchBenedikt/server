@@ -52,8 +52,19 @@ const editPost = computed(() => appState.composer.editPost);
 const isEdit = computed(() => editPost.value !== null);
 const replyTo = computed(() => appState.composer.replyTo);
 const isReply = computed(() => replyTo.value !== null);
+const quoteTo = computed(() => appState.composer.quoteTo);
+const isQuote = computed(() => quoteTo.value !== null);
+const quoteHandle = computed(() => quoteTo.value === null ? '' : handleLabel(quoteTo.value.object_author_id ?? quoteTo.value.author_id));
+const quoteTargetId = computed(() => {
+	const target = quoteTo.value;
+	if (target === null) {
+		return null;
+	}
+
+	return target.object_id ?? target.id;
+});
 const title = computed(() => (
-	isEdit.value ? 'Beitrag bearbeiten' : isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag'
+	isEdit.value ? 'Beitrag bearbeiten' : isQuote.value ? 'Beitrag zitieren' : isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag'
 ));
 const submitLabel = computed(() => {
 	if (submitting.value) {
@@ -64,7 +75,7 @@ const submitLabel = computed(() => {
 		return 'Planen';
 	}
 
-	return isEdit.value ? 'Speichern' : isReply.value ? 'Antworten' : 'Posten';
+	return isEdit.value ? 'Speichern' : isReply.value ? 'Antworten' : isQuote.value ? 'Zitieren' : 'Posten';
 });
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
@@ -99,6 +110,7 @@ const canSubmit = computed(() => (
 	&& pollReady.value
 	&& scheduleReady.value
 	&& (isReply.value ? replyId.value !== null : true)
+	&& (isQuote.value ? quoteTargetId.value !== null : true)
 	&& !(scheduledAt.value !== '' && showPoll.value)
 ));
 
@@ -147,7 +159,7 @@ function saveDraft(): void {
 function restoreDraft(): void {
 	resetExtras();
 
-	if (isReply.value || isEdit.value) {
+	if (isReply.value || isEdit.value || isQuote.value) {
 		content.value = '';
 		contentWarning.value = '';
 		showWarning.value = false;
@@ -225,6 +237,10 @@ function removePollOption(index: number): void {
 }
 
 function togglePoll(): void {
+	if (isQuote.value) {
+		return;
+	}
+
 	showPoll.value = !showPoll.value;
 	if (showPoll.value) {
 		scheduleOpen.value = false;
@@ -233,6 +249,10 @@ function togglePoll(): void {
 }
 
 function toggleSchedule(): void {
+	if (isQuote.value) {
+		return;
+	}
+
 	scheduleOpen.value = !scheduleOpen.value;
 	if (scheduleOpen.value) {
 		showPoll.value = false;
@@ -257,6 +277,9 @@ watch(() => appState.composer.open, async (open) => {
 		window.setTimeout(() => textarea.value?.focus(), 60);
 		if (replyTo.value !== null) {
 			void resolveAccount(replyTo.value.object_author_id ?? replyTo.value.author_id);
+		}
+		if (quoteTo.value !== null) {
+			void resolveAccount(quoteTo.value.object_author_id ?? quoteTo.value.author_id);
 		}
 	} else if (dialog.value?.open) {
 		dialog.value.close();
@@ -429,6 +452,7 @@ async function submit(): Promise<void> {
 			visibility: visibility.value,
 			content_warning: showWarning.value ? contentWarning.value : null,
 			in_reply_to_id: replyId.value,
+			quoted_post_id: isQuote.value ? quoteTargetId.value : null,
 			attachment_ids: attachmentIds,
 		});
 
@@ -442,7 +466,10 @@ async function submit(): Promise<void> {
 		visibility.value = 'public';
 		resetExtras();
 		closeComposer();
-		showToast(replying ? 'Antwort veröffentlicht.' : 'Beitrag veröffentlicht.', 'success');
+		showToast(
+			replying ? 'Antwort veröffentlicht.' : isQuote.value ? 'Zitat veröffentlicht.' : 'Beitrag veröffentlicht.',
+			'success',
+		);
 	} catch (caught) {
 		error.value = caught instanceof Error
 			? caught.message
@@ -473,6 +500,17 @@ async function submit(): Promise<void> {
 					<span v-if="replyAuthor !== replyHandle">{{ replyHandle }}</span>
 					<p>{{ truncate(replyTo.content, 160) }}</p>
 				</div>
+			</div>
+
+			<div v-if="quoteTo" class="a-composer__quote">
+				<p class="a-composer__quote-head">
+					<AppIcon name="quote" :size="15" />
+					<span>Du zitierst <strong>{{ quoteHandle }}</strong></span>
+				</p>
+				<p class="a-composer__quote-text">{{ truncate(quoteTo.content, 240) }}</p>
+				<p v-if="quoteTo.quote_state === 'pending'" class="a-composer__hint">
+					Bei entfernten Beiträgen kann die Freigabe noch ausstehen; der Beitrag wird trotzdem veröffentlicht.
+				</p>
 			</div>
 
 			<form class="a-composer__body" @submit.prevent="submit">
@@ -642,7 +680,7 @@ async function submit(): Promise<void> {
 						<AppIcon name="info" :size="20" />
 					</button>
 					<button
-						v-if="!isEdit"
+						v-if="!isEdit && !isQuote"
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showPoll }"
@@ -653,7 +691,7 @@ async function submit(): Promise<void> {
 						<AppIcon name="hash" :size="20" />
 					</button>
 					<button
-						v-if="!isEdit"
+						v-if="!isEdit && !isQuote"
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': scheduleOpen }"

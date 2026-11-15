@@ -66,8 +66,14 @@ Accounts, sessions and CSRF are host-owned per
   sign-in; the `return_to` parameter built by `loginUrl()` is not consumed yet.
   In addition to the core API, the host serves the same-origin UI extensions
   for likes, interaction counts, batch post hydration, profile updates, remote
-  profiles, remote post detail and remote followers/following lists (see the
-  README).
+  profiles, remote post detail, remote followers/following lists, remote
+  likes/boosts, cross-network search and quote resolution (see the README).
+- **Discovery.** `#/explore` searches the public timeline locally and offers a
+  cross-network search over Bluesky's AppView and a configurable public
+  Mastodon-compatible instance (`ALOHASOCIAL_DISCOVERY_INSTANCE`). Results are
+  grouped into profiles and posts, paged by cursor, and never stored locally.
+  A remote post's detail view lists who publicly liked or reposted it. Both
+  use the same SSRF guard and byte limits as the profile lookup.
 - **Editing.** The post menu on the signed-in account's own posts opens the
   composer in edit mode. It calls the core's `PATCH /api/v1/posts/{id}` with the
   `revision` that was read and rebroadcasts the saved record; a stale revision

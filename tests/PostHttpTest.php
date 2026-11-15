@@ -76,6 +76,57 @@ final class PostHttpTest extends TestCase
         self::assertStringContainsString('Hello #fediverse', $timeline->body);
     }
 
+    public function testLocalQuoteIsAcceptedAndResolvedForTheUi(): void
+    {
+        $original = $this->server->json('POST', '/api/v1/posts', [
+            'content' => 'The post that will be quoted',
+            'visibility' => 'public',
+        ], $this->cookies, $this->csrf);
+        self::assertSame(201, $original->status);
+        $originalId = json_decode($original->body, true, 512, JSON_THROW_ON_ERROR)['post']['id'];
+
+        $quote = $this->server->json('POST', '/api/v1/posts', [
+            'content' => 'Adding my own thoughts',
+            'visibility' => 'public',
+            'quoted_post_id' => $originalId,
+        ], $this->cookies, $this->csrf);
+
+        self::assertSame(201, $quote->status, $quote->body);
+        $quoted = json_decode($quote->body, true, 512, JSON_THROW_ON_ERROR)['post'];
+        $objectId = 'http://localhost:3000/api/v1/posts/' . $originalId;
+        self::assertSame($objectId, $quoted['quoted_object_id']);
+        self::assertSame('accepted', $quoted['quote_state']);
+        self::assertNotNull($quoted['quote_authorization_id']);
+
+        $resolved = $this->server->send('GET', '/api/v1/host/quoted', [
+            'query' => ['ids' => $objectId],
+            'cookies' => $this->cookies,
+        ]);
+        self::assertSame(200, $resolved->status);
+        $body = json_decode($resolved->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame($originalId, $body['quoted'][$objectId]['id']);
+        self::assertSame('The post that will be quoted', $body['quoted'][$objectId]['content']);
+    }
+
+    public function testPrivatePostCannotBeQuoted(): void
+    {
+        $original = $this->server->json('POST', '/api/v1/posts', [
+            'content' => 'Only for followers',
+            'visibility' => 'followers',
+        ], $this->cookies, $this->csrf);
+        self::assertSame(201, $original->status);
+        $originalId = json_decode($original->body, true, 512, JSON_THROW_ON_ERROR)['post']['id'];
+
+        $quote = $this->server->json('POST', '/api/v1/posts', [
+            'content' => 'Trying to quote a private post',
+            'visibility' => 'public',
+            'quoted_post_id' => $originalId,
+        ], $this->cookies, $this->csrf);
+
+        self::assertSame(422, $quote->status);
+        self::assertStringContainsString('quoted_post_id', $quote->body);
+    }
+
     public function testActorDocumentAndWebFingerResolveTheAccount(): void
     {
         $actor = $this->server->send('GET', '/@alice');

@@ -550,6 +550,239 @@ final class RemoteDirectoryTest extends TestCase
         self::assertSame('next-followers', $result['cursor']);
     }
 
+    public function testBlueskySearchReturnsActorsAndPosts(): void
+    {
+        $actors = 'https://public.api.bsky.app/xrpc/app.bsky.actor.searchActors?q=aloha&limit=20';
+        $posts = 'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=aloha&limit=25&sort=latest';
+
+        $this->http->json($actors, [
+            'actors' => [[
+                'did' => 'did:plc:alice',
+                'handle' => 'alice.bsky.test',
+                'displayName' => 'Alice',
+                'description' => '<p>Fediverse-Freundin</p>',
+                'avatar' => 'https://cdn.bsky.app/alice.png',
+                'followersCount' => 44,
+            ]],
+        ]);
+        $this->http->json($posts, [
+            'cursor' => 'posts-next',
+            'posts' => [[
+                'uri' => 'at://did:plc:alice/app.bsky.feed.post/3ksearch',
+                'author' => [
+                    'handle' => 'alice.bsky.test',
+                    'displayName' => 'Alice',
+                ],
+                'record' => [
+                    'text' => 'Hallo aus der Suche',
+                    'createdAt' => '2026-06-06T00:00:00Z',
+                ],
+            ]],
+        ]);
+
+        $result = $this->directory->search('aloha', 'all', 'bluesky');
+
+        self::assertSame('aloha', $result['query']);
+        self::assertCount(1, $result['accounts']);
+        self::assertSame('@alice.bsky.test', $result['accounts'][0]['handle']);
+        self::assertSame('Fediverse-Freundin', $result['accounts'][0]['bio']);
+        self::assertCount(1, $result['posts']);
+        self::assertSame('Hallo aus der Suche', $result['posts'][0]['content']);
+        self::assertSame('posts-next', $result['cursor']);
+        self::assertSame([], $result['notes']);
+    }
+
+    public function testMastodonKeywordSearchUsesTheDiscoveryInstance(): void
+    {
+        $directory = new RemoteDirectory(
+            $this->http,
+            new FederationTargetGuard(),
+            'discovery.test',
+        );
+
+        $accountSearch = 'https://discovery.test/api/v2/search?q=aloha&type=accounts&limit=20&resolve=false';
+        $statusSearch = 'https://discovery.test/api/v2/search?q=aloha&type=statuses&limit=20&resolve=false';
+
+        $this->http->json($accountSearch, [
+            'accounts' => [[
+                'id' => '9',
+                'uri' => 'https://discovery.test/users/carol',
+                'url' => 'https://discovery.test/@carol',
+                'acct' => 'carol',
+                'display_name' => 'Carol',
+                'note' => '<p>Discovery-Profil</p>',
+                'followers_count' => 10,
+            ]],
+            'statuses' => [],
+        ]);
+        $this->http->json($statusSearch, [
+            'accounts' => [],
+            'statuses' => [[
+                'id' => '77',
+                'uri' => 'https://discovery.test/users/carol/statuses/77',
+                'url' => 'https://discovery.test/@carol/77',
+                'created_at' => '2026-07-07T00:00:00Z',
+                'content' => '<p>Ein Treffer aus dem Fediverse</p>',
+                'visibility' => 'public',
+                'account' => [
+                    'uri' => 'https://discovery.test/users/carol',
+                    'url' => 'https://discovery.test/@carol',
+                    'acct' => 'carol',
+                ],
+                'media_attachments' => [],
+            ]],
+        ]);
+
+        $result = $directory->search('aloha', 'all', 'activitypub');
+
+        self::assertCount(1, $result['accounts']);
+        self::assertSame('@carol@discovery.test', $result['accounts'][0]['handle']);
+        self::assertSame('Discovery-Profil', $result['accounts'][0]['bio']);
+        self::assertCount(1, $result['posts']);
+        self::assertSame('Ein Treffer aus dem Fediverse', $result['posts'][0]['content']);
+    }
+
+    public function testMastodonHashtagSearchReadsTheTagTimeline(): void
+    {
+        $directory = new RemoteDirectory(
+            $this->http,
+            new FederationTargetGuard(),
+            'discovery.test',
+        );
+
+        $this->http->json(
+            'https://discovery.test/api/v2/search?q=%23aloha&type=accounts&limit=20&resolve=false',
+            ['accounts' => [], 'statuses' => []],
+        );
+        $this->http->json('https://discovery.test/api/v1/timelines/tag/aloha?limit=25', [
+            [
+                'id' => '88',
+                'uri' => 'https://discovery.test/users/dave/statuses/88',
+                'url' => 'https://discovery.test/@dave/88',
+                'created_at' => '2026-08-08T00:00:00Z',
+                'content' => '<p>#aloha ist ein Hashtag</p>',
+                'visibility' => 'public',
+                'account' => [
+                    'uri' => 'https://discovery.test/users/dave',
+                    'url' => 'https://discovery.test/@dave',
+                    'acct' => 'dave',
+                ],
+                'media_attachments' => [],
+            ],
+        ]);
+
+        $result = $directory->search('#aloha', 'posts', 'activitypub');
+
+        self::assertCount(1, $result['posts']);
+        self::assertSame('#aloha ist ein Hashtag', $result['posts'][0]['content']);
+        self::assertSame('@dave@discovery.test', $result['posts'][0]['author_handle']);
+    }
+
+    public function testSearchWithoutDiscoveryInstanceExplainsTheGap(): void
+    {
+        $directory = new RemoteDirectory($this->http, new FederationTargetGuard(), '');
+
+        // Bluesky is still reachable through its public AppView.
+        $this->http->json(
+            'https://public.api.bsky.app/xrpc/app.bsky.actor.searchActors?q=aloha&limit=20',
+            ['actors' => []],
+        );
+        $this->http->json(
+            'https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=aloha&limit=25&sort=latest',
+            ['posts' => []],
+        );
+
+        $result = $directory->search('aloha', 'all', 'activitypub');
+
+        self::assertSame([], $result['accounts']);
+        self::assertSame([], $result['posts']);
+        self::assertCount(1, $result['notes']);
+        self::assertStringContainsString('Discovery-Instanz', $result['notes'][0]);
+    }
+
+    public function testMastodonEngagementListsLikesAndBoosts(): void
+    {
+        $likes = 'https://mastodon.test/api/v1/statuses/123/favourited_by?limit=40';
+        $this->http->json($likes, [[
+            'id' => '5',
+            'uri' => 'https://mastodon.test/users/eve',
+            'url' => 'https://mastodon.test/@eve',
+            'acct' => 'eve',
+            'display_name' => 'Eve',
+            'avatar' => 'https://cdn.test/eve.png',
+        ]]);
+
+        $likesResult = $this->directory->remoteEngagement('https://mastodon.test/@alice/123', 'likes');
+        self::assertSame('activitypub', $likesResult['network']);
+        self::assertSame('likes', $likesResult['type']);
+        self::assertCount(1, $likesResult['profiles']);
+        self::assertSame('@eve@mastodon.test', $likesResult['profiles'][0]['handle']);
+        self::assertNull($likesResult['cursor']);
+
+        $reposts = 'https://mastodon.test/api/v1/statuses/123/reblogged_by?limit=40&max_id=9';
+        $this->http->json($reposts, [[
+            'id' => '9',
+            'uri' => 'https://mastodon.test/users/frank',
+            'url' => 'https://mastodon.test/@frank',
+            'acct' => 'frank',
+            'display_name' => 'Frank',
+        ]]);
+
+        $repostResult = $this->directory->remoteEngagement('https://mastodon.test/@alice/123', 'reposts', '9');
+        self::assertSame('reposts', $repostResult['type']);
+        self::assertCount(1, $repostResult['profiles']);
+        self::assertSame('@frank@mastodon.test', $repostResult['profiles'][0]['handle']);
+    }
+
+    public function testBlueskyEngagementReadsLikesAndReposts(): void
+    {
+        $uri = 'at://did:plc:abc/app.bsky.feed.post/3kabc';
+        $encoded = rawurlencode($uri);
+        $likes = 'https://public.api.bsky.app/xrpc/app.bsky.feed.getLikes?uri=' . $encoded . '&limit=50';
+        $reposts = 'https://public.api.bsky.app/xrpc/app.bsky.feed.getRepostedBy?uri=' . $encoded . '&limit=50';
+
+        $this->http->json($likes, [
+            'likes' => [[
+                'actor' => [
+                    'did' => 'did:plc:gina',
+                    'handle' => 'gina.bsky.test',
+                    'displayName' => 'Gina',
+                ],
+            ]],
+        ]);
+        $this->http->json($reposts, [
+            'cursor' => 'reposts-next',
+            'repostedBy' => [[
+                'did' => 'did:plc:hans',
+                'handle' => 'hans.bsky.test',
+                'displayName' => 'Hans',
+            ]],
+        ]);
+
+        $likeResult = $this->directory->remoteEngagement($uri, 'likes');
+        self::assertSame('bluesky', $likeResult['network']);
+        self::assertCount(1, $likeResult['profiles']);
+        self::assertSame('@gina.bsky.test', $likeResult['profiles'][0]['handle']);
+
+        $repostResult = $this->directory->remoteEngagement($uri, 'reposts');
+        self::assertCount(1, $repostResult['profiles']);
+        self::assertSame('@hans.bsky.test', $repostResult['profiles'][0]['handle']);
+        self::assertSame('reposts-next', $repostResult['cursor']);
+    }
+
+    public function testUnknownEngagementTypeIsRejected(): void
+    {
+        try {
+            $this->directory->remoteEngagement('https://mastodon.test/@alice/123', 'stars');
+            self::fail('An unknown engagement type must not be accepted.');
+        } catch (RemoteDirectoryException $exception) {
+            self::assertSame('remote_engagement_type_invalid', $exception->errorCode);
+            self::assertSame(422, $exception->status);
+        }
+
+        self::assertSame([], $this->http->requests);
+    }
+
     public function testHtmlTextKeepsTextAndDropsMarkup(): void
     {
         self::assertSame(

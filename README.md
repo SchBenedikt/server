@@ -164,6 +164,9 @@ the core route contract:
 | `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
 | `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. |
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
+| `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
+| `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |
+| `GET /api/v1/host/quoted?ids=…` | Resolve the quoted note behind a quote post, local or remote. |
 | `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
 

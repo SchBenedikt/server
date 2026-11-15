@@ -63,6 +63,73 @@ const emptyRepliesText = computed(() => (
 		: 'Beginne die Unterhaltung – deine Antwort erscheint direkt hier.'
 ));
 
+// --- Remote engagement lists ---------------------------------------------
+const engagementTab = ref<'likes' | 'reposts' | null>(null);
+const engagement = ref<Record<'likes' | 'reposts', Account[]>>({ likes: [], reposts: [] });
+const engagementCursor = ref<Record<'likes' | 'reposts', string | null>>({ likes: null, reposts: null });
+const engagementLoading = ref(false);
+const engagementError = ref('');
+const engagementLoaded = ref<Record<'likes' | 'reposts', boolean>>({ likes: false, reposts: false });
+const likeTotal = computed(() => post.value?.likes_count ?? 0);
+const boostTotal = computed(() => post.value?.boosts_count ?? 0);
+const remoteEngagementTarget = computed(() => {
+	const item = post.value;
+	if (item === null || !isRemoteTarget.value) {
+		return '';
+	}
+
+	if (item.id.startsWith('at://')) {
+		return item.id;
+	}
+
+	return item.object_id ?? item.external_url ?? item.id;
+});
+
+async function openEngagement(tab: 'likes' | 'reposts'): Promise<void> {
+	if (engagementTab.value === tab) {
+		engagementTab.value = null;
+		return;
+	}
+
+	engagementTab.value = tab;
+	if (engagementLoaded.value[tab] || remoteEngagementTarget.value === '') {
+		return;
+	}
+
+	await loadEngagement(tab, true);
+}
+
+async function loadEngagement(tab: 'likes' | 'reposts', reset: boolean): Promise<void> {
+	if (engagementLoading.value || remoteEngagementTarget.value === '') {
+		return;
+	}
+
+	engagementLoading.value = true;
+	engagementError.value = '';
+	try {
+		const data = await getApi().remoteEngagement(
+			remoteEngagementTarget.value,
+			tab,
+			reset ? null : engagementCursor.value[tab],
+		);
+		const seen = new Set((reset ? [] : engagement.value[tab]).map((account) => account.id));
+		const merged = reset ? [] : [...engagement.value[tab]];
+		for (const account of data.profiles) {
+			if (!seen.has(account.id)) {
+				seen.add(account.id);
+				merged.push(account);
+			}
+		}
+		engagement.value = { ...engagement.value, [tab]: merged };
+		engagementCursor.value = { ...engagementCursor.value, [tab]: data.cursor };
+		engagementLoaded.value = { ...engagementLoaded.value, [tab]: true };
+	} catch (error) {
+		engagementError.value = error instanceof Error ? error.message : 'Die Liste konnte nicht geladen werden.';
+	} finally {
+		engagementLoading.value = false;
+	}
+}
+
 watch(id, () => {
 	void load();
 }, { immediate: true });
@@ -334,6 +401,69 @@ onUnmounted(() => {
 					<AppIcon name="external" :size="15" />
 					Original öffnen
 				</a>
+			</section>
+
+			<section v-if="isRemoteTarget && remoteEngagementTarget !== ''" class="a-engagement">
+				<header class="a-section-head">
+					<h2>Reaktionen</h2>
+					<span>öffentlich auf {{ remoteHostName }}</span>
+				</header>
+
+				<div class="a-chip-row" role="group" aria-label="Reaktionen">
+					<button
+						type="button"
+						class="a-tag-chip"
+						:class="{ 'a-tag-chip--active': engagementTab === 'likes' }"
+						@click="openEngagement('likes')"
+					>
+						<AppIcon name="heart" :size="14" />
+						{{ likeTotal }} Likes
+					</button>
+					<button
+						type="button"
+						class="a-tag-chip"
+						:class="{ 'a-tag-chip--active': engagementTab === 'reposts' }"
+						@click="openEngagement('reposts')"
+					>
+						<AppIcon name="repeat" :size="14" />
+						{{ boostTotal }} Boosts
+					</button>
+				</div>
+
+				<template v-if="engagementTab !== null">
+					<TimelineSkeleton v-if="engagementLoading && engagement[engagementTab].length === 0" :count="1" />
+
+					<p v-if="engagementError !== ''" class="a-feed__inline-error">{{ engagementError }}</p>
+
+					<ul v-else-if="engagement[engagementTab].length > 0" class="a-people a-people--wide">
+						<li v-for="account in engagement[engagementTab]" :key="account.id" class="a-person">
+							<a
+								:href="`#/u/${encodeURIComponent(account.handle !== '' ? account.handle : account.id)}`"
+								class="a-person__link"
+							>
+								<Avatar :id="account.id" :name="account.display_name" :src="account.avatar" :size="38" />
+								<span class="a-person__copy">
+									<strong>{{ account.display_name }}</strong>
+									<small>{{ account.handle }}</small>
+								</span>
+							</a>
+						</li>
+					</ul>
+
+					<p v-else-if="!engagementLoading" class="a-muted">
+						{{ engagementTab === 'likes' ? 'Noch keine öffentlichen Likes.' : 'Noch keine öffentlichen Boosts.' }}
+					</p>
+
+					<button
+						v-if="engagementCursor[engagementTab] !== null"
+						type="button"
+						class="a-btn a-btn--small"
+						:disabled="engagementLoading"
+						@click="loadEngagement(engagementTab, false)"
+					>
+						{{ engagementLoading ? 'Lädt …' : 'Weitere laden' }}
+					</button>
+				</template>
 			</section>
 
 			<section class="a-replies">

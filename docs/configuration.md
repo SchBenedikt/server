@@ -85,6 +85,7 @@ account.
 | --- | --- | --- | --- |
 | `ALOHASOCIAL_REMOTE_MEDIA` | `remote_media` | `true` | Allows the core to fetch remote media. |
 | `ALOHASOCIAL_MASTODON_API` | `mastodon_api` | `true` | Enables the Mastodon-compatible prefix. |
+| `ALOHASOCIAL_DISCOVERY_INSTANCE` | `discovery_instance` | `mastodon.social` | Public Mastodon-compatible instance used for federated keyword and hashtag search. Empty disables it; Bluesky search keeps working. |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `mastodon_prefix` | `/api/mastodon/v1` | Compatibility route prefix. |
 
 The application accepts JPEG, PNG and WebP images up to 5 MiB per file. Set

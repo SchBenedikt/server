@@ -4306,3 +4306,133 @@ dialog.a-modal::backdrop {
 .a-notification__excerpt:hover {
 	background: var(--a-surface-hover);
 }
+
+/* ------------------------------------------------------------- quote posts */
+
+.a-quote-embed {
+	display: grid;
+	gap: 6px;
+	margin-top: 10px;
+	padding: 10px 12px;
+	border: 1px solid var(--a-border-strong);
+	border-radius: 14px;
+	background: var(--a-bg-soft);
+	transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.a-quote-embed:hover {
+	border-color: color-mix(in srgb, var(--a-primary) 38%, var(--a-border-strong));
+}
+
+.a-quote-embed__state {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	color: var(--a-amber);
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.a-quote-embed__link {
+	display: grid;
+	gap: 5px;
+	color: inherit;
+	text-decoration: none;
+}
+
+.a-quote-embed__head {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	font-size: 12.5px;
+}
+
+.a-quote-embed__head strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.a-quote-embed__handle {
+	color: var(--a-muted);
+	font-size: 11.5px;
+	text-decoration: none;
+}
+
+.a-quote-embed__handle:hover {
+	color: var(--a-primary);
+}
+
+.a-quote-embed__head time {
+	margin-left: auto;
+	color: var(--a-faint);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.a-quote-embed__text {
+	display: -webkit-box;
+	margin: 0;
+	overflow: hidden;
+	color: var(--a-text);
+	font-size: 13px;
+	line-height: 1.5;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+	overflow-wrap: anywhere;
+}
+
+.a-quote-embed__cw {
+	margin: 0;
+	color: var(--a-amber);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.a-quote-embed__media {
+	width: 100%;
+	max-height: 220px;
+	margin-top: 2px;
+	border-radius: 9px;
+	object-fit: cover;
+}
+
+.a-quote-embed__missing {
+	margin: 0;
+	color: var(--a-faint);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.a-composer__quote {
+	display: grid;
+	gap: 6px;
+	margin: 0 18px 4px;
+	padding: 10px 12px;
+	border: 1px solid var(--a-border-strong);
+	border-radius: 12px;
+	background: var(--a-bg-soft);
+}
+
+.a-composer__quote-head {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 0;
+	color: var(--a-muted);
+	font-size: 12px;
+}
+
+.a-composer__quote-text {
+	display: -webkit-box;
+	margin: 0;
+	overflow: hidden;
+	color: var(--a-text);
+	font-size: 12.5px;
+	line-height: 1.5;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+	overflow-wrap: anywhere;
+}
