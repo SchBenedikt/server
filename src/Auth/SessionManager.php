@@ -104,6 +104,17 @@ final class SessionManager
         $this->sessions->delete(self::hash($rawCookie));
     }
 
+    /**
+     * Invalidates every signed-in session of an account.
+     *
+     * Used after a password reset and when an administrator disables an
+     * account, so an already issued cookie cannot outlive the decision.
+     */
+    public function revokeAccount(string $accountId): int
+    {
+        return $this->sessions->deleteForAccount($accountId);
+    }
+
     public function csrfMatches(?AuthenticatedSession $session, string $token): bool
     {
         if ($session === null || $token === '') {

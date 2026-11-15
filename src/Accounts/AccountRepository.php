@@ -121,6 +121,31 @@ final class AccountRepository
         );
     }
 
+    public function enable(string $id): void
+    {
+        $this->db->execute(
+            'UPDATE account SET disabled_at = NULL WHERE id = :id',
+            ['id' => $id],
+        );
+    }
+
+    public function updateRole(string $id, string $role): void
+    {
+        $this->db->execute(
+            'UPDATE account SET role = :role WHERE id = :id',
+            ['role' => $role, 'id' => $id],
+        );
+    }
+
+    public function activeAdminCount(): int
+    {
+        $value = $this->db->fetchValue(
+            "SELECT COUNT(*) FROM account WHERE role = 'admin' AND disabled_at IS NULL",
+        );
+
+        return $value === null ? 0 : (int) $value;
+    }
+
     public function count(): int
     {
         $value = $this->db->fetchValue('SELECT COUNT(*) FROM account WHERE disabled_at IS NULL');

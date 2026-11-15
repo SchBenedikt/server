@@ -7,6 +7,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import MediaGrid from './MediaGrid.vue';
+import ReportDialog from './ReportDialog.vue';
 import RichText from './RichText.vue';
 import { accountName, handleLabel, isLocalPostId, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
 import { hostDisplayName, resolveAccount } from '../lib/account';
@@ -93,6 +94,12 @@ const remoteTarget = computed(() => {
 const detailTarget = computed(() => localId.value ?? remoteTarget.value);
 const detailHref = computed(() => detailTarget.value === null ? null : `#/p/${encodeURIComponent(detailTarget.value)}`);
 const isRemotePost = computed(() => localId.value === null);
+const reportTargetId = computed(() => localId.value ?? remoteTarget.value ?? '');
+const canReport = computed(() => (
+	appState.session.user !== null
+	&& !isMine.value
+	&& reportTargetId.value !== ''
+));
 
 function blueskyPostUrl(id: string): string | null {
 	if (!id.startsWith('at://')) {
@@ -154,6 +161,7 @@ const confirmingDelete = ref(false);
 const menuOpen = ref(false);
 const bookmarked = ref(props.post.bookmarked === true);
 const bookmarking = ref(false);
+const reportOpen = ref(false);
 
 watch(() => props.post.bookmarked, (value) => {
 	if (value !== undefined) {
@@ -434,6 +442,16 @@ function edit(): void {
 	openEditor(props.post);
 }
 
+function openReport(): void {
+	if (appState.session.user === null) {
+		window.location.assign('/login');
+		return;
+	}
+
+	menuOpen.value = false;
+	reportOpen.value = true;
+}
+
 async function remove(): Promise<void> {
 	if (localId.value === null || deleting.value) {
 		return;
@@ -535,6 +553,9 @@ onUnmounted(() => {
 					</button>
 					<button type="button" role="menuitem" @click.stop="share">
 						<AppIcon name="share" :size="15" /> Link kopieren
+					</button>
+					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
+						<AppIcon name="flag" :size="15" /> Beitrag melden
 					</button>
 					<a
 						v-if="external"
@@ -643,12 +664,16 @@ onUnmounted(() => {
 		</div>
 
 		<footer class="a-post__actions">
-			<button v-if="!isRemotePost" type="button" class="a-post__action" aria-label="Antworten" title="Antworten" @click="reply">
+			<button
+				v-if="!isRemotePost"
+				type="button"
+				class="a-post__action"
+				:aria-label="`Antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:title="`Antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				@click="reply"
+			>
 				<AppIcon name="reply" :size="18" />
-				<span>
-					Antworten
-					<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
-				</span>
+				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</button>
 			<a
 				v-else-if="external"
@@ -656,18 +681,15 @@ onUnmounted(() => {
 				target="_blank"
 				rel="noopener noreferrer"
 				class="a-post__action"
-				aria-label="Auf dem Ursprungs-Server antworten"
-				title="Auf dem Ursprungs-Server antworten"
+				:aria-label="`Auf dem Ursprungs-Server antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:title="`Auf dem Ursprungs-Server antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
 			>
 				<AppIcon name="reply" :size="18" />
-				<span>
-					Antworten
-					<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
-				</span>
+				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</a>
-			<span v-else class="a-post__action a-post__action--static">
+			<span v-else class="a-post__action a-post__action--static" :title="`${replyCount} Antworten`">
 				<AppIcon name="reply" :size="18" />
-				<span>Antworten <b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b></span>
+				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</span>
 
 			<button
@@ -676,15 +698,12 @@ onUnmounted(() => {
 				class="a-post__action"
 				:class="{ 'a-post__action--active': boosted }"
 				:aria-label="boosted ? 'Boost entfernen' : 'Beitrag boosten'"
-				:title="boosted ? 'Boost entfernen' : 'Boosten'"
+				:title="boosted ? 'Boost entfernen' : 'Beitrag boosten'"
 				:disabled="boosting"
 				@click="toggleBoost"
 			>
 				<AppIcon name="repeat" :size="18" />
-				<span>
-					{{ boosted ? 'Geboostet' : 'Boosten' }}
-					<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
-				</span>
+				<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
 			</button>
 			<span
 				v-else
@@ -692,10 +711,7 @@ onUnmounted(() => {
 				:title="`${boostCount} Boosts auf ${handle}`"
 			>
 				<AppIcon name="repeat" :size="18" />
-				<span>
-					Boosts
-					<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
-				</span>
+				<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
 			</span>
 
 			<button
@@ -705,15 +721,12 @@ onUnmounted(() => {
 				:class="{ 'a-post__action--liked': liked }"
 				:aria-label="liked ? 'Like entfernen' : 'Beitrag liken'"
 				:aria-pressed="liked"
-				:title="liked ? 'Like entfernen' : 'Gefällt mir'"
+				:title="liked ? 'Like entfernen' : 'Beitrag liken'"
 				:disabled="liking"
 				@click="toggleLike"
 			>
 				<AppIcon name="heart" :size="18" />
-				<span>
-					Gefällt mir
-					<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
-				</span>
+				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 			</button>
 			<span
 				v-else
@@ -721,10 +734,7 @@ onUnmounted(() => {
 				:title="`${likeCount} Likes auf ${handle}`"
 			>
 				<AppIcon name="heart" :size="18" />
-				<span>
-					Gefällt mir
-					<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
-				</span>
+				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 			</span>
 
 			<button
@@ -734,17 +744,26 @@ onUnmounted(() => {
 				:class="{ 'a-post__action--active': bookmarked }"
 				:aria-label="bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'"
 				:aria-pressed="bookmarked"
-				:title="bookmarked ? 'Lesezeichen entfernen' : 'Lesezeichen'"
+				:title="bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'"
 				:disabled="bookmarking"
 				@click="toggleBookmark"
 			>
 				<AppIcon name="bookmark" :size="18" />
-				<span>{{ bookmarked ? 'Gespeichert' : 'Merken' }}</span>
+			</button>
+
+			<button
+				v-if="canReport"
+				type="button"
+				class="a-post__action"
+				aria-label="Beitrag melden"
+				title="Beitrag melden"
+				@click="openReport"
+			>
+				<AppIcon name="flag" :size="18" />
 			</button>
 
 			<button type="button" class="a-post__action" aria-label="Link teilen" title="Link teilen" @click="share">
 				<AppIcon name="share" :size="18" />
-				<span>Teilen</span>
 			</button>
 
 			<a
@@ -755,8 +774,15 @@ onUnmounted(() => {
 				title="Beitrag öffnen"
 			>
 				<AppIcon name="external" :size="17" />
-				<span>Öffnen</span>
 			</a>
 		</footer>
+
+		<ReportDialog
+			:open="reportOpen"
+			target-type="post"
+			:target-id="reportTargetId"
+			:target-label="handle"
+			@close="reportOpen = false"
+		/>
 	</article>
 </template>

@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import FollowButton from '../components/FollowButton.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
+import ReportDialog from '../components/ReportDialog.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { hostDisplayName, refreshAccount, setAccount, setHostDisplayName } from '../lib/account';
 import { getApi, hydrateTimelineBoosts } from '../lib/api';
@@ -128,6 +129,30 @@ const canModerate = computed(() => (
 	&& account.value !== null
 	&& (!isRemoteProfile.value || remoteKind.value === 'activitypub')
 ));
+const reportTargetId = computed(() => {
+	const target = account.value;
+	if (target === null) {
+		return handle.value;
+	}
+	if (!isRemoteProfile.value) {
+		return target.id;
+	}
+
+	for (const candidate of [target.id, target.url, target.handle, handle.value]) {
+		if (candidate !== undefined && /^https?:\/\//i.test(candidate)) {
+			return candidate;
+		}
+	}
+
+	return target.id !== '' ? target.id : handle.value;
+});
+const canReport = computed(() => (
+	signedIn.value
+	&& !isSelf.value
+	&& account.value !== null
+	&& reportTargetId.value !== ''
+));
+const reportOpen = ref(false);
 const moderationBusy = ref<'mute' | 'block' | ''>('');
 
 function setRelationshipFlag(name: 'muting' | 'blocking', value: boolean): void {
@@ -544,6 +569,15 @@ async function share(): Promise<void> {
 	}
 }
 
+function openReport(): void {
+	if (!signedIn.value) {
+		window.location.assign('/login');
+		return;
+	}
+
+	reportOpen.value = true;
+}
+
 function compose(): void {
 	openComposer();
 }
@@ -746,6 +780,16 @@ onUnmounted(() => {
 							>
 								<AppIcon name="ban" :size="17" />
 							</button>
+							<button
+								v-if="canReport"
+								type="button"
+								class="a-icon-btn"
+								aria-label="Profil melden"
+								title="Profil melden"
+								@click="openReport"
+							>
+								<AppIcon name="flag" :size="17" />
+							</button>
 						</div>
 					</div>
 
@@ -887,6 +931,14 @@ onUnmounted(() => {
 
 			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error">{{ postsError }}</p>
 		</template>
+
+		<ReportDialog
+			:open="reportOpen"
+			target-type="account"
+			:target-id="reportTargetId"
+			:target-label="handleText"
+			@close="reportOpen = false"
+		/>
 	</div>
 
 	<Teleport to="body">

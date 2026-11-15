@@ -243,6 +243,61 @@ The bundle is committed, so a fresh clone serves `/app` without Node. The
 production web server serves `public/`; the PHP built-in server serves the
 bundle through the router fallback in `public/index.php`.
 
+### Administration and moderation
+
+Accounts with the `admin` role see an **Administration** entry in the sidebar
+and in the profile menu. `/admin` redirects to `/app#/admin`; the page and every
+`/api/v1/host/admin/*` route require an admin session, so a normal account gets
+`403` and a signed-out visitor gets `401`. The interface is host-owned because
+the core deliberately has no administration API.
+
+| Section | What it does |
+| --- | --- |
+| Übersicht | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
+| Konten | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
+| Meldungen | Open, resolved and dismissed reports with target preview, reporter, category and internal note; delete the reported post or disable the reported local account. |
+| Föderation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
+| Warteschlange | Pending, running and dead jobs with payload inspection, single retry/delete, retry-all, purge of old dead jobs and an immediate worker run. |
+| Instanz | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
+| Protokoll | Every administrative mutation with actor, action, target, details and time. |
+
+Every signed-in reader can report a post from its action bar or a profile from
+its header. A report stores the reporter, target, category (`spam`, `abuse`,
+`harassment`, `misinformation`, `other`), an optional comment and the target
+snapshot. Remote posts and profiles may be reported by canonical URL, `at://`
+or `did:` even before they are cached; the moderation view marks them as
+`remote` and links to the origin. Duplicate open reports from the same reporter
+for the same target answer `409`. Resolving or dismissing a report, deleting a
+post and disabling an account are written to the audit log.
+
+```text
+GET    /api/v1/host/admin/overview
+GET    /api/v1/host/admin/users?query=&page=&per_page=
+POST   /api/v1/host/admin/users
+PATCH  /api/v1/host/admin/users/{id}
+POST   /api/v1/host/admin/users/{id}/disable|enable|password|sessions
+GET    /api/v1/host/admin/reports?state=open|resolved|dismissed|all
+POST   /api/v1/host/admin/reports/{id}/resolve
+DELETE /api/v1/host/admin/posts/{id}
+GET    /api/v1/host/admin/jobs?state=
+POST   /api/v1/host/admin/jobs/{id}/retry
+DELETE /api/v1/host/admin/jobs/{id}
+POST   /api/v1/host/admin/jobs/retry-dead|purge
+POST   /api/v1/host/admin/queue/run
+GET    /api/v1/host/admin/federation|instance|audit
+POST   /api/v1/host/reports
+```
+
+The self-protection rules are intentional: an admin cannot disable their own
+account or remove the last active admin. Those requests answer `409`, as does
+any attempt to change state that a concurrent moderator already changed. The
+moderation tables (`moderation_report`, `admin_audit`) and the worker
+heartbeat (`runtime_state`) are created by host migration `202611150001`.
+
+Post actions — reply, boost, like, bookmark, share, report and open — render
+as icons with accessible labels. Counts appear only when they are greater than
+zero, so a quiet post stays quiet without losing the action.
+
 ## Configuration
 
 Precedence: defaults < `config/server.php` < environment (and `.env`).
@@ -264,7 +319,7 @@ Precedence: defaults < `config/server.php` < environment (and `.env`).
 | `ALOHASOCIAL_SESSION_LIFETIME` | `604800` | Session lifetime in seconds |
 | `ALOHASOCIAL_SESSION_COOKIE_NAME` | `alohasocial_session` | Session cookie name |
 | `ALOHASOCIAL_REMOTE_MEDIA` | `true` | `social/media.remote_fetch` |
-| `ALOHASOCIAL_MASTODON_API` | `false` | Enables the compatibility prefix |
+| `ALOHASOCIAL_MASTODON_API` | `true` | Enables the compatibility prefix |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `/api/mastodon/v1` | Prefix for the compatibility routes |
 | `ALOHASOCIAL_MAIL_TRANSPORT` | `log` | `log` writes `.eml` files; `smtp` sends them |
 | `ALOHASOCIAL_MAIL_FROM` | `no-reply@<instance host>` | Envelope and `From` address |

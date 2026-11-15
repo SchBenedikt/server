@@ -53,10 +53,11 @@ Accounts, sessions and CSRF are host-owned per
   is only required to rebuild the UI.
 - **Route.** `FrontController::appPage()` serves `GET /app` through
   `resources/views/app.php`. The view mounts `#aloha-social`, references
-  `/ui/app.js` and `/ui/app.css`, and passes the handle, display name and CSRF
-  token as data attributes (`data-user`, `data-display-name`, `data-csrf`,
-  `data-signed-in`). Signed-out visitors get the page with an empty handle; the
-  shell still mounts and can read the public timeline.
+  `/ui/app.js` and `/ui/app.css`, and passes the handle, display name, CSRF
+  token and admin flag as data attributes (`data-user`, `data-display-name`,
+  `data-csrf`, `data-signed-in`, `data-is-admin`). Signed-out visitors get the
+  page with an empty handle; the shell still mounts and can read the public
+  timeline. `GET /admin` redirects to `/app#/admin`.
 - **Bridge.** `ui/src/bridge.ts` implements the `HostBridge` with
   `apiBase: '/api/v1'`. It sends the session cookie with
   `credentials: 'same-origin'`, adds `X-CSRF-Token` from the page's data
@@ -79,6 +80,11 @@ Accounts, sessions and CSRF are host-owned per
   (blocks, filters, scheduled posts). The Mastodon API is enabled by default in
   `HostConfig`; first-party sessions get the `['*']` scope, so no separate
   bearer token is issued for the UI.
+- **Administration.** `/admin` redirects to `/app#/admin`. The host app switches
+  to a dedicated admin shell when the mount page reports the admin role; the
+  sections call `/api/v1/host/admin/*`, and reporting uses
+  `/api/v1/host/reports`. These routes are intentionally outside the core
+  manifest because they depend on host-owned accounts, sessions and tables.
 - **Composer extras.** The composer can publish a poll or schedule a post.
   Polls use `POST /api/mastodon/v1/statuses` with the `poll` object; scheduling
   uses `POST /api/v1/scheduled-posts`. The two are mutually exclusive because a

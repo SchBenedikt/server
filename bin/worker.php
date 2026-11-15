@@ -23,6 +23,7 @@ try {
 }
 
 if ($once) {
+    $runtime->admin->heartbeat();
     $handled = $runtime->app->worker->runOnce(10);
     fwrite(STDOUT, 'handled=' . $handled . "\n");
     exit(0);
@@ -42,6 +43,7 @@ if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
 while (!$stop) {
     // A non-empty batch is drained immediately; an empty one sleeps, so the
     // worker is not a busy loop.
+    $runtime->admin->heartbeat();
     $handled = $runtime->app->worker->runOnce(10);
     if ($handled === 0) {
         usleep(500_000);
