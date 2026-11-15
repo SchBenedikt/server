@@ -162,6 +162,10 @@ async function logout(): Promise<void> {
 				<AppIcon name="info" :size="18" />
 				<span>Über diese Instanz</span>
 			</a>
+			<a v-if="appState.session.admin" href="#/admin" class="a-nav__item a-nav__item--small a-nav__item--admin" :class="{ 'a-nav__item--active': route.name === 'admin' }">
+				<AppIcon name="shield" :size="18" />
+				<span>Administration</span>
+			</a>
 			<a href="/" class="a-nav__item a-nav__item--small">
 				<AppIcon name="settings" :size="18" />
 				<span>Server-Dashboard</span>
@@ -187,6 +191,9 @@ async function logout(): Promise<void> {
 			<div v-if="menuOpen" class="a-profile-menu__popover" role="menu">
 				<a :href="`#/u/${encodeURIComponent(handle)}`" role="menuitem" @click="menuOpen = false">
 					<AppIcon name="user" :size="16" /> Mein Profil
+				</a>
+				<a v-if="appState.session.admin" href="#/admin" role="menuitem" @click="menuOpen = false">
+					<AppIcon name="shield" :size="16" /> Administration
 				</a>
 				<button type="button" role="menuitem" @click="toggleTheme">
 					<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="16" />

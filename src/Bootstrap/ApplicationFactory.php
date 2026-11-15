@@ -27,6 +27,7 @@ use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
@@ -117,6 +118,7 @@ final class ApplicationFactory
             : new LogMailer($this->config->mailLogDirectory, $this->config->mailFrom);
 
         $passwordHasher = new PasswordHasher();
+        $sessions = new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock);
         $interactions = new PostInteractions(
             $app->posts,
             $database,
@@ -132,7 +134,7 @@ final class ApplicationFactory
             rateLimiter: new RateLimiter($database, $clock),
             accounts: $accounts,
             directory: $directory,
-            sessions: new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock),
+            sessions: $sessions,
             throttle: new LoginThrottle($database, $clock),
             passwordHasher: $passwordHasher,
             passwordReset: new PasswordResetService(
@@ -148,6 +150,15 @@ final class ApplicationFactory
             clock: $clock,
             interactions: $interactions,
             remoteDirectory: $remoteDirectory,
+            admin: new AdminService(
+                $database,
+                $clock,
+                $accounts,
+                $passwordHasher,
+                $sessions,
+                $app,
+                $this->config,
+            ),
         );
     }
 

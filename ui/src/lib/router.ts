@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { ref } from 'vue';
+import { adminSectionDefinition, isAdminSection } from './admin';
+import type { AdminSection } from './admin';
 
 export type Route =
 	| { name: 'home' }
@@ -20,6 +22,7 @@ export type Route =
 	| { name: 'blocked' }
 	| { name: 'filters' }
 	| { name: 'scheduled' }
+	| { name: 'admin'; section: AdminSection }
 	| { name: 'notfound' };
 
 function decode(value: string): string {
@@ -80,6 +83,11 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'scheduled' && parts.length === 1) {
 		return { name: 'scheduled' };
+	}
+
+	if (parts[0] === 'admin') {
+		const section = parts[1] !== undefined && isAdminSection(parts[1]) ? parts[1] : 'overview';
+		return { name: 'admin', section };
 	}
 
 	if (parts[0] === 'u' && parts[1] !== undefined) {
@@ -165,6 +173,10 @@ export function routeTitle(current: Route): string {
 			return 'Filter';
 		case 'scheduled':
 			return 'Geplante Beiträge';
+		case 'admin':
+			return current.section === 'overview'
+				? 'Administration'
+				: `Administration · ${adminSectionDefinition(current.section).label}`;
 		default:
 			return 'Nicht gefunden';
 	}

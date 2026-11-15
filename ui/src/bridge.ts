@@ -10,6 +10,7 @@ const handle = mount?.dataset.user ?? '';
 const displayName = mount?.dataset.displayName ?? '';
 const csrf = mount?.dataset.csrf ?? '';
 const instance = mount?.dataset.instance ?? 'Aloha Social';
+const isAdmin = mount?.dataset.isAdmin === '1';
 
 function apiUrl(path: string, query?: Record<string, string>): string {
 	const url = new URL(path, window.location.origin);
@@ -130,3 +131,4 @@ export const bridge: AlohaHostBridge = {
 export const instanceName = instance;
 export const currentHandle = handle;
 export const signedIn = handle !== '';
+export const adminSession = isAdmin;

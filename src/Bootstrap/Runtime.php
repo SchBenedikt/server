@@ -15,6 +15,7 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\PdoConnection;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
@@ -51,6 +52,7 @@ final readonly class Runtime
         public Clock $clock,
         public PostInteractions $interactions,
         public RemoteDirectory $remoteDirectory,
+        public AdminService $admin,
     ) {
     }
 }

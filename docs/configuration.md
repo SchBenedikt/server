@@ -84,7 +84,7 @@ account.
 | Variable | Config file key | Default | Meaning |
 | --- | --- | --- | --- |
 | `ALOHASOCIAL_REMOTE_MEDIA` | `remote_media` | `true` | Allows the core to fetch remote media. |
-| `ALOHASOCIAL_MASTODON_API` | `mastodon_api` | `false` | Enables the Mastodon-compatible prefix. |
+| `ALOHASOCIAL_MASTODON_API` | `mastodon_api` | `true` | Enables the Mastodon-compatible prefix. |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `mastodon_prefix` | `/api/mastodon/v1` | Compatibility route prefix. |
 
 The application accepts JPEG, PNG and WebP images up to 5 MiB per file. Set
@@ -173,7 +173,7 @@ ALOHASOCIAL_SMTP_PASSWORD=replace-with-a-strong-secret
 ALOHASOCIAL_SMTP_ENCRYPTION=starttls
 
 ALOHASOCIAL_REMOTE_MEDIA=true
-ALOHASOCIAL_MASTODON_API=false
+ALOHASOCIAL_MASTODON_API=true
 ALOHASOCIAL_DEBUG=false
 ```
 

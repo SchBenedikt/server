@@ -6,6 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useHostBridge } from '@alohasocial/ui';
 import type { AlohaHostBridge } from './bridge';
+import { adminSession } from './bridge';
 import AppIcon from './components/AppIcon.vue';
 import ComposerModal from './components/ComposerModal.vue';
 import Lightbox from './components/Lightbox.vue';
@@ -14,6 +15,7 @@ import RightRail from './components/RightRail.vue';
 import SidebarNav from './components/SidebarNav.vue';
 import ToastHost from './components/ToastHost.vue';
 import AboutView from './views/AboutView.vue';
+import AdminView from './views/AdminView.vue';
 import BlocksView from './views/BlocksView.vue';
 import BookmarksView from './views/BookmarksView.vue';
 import ExploreView from './views/ExploreView.vue';
@@ -31,12 +33,14 @@ import SearchView from './views/SearchView.vue';
 import TagView from './views/TagView.vue';
 import { loadHostDisplayNames, setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
+import { configureAdminApi, createAdminApi } from './lib/admin';
 import { initRouter, route, routeTitle } from './lib/router';
 import { appState, initTheme, setInstance, setSession, setUnread, toggleTheme } from './lib/state';
 import type { Account } from './lib/types';
 
 const bridge = useHostBridge() as AlohaHostBridge;
 configureApi(createApi(bridge, (file, altText) => bridge.uploadMedia(file, altText)));
+configureAdminApi(createAdminApi(bridge));
 initTheme();
 
 let stopRouter: (() => void) | null = null;
@@ -73,6 +77,8 @@ const currentView = computed(() => {
 			return FiltersView;
 		case 'scheduled':
 			return ScheduledView;
+		case 'admin':
+			return AdminView;
 		case 'home':
 			return HomeView;
 		default:
@@ -91,6 +97,8 @@ const viewKey = computed(() => {
 			return `tag:${current.tag}`;
 		case 'list':
 			return `list:${current.id}`;
+		case 'admin':
+			return `admin:${current.section}`;
 		default:
 			return current.name;
 	}
@@ -134,7 +142,7 @@ async function bootstrap(): Promise<void> {
 			// The host data is enough to show the signed-in identity.
 		}
 
-		setSession(user, profile);
+		setSession(user, profile, adminSession);
 		await refreshUnread();
 	} catch {
 		setSession(null);

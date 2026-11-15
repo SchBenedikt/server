@@ -35,6 +35,14 @@ declare(strict_types=1);
     <h2>App</h2>
     <p><a href="/app">Gemeinsame Aloha-Oberfläche öffnen</a></p>
 
+    <?php if ($isAdmin): ?>
+    <h2>Administration</h2>
+    <p>
+        <a href="/admin">Admin-Oberfläche öffnen</a> ·
+        Konten, Meldungen, Föderation, Warteschlange und Prüfprotokoll.
+    </p>
+    <?php endif; ?>
+
     <h2>API</h2>
     <ul>
         <li><a href="/healthz">/healthz</a></li>

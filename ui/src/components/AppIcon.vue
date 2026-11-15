@@ -54,6 +54,15 @@ const paths: Record<string, string> = {
 	ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
 	filter: '<path d="M3 4h18l-7 8v7l-4 2v-9z"/>',
 	clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+	activity: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
+	flag: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+	shield: '<path d="M12 3 20 6v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="m9 12 2 2 4-4"/>',
+	server: '<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>',
+	key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8-8"/><path d="m17 6 2 2"/><path d="m14 9 2 2"/>',
+	mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+	alert: '<path d="M12 3 2 21h20z"/><path d="M12 9v5M12 17.5v.5"/>',
+	arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+	chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
 };
 
 const markup = computed(() => paths[props.name] ?? paths.info);

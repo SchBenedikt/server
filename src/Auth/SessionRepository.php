@@ -62,9 +62,9 @@ final class SessionRepository
         $this->db->execute('DELETE FROM session WHERE id_hash = :id_hash', ['id_hash' => $idHash]);
     }
 
-    public function deleteForAccount(string $accountId): void
+    public function deleteForAccount(string $accountId): int
     {
-        $this->db->execute('DELETE FROM session WHERE account_id = :account_id', ['account_id' => $accountId]);
+        return $this->db->execute('DELETE FROM session WHERE account_id = :account_id', ['account_id' => $accountId]);
     }
 
     public function deleteExpired(string $now): int

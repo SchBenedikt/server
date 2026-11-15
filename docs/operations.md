@@ -63,6 +63,50 @@ php bin/set-password.php alice
 
 This also revokes all existing sessions for the account.
 
+## Administration and moderation
+
+The admin interface is part of the host app and lives at `/admin`, which
+redirects to `/app#/admin`. Only accounts with the `admin` role can open it or
+call `/api/v1/host/admin/*`. Another account gets `403`; a signed-out request
+gets `401`.
+
+```shell
+# Bootstrap the first administrator when no admin account exists yet.
+php bin/create-account.php admin admin@example.com --admin
+
+# After that, use the admin UI:
+#   Konten -> role toggle, display name, password reset, session revoke,
+#   disable/enable, create account.
+```
+
+An operator can always create a new admin account from the CLI when locked out,
+but the UI is the normal path because it writes an audit entry. Every mutation
+is recorded in `admin_audit` with actor, action, target, details and time; the
+**Protokoll** section reads that table.
+
+### Reports
+
+Any signed-in reader can report a post or a profile. Reports are stored in
+`moderation_report` with one of five categories and an optional comment. The
+admin **Meldungen** view shows the target preview, reporter, category, state and
+the internal resolution note.
+
+- **Open** reports are the working queue.
+- **Resolved** means the case was reviewed and handled.
+- **Dismissed** means no action was taken.
+- A duplicate open report by the same reporter for the same target answers
+  `409`.
+- Remote posts and profiles may be reported by canonical URL, `at://` or
+  `did:` before they are cached. They appear with scope `remote` and a link to
+  the origin; deleting them only tombstones a cached row, never the remote
+  object.
+- Deleting a local post and disabling a local account from the report view are
+  audited. Disabling keeps posts and follower edges and can be reversed with
+  **Aktivieren**.
+
+Moderation is not a substitute for federation policy. Serve only over HTTPS,
+keep the admin role small, and review the audit log after an incident.
+
 ## Worker and queue
 
 The worker handles delivery jobs and queued cleanup:
@@ -183,8 +227,11 @@ checkout with dev dependencies installed.
   check.
 - **Readiness:** `GET /api/v1/instance` exercises the database and the core
   assembly. `GET /app` checks that the mount page is served.
-- **Worker:** check `systemctl status aloha-worker` or the cron mail. A growing
-  job queue means delivery or cleanup is not making progress.
+- **Worker:** check `systemctl status aloha-worker` or the cron mail. The worker
+  writes a heartbeat to `runtime_state` (`worker`) every loop and in
+  `--once`; **Administration → Übersicht** and **Instanz** show it as online
+  when it is younger than 90 seconds. A growing job queue means delivery or
+  cleanup is not making progress.
 - **Disk:** watch `var/blobs/`, database size and backup storage. Uploads and
   federation media are the usual growth sources.
 - **Logs:** PHP-FPM/error log for web errors, worker journal for jobs. Keep

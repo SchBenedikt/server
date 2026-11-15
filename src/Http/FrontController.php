@@ -35,9 +35,12 @@ final class FrontController
 {
     private const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
+    private readonly AdminApiController $adminApi;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
+        $this->adminApi = new AdminApiController($runtime);
     }
 
     /**
@@ -93,6 +96,16 @@ final class FrontController
 
         if ($request->method === 'GET' && $request->path === '/app') {
             return $this->appPage($session);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/admin') {
+            if ($session?->account?->isAdmin() !== true) {
+                return $session === null ? $this->redirect('/login') : $this->page('error', [
+                    'message' => 'Diese Seite ist der Administration vorbehalten.',
+                ], 'Kein Zugriff', 403);
+            }
+
+            return $this->redirect('/app#/admin');
         }
 
         if ($request->method === 'GET' && $request->path === '/favicon.ico') {
@@ -238,6 +251,11 @@ final class FrontController
                     403,
                 );
             }
+        }
+
+        $adminResponse = $this->adminApi->handle($request, $session);
+        if ($adminResponse !== null) {
+            return $adminResponse;
         }
 
         if ($request->method === 'PATCH' && $request->path === '/api/v1/host/profile') {
@@ -608,6 +626,7 @@ final class FrontController
             'csrf' => $session?->session->csrfToken ?? '',
             'handle' => $account?->handle ?? '',
             'displayName' => $account?->name() ?? '',
+            'isAdmin' => $account?->isAdmin() === true,
             'appShell' => true,
         ], 'App', 200, null, [
             'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",

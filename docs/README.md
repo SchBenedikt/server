@@ -37,6 +37,10 @@ Nginx, PHP-FPM, mail, the worker and verification: see
 - Sessions with rotation, CSRF protection and rate limits
 - The shared Aloha Social UI: feed, composer, replies, boosts, likes, media
   uploads, profiles, profile editing, search, notifications and themes
+- A host-owned administration interface at `/admin` for accounts, reports,
+  federation, the job queue, instance checks and the audit log
+- User-facing reporting for posts and profiles, with a moderation queue that
+  can resolve, dismiss, delete or disable
 - ActivityPub actor documents, WebFinger, federation delivery and a smoke test
 - A migration runner, a worker, cleanup and route parity checks
 - A committed Vue bundle, so running the app does not require Node.js

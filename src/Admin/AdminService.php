@@ -1,0 +1,1410 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace AlohaSocial\Server\Admin;
+
+use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Post\PostNotFoundException;
+use AlohaSocial\Core\Platform\Clock\Clock;
+use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Server\Accounts\Account;
+use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\SessionManager;
+use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Support\CoreVersion;
+use DateTimeImmutable;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use Throwable;
+
+use function array_map;
+use function basename;
+use function count;
+use function explode;
+use function file_exists;
+use function filesize;
+use function in_array;
+use function is_array;
+use function is_dir;
+use function is_file;
+use function is_readable;
+use function is_string;
+use function is_writable;
+use function max;
+use function mb_strlen;
+use function mb_substr;
+use function min;
+use function parse_url;
+use function preg_match;
+use function rawurlencode;
+use function round;
+use function rtrim;
+use function sprintf;
+use function str_starts_with;
+use function strtolower;
+use function substr;
+use function time;
+use function trim;
+
+/**
+ * Administration and moderation read/write model.
+ *
+ * Everything that needs privileged access lives here rather than in the core:
+ * the host owns accounts, sessions and the moderation queue. The core
+ * application is only used for actions the core authorises itself, such as a
+ * federation-aware post deletion.
+ */
+final class AdminService
+{
+    public const REPORT_CATEGORIES = ['spam', 'abuse', 'harassment', 'misinformation', 'other'];
+
+    public const REPORT_STATES = ['open', 'resolved', 'dismissed'];
+
+    private const WORKER_HEARTBEAT = 'worker';
+
+    public function __construct(
+        private readonly Connection $db,
+        private readonly Clock $clock,
+        private readonly AccountRepository $accounts,
+        private readonly PasswordHasher $hasher,
+        private readonly SessionManager $sessions,
+        private readonly Application $app,
+        private readonly HostConfig $config,
+    ) {
+    }
+
+    /**
+     * Writes the worker heartbeat. Called once per loop by `bin/worker.php`.
+     */
+    public function heartbeat(): void
+    {
+        $now = Time::format($this->clock->now());
+
+        $updated = $this->db->execute(
+            'UPDATE runtime_state SET value = :value, updated_at = :updated_at WHERE name = :name',
+            ['value' => (string) time(), 'updated_at' => $now, 'name' => self::WORKER_HEARTBEAT],
+        );
+
+        if ($updated === 0) {
+            $this->db->execute(
+                'INSERT INTO runtime_state (name, value, updated_at) VALUES (:name, :value, :updated_at)',
+                ['name' => self::WORKER_HEARTBEAT, 'value' => (string) time(), 'updated_at' => $now],
+            );
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function overview(): array
+    {
+        $now = $this->clock->now();
+        $today = Time::format($now->setTime(0, 0));
+        $weekAgo = Time::format($now->modify('-7 days'));
+
+        $stats = [
+            'accounts' => [
+                'total' => $this->intValue('SELECT COUNT(*) FROM account'),
+                'active' => $this->intValue('SELECT COUNT(*) FROM account WHERE disabled_at IS NULL'),
+                'disabled' => $this->intValue('SELECT COUNT(*) FROM account WHERE disabled_at IS NOT NULL'),
+                'admins' => $this->intValue("SELECT COUNT(*) FROM account WHERE role = 'admin' AND disabled_at IS NULL"),
+                'new_7d' => $this->intValue('SELECT COUNT(*) FROM account WHERE created_at >= :cutoff', ['cutoff' => $weekAgo]),
+            ],
+            'posts' => [
+                'total' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL'),
+                'public' => $this->intValue("SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND visibility = 'public'"),
+                'replies' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND in_reply_to_id IS NOT NULL'),
+                'today' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND published_at >= :today', ['today' => $today]),
+            ],
+            'media' => [
+                'attachments' => $this->intValue('SELECT COUNT(*) FROM social_attachment'),
+                'bytes' => $this->intValue('SELECT COALESCE(SUM(byte_size), 0) FROM social_attachment'),
+                'blobs' => $this->blobCount(),
+                'blob_bytes' => $this->blobBytes(),
+            ],
+            'federation' => [
+                'remote_posts' => $this->intValue('SELECT COUNT(*) FROM social_remote_post WHERE deleted_at IS NULL'),
+                'remote_actors' => $this->intValue('SELECT COUNT(DISTINCT actor_id) FROM social_remote_post WHERE deleted_at IS NULL'),
+                'followers' => $this->intValue('SELECT COUNT(*) FROM social_follower'),
+                'following' => $this->intValue('SELECT COUNT(*) FROM social_following'),
+                'blocked_actors' => $this->intValue('SELECT COUNT(*) FROM social_block'),
+                'peer_domains' => count($this->peerDomains()),
+            ],
+            'notifications' => [
+                'total' => $this->intValue('SELECT COUNT(*) FROM social_notification'),
+                'unread' => $this->intValue('SELECT COUNT(*) FROM social_notification WHERE read_at IS NULL'),
+            ],
+            'queue' => $this->queueCounts(),
+            'reports' => [
+                'open' => $this->intValue("SELECT COUNT(*) FROM moderation_report WHERE state = 'open'"),
+                'total' => $this->intValue('SELECT COUNT(*) FROM moderation_report'),
+            ],
+            'scheduled' => $this->scheduledCounts(),
+        ];
+
+        return [
+            'generated_at' => Time::format($now),
+            'stats' => $stats,
+            'health' => $this->health($stats),
+            'worker' => $this->workerStatus(),
+            'recent_users' => $this->recentUsers(5),
+            'recent_posts' => $this->recentPosts(6),
+            'audit' => $this->audit(8),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function users(string $query = '', int $page = 1, int $perPage = 20): array
+    {
+        $perPage = max(5, min(100, $perPage));
+        $page = max(1, $page);
+        $offset = ($page - 1) * $perPage;
+        $query = trim($query);
+
+        $where = '';
+        $parameters = [];
+        if ($query !== '') {
+            $where = ' WHERE (handle LIKE :query OR email LIKE :query OR display_name LIKE :query)';
+            $parameters['query'] = '%' . $query . '%';
+        }
+
+        $total = $this->intValue('SELECT COUNT(*) FROM account' . $where, $parameters);
+
+        $rows = $this->db->fetchAll(
+            'SELECT a.id, a.handle, a.email, a.role, a.display_name, a.created_at, a.disabled_at,'
+            . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = a.id AND p.deleted_at IS NULL) AS post_count,'
+            . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = a.id) AS follower_count,'
+            . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = a.id) AS following_count'
+            . ' FROM account a' . $where . ' ORDER BY a.created_at DESC, a.handle ASC'
+            . ' LIMIT ' . $perPage . ' OFFSET ' . $offset,
+            $parameters,
+        );
+
+        return [
+            'users' => array_map(fn (array $row): array => $this->userRow($row), $rows),
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'pages' => max(1, (int) ceil($total / $perPage)),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function createUser(
+        string $adminId,
+        string $handle,
+        string $email,
+        string $password,
+        string $role = Account::ROLE_USER,
+        ?string $displayName = null,
+    ): array {
+        $handle = strtolower(trim($handle));
+        $email = strtolower(trim($email));
+        $role = strtolower(trim($role));
+        $displayName = $displayName === null ? null : trim($displayName);
+
+        $fields = [];
+        if (preg_match('/^[a-z0-9][a-z0-9_-]{1,29}$/', $handle) !== 1) {
+            $fields['handle'] = '2–30 Zeichen: Kleinbuchstaben, Ziffern, "_" oder "-".';
+        }
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            $fields['email'] = 'Bitte gib eine gültige E-Mail-Adresse ein.';
+        }
+        if (mb_strlen($password) < 8) {
+            $fields['password'] = 'Das Passwort braucht mindestens 8 Zeichen.';
+        }
+        if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
+            $fields['role'] = 'Unbekannte Rolle.';
+        }
+        if ($displayName !== null && mb_strlen($displayName) > 80) {
+            $fields['display_name'] = 'Höchstens 80 Zeichen.';
+        }
+        if ($fields !== []) {
+            throw AdminException::invalid('Bitte prüfe die Kontodaten.', $fields);
+        }
+
+        if ($this->accounts->exists($handle, $email)) {
+            throw AdminException::conflict('Handle oder E-Mail-Adresse werden bereits verwendet.');
+        }
+
+        $account = $this->accounts->create(
+            $handle,
+            $email,
+            $this->hasher->hash($password),
+            $role,
+            $displayName,
+        );
+
+        $this->record($adminId, 'user.create', 'account', $account->id, [
+            'role' => $account->role,
+        ]);
+
+        return $this->user($account->id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function updateUser(
+        string $adminId,
+        string $id,
+        ?string $displayName = null,
+        ?string $role = null,
+    ): array {
+        $target = $this->requireUser($id);
+
+        if ($role !== null) {
+            $role = strtolower(trim($role));
+            if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
+                throw AdminException::invalid('Unbekannte Rolle.', ['role' => 'admin oder user.']);
+            }
+
+            if ($target->role === Account::ROLE_ADMIN
+                && $role === Account::ROLE_USER
+                && $this->activeAdminCount() <= 1
+            ) {
+                throw AdminException::conflict('Die letzte aktive Administration kann nicht herabgestuft werden.');
+            }
+
+            if ($role !== $target->role) {
+                $this->accounts->updateRole($id, $role);
+                $this->record($adminId, 'user.role', 'account', $id, [
+                    'from' => $target->role,
+                    'to' => $role,
+                ]);
+            }
+        }
+
+        if ($displayName !== null) {
+            $displayName = trim($displayName);
+            if (mb_strlen($displayName) > 80) {
+                throw AdminException::invalid('Der Anzeigename ist zu lang.', ['display_name' => 'Höchstens 80 Zeichen.']);
+            }
+
+            $this->accounts->updateDisplayName($id, $displayName === '' ? null : $displayName);
+            $this->record($adminId, 'user.display_name', 'account', $id, []);
+        }
+
+        return $this->user($id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function disableUser(string $adminId, string $id): array
+    {
+        $target = $this->requireUser($id);
+        if ($id === $adminId) {
+            throw AdminException::conflict('Du kannst dein eigenes Konto nicht deaktivieren.');
+        }
+        if ($target->isDisabled()) {
+            return $this->user($id);
+        }
+        if ($target->role === Account::ROLE_ADMIN && $this->activeAdminCount() <= 1) {
+            throw AdminException::conflict('Die letzte aktive Administration kann nicht deaktiviert werden.');
+        }
+
+        $this->accounts->disable($id);
+        $revoked = $this->sessions->revokeAccount($id);
+        $this->record($adminId, 'user.disable', 'account', $id, ['sessions_revoked' => $revoked]);
+
+        return $this->user($id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function enableUser(string $adminId, string $id): array
+    {
+        $this->requireUser($id);
+        $this->accounts->enable($id);
+        $this->record($adminId, 'user.enable', 'account', $id, []);
+
+        return $this->user($id);
+    }
+
+    public function resetPassword(string $adminId, string $id, string $password): int
+    {
+        $this->requireUser($id);
+        if (mb_strlen($password) < 8) {
+            throw AdminException::invalid('Das Passwort braucht mindestens 8 Zeichen.', [
+                'password' => 'Mindestens 8 Zeichen.',
+            ]);
+        }
+
+        $this->accounts->updatePasswordHash($id, $this->hasher->hash($password));
+        $revoked = $this->sessions->revokeAccount($id);
+        $this->record($adminId, 'user.password', 'account', $id, ['sessions_revoked' => $revoked]);
+
+        return $revoked;
+    }
+
+    public function revokeSessions(string $adminId, string $id): int
+    {
+        $this->requireUser($id);
+        $revoked = $this->sessions->revokeAccount($id);
+        $this->record($adminId, 'user.sessions', 'account', $id, ['sessions_revoked' => $revoked]);
+
+        return $revoked;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function reports(string $state = 'open', int $limit = 50): array
+    {
+        $limit = max(1, min(100, $limit));
+        $parameters = [];
+        $where = '';
+        if ($state !== 'all') {
+            if (!in_array($state, self::REPORT_STATES, true)) {
+                $state = 'open';
+            }
+            $where = ' WHERE r.state = :state';
+            $parameters['state'] = $state;
+        }
+
+        $rows = $this->db->fetchAll(
+            'SELECT r.*, a.display_name AS reporter_name, a.handle AS reporter_handle, a.disabled_at AS reporter_disabled_at'
+            . ' FROM moderation_report r LEFT JOIN account a ON a.id = r.reporter_id'
+            . $where . ' ORDER BY r.created_at DESC LIMIT ' . $limit,
+            $parameters,
+        );
+
+        $counts = [];
+        foreach (self::REPORT_STATES as $known) {
+            $counts[$known] = $this->intValue(
+                'SELECT COUNT(*) FROM moderation_report WHERE state = :state',
+                ['state' => $known],
+            );
+        }
+
+        return [
+            'reports' => array_map(fn (array $row): array => $this->reportRow($row), $rows),
+            'counts' => $counts,
+            'state' => $state,
+        ];
+    }
+
+    /**
+     * A user-submitted report. The target must exist when it is reported, so
+     * an admin never opens an empty case.
+     */
+    public function createReport(
+        string $reporterId,
+        string $targetType,
+        string $targetId,
+        string $category,
+        ?string $comment,
+    ): array {
+        $targetType = strtolower(trim($targetType));
+        $targetId = trim($targetId);
+        $category = strtolower(trim($category));
+        $comment = $comment === null ? null : trim($comment);
+
+        if (!in_array($targetType, ['post', 'account'], true)) {
+            throw AdminException::invalid('Unbekanntes Ziel.', ['target_type' => 'post oder account.']);
+        }
+        if ($targetId === '' || mb_strlen($targetId) > 512) {
+            throw AdminException::invalid('Das Ziel fehlt.', ['target_id' => 'Bitte gib ein Ziel an.']);
+        }
+        if (!in_array($category, self::REPORT_CATEGORIES, true)) {
+            throw AdminException::invalid('Unbekannter Meldegrund.', ['category' => 'Bitte wähle einen Grund.']);
+        }
+        if ($comment !== null && mb_strlen($comment) > 1000) {
+            throw AdminException::invalid('Der Kommentar ist zu lang.', ['comment' => 'Höchstens 1000 Zeichen.']);
+        }
+        if ($targetType === 'post' && !$this->postExists($targetId) && !$this->isRemoteReference($targetId)) {
+            throw AdminException::notFound('Dieser Beitrag ist nicht verfügbar.');
+        }
+        if ($targetType === 'account' && !$this->accountTargetExists($targetId) && !$this->isRemoteReference($targetId)) {
+            throw AdminException::notFound('Dieses Konto ist nicht verfügbar.');
+        }
+
+        $existing = $this->db->fetchValue(
+            "SELECT COUNT(*) FROM moderation_report WHERE reporter_id = :reporter AND target_type = :type"
+            . " AND target_id = :target AND state = 'open'",
+            ['reporter' => $reporterId, 'type' => $targetType, 'target' => $targetId],
+        );
+        if ((int) ($existing ?? 0) > 0) {
+            throw AdminException::conflict('Du hast dieses Ziel bereits gemeldet. Die Meldung ist noch offen.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $id = $this->newId();
+
+        $this->db->execute(
+            'INSERT INTO moderation_report'
+            . ' (id, reporter_id, target_type, target_id, category, comment, state, resolution_note, created_at, updated_at, resolved_at, resolved_by)'
+            . ' VALUES (:id, :reporter, :type, :target, :category, :comment, :state, NULL, :created, :updated, NULL, NULL)',
+            [
+                'id' => $id,
+                'reporter' => $reporterId,
+                'type' => $targetType,
+                'target' => $targetId,
+                'category' => $category,
+                'comment' => $comment === '' ? null : $comment,
+                'state' => 'open',
+                'created' => $now,
+                'updated' => $now,
+            ],
+        );
+
+        $this->record($reporterId, 'report.create', $targetType, $targetId, ['category' => $category]);
+
+        return $this->report($id);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function resolveReport(string $adminId, string $id, string $state, ?string $note): array
+    {
+        $state = strtolower(trim($state));
+        if (!in_array($state, ['resolved', 'dismissed'], true)) {
+            throw AdminException::invalid('Unbekannter Status.', ['state' => 'resolved oder dismissed.']);
+        }
+
+        $note = $note === null ? null : trim($note);
+        if ($note !== null && mb_strlen($note) > 500) {
+            throw AdminException::invalid('Die Notiz ist zu lang.', ['note' => 'Höchstens 500 Zeichen.']);
+        }
+
+        $row = $this->db->fetchOne('SELECT * FROM moderation_report WHERE id = :id', ['id' => $id]);
+        if ($row === null) {
+            throw AdminException::notFound('Diese Meldung existiert nicht.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'UPDATE moderation_report SET state = :state, resolution_note = :note, updated_at = :updated,'
+            . ' resolved_at = :resolved, resolved_by = :admin WHERE id = :id',
+            [
+                'state' => $state,
+                'note' => $note === '' ? null : $note,
+                'updated' => $now,
+                'resolved' => $now,
+                'admin' => $adminId,
+                'id' => $id,
+            ],
+        );
+
+        $this->record($adminId, 'report.' . $state, (string) $row['target_type'], (string) $row['target_id'], [
+            'report_id' => $id,
+            'note' => $note,
+        ]);
+
+        return $this->report($id);
+    }
+
+    /**
+     * Removes a reported post. Local posts go through the core so a federated
+     * delete is queued; remote copies are tombstoned in the local cache.
+     */
+    public function deletePost(string $adminId, string $postId): void
+    {
+        try {
+            $post = $this->app->posts->get($postId);
+            $this->app->posts->delete($post->authorId, $postId);
+            $this->record($adminId, 'post.delete', 'post', $postId, ['scope' => 'local']);
+
+            return;
+        } catch (PostNotFoundException) {
+            // Fall through to the remote cache.
+        }
+
+        $remote = $this->db->fetchOne(
+            'SELECT activity_id, object_id FROM social_remote_post WHERE object_id = :id AND deleted_at IS NULL LIMIT 1',
+            ['id' => $postId],
+        );
+        if ($remote === null) {
+            throw AdminException::notFound('Dieser Beitrag ist nicht verfügbar.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'UPDATE social_remote_post SET deleted_at = :now WHERE object_id = :id',
+            ['now' => $now, 'id' => $postId],
+        );
+        $this->record($adminId, 'post.delete', 'post', $postId, ['scope' => 'remote']);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function jobs(string $state = 'all', int $limit = 100): array
+    {
+        $limit = max(1, min(200, $limit));
+        $where = '';
+        if ($state === 'pending') {
+            $where = ' WHERE dead_at IS NULL AND reserved_at IS NULL';
+        } elseif ($state === 'running') {
+            $where = ' WHERE dead_at IS NULL AND reserved_at IS NOT NULL';
+        } elseif ($state === 'dead') {
+            $where = ' WHERE dead_at IS NOT NULL';
+        } else {
+            $state = 'all';
+        }
+
+        $rows = $this->db->fetchAll(
+            'SELECT * FROM social_job' . $where . ' ORDER BY available_at ASC, id ASC LIMIT ' . $limit,
+        );
+
+        return [
+            'jobs' => array_map(fn (array $row): array => $this->jobRow($row), $rows),
+            'counts' => $this->queueCounts(),
+            'state' => $state,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function retryJob(string $adminId, string $id): array
+    {
+        $row = $this->db->fetchOne('SELECT * FROM social_job WHERE id = :id', ['id' => $id]);
+        if ($row === null) {
+            throw AdminException::notFound('Dieser Job existiert nicht.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'UPDATE social_job SET attempts = 0, dead_at = NULL, reserved_at = NULL, available_at = :now WHERE id = :id',
+            ['now' => $now, 'id' => $id],
+        );
+        $this->record($adminId, 'job.retry', 'job', $id, ['type' => (string) $row['type']]);
+
+        return $this->job($id);
+    }
+
+    public function deleteJob(string $adminId, string $id): void
+    {
+        $row = $this->db->fetchOne('SELECT type FROM social_job WHERE id = :id', ['id' => $id]);
+        if ($row === null) {
+            throw AdminException::notFound('Dieser Job existiert nicht.');
+        }
+
+        $this->db->execute('DELETE FROM social_job WHERE id = :id', ['id' => $id]);
+        $this->record($adminId, 'job.delete', 'job', $id, ['type' => (string) $row['type']]);
+    }
+
+    public function retryDeadJobs(string $adminId): int
+    {
+        $now = Time::format($this->clock->now());
+        $count = $this->db->execute(
+            'UPDATE social_job SET attempts = 0, dead_at = NULL, reserved_at = NULL, available_at = :now WHERE dead_at IS NOT NULL',
+            ['now' => $now],
+        );
+        $this->record($adminId, 'job.retry_all', 'job', null, ['count' => $count]);
+
+        return $count;
+    }
+
+    public function purgeDeadJobs(string $adminId, int $olderThanDays = 7): int
+    {
+        $olderThanDays = max(1, min(365, $olderThanDays));
+        $cutoff = Time::format($this->clock->now()->modify('-' . $olderThanDays . ' days'));
+        $count = $this->db->execute(
+            'DELETE FROM social_job WHERE dead_at IS NOT NULL AND dead_at <= :cutoff',
+            ['cutoff' => $cutoff],
+        );
+        $this->record($adminId, 'job.purge', 'job', null, ['count' => $count, 'older_than_days' => $olderThanDays]);
+
+        return $count;
+    }
+
+    public function runQueue(string $adminId): int
+    {
+        $handled = $this->app->worker->runOnce(20);
+        $this->record($adminId, 'queue.run', null, null, ['handled' => $handled]);
+
+        return $handled;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function federation(): array
+    {
+        $peers = $this->peerDomains();
+        $blocks = $this->db->fetchAll(
+            'SELECT b.id, b.local_user_id, b.actor_id, b.blocked_at FROM social_block b ORDER BY b.blocked_at DESC LIMIT 100',
+        );
+
+        $recent = $this->db->fetchAll(
+            'SELECT object_id, object_author_id, actor_id, content, published_at FROM social_remote_post'
+            . ' WHERE deleted_at IS NULL AND kind = :kind ORDER BY published_at DESC LIMIT 12',
+            ['kind' => 'post'],
+        );
+
+        return [
+            'counts' => [
+                'remote_posts' => $this->intValue('SELECT COUNT(*) FROM social_remote_post WHERE deleted_at IS NULL'),
+                'remote_actors' => $this->intValue('SELECT COUNT(DISTINCT actor_id) FROM social_remote_post WHERE deleted_at IS NULL'),
+                'followers' => $this->intValue('SELECT COUNT(*) FROM social_follower'),
+                'following' => $this->intValue('SELECT COUNT(*) FROM social_following'),
+                'blocks' => $this->intValue('SELECT COUNT(*) FROM social_block'),
+                'peers' => count($peers),
+            ],
+            'peers' => array_slice($peers, 0, 50),
+            'recent' => array_map(fn (array $row): array => [
+                'id' => (string) $row['object_id'],
+                'author' => (string) ($row['object_author_id'] ?? $row['actor_id']),
+                'actor' => (string) $row['actor_id'],
+                'domain' => $this->hostOf((string) $row['actor_id']),
+                'content' => $this->excerpt((string) $row['content'], 240),
+                'published_at' => (string) $row['published_at'],
+            ], $recent),
+            'blocks' => array_map(fn (array $row): array => [
+                'id' => (string) $row['id'],
+                'local_user_id' => (string) $row['local_user_id'],
+                'actor' => (string) $row['actor_id'],
+                'domain' => $this->hostOf((string) $row['actor_id']),
+                'blocked_at' => (string) $row['blocked_at'],
+            ], $blocks),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function instance(): array
+    {
+        $worker = $this->workerStatus();
+        $required = [
+            'database' => $this->dbReachable(),
+            'blob_directory' => is_dir($this->config->blobDirectory) && is_writable($this->config->blobDirectory),
+            'secret_key' => $this->config->secretKey !== null || is_readable($this->config->secretKeyFile),
+            'worker' => $worker['online'],
+        ];
+
+        return [
+            'instance' => [
+                'name' => $this->config->instanceName,
+                'url' => $this->config->instanceUrl,
+                'description' => $this->config->instanceDescription,
+                'contact' => $this->config->contactEmail,
+                'actor_domain' => parse_url($this->config->instanceUrl, PHP_URL_HOST) ?: 'localhost',
+            ],
+            'versions' => [
+                'application' => CoreVersion::current(),
+                'php' => PHP_VERSION,
+                'database' => $this->databaseDriver(),
+                'environment' => $this->config->debug ? 'development' : 'production',
+            ],
+            'features' => [
+                'federation' => true,
+                'remote_media' => $this->config->remoteMedia,
+                'mastodon_api' => $this->config->mastodonApi,
+                'mastodon_prefix' => $this->config->mastodonPrefix,
+                'mail_transport' => $this->config->mailTransport,
+                'secure_cookies' => $this->config->secureCookies,
+                'atproto' => false,
+            ],
+            'limits' => [
+                'session_lifetime_seconds' => $this->config->sessionLifetimeSeconds,
+                'max_post_characters' => 5000,
+                'max_attachments' => 4,
+                'max_attachment_bytes' => 5 * 1024 * 1024,
+            ],
+            'paths' => [
+                'var' => $this->config->varDirectory,
+                'blobs' => $this->config->blobDirectory,
+                'mail' => $this->config->mailLogDirectory,
+                'secret_key' => $this->config->secretKeyFile,
+            ],
+            'worker' => $worker,
+            'checks' => $required,
+            'warnings' => $this->configurationWarnings(),
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function audit(int $limit = 100): array
+    {
+        $limit = max(1, min(500, $limit));
+        $rows = $this->db->fetchAll(
+            'SELECT * FROM admin_audit ORDER BY created_at DESC, id DESC LIMIT ' . $limit,
+        );
+
+        return array_map(fn (array $row): array => [
+            'id' => (string) $row['id'],
+            'actor_id' => (string) $row['actor_id'],
+            'action' => (string) $row['action'],
+            'target_type' => $row['target_type'] === null ? null : (string) $row['target_type'],
+            'target_id' => $row['target_id'] === null ? null : (string) $row['target_id'],
+            'details' => $this->decodeDetails($row['details']),
+            'created_at' => (string) $row['created_at'],
+        ], $rows);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function user(string $id): array
+    {
+        $row = $this->db->fetchOne(
+            'SELECT a.id, a.handle, a.email, a.role, a.display_name, a.created_at, a.disabled_at,'
+            . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = a.id AND p.deleted_at IS NULL) AS post_count,'
+            . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = a.id) AS follower_count,'
+            . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = a.id) AS following_count'
+            . ' FROM account a WHERE a.id = :id',
+            ['id' => $id],
+        );
+        if ($row === null) {
+            throw AdminException::notFound('Dieses Konto existiert nicht.');
+        }
+
+        return $this->userRow($row);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     *
+     * @return array<string, mixed>
+     */
+    private function userRow(array $row): array
+    {
+        return [
+            'id' => (string) $row['id'],
+            'handle' => (string) $row['handle'],
+            'email' => (string) $row['email'],
+            'role' => (string) $row['role'],
+            'display_name' => $row['display_name'] === null ? null : (string) $row['display_name'],
+            'created_at' => (string) $row['created_at'],
+            'disabled_at' => $row['disabled_at'] === null ? null : (string) $row['disabled_at'],
+            'posts' => (int) ($row['post_count'] ?? 0),
+            'followers' => (int) ($row['follower_count'] ?? 0),
+            'following' => (int) ($row['following_count'] ?? 0),
+        ];
+    }
+
+    private function requireUser(string $id): Account
+    {
+        $account = $this->accounts->find($id);
+        if ($account === null) {
+            throw AdminException::notFound('Dieses Konto existiert nicht.');
+        }
+
+        return $account;
+    }
+
+    private function activeAdminCount(): int
+    {
+        return $this->accounts->activeAdminCount();
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     *
+     * @return array<string, mixed>
+     */
+    private function reportRow(array $row): array
+    {
+        $target = $this->reportTarget((string) $row['target_type'], (string) $row['target_id']);
+
+        return [
+            'id' => (string) $row['id'],
+            'reporter_id' => (string) $row['reporter_id'],
+            'reporter_name' => $row['reporter_name'] === null ? (string) $row['reporter_id'] : (string) $row['reporter_name'],
+            'reporter_handle' => $row['reporter_handle'] === null ? (string) $row['reporter_id'] : (string) $row['reporter_handle'],
+            'target_type' => (string) $row['target_type'],
+            'target_id' => (string) $row['target_id'],
+            'target' => $target,
+            'category' => (string) $row['category'],
+            'comment' => $row['comment'] === null ? null : (string) $row['comment'],
+            'state' => (string) $row['state'],
+            'resolution_note' => $row['resolution_note'] === null ? null : (string) $row['resolution_note'],
+            'created_at' => (string) $row['created_at'],
+            'updated_at' => (string) $row['updated_at'],
+            'resolved_at' => $row['resolved_at'] === null ? null : (string) $row['resolved_at'],
+            'resolved_by' => $row['resolved_by'] === null ? null : (string) $row['resolved_by'],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function report(string $id): array
+    {
+        $row = $this->db->fetchOne(
+            'SELECT r.*, a.display_name AS reporter_name, a.handle AS reporter_handle, a.disabled_at AS reporter_disabled_at'
+            . ' FROM moderation_report r LEFT JOIN account a ON a.id = r.reporter_id WHERE r.id = :id',
+            ['id' => $id],
+        );
+        if ($row === null) {
+            throw AdminException::notFound('Diese Meldung existiert nicht.');
+        }
+
+        return $this->reportRow($row);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function reportTarget(string $type, string $id): array
+    {
+        if ($type === 'post') {
+            $local = $this->db->fetchOne(
+                'SELECT id, author_id, content, visibility, published_at FROM social_post'
+                . ' WHERE id = :id AND deleted_at IS NULL',
+                ['id' => $id],
+            );
+            if ($local !== null) {
+                return [
+                    'type' => 'post',
+                    'id' => (string) $local['id'],
+                    'exists' => true,
+                    'scope' => 'local',
+                    'author' => (string) $local['author_id'],
+                    'author_name' => $this->localName((string) $local['author_id']),
+                    'content' => $this->excerpt((string) $local['content'], 400),
+                    'published_at' => (string) $local['published_at'],
+                    'href' => '#/p/' . rawurlencode((string) $local['id']),
+                ];
+            }
+
+            $remote = $this->db->fetchOne(
+                'SELECT object_id, object_author_id, actor_id, content, published_at FROM social_remote_post'
+                . ' WHERE object_id = :id AND deleted_at IS NULL LIMIT 1',
+                ['id' => $id],
+            );
+            if ($remote !== null) {
+                return [
+                    'type' => 'post',
+                    'id' => (string) $remote['object_id'],
+                    'exists' => true,
+                    'scope' => 'remote',
+                    'author' => (string) ($remote['object_author_id'] ?? $remote['actor_id']),
+                    'author_name' => (string) ($remote['object_author_id'] ?? $remote['actor_id']),
+                    'content' => $this->excerpt((string) $remote['content'], 400),
+                    'published_at' => (string) $remote['published_at'],
+                    'href' => (string) $remote['object_id'],
+                ];
+            }
+
+            return $this->isRemoteReference($id)
+                ? [
+                    'type' => 'post',
+                    'id' => $id,
+                    'exists' => true,
+                    'scope' => 'remote',
+                    'author' => $id,
+                    'author_name' => $id,
+                    'content' => null,
+                    'published_at' => null,
+                    'href' => str_starts_with($id, 'http') ? $id : null,
+                ]
+                : ['type' => 'post', 'id' => $id, 'exists' => false, 'scope' => 'unknown'];
+        }
+
+        $local = $this->accounts->find($id);
+        if ($local !== null) {
+            return [
+                'type' => 'account',
+                'id' => $local->id,
+                'exists' => true,
+                'scope' => 'local',
+                'author' => $local->id,
+                'author_name' => $local->name(),
+                'content' => null,
+                'published_at' => $local->createdAt,
+                'href' => '#/u/' . rawurlencode($local->id),
+                'disabled' => $local->isDisabled(),
+            ];
+        }
+
+        return [
+            'type' => 'account',
+            'id' => $id,
+            'exists' => $this->isRemoteReference($id),
+            'scope' => $this->isRemoteReference($id) ? 'remote' : 'unknown',
+            'author' => $id,
+            'author_name' => $id,
+            'content' => null,
+            'published_at' => null,
+            'href' => str_starts_with($id, 'http') ? $id : null,
+        ];
+    }
+
+    /**
+     * Remote posts and profiles are read live and may not be in the cache yet.
+     * A report about one is still valid: it names the remote object by its
+     * canonical URL or AT URI, and the moderator can open it in place.
+     */
+    private function isRemoteReference(string $id): bool
+    {
+        return str_starts_with($id, 'http://')
+            || str_starts_with($id, 'https://')
+            || str_starts_with($id, 'at://')
+            || str_starts_with($id, 'did:');
+    }
+
+    private function postExists(string $id): bool
+    {
+        $local = $this->db->fetchValue(
+            'SELECT COUNT(*) FROM social_post WHERE id = :id AND deleted_at IS NULL',
+            ['id' => $id],
+        );
+        if ((int) ($local ?? 0) > 0) {
+            return true;
+        }
+
+        $remote = $this->db->fetchValue(
+            'SELECT COUNT(*) FROM social_remote_post WHERE object_id = :id AND deleted_at IS NULL',
+            ['id' => $id],
+        );
+
+        return (int) ($remote ?? 0) > 0;
+    }
+
+    private function accountTargetExists(string $id): bool
+    {
+        return $this->accounts->find($id) !== null || str_starts_with($id, 'http');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     *
+     * @return array<string, mixed>
+     */
+    private function jobRow(array $row): array
+    {
+        $state = 'pending';
+        if ($row['dead_at'] !== null) {
+            $state = 'dead';
+        } elseif ($row['reserved_at'] !== null) {
+            $state = 'running';
+        }
+
+        return [
+            'id' => (string) $row['id'],
+            'type' => (string) $row['type'],
+            'state' => $state,
+            'attempts' => (int) $row['attempts'],
+            'available_at' => (string) $row['available_at'],
+            'reserved_at' => $row['reserved_at'] === null ? null : (string) $row['reserved_at'],
+            'dead_at' => $row['dead_at'] === null ? null : (string) $row['dead_at'],
+            'payload' => $this->decodeDetails($row['payload']),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function job(string $id): array
+    {
+        $row = $this->db->fetchOne('SELECT * FROM social_job WHERE id = :id', ['id' => $id]);
+        if ($row === null) {
+            throw AdminException::notFound('Dieser Job existiert nicht.');
+        }
+
+        return $this->jobRow($row);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function queueCounts(): array
+    {
+        $oldest = $this->db->fetchValue(
+            'SELECT MIN(available_at) FROM social_job WHERE dead_at IS NULL AND reserved_at IS NULL',
+        );
+
+        return [
+            'pending' => $this->intValue('SELECT COUNT(*) FROM social_job WHERE dead_at IS NULL AND reserved_at IS NULL'),
+            'running' => $this->intValue('SELECT COUNT(*) FROM social_job WHERE dead_at IS NULL AND reserved_at IS NOT NULL'),
+            'dead' => $this->intValue('SELECT COUNT(*) FROM social_job WHERE dead_at IS NOT NULL'),
+            'total' => $this->intValue('SELECT COUNT(*) FROM social_job'),
+            'oldest_pending' => $oldest === null ? null : (string) $oldest,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function scheduledCounts(): array
+    {
+        return [
+            'pending' => $this->intValue("SELECT COUNT(*) FROM social_scheduled_post WHERE state IN ('scheduled', 'publishing')"),
+            'published' => $this->intValue("SELECT COUNT(*) FROM social_scheduled_post WHERE state = 'published'"),
+            'failed' => $this->intValue("SELECT COUNT(*) FROM social_scheduled_post WHERE state = 'failed'"),
+            'cancelled' => $this->intValue("SELECT COUNT(*) FROM social_scheduled_post WHERE state = 'cancelled'"),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $stats
+     *
+     * @return list<array<string, string>>
+     */
+    private function health(array $stats): array
+    {
+        $worker = $this->workerStatus();
+        $queue = is_array($stats['queue'] ?? null) ? $stats['queue'] : [];
+        $dead = (int) ($queue['dead'] ?? 0);
+
+        $storageWritable = is_dir($this->config->blobDirectory) && is_writable($this->config->blobDirectory);
+        $freeRatio = $this->freeDiskRatio($this->config->blobDirectory);
+
+        return [
+            [
+                'id' => 'database',
+                'label' => 'Datenbank',
+                'status' => $this->dbReachable() ? 'ok' : 'error',
+                'detail' => $this->databaseDriver(),
+            ],
+            [
+                'id' => 'worker',
+                'label' => 'Worker',
+                'status' => $worker['online'] ? 'ok' : 'warn',
+                'detail' => $worker['online']
+                    ? 'Letzter Herzschlag ' . $worker['last_beat']
+                    : 'Kein aktueller Herzschlag',
+            ],
+            [
+                'id' => 'queue',
+                'label' => 'Job-Warteschlange',
+                'status' => $dead > 0 ? 'warn' : 'ok',
+                'detail' => $dead > 0 ? $dead . ' fehlgeschlagene Jobs' : 'Keine fehlgeschlagenen Jobs',
+            ],
+            [
+                'id' => 'storage',
+                'label' => 'Medienspeicher',
+                'status' => $storageWritable ? ($freeRatio !== null && $freeRatio < 0.1 ? 'warn' : 'ok') : 'error',
+                'detail' => $storageWritable
+                    ? ($freeRatio === null ? 'Schreibbar' : sprintf('Schreibbar · %.0f %% frei', $freeRatio * 100))
+                    : 'Nicht schreibbar',
+            ],
+            [
+                'id' => 'mail',
+                'label' => 'E-Mail',
+                'status' => $this->config->mailTransport === 'smtp' ? 'ok' : 'warn',
+                'detail' => $this->config->mailTransport === 'smtp'
+                    ? 'SMTP konfiguriert'
+                    : 'Log-Transport: Mails werden nur geschrieben',
+            ],
+            [
+                'id' => 'https',
+                'label' => 'TLS',
+                'status' => $this->httpsStatus(),
+                'detail' => str_starts_with($this->config->instanceUrl, 'https://')
+                    ? 'HTTPS aktiv'
+                    : (in_array(parse_url($this->config->instanceUrl, PHP_URL_HOST), ['localhost', '127.0.0.1', '::1'], true)
+                        ? 'Lokale Entwicklung über HTTP'
+                        : 'Öffentliche Instanz ohne HTTPS'),
+            ],
+            [
+                'id' => 'debug',
+                'label' => 'Debug-Modus',
+                'status' => $this->config->debug ? 'warn' : 'ok',
+                'detail' => $this->config->debug ? 'Fehlerdetails werden ausgeliefert' : 'Deaktiviert',
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function workerStatus(): array
+    {
+        $row = $this->db->fetchOne(
+            'SELECT value, updated_at FROM runtime_state WHERE name = :name',
+            ['name' => self::WORKER_HEARTBEAT],
+        );
+        if ($row === null) {
+            return ['online' => false, 'last_beat' => null, 'updated_at' => null, 'age_seconds' => null];
+        }
+
+        $timestamp = (int) $row['value'];
+        $age = time() - $timestamp;
+
+        return [
+            'online' => $age <= 90,
+            'last_beat' => $this->relativeSeconds($age),
+            'updated_at' => (string) $row['updated_at'],
+            'age_seconds' => $age,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function recentUsers(int $limit): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT id, handle, email, role, display_name, created_at, disabled_at,'
+            . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = account.id AND p.deleted_at IS NULL) AS post_count,'
+            . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = account.id) AS follower_count,'
+            . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = account.id) AS following_count'
+            . ' FROM account ORDER BY created_at DESC LIMIT ' . max(1, $limit),
+        );
+
+        return array_map(fn (array $row): array => $this->userRow($row), $rows);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function recentPosts(int $limit): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT id, author_id, content, visibility, in_reply_to_id, published_at FROM social_post'
+            . ' WHERE deleted_at IS NULL ORDER BY published_at DESC LIMIT ' . max(1, $limit),
+        );
+
+        return array_map(fn (array $row): array => [
+            'id' => (string) $row['id'],
+            'author' => (string) $row['author_id'],
+            'author_name' => $this->localName((string) $row['author_id']),
+            'content' => $this->excerpt((string) $row['content'], 220),
+            'visibility' => (string) $row['visibility'],
+            'reply' => $row['in_reply_to_id'] !== null,
+            'published_at' => (string) $row['published_at'],
+        ], $rows);
+    }
+
+    /**
+     * @return list<array{domain: string, posts: int, actors: int}>
+     */
+    private function peerDomains(): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT actor_id, COUNT(*) AS posts FROM social_remote_post WHERE deleted_at IS NULL GROUP BY actor_id LIMIT 20000',
+        );
+
+        $domains = [];
+        foreach ($rows as $row) {
+            $domain = $this->hostOf((string) $row['actor_id']);
+            if ($domain === '') {
+                continue;
+            }
+
+            $domains[$domain] ??= ['domain' => $domain, 'posts' => 0, 'actors' => 0];
+            $domains[$domain]['posts'] += (int) $row['posts'];
+            $domains[$domain]['actors']++;
+        }
+
+        $values = array_values($domains);
+        usort($values, static fn (array $left, array $right): int => $right['posts'] <=> $left['posts']);
+
+        return $values;
+    }
+
+    private function localName(string $id): string
+    {
+        $account = $this->accounts->find($id);
+
+        return $account?->name() ?? $id;
+    }
+
+    private function hostOf(string $actor): string
+    {
+        $host = parse_url($actor, PHP_URL_HOST);
+
+        return is_string($host) ? strtolower($host) : '';
+    }
+
+    private function excerpt(string $value, int $length): string
+    {
+        $value = trim(preg_replace('/\s+/u', ' ', $value) ?? $value);
+
+        return mb_strlen($value) <= $length ? $value : mb_substr($value, 0, $length - 1) . '…';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decodeDetails(mixed $value): array
+    {
+        if (!is_string($value) || $value === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        return is_array($decoded) ? $decoded : ['raw' => mb_substr($value, 0, 500)];
+    }
+
+    /**
+     * @param array<string, mixed> $details
+     */
+    private function record(string $actorId, string $action, ?string $targetType, ?string $targetId, array $details): void
+    {
+        $this->db->execute(
+            'INSERT INTO admin_audit (id, actor_id, action, target_type, target_id, details, created_at)'
+            . ' VALUES (:id, :actor, :action, :target_type, :target_id, :details, :created_at)',
+            [
+                'id' => $this->newId(),
+                'actor' => $actorId,
+                'action' => $action,
+                'target_type' => $targetType,
+                'target_id' => $targetId,
+                'details' => $details === [] ? null : json_encode($details, JSON_THROW_ON_ERROR),
+                'created_at' => Time::format($this->clock->now()),
+            ],
+        );
+    }
+
+    private function newId(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    /**
+     * @param array<string, mixed> $parameters
+     */
+    private function intValue(string $sql, array $parameters = []): int
+    {
+        $value = $this->db->fetchValue($sql, $parameters);
+
+        return $value === null ? 0 : (int) $value;
+    }
+
+    private function dbReachable(): bool
+    {
+        try {
+            $this->db->fetchValue('SELECT 1');
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function databaseDriver(): string
+    {
+        $dsn = $this->config->databaseDsn;
+        $driver = explode(':', $dsn, 2)[0];
+
+        if ($driver === 'sqlite') {
+            return 'SQLite · ' . basename(substr($dsn, 7));
+        }
+
+        return strtoupper($driver);
+    }
+
+    private function blobCount(): int
+    {
+        if (!is_dir($this->config->blobDirectory)) {
+            return 0;
+        }
+
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($this->config->blobDirectory, RecursiveDirectoryIterator::SKIP_DOTS),
+            );
+            $count = 0;
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $count++;
+                }
+            }
+
+            return $count;
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function blobBytes(): int
+    {
+        if (!is_dir($this->config->blobDirectory)) {
+            return 0;
+        }
+
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($this->config->blobDirectory, RecursiveDirectoryIterator::SKIP_DOTS),
+            );
+            $bytes = 0;
+            foreach ($iterator as $file) {
+                if ($file->isFile()) {
+                    $bytes += (int) $file->getSize();
+                }
+            }
+
+            return $bytes;
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function freeDiskRatio(string $path): ?float
+    {
+        $free = @disk_free_space($path);
+        $total = @disk_total_space($path);
+        if ($free === false || $total === false || $total <= 0) {
+            return null;
+        }
+
+        return $free / $total;
+    }
+
+    private function httpsStatus(): string
+    {
+        if (str_starts_with($this->config->instanceUrl, 'https://')) {
+            return 'ok';
+        }
+
+        $host = parse_url($this->config->instanceUrl, PHP_URL_HOST);
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true) ? 'ok' : 'warn';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function configurationWarnings(): array
+    {
+        $warnings = [];
+        if ($this->config->debug) {
+            $warnings[] = 'Der Debug-Modus ist aktiv und liefert interne Fehlerdetails aus.';
+        }
+        if (!str_starts_with($this->config->instanceUrl, 'https://')
+            && !in_array(parse_url($this->config->instanceUrl, PHP_URL_HOST), ['localhost', '127.0.0.1', '::1'], true)
+        ) {
+            $warnings[] = 'Die Instanz läuft über HTTP. Föderation und Anmeldung sollten HTTPS verwenden.';
+        }
+        if ($this->config->mailTransport !== 'smtp') {
+            $warnings[] = 'E-Mails werden über den Log-Transport nur in Dateien geschrieben.';
+        }
+        if ($this->config->contactEmail === '') {
+            $warnings[] = 'Es ist keine Kontaktadresse für die Instanz hinterlegt.';
+        }
+        if ($this->config->instanceDescription === '') {
+            $warnings[] = 'Die Instanzbeschreibung ist leer.';
+        }
+
+        return $warnings;
+    }
+
+    private function relativeSeconds(int $age): string
+    {
+        if ($age < 5) {
+            return 'gerade eben';
+        }
+        if ($age < 60) {
+            return 'vor ' . $age . ' Sekunden';
+        }
+        if ($age < 3600) {
+            return 'vor ' . (int) floor($age / 60) . ' Minuten';
+        }
+
+        return 'vor ' . (int) floor($age / 3600) . ' Stunden';
+    }
+}
