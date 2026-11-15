@@ -41,6 +41,7 @@ const items = computed(() => {
 
 	if (signedIn.value) {
 		base.push(
+			{ name: 'messages' as const, label: 'Nachrichten', icon: 'message', href: '#/messages' },
 			{ name: 'bookmarks' as const, label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
 			{ name: 'lists' as const, label: 'Listen', icon: 'list', href: '#/lists' },
 			{ name: 'scheduled' as const, label: 'Geplante Beiträge', icon: 'calendar', href: '#/scheduled' },

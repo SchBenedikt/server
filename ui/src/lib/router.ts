@@ -22,6 +22,8 @@ export type Route =
 	| { name: 'blocked' }
 	| { name: 'filters' }
 	| { name: 'scheduled' }
+	| { name: 'messages' }
+	| { name: 'conversation'; id: string }
 	| { name: 'admin'; section: AdminSection }
 	| { name: 'notfound' };
 
@@ -83,6 +85,14 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'scheduled' && parts.length === 1) {
 		return { name: 'scheduled' };
+	}
+
+	if (parts[0] === 'messages' && parts.length === 1) {
+		return { name: 'messages' };
+	}
+
+	if (parts[0] === 'messages' && parts[1] !== undefined) {
+		return { name: 'conversation', id: decode(parts[1]) };
 	}
 
 	if (parts[0] === 'admin') {
