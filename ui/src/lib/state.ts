@@ -59,6 +59,7 @@ export const appState = reactive({
 	composer: {
 		open: false,
 		replyTo: null as TimelineItem | null,
+		editPost: null as TimelineItem | null,
 	},
 	lightbox: {
 		open: false,
@@ -105,12 +106,23 @@ export function setHomeTab(tab: HomeTab): void {
 
 export function openComposer(replyTo: TimelineItem | null = null): void {
 	appState.composer.replyTo = replyTo;
+	appState.composer.editPost = null;
+	appState.composer.open = true;
+}
+
+/**
+ * Opens the composer in edit mode for one of the signed-in account's posts.
+ */
+export function openEditor(post: TimelineItem): void {
+	appState.composer.replyTo = null;
+	appState.composer.editPost = post;
 	appState.composer.open = true;
 }
 
 export function closeComposer(): void {
 	appState.composer.open = false;
 	appState.composer.replyTo = null;
+	appState.composer.editPost = null;
 }
 
 export function openLightbox(attachments: Attachment[], index: number): void {

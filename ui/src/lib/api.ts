@@ -12,7 +12,11 @@ import type {
 	NotificationPageData,
 	PostInteraction,
 	Relationship,
+	RemoteConnectionsData,
+	RemotePostData,
+	RemoteProfileData,
 	TimelineItem,
+	UpdatePostPayload,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -40,6 +44,10 @@ export interface Api {
 	post(id: string): Promise<TimelineItem>;
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	account(id: string): Promise<Account>;
+	remoteProfile(handle: string, cursor?: string | null): Promise<RemoteProfileData>;
+	remotePost(id: string): Promise<RemotePostData>;
+	remoteConnections(handle: string, type: 'followers' | 'following', cursor?: string | null): Promise<RemoteConnectionsData>;
+	followRemote(actor: string, inbox: string): Promise<void>;
 	hostProfiles(): Promise<Record<string, string>>;
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
@@ -48,6 +56,7 @@ export interface Api {
 	dismissNotification(id: string): Promise<void>;
 	clearNotifications(): Promise<number>;
 	createPost(payload: CreatePostPayload): Promise<TimelineItem>;
+	updatePost(id: string, payload: UpdatePostPayload): Promise<TimelineItem>;
 	deletePost(id: string): Promise<void>;
 	boostPost(id: string): Promise<void>;
 	unboostPost(id: string): Promise<void>;
@@ -129,10 +138,16 @@ export function normalizeTimelineItem(value: unknown): TimelineItem | null {
 	return {
 		id: value.id,
 		author_id: value.author_id,
+		author_handle: typeof value.author_handle === 'string' ? value.author_handle : null,
+		author_display_name: typeof value.author_display_name === 'string' ? value.author_display_name : null,
+		author_avatar: typeof value.author_avatar === 'string' ? value.author_avatar : null,
+		is_remote: value.is_remote === true,
 		content: typeof value.content === 'string' ? value.content : '',
 		content_warning: typeof value.content_warning === 'string' ? value.content_warning : null,
 		visibility: typeof value.visibility === 'string' ? value.visibility : null,
 		published_at: typeof value.published_at === 'string' ? value.published_at : '',
+		edited_at: typeof value.edited_at === 'string' ? value.edited_at : null,
+		revision: typeof value.revision === 'number' ? value.revision : undefined,
 		deleted_at: typeof value.deleted_at === 'string' ? value.deleted_at : null,
 		in_reply_to_id: typeof value.in_reply_to_id === 'string' ? value.in_reply_to_id : null,
 		recipient_ids: Array.isArray(value.recipient_ids)
@@ -144,6 +159,10 @@ export function normalizeTimelineItem(value: unknown): TimelineItem | null {
 		object_id: typeof value.object_id === 'string' ? value.object_id : null,
 		object_author_id: typeof value.object_author_id === 'string' ? value.object_author_id : null,
 		boosted_by: typeof value.boosted_by === 'string' ? value.boosted_by : null,
+		likes_count: typeof value.likes_count === 'number' ? value.likes_count : null,
+		replies_count: typeof value.replies_count === 'number' ? value.replies_count : null,
+		boosts_count: typeof value.boosts_count === 'number' ? value.boosts_count : null,
+		external_url: typeof value.external_url === 'string' ? value.external_url : null,
 	};
 }
 
@@ -214,9 +233,19 @@ function normalizeAccount(value: unknown): Account | null {
 		handle: value.handle,
 		display_name: typeof value.display_name === 'string' ? value.display_name : value.handle,
 		url: typeof value.url === 'string' ? value.url : '',
-		followers_count: typeof value.followers_count === 'number' ? value.followers_count : 0,
-		following_count: typeof value.following_count === 'number' ? value.following_count : 0,
+		followers_count: typeof value.followers_count === 'number' ? value.followers_count : null,
+		following_count: typeof value.following_count === 'number' ? value.following_count : null,
+		posts_count: typeof value.posts_count === 'number' ? value.posts_count : null,
+		avatar: typeof value.avatar === 'string' ? value.avatar : null,
+		banner: typeof value.banner === 'string' ? value.banner : null,
+		bio: typeof value.bio === 'string' ? value.bio : null,
+		network: value.network === 'bluesky' ? 'bluesky' : (value.network === 'activitypub' ? 'activitypub' : undefined),
+		can_follow: value.can_follow === true,
+		inbox: typeof value.inbox === 'string' ? value.inbox : null,
+		did: typeof value.did === 'string' ? value.did : null,
+		is_remote: value.is_remote === true,
 		relationship,
+		published_at: typeof value.published_at === 'string' ? value.published_at : null,
 	};
 }
 
@@ -374,6 +403,99 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return account;
 		},
 
+		async remoteProfile(handle: string, cursor: string | null = null): Promise<RemoteProfileData> {
+			const query: Record<string, string> = { handle };
+			if (cursor !== null && cursor !== '') {
+				query.cursor = cursor;
+			}
+
+			const data = await request<{
+				kind?: unknown;
+				profile?: unknown;
+				posts?: unknown;
+				cursor?: unknown;
+			}>('GET', '/api/v1/host/lookup', query);
+
+			const profile = normalizeAccount(data?.profile);
+			if (profile === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält kein entferntes Profil.');
+			}
+
+			profile.relationship = { following: false, followed_by: false, blocking: false, muting: false };
+
+			return {
+				kind: data?.kind === 'bluesky' ? 'bluesky' : 'activitypub',
+				profile,
+				posts: normalizePosts(data?.posts),
+				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : null,
+			};
+		},
+
+		async followRemote(actor: string, inbox: string): Promise<void> {
+			await request<unknown>('POST', '/api/v1/following', undefined, { actor, inbox });
+		},
+
+		async remotePost(id: string): Promise<RemotePostData> {
+			const data = await request<{
+				network?: unknown;
+				post?: unknown;
+				parent?: unknown;
+				replies?: unknown;
+				profile?: unknown;
+			}>('GET', '/api/v1/host/remote-post', { id });
+
+			const post = normalizeTimelineItem(data?.post);
+			if (post === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+			}
+
+			return {
+				network: data?.network === 'bluesky' ? 'bluesky' : 'activitypub',
+				post,
+				parent: normalizeTimelineItem(data?.parent),
+				replies: normalizePosts(data?.replies),
+				profile: normalizeAccount(data?.profile),
+			};
+		},
+
+		async remoteConnections(
+			handle: string,
+			type: 'followers' | 'following',
+			cursor: string | null = null,
+		): Promise<RemoteConnectionsData> {
+			const query: Record<string, string> = { handle, type };
+			if (cursor !== null && cursor !== '') {
+				query.cursor = cursor;
+			}
+
+			const data = await request<{
+				network?: unknown;
+				profiles?: unknown;
+				cursor?: unknown;
+			}>('GET', '/api/v1/host/remote-connections', query);
+
+			const profiles = Array.isArray(data?.profiles)
+				? data.profiles
+					.map(normalizeAccount)
+					.filter((profile): profile is Account => profile !== null)
+					.map((profile) => ({
+						...profile,
+						relationship: profile.relationship ?? {
+							following: false,
+							followed_by: false,
+							blocking: false,
+							muting: false,
+						},
+					}))
+				: [];
+
+			return {
+				network: data?.network === 'bluesky' ? 'bluesky' : 'activitypub',
+				profiles,
+				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : null,
+			};
+		},
+
 		async followAccount(id: string): Promise<Relationship> {
 			const data = await request<{ relationship?: unknown }>(
 				'POST',
@@ -455,6 +577,31 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			const data = await request<{ post?: unknown }>('POST', '/api/v1/posts', undefined, body);
+			const post = normalizeTimelineItem(data?.post);
+			if (post === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+			}
+
+			return post;
+		},
+
+		async updatePost(id: string, payload: UpdatePostPayload): Promise<TimelineItem> {
+			const body: JsonRecord = {
+				content: payload.content,
+				visibility: payload.visibility,
+				content_warning: payload.content_warning,
+				attachment_ids: payload.attachment_ids ?? [],
+			};
+			if (payload.revision !== undefined) {
+				body.revision = payload.revision;
+			}
+
+			const data = await request<{ post?: unknown }>(
+				'PATCH',
+				`/api/v1/posts/${encodeURIComponent(id)}`,
+				undefined,
+				body,
+			);
 			const post = normalizeTimelineItem(data?.post);
 			if (post === null) {
 				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');

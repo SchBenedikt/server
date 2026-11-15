@@ -5,7 +5,7 @@
 import { computed, reactive } from 'vue';
 import { getApi } from './api';
 import { extractTags } from './format';
-import { onPostCreated, onPostDeleted } from './events';
+import { onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import { appState } from './state';
 import type { TimelineItem } from './types';
 
@@ -112,6 +112,16 @@ onPostCreated((post) => {
 	}
 
 	discover.posts = merge([post], discover.posts);
+});
+
+onPostUpdated((post) => {
+	discover.posts = discover.posts.map((item) => {
+		if (item.id !== post.id) {
+			return item;
+		}
+
+		return { ...item, ...post, interaction: item.interaction ?? post.interaction };
+	});
 });
 
 onPostDeleted((postId) => {

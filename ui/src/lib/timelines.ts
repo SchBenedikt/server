@@ -4,7 +4,7 @@
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { ApiError, getApi, hydrateTimelineBoosts } from './api';
-import { onPostCreated, onPostDeleted } from './events';
+import { onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import type { TimelineItem } from './types';
 
 export type FeedKind = 'home' | 'public' | 'tag' | 'followed';
@@ -143,6 +143,26 @@ export function useTimeline(source: () => TimelineSource) {
 		posts.value = [post, ...posts.value];
 	});
 
+	const stopUpdated = onPostUpdated((post) => {
+		posts.value = posts.value.map((item) => {
+			if (item.id === post.id) {
+				return { ...item, ...post, interaction: item.interaction ?? post.interaction };
+			}
+			if (item.object_id === post.id) {
+				return {
+					...item,
+					...post,
+					kind: 'boost',
+					object_id: item.object_id,
+					boosted_by: item.boosted_by,
+					interaction: item.interaction ?? post.interaction,
+				};
+			}
+
+			return item;
+		});
+	});
+
 	const stopDeleted = onPostDeleted((postId) => {
 		posts.value = posts.value.filter((post) => post.id !== postId && post.object_id !== postId);
 	});
@@ -158,6 +178,7 @@ export function useTimeline(source: () => TimelineSource) {
 	onUnmounted(() => {
 		generation += 1;
 		stopCreated();
+		stopUpdated();
 		stopDeleted();
 	});
 

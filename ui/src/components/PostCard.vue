@@ -8,12 +8,12 @@ import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import MediaGrid from './MediaGrid.vue';
 import RichText from './RichText.vue';
-import { accountName, handleLabel, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
+import { accountName, handleLabel, isLocalPostId, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
 import { ensureInteractions, interactionFor, patchInteraction, rememberInteraction } from '../lib/interactions';
-import { appState, openComposer, showToast } from '../lib/state';
+import { appState, openComposer, openEditor, showToast } from '../lib/state';
 import type { TimelineItem } from '../lib/types';
 
 const props = withDefaults(defineProps<{
@@ -43,6 +43,16 @@ const resolvedAuthor = computed(() => {
 });
 
 const displayName = computed(() => {
+	const remoteName = props.post.author_display_name?.trim() ?? '';
+	if (remoteName !== '') {
+		return remoteName;
+	}
+
+	const remoteHandle = props.post.author_handle?.trim() ?? '';
+	if (remoteHandle !== '') {
+		return remoteHandle;
+	}
+
 	const session = appState.session;
 	if (session.user?.handle === authorId.value) {
 		return session.user.displayName || session.profile?.display_name || handleLabel(authorId.value);
@@ -50,18 +60,62 @@ const displayName = computed(() => {
 
 	return hostDisplayName(authorId.value) || accountName(resolvedAuthor.value, authorId.value);
 });
-const handle = computed(() => handleLabel(authorId.value));
+const handle = computed(() => {
+	const remoteHandle = props.post.author_handle?.trim() ?? '';
+	return remoteHandle !== '' ? remoteHandle : handleLabel(authorId.value);
+});
 const showHandle = computed(() => displayName.value !== handle.value);
-const isRemoteAuthor = computed(() => isRemoteId(authorId.value));
-const profileHref = computed(() => isRemoteAuthor.value
-	? (resolvedAuthor.value?.url || authorId.value)
-	: `#/u/${encodeURIComponent(authorId.value)}`);
+const isRemoteAuthor = computed(() => props.post.is_remote === true || isRemoteId(authorId.value));
+const profileTarget = computed(() => {
+	const remoteHandle = props.post.author_handle?.trim() ?? '';
+	return remoteHandle !== '' ? remoteHandle : authorId.value;
+});
+const profileHref = computed(() => `#/u/${encodeURIComponent(profileTarget.value)}`);
 const time = computed(() => relativeTime(props.post.published_at));
 const absolute = computed(() => new Date(props.post.published_at).toLocaleString('de-DE'));
-const isMine = computed(() => appState.session.user?.handle === authorId.value);
+const isMine = computed(() => !isRemoteAuthor.value && appState.session.user?.handle === authorId.value);
+const canEdit = computed(() => (
+	isMine.value
+	&& props.post.kind !== 'boost'
+	&& props.post.deleted_at === null
+	&& postRouteId(props.post) !== null
+));
+const editedAbsolute = computed(() => (
+	props.post.edited_at ? new Date(props.post.edited_at).toLocaleString('de-DE') : ''
+));
 const localId = computed(() => postRouteId(props.post));
-const detailHref = computed(() => localId.value === null ? null : `#/p/${encodeURIComponent(localId.value)}`);
-const external = computed(() => (props.post.object_id && isRemoteId(props.post.object_id) ? props.post.object_id : null));
+const remoteTarget = computed(() => {
+	const candidate = props.post.object_id ?? props.post.id;
+	return isRemoteId(candidate) || candidate.startsWith('at://') ? candidate : null;
+});
+const detailTarget = computed(() => localId.value ?? remoteTarget.value);
+const detailHref = computed(() => detailTarget.value === null ? null : `#/p/${encodeURIComponent(detailTarget.value)}`);
+const isRemotePost = computed(() => localId.value === null);
+
+function blueskyPostUrl(id: string): string | null {
+	if (!id.startsWith('at://')) {
+		return null;
+	}
+
+	const parts = id.slice('at://'.length).split('/');
+	if (parts.length < 3 || parts[0] === '' || parts[2] === '') {
+		return null;
+	}
+
+	return `https://bsky.app/profile/${encodeURIComponent(parts[0])}/post/${encodeURIComponent(parts[2])}`;
+}
+
+const external = computed(() => {
+	const objectId = props.post.object_id ?? '';
+	if (isRemoteId(objectId)) {
+		return objectId;
+	}
+	if (isRemoteId(props.post.id)) {
+		return props.post.id;
+	}
+
+	return blueskyPostUrl(props.post.id);
+});
 const shareUrl = computed(() => {
 	if (localId.value !== null) {
 		return `${window.location.origin}/app#/p/${encodeURIComponent(localId.value)}`;
@@ -70,15 +124,24 @@ const shareUrl = computed(() => {
 	return external.value ?? '';
 });
 
-const replyContext = computed(() => props.post.in_reply_to_id
-	? `#/p/${encodeURIComponent(props.post.in_reply_to_id)}`
-	: null);
+function postDetailHref(value: string | null | undefined): string | null {
+	if (value === null || value === undefined || value === '') {
+		return null;
+	}
+	if (isLocalPostId(value) || isRemoteId(value) || value.startsWith('at://')) {
+		return `#/p/${encodeURIComponent(value)}`;
+	}
+
+	return null;
+}
+
+const replyContext = computed(() => postDetailHref(props.post.in_reply_to_id));
 
 const interaction = computed(() => interactionFor(localId.value));
 const liked = computed(() => interaction.value?.favourited === true);
-const likeCount = computed(() => interaction.value?.favourites_count ?? 0);
-const boostCount = computed(() => interaction.value?.reblogs_count ?? 0);
-const replyCount = computed(() => interaction.value?.replies_count ?? 0);
+const likeCount = computed(() => interaction.value?.favourites_count ?? props.post.likes_count ?? 0);
+const boostCount = computed(() => interaction.value?.reblogs_count ?? props.post.boosts_count ?? 0);
+const replyCount = computed(() => interaction.value?.replies_count ?? props.post.replies_count ?? 0);
 
 const boosted = ref(false);
 const boosting = ref(false);
@@ -233,6 +296,11 @@ async function share(): Promise<void> {
 	}
 }
 
+function edit(): void {
+	menuOpen.value = false;
+	openEditor(props.post);
+}
+
 async function remove(): Promise<void> {
 	if (localId.value === null || deleting.value) {
 		return;
@@ -288,15 +356,13 @@ onUnmounted(() => {
 
 		<header class="a-post__header">
 			<a :href="profileHref" class="a-post__avatar-link" :aria-label="`Profil von ${displayName}`">
-				<Avatar :id="authorId" :name="displayName" :size="detail ? 52 : 44" />
+				<Avatar :id="authorId" :name="displayName" :src="post.author_avatar" :size="detail ? 52 : 44" />
 			</a>
 
 			<div class="a-post__identity">
 				<a
 					:href="profileHref"
 					class="a-post__name"
-					:target="isRemoteAuthor ? '_blank' : undefined"
-					:rel="isRemoteAuthor ? 'noopener noreferrer' : undefined"
 				>{{ displayName }}</a>
 				<span class="a-post__meta">
 					<template v-if="showHandle">
@@ -310,6 +376,7 @@ onUnmounted(() => {
 						:title="absolute"
 					>{{ time }}</a>
 					<time v-else class="a-post__time" :datetime="post.published_at" :title="absolute">{{ time }}</time>
+					<span v-if="post.edited_at" class="a-post__edited" :title="`Bearbeitet: ${editedAbsolute}`">· bearbeitet</span>
 					<span v-if="detail" class="a-post__visibility">
 						<AppIcon :name="post.visibility === 'public' ? 'globe' : post.visibility === 'followers' ? 'users' : 'lock'" :size="13" />
 						{{ visibilityLabel(post.visibility) }}
@@ -343,6 +410,14 @@ onUnmounted(() => {
 						<AppIcon name="external" :size="15" /> Original öffnen
 					</a>
 					<button
+						v-if="canEdit"
+						type="button"
+						role="menuitem"
+						@click.stop="edit"
+					>
+						<AppIcon name="pen" :size="15" /> Beitrag bearbeiten
+					</button>
+					<button
 						v-if="isMine"
 						type="button"
 						role="menuitem"
@@ -357,7 +432,7 @@ onUnmounted(() => {
 
 		<p v-if="replyContext" class="a-post__reply-context">
 			<AppIcon name="reply" :size="14" />
-			<a :href="replyContext">Antwort auf einen Beitrag</a>
+			<a :href="replyContext">{{ isRemotePost ? 'Antwort auf einen externen Beitrag' : 'Antwort auf einen Beitrag' }}</a>
 		</p>
 
 		<div v-if="confirmingDelete" class="a-post__confirm" role="alert">
@@ -405,13 +480,32 @@ onUnmounted(() => {
 		</div>
 
 		<footer class="a-post__actions">
-			<button type="button" class="a-post__action" aria-label="Antworten" title="Antworten" @click="reply">
+			<button v-if="!isRemotePost" type="button" class="a-post__action" aria-label="Antworten" title="Antworten" @click="reply">
 				<AppIcon name="reply" :size="18" />
 				<span>
 					Antworten
 					<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 				</span>
 			</button>
+			<a
+				v-else-if="external"
+				:href="external"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="a-post__action"
+				aria-label="Auf dem Ursprungs-Server antworten"
+				title="Auf dem Ursprungs-Server antworten"
+			>
+				<AppIcon name="reply" :size="18" />
+				<span>
+					Antworten
+					<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
+				</span>
+			</a>
+			<span v-else class="a-post__action a-post__action--static">
+				<AppIcon name="reply" :size="18" />
+				<span>Antworten <b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b></span>
+			</span>
 
 			<button
 				v-if="localId"
@@ -429,6 +523,17 @@ onUnmounted(() => {
 					<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
 				</span>
 			</button>
+			<span
+				v-else
+				class="a-post__action a-post__action--static"
+				:title="`${boostCount} Boosts auf ${handle}`"
+			>
+				<AppIcon name="repeat" :size="18" />
+				<span>
+					Boosts
+					<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
+				</span>
+			</span>
 
 			<button
 				v-if="localId"
@@ -447,6 +552,17 @@ onUnmounted(() => {
 					<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 				</span>
 			</button>
+			<span
+				v-else
+				class="a-post__action a-post__action--static"
+				:title="`${likeCount} Likes auf ${handle}`"
+			>
+				<AppIcon name="heart" :size="18" />
+				<span>
+					Gefällt mir
+					<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
+				</span>
+			</span>
 
 			<button type="button" class="a-post__action" aria-label="Link teilen" title="Link teilen" @click="share">
 				<AppIcon name="share" :size="18" />

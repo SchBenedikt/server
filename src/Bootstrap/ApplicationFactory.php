@@ -21,8 +21,10 @@ use AlohaSocial\Core\Platform\Storage\LocalBlobStore;
 use AlohaSocial\Core\Protocol\ActivityPub\HttpActorResolver;
 use AlohaSocial\Core\Security\OpenSslSecretBox;
 use AlohaSocial\Core\Security\SecretBox;
+use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
+use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\LoginThrottle;
@@ -74,6 +76,7 @@ final class ApplicationFactory
         // 5. HTTP client and DNS policy (shared by federation, media, threads)
         $httpClient = new CurlHttpClient();
         $hostResolver = new DnsHostResolver();
+        $remoteDirectory = new RemoteDirectory($httpClient, new FederationTargetGuard($hostResolver));
 
         // 6.-8. Repositories, queue/log and the core assembly
         $accounts = new AccountRepository($database, $clock);
@@ -144,6 +147,7 @@ final class ApplicationFactory
             view: new View($this->root . '/resources/views'),
             clock: $clock,
             interactions: $interactions,
+            remoteDirectory: $remoteDirectory,
         );
     }
 

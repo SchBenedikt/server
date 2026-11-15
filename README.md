@@ -35,12 +35,13 @@ accepts ActivityPub, resets passwords by email and serves the shared Vue app.
 | 5 | Shared Vue UI mounted at `/app` | `HostBridge` page, timeline, composer, notifications; built assets committed |
 | 6 | Federation smoke against a real peer | two instances, signed Follow, follower edge, delivered Create |
 
-Not implemented yet (later blueprint phases): AT Protocol account linking,
-installer/container, and the Nextcloud host. The federation smoke also shows a
-core-level gap: an inbound `Accept` is not in the core's supported activity
-list, so the `Accept` a core instance queues for an inbound `Follow` is retried
-by the worker. The follower edge and the `Create` delivery are unaffected; the
-fix belongs in the core package, not in this host.
+Not implemented yet (later blueprint phases): AT Protocol account linking
+(Bluesky profiles and posts are readable, but posting and following need
+ATProto OAuth), installer/container, and the Nextcloud host. The federation
+smoke also shows a core-level gap: an inbound `Accept` is not in the core's
+supported activity list, so the `Accept` a core instance queues for an inbound
+`Follow` is retried by the worker. The follower edge and the `Create` delivery
+are unaffected; the fix belongs in the core package, not in this host.
 
 ## Requirements
 
@@ -136,16 +137,23 @@ the standalone `HostBridge` (`src` under `ui/`). The bridge attaches the session
 cookie and `X-CSRF-Token`, and the shared screens consume only `/api/v1`.
 
 ```shell
-# Only needed after changing the shared package or the host app.
+# Only needed after changing the shared package or the host app. The core's
+# Composer dist export-ignores ui/, so check out the matching core source once
+# (use the reference from composer.lock) before building the shared package.
+git clone --depth 1 https://github.com/SchBenedikt/core.git /tmp/aloha-core
+mkdir -p vendor/alohasocial/core/ui
+cp -a /tmp/aloha-core/ui/. vendor/alohasocial/core/ui/
 (cd vendor/alohasocial/core/ui && npm ci && npm run build)
 (cd ui && npm ci && npm run build)   # writes public/ui/app.js + app.css
 ```
 
-The hosting decision is recorded in [docs/frontend.md](docs/frontend.md).
+The bundled `public/ui/` files are committed, so a deployment only needs the
+PHP host and never runs Node. The hosting decision is recorded in
+[docs/frontend.md](docs/frontend.md).
 
 ### Host UI extensions
 
-The shared screens need four things the core's anonymous v1 timeline does not
+The shared screens need several things the core's anonymous v1 timeline does not
 expose directly. The host adds them as same-origin routes; they are not part of
 the core route contract:
 
@@ -153,12 +161,57 @@ the core route contract:
 | --- | --- |
 | `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and the viewer's own like/boost state. |
 | `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
+| `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
+| `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. |
+| `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
+
+The post menu on your own posts opens the composer in edit mode. Saving sends
+the core's `PATCH /api/v1/posts/{id}` with the `revision` the reader loaded;
+a concurrent edit answers `409` instead of overwriting it, and the updated
+record is broadcast to every open timeline and detail view. Edits can keep or
+replace attachments, but cannot widen a post's audience.
 
 All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
 posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
+`FrontController`.
+
+### Remote profiles and Bluesky
+
+`#/u/<handle>` opens a profile that is not hosted here. The handle may be an
+`@user@server` address, a profile URL, a Bluesky handle (`name.bsky.social`) or
+a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
+
+- **ActivityPub**: WebFinger resolves the handle, the actor document supplies
+  the profile and the actor's public outbox supplies the posts. An instance
+  that enables authorized fetch answers `401`/`403` to an unsigned actor
+  request; for reading, the host then falls back to that instance's public
+  Mastodon-compatible API (`can_follow` stays `false`).
+- **Bluesky**: the unauthenticated public AppView supplies the profile and the
+  author feed. Posting, liking and following would need ATProto OAuth, so the
+  profile view links out to Bluesky instead.
+
+A remote post opens in the same detail view as a local post. The canonical
+ActivityPub object id or AT Protocol URI is encoded into `#/p/…`; the host
+fetches the post live and shows its parent and replies. Mastodon instances are
+read through the public status and context API, other ActivityPub servers
+through the object and its `replies` collection, and Bluesky through
+`app.bsky.feed.getPostThread`. The view shows like, reply and boost counts
+alongside a link to the original. Opening a remote profile's follower or
+following count loads that list page by page: the Mastodon API when available,
+otherwise the actor's ActivityPub collection, or `app.bsky.graph.getFollowers`
+and `getFollows` for Bluesky. Remote profile and post counts are shown exactly
+as the origin reports them, and replies, followers and following remain
+read-only because acting on them needs a local federation or ATProto identity.
+
+Every remote document is checked by `FederationTargetGuard` (SSRF, redirects,
+DNS) and fetched with a byte limit; remote HTML is converted to plain text
+before it reaches Vue, which does not use `v-html` for remote content. Remote
+lookup and connections are limited to 30 requests per minute per session or
+address, and remote post detail to 60.
+The implementation is `src/Federation/` plus the host route in
 `FrontController`.
 
 The bundle is committed, so a fresh clone serves `/app` without Node. The
