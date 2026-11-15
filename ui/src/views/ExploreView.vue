@@ -29,6 +29,25 @@ const cleanedQuery = computed(() => query.value.trim());
 const lowercaseQuery = computed(() => cleanedQuery.value.toLowerCase());
 const isHashtagQuery = computed(() => cleanedQuery.value.startsWith('#') && normalizeTag(cleanedQuery.value) !== '');
 const suggestedTag = computed(() => normalizeTag(cleanedQuery.value));
+const looksLikeProfile = computed(() => {
+	const value = cleanedQuery.value;
+	if (value === '' || isHashtagQuery.value) {
+		return false;
+	}
+	if (/^https?:\/\//i.test(value) || /^did:/i.test(value)) {
+		return true;
+	}
+
+	const address = value.replace(/^@/, '');
+	if (/^[^@\s]+@[^@\s]+$/.test(address)) {
+		return true;
+	}
+	if (/^(?:www\.)?bsky\.app\/profile\//i.test(value)) {
+		return true;
+	}
+
+	return /^[^@\s/]+\.[A-Za-z]{2,}$/.test(address);
+});
 
 const results = computed(() => {
 	if (lowercaseQuery.value === '') {
@@ -81,7 +100,20 @@ async function loadFollowedTags(): Promise<void> {
 function submitSearch(): void {
 	if (isHashtagQuery.value) {
 		navigate(`/tag/${encodeURIComponent(suggestedTag.value)}`);
+		return;
 	}
+
+	if (looksLikeProfile.value) {
+		openProfile();
+	}
+}
+
+function openProfile(): void {
+	if (cleanedQuery.value === '') {
+		return;
+	}
+
+	navigate(`/u/${encodeURIComponent(cleanedQuery.value)}`);
 }
 
 function openTag(tag: string): void {
@@ -120,15 +152,15 @@ function isFollowingTag(tag: string): boolean {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Entdecken" subtitle="Suche in den öffentlichen Beiträgen dieser Instanz, finde Hashtags und neue Stimmen." />
+		<PageHeader title="Entdecken" subtitle="Suche in den öffentlichen Beiträgen, öffne Profile aus dem Fediverse und Bluesky oder finde Hashtags." />
 
 		<form class="a-search" role="search" @submit.prevent="submitSearch">
 			<AppIcon name="search" :size="21" />
 			<input
 				v-model="query"
 				type="search"
-				placeholder="Worte, Menschen, #Tags …"
-				aria-label="Öffentliche Beiträge durchsuchen"
+				placeholder="Worte, @name@server, bsky.app/profile/…, #Tags …"
+				aria-label="Öffentliche Beiträge durchsuchen oder ein Profil öffnen"
 			/>
 			<button v-if="query !== ''" type="button" class="a-icon-btn" aria-label="Suche leeren" @click="query = ''">
 				<AppIcon name="x" :size="18" />
@@ -139,6 +171,11 @@ function isFollowingTag(tag: string): boolean {
 		<p v-if="isHashtagQuery" class="a-search-hint">
 			<AppIcon name="hash" :size="15" />
 			<button type="button" @click="openTag(suggestedTag)">#{{ suggestedTag }} als Hashtag öffnen</button>
+		</p>
+
+		<p v-else-if="looksLikeProfile" class="a-search-hint">
+			<AppIcon name="globe" :size="15" />
+			<button type="button" @click="openProfile">{{ cleanedQuery }} als Profil öffnen</button>
 		</p>
 
 		<template v-if="cleanedQuery !== ''">

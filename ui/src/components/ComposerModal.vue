@@ -9,7 +9,7 @@ import Avatar from './Avatar.vue';
 import { accountName, handleLabel, postRouteId, truncate } from '../lib/format';
 import { getApi } from '../lib/api';
 import { hostDisplayName, resolveAccount } from '../lib/account';
-import { announcePostCreated } from '../lib/events';
+import { announcePostCreated, announcePostUpdated } from '../lib/events';
 import { appState, closeComposer, showToast } from '../lib/state';
 import type { Attachment, TimelineItem } from '../lib/types';
 
@@ -35,14 +35,26 @@ const contentWarning = ref('');
 const showWarning = ref(false);
 const visibility = ref<'public' | 'unlisted' | 'followers'>('public');
 const images = ref<PendingImage[]>([]);
+const existing = ref<Attachment[]>([]);
 const submitting = ref(false);
 const error = ref('');
 let imageSequence = 0;
 let draftTimer: number | null = null;
 
+const editPost = computed(() => appState.composer.editPost);
+const isEdit = computed(() => editPost.value !== null);
 const replyTo = computed(() => appState.composer.replyTo);
 const isReply = computed(() => replyTo.value !== null);
-const title = computed(() => isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag');
+const title = computed(() => (
+	isEdit.value ? 'Beitrag bearbeiten' : isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag'
+));
+const submitLabel = computed(() => {
+	if (submitting.value) {
+		return isEdit.value ? 'Wird gespeichert…' : 'Wird gesendet…';
+	}
+
+	return isEdit.value ? 'Speichern' : isReply.value ? 'Antworten' : 'Posten';
+});
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
 const replyId = computed(() => replyTo.value === null ? null : postRouteId(replyTo.value));
@@ -76,7 +88,7 @@ function draftKey(): string {
 }
 
 function saveDraft(): void {
-	if (isReply.value || currentHandle.value === '') {
+	if (isReply.value || isEdit.value || currentHandle.value === '') {
 		return;
 	}
 
@@ -103,7 +115,7 @@ function saveDraft(): void {
 }
 
 function restoreDraft(): void {
-	if (isReply.value) {
+	if (isReply.value || isEdit.value) {
 		content.value = '';
 		contentWarning.value = '';
 		showWarning.value = false;
@@ -144,10 +156,26 @@ function clearDraft(): void {
 
 watch([content, contentWarning, showWarning, visibility], saveDraft, { deep: true });
 
+function populateEditor(post: TimelineItem): void {
+	resetImages();
+	existing.value = [...(post.attachments ?? [])];
+	content.value = post.content;
+	contentWarning.value = post.content_warning ?? '';
+	showWarning.value = post.content_warning !== null && post.content_warning !== '';
+	visibility.value = post.visibility === 'unlisted' || post.visibility === 'followers'
+		? post.visibility
+		: 'public';
+}
+
 watch(() => appState.composer.open, async (open) => {
 	if (open) {
 		error.value = '';
-		restoreDraft();
+		if (editPost.value !== null) {
+			populateEditor(editPost.value);
+		} else {
+			existing.value = [];
+			restoreDraft();
+		}
 		await nextTick();
 		if (dialog.value !== null && !dialog.value.open) {
 			dialog.value.showModal();
@@ -175,7 +203,7 @@ function addFiles(event: Event): void {
 	input.value = '';
 
 	for (const file of selected) {
-		if (images.value.length >= MAX_FILES) {
+		if (images.value.length + existing.value.length >= MAX_FILES) {
 			showToast(`Höchstens ${MAX_FILES} Bilder pro Beitrag.`, 'error');
 			break;
 		}
@@ -207,6 +235,10 @@ function removeImage(key: number): void {
 	images.value.splice(index, 1);
 }
 
+function removeExisting(id: string): void {
+	existing.value = existing.value.filter((attachment) => attachment.id !== id);
+}
+
 function resetImages(): void {
 	for (const image of images.value) {
 		URL.revokeObjectURL(image.preview);
@@ -232,6 +264,27 @@ async function submit(): Promise<void> {
 			attachments.push(await getApi().uploadMedia(image.file, image.alt.trim()));
 		}
 
+		const editing = editPost.value;
+		if (editing !== null) {
+			const updated = await getApi().updatePost(editing.id, {
+				content: content.value,
+				visibility: visibility.value,
+				content_warning: showWarning.value ? contentWarning.value : null,
+				attachment_ids: [
+					...existing.value.map((attachment) => attachment.id),
+					...attachments.map((attachment) => attachment.id),
+				],
+				revision: editing.revision,
+			});
+
+			announcePostUpdated(updated);
+			resetImages();
+			existing.value = [];
+			closeComposer();
+			showToast('Beitrag aktualisiert.', 'success');
+			return;
+		}
+
 		const replying = isReply.value;
 		const post = await getApi().createPost({
 			content: content.value,
@@ -244,6 +297,7 @@ async function submit(): Promise<void> {
 		announcePostCreated(post);
 		clearDraft();
 		resetImages();
+		existing.value = [];
 		content.value = '';
 		contentWarning.value = '';
 		showWarning.value = false;
@@ -251,7 +305,11 @@ async function submit(): Promise<void> {
 		closeComposer();
 		showToast(replying ? 'Antwort veröffentlicht.' : 'Beitrag veröffentlicht.', 'success');
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Der Beitrag konnte nicht veröffentlicht werden.';
+		error.value = caught instanceof Error
+			? caught.message
+			: isEdit.value
+				? 'Der Beitrag konnte nicht gespeichert werden.'
+				: 'Der Beitrag konnte nicht veröffentlicht werden.';
 	} finally {
 		submitting.value = false;
 	}
@@ -310,7 +368,26 @@ async function submit(): Promise<void> {
 					<span :class="{ 'a-count--over': warningOverLimit }">{{ warningLength }} / {{ MAX_WARNING }}</span>
 				</div>
 
-				<div v-if="images.length > 0" class="a-composer__images">
+				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
+					<figure v-for="attachment in existing" :key="attachment.id" class="a-composer__image">
+						<img
+							v-if="attachment.media_type === 'image'"
+							:src="attachment.url"
+							:alt="attachment.alt_text ?? ''"
+						/>
+						<span v-else class="a-composer__image-note">
+							<AppIcon name="image" :size="18" /> {{ attachment.media_type }}
+						</span>
+						<button
+							type="button"
+							class="a-composer__image-remove"
+							:aria-label="`${attachment.media_type === 'image' ? 'Bild' : 'Anhang'} entfernen`"
+							@click="removeExisting(attachment.id)"
+						>
+							<AppIcon name="x" :size="15" />
+						</button>
+						<span class="a-composer__image-note">Vorhandener Anhang</span>
+					</figure>
 					<figure v-for="(image, index) in images" :key="image.key" class="a-composer__image">
 						<img :src="image.preview" :alt="image.alt || `Bild ${index + 1}`" />
 						<button type="button" class="a-composer__image-remove" aria-label="Bild entfernen" @click="removeImage(image.key)">
@@ -342,7 +419,7 @@ async function submit(): Promise<void> {
 					<button
 						type="button"
 						class="a-icon-btn"
-						:disabled="images.length >= MAX_FILES || submitting"
+						:disabled="images.length + existing.length >= MAX_FILES || submitting"
 						aria-label="Bilder hinzufügen"
 						title="Bilder hinzufügen"
 						@click="fileInput?.click()"
@@ -372,7 +449,7 @@ async function submit(): Promise<void> {
 					</span>
 					<button type="submit" class="a-btn a-btn--primary" :disabled="!canSubmit">
 						<AppIcon v-if="submitting" name="refresh" :size="16" class="a-spin" />
-						{{ submitting ? 'Wird gesendet…' : isReply ? 'Antworten' : 'Posten' }}
+						{{ submitLabel }}
 					</button>
 				</div>
 			</form>

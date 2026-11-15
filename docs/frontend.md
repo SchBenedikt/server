@@ -42,8 +42,11 @@ Accounts, sessions and CSRF are host-owned per
 - **Build.** `npm run build` runs `vite build`. `ui/vite.config.ts` writes to
   `../public/ui` with stable names: `app.js`, `app.css` and `app-[name].js`.
   `npm run build:shared` builds the shared package in the installed core
-  checkout. The documented full rebuild is
-  `(cd vendor/alohasocial/core/ui && npm ci && npm run build)` followed by
+  checkout. The core marks `ui/` as `export-ignore`, so it is absent from the
+  Composer dist archive; a developer rebuilding the shared package checks the
+  matching core source out into `vendor/alohasocial/core/ui` first. The
+  documented full rebuild is that check-out followed by
+  `(cd vendor/alohasocial/core/ui && npm ci && npm run build)` and then
   `(cd ui && npm ci && npm run build)`.
 - **Committed artifact.** `public/ui/app.js` and `public/ui/app.css` are tracked
   in Git. A deployment serves them from `public/` and does not need Node; Node
@@ -55,14 +58,19 @@ Accounts, sessions and CSRF are host-owned per
   `data-signed-in`). Signed-out visitors get the page with an empty handle; the
   shell still mounts and can read the public timeline.
 - **Bridge.** `ui/src/bridge.ts` implements the `HostBridge` with
-  `apiBase: ''` (core paths are absolute, same-origin `/api/v1/...`). It sends
-  the session cookie with `credentials: 'same-origin'`, adds `X-CSRF-Token`
-  from the page's data attribute, posts logout to `/logout` with `_csrf`, and
-  uses `/login` for login. The host login currently redirects to `/` after a
-  successful sign-in; the `return_to` parameter built by `loginUrl()` is not
-  consumed yet. In addition to the core API, the host serves the four
-  same-origin UI extensions for likes, interaction counts, batch post
-  hydration and profile updates (see the README).
+  `apiBase: '/api/v1'`. It sends the session cookie with
+  `credentials: 'same-origin'`, adds `X-CSRF-Token` from the page's data
+  attribute, posts logout to `/logout` with `_csrf`, and uses `/login` for
+  login. The host login currently redirects to `/` after a successful
+  sign-in; the `return_to` parameter built by `loginUrl()` is not consumed yet.
+  In addition to the core API, the host serves the same-origin UI extensions
+  for likes, interaction counts, batch post hydration, profile updates, remote
+  profiles, remote post detail and remote followers/following lists (see the
+  README).
+- **Editing.** The post menu on the signed-in account's own posts opens the
+  composer in edit mode. It calls the core's `PATCH /api/v1/posts/{id}` with the
+  `revision` that was read and rebroadcasts the saved record; a stale revision
+  is reported as a conflict instead of overwriting the newer edit.
 - **CSP.** The `/app` response uses
   `script-src 'self'`, `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: https:` and `connect-src 'self'`, so the bundle and the

@@ -20,6 +20,7 @@ use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
@@ -49,6 +50,7 @@ final readonly class Runtime
         public View $view,
         public Clock $clock,
         public PostInteractions $interactions,
+        public RemoteDirectory $remoteDirectory,
     ) {
     }
 }

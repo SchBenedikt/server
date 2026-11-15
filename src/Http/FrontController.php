@@ -17,7 +17,9 @@ use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\SessionIssue;
 use AlohaSocial\Server\Bootstrap\Runtime;
+use AlohaSocial\Server\Federation\RemoteDirectoryException;
 use AlohaSocial\Server\Mail\MailException;
+use Throwable;
 
 /**
  * The server's only HTTP entry point.
@@ -101,6 +103,95 @@ final class FrontController
             return Response::json([
                 'profiles' => $this->runtime->accounts->displayNames(),
             ]);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/lookup') {
+            $identity = $session?->userId() ?? $ip ?? 'anonymous';
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_lookup', $identity, 30, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Zu viele Profil-Abrufe. Bitte warte kurz.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $handle = trim((string) ($request->queryParam('handle') ?? ''));
+            $cursor = $request->queryParam('cursor');
+            $cursor = is_string($cursor) && $cursor !== '' ? $cursor : null;
+
+            try {
+                return Response::json($this->runtime->remoteDirectory->lookup($handle, $cursor));
+            } catch (RemoteDirectoryException $exception) {
+                return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
+            } catch (Throwable) {
+                return $this->apiError(502, 'remote_lookup_failed', 'Das entfernte Profil konnte nicht geladen werden.');
+            }
+        }
+
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/remote-post') {
+            $identity = $session?->userId() ?? $ip ?? 'anonymous';
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_post', $identity, 60, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Zu viele Beitrags-Abrufe. Bitte warte kurz.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $id = trim((string) ($request->queryParam('id') ?? ''));
+            if ($id === '') {
+                return $this->apiError(422, 'remote_post_missing', 'Bitte gib einen Beitrag an.');
+            }
+
+            try {
+                return Response::json($this->runtime->remoteDirectory->remotePost($id));
+            } catch (RemoteDirectoryException $exception) {
+                return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
+            } catch (Throwable) {
+                return $this->apiError(502, 'remote_post_failed', 'Der entfernte Beitrag konnte nicht geladen werden.');
+            }
+        }
+
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/remote-connections') {
+            $identity = $session?->userId() ?? $ip ?? 'anonymous';
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_connections', $identity, 30, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Zu viele Verbindungs-Abrufe. Bitte warte kurz.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $handle = trim((string) ($request->queryParam('handle') ?? ''));
+            $type = trim((string) ($request->queryParam('type') ?? ''));
+            $cursor = $request->queryParam('cursor');
+            $cursor = is_string($cursor) && $cursor !== '' ? $cursor : null;
+
+            try {
+                return Response::json($this->runtime->remoteDirectory->remoteConnections($handle, $type, $cursor));
+            } catch (RemoteDirectoryException $exception) {
+                return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
+            } catch (Throwable) {
+                return $this->apiError(502, 'remote_connections_failed', 'Die Verbindungen konnten nicht geladen werden.');
+            }
         }
 
         if ($request->method === 'GET' && $request->path === '/api/v1/host/interactions') {

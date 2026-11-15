@@ -13,20 +13,47 @@ import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { hostDisplayName, refreshAccount, setAccount, setHostDisplayName } from '../lib/account';
 import { getApi, hydrateTimelineBoosts } from '../lib/api';
-import { onPostCreated, onPostDeleted } from '../lib/events';
-import { accountName, avatarStyle, formatCount, handleLabel, isRemoteId } from '../lib/format';
+import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
+import { accountName, absoluteTime, avatarStyle, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
 import { appState, openComposer, showToast } from '../lib/state';
-import type { Account, TimelineItem } from '../lib/types';
+import type { Account, RemoteProfileData, TimelineItem } from '../lib/types';
 
 const PAGE_SIZE = 40;
 
+/**
+ * A route handle is remote when it is an absolute URL, an `@user@host`
+ * address, a Bluesky handle or an AT Protocol DID. Local handles are plain
+ * account names, so this cannot misroute a local profile.
+ */
+function looksRemote(id: string): boolean {
+	const value = id.trim();
+	if (value === '') {
+		return false;
+	}
+	if (isRemoteId(value) || /^did:/i.test(value)) {
+		return true;
+	}
+
+	const address = value.replace(/^@/, '');
+	if (/^[^@\s]+@[^@\s]+$/.test(address)) {
+		return true;
+	}
+	if (/^(?:www\.)?bsky\.app\/profile\//i.test(value)) {
+		return true;
+	}
+
+	return /^[^@\s/]+\.[A-Za-z]{2,}$/.test(address);
+}
+
 const handle = computed(() => route.value.name === 'profile' ? route.value.handle : '');
-const isRemote = computed(() => isRemoteId(handle.value));
-const isSelf = computed(() => appState.session.user?.handle === handle.value);
+const isRemoteProfile = computed(() => looksRemote(handle.value));
+const isSelf = computed(() => !isRemoteProfile.value && appState.session.user?.handle === handle.value);
 const signedIn = computed(() => appState.session.user !== null);
 
 const account = ref<Account | null>(null);
+const remoteKind = ref<'activitypub' | 'bluesky' | null>(null);
+const remoteFollowState = ref<'idle' | 'sending' | 'sent'>('idle');
 const loading = ref(false);
 const error = ref('');
 const tab = ref<'posts' | 'media'>('posts');
@@ -42,6 +69,24 @@ const cursor = ref<string | null>(null);
 const hasMore = ref(true);
 const loadedOnce = ref(false);
 
+const connectionType = ref<'followers' | 'following' | null>(null);
+const connectionProfiles = ref<Account[]>([]);
+const connectionCursor = ref<string | null>(null);
+const connectionLoading = ref(false);
+const connectionError = ref('');
+const connectionNetwork = ref<'activitypub' | 'bluesky'>('activitypub');
+const connectionGeneration = ref(0);
+const connectionTitle = computed(() => connectionType.value === 'followers' ? 'Follower' : 'Gefolgt');
+const connectionEmptyText = computed(() => (
+	connectionType.value === 'followers'
+		? 'Dieses Profil hat keine öffentlich sichtbaren Follower.'
+		: 'Dieses Profil folgt niemandem öffentlich.'
+));
+const joinedLabel = computed(() => {
+	const value = account.value?.published_at ?? '';
+	return value !== '' ? absoluteTime(value) : '';
+});
+
 const displayName = computed(() => {
 	if (isSelf.value) {
 		return appState.session.user?.displayName
@@ -49,26 +94,91 @@ const displayName = computed(() => {
 			|| handleLabel(handle.value);
 	}
 
+	if (isRemoteProfile.value) {
+		return accountName(account.value, handle.value);
+	}
+
 	return hostDisplayName(handle.value) || accountName(account.value, handle.value);
 });
-const handleText = computed(() => handleLabel(handle.value));
+const handleText = computed(() => (
+	isRemoteProfile.value && account.value?.handle !== undefined && account.value.handle !== ''
+		? account.value.handle
+		: handleLabel(handle.value)
+));
 const showHandle = computed(() => displayName.value !== handleText.value);
-const coverStyle = computed(() => avatarStyle(handle.value || 'aloha'));
+const coverStyle = computed(() => {
+	const banner = account.value?.banner ?? '';
+	if (banner !== '') {
+		return {
+			backgroundImage: `url(${JSON.stringify(banner)})`,
+			backgroundSize: 'cover',
+			backgroundPosition: 'center',
+		};
+	}
+
+	return avatarStyle(handle.value || 'aloha');
+});
 const profileUrl = computed(() => `${window.location.origin}/app#/u/${encodeURIComponent(handle.value)}`);
 const relationship = computed(() => account.value?.relationship ?? null);
 const visiblePosts = computed(() => tab.value === 'media'
 	? posts.value.filter((post) => (post.attachments?.length ?? 0) > 0)
 	: posts.value);
+const canRemoteFollow = computed(() => (
+	isRemoteProfile.value
+	&& signedIn.value
+	&& account.value?.can_follow === true
+	&& typeof account.value?.inbox === 'string'
+	&& account.value.inbox !== ''
+));
+const emptyText = computed(() => {
+	if (tab.value === 'media') {
+		return isRemoteProfile.value
+			? 'Dieses Profil hat in den zuletzt geladenen Beiträgen keine Bilder oder Videos.'
+			: 'Diese Person hat in den zuletzt geladenen Beiträgen keine Bilder oder Videos.';
+	}
+	if (isSelf.value) {
+		return 'Schreib den ersten Beitrag – er erscheint dann hier.';
+	}
+
+	return isRemoteProfile.value
+		? 'Dieses Profil hat in den zuletzt geladenen öffentlichen Beiträgen noch nichts geschrieben.'
+		: 'Diese Person hat in den zuletzt geladenen öffentlichen Beiträgen noch nichts geschrieben.';
+});
+const externalProfileUrl = computed(() => {
+	const url = account.value?.url ?? '';
+	return isRemoteId(url) ? url : (isRemoteId(handle.value) ? handle.value : '');
+});
+const remoteHost = computed(() => {
+	const url = account.value?.url ?? (isRemoteId(handle.value) ? handle.value : '');
+	try {
+		return new URL(url).hostname.replace(/^www\./, '');
+	} catch {
+		const match = handleText.value.match(/@([^@]+)$/);
+		return match?.[1] ?? '';
+	}
+});
+const networkLabel = computed(() => {
+	if (remoteKind.value === 'bluesky') {
+		return 'Bluesky';
+	}
+
+	return remoteHost.value !== '' ? remoteHost.value : 'Federated Network';
+});
+const networkIcon = computed(() => remoteKind.value === 'bluesky' ? 'sparkles' : 'globe');
 
 let generation = 0;
 
 watch(handle, () => {
+	remoteFollowState.value = 'idle';
 	void loadProfile();
 }, { immediate: true });
 
 async function loadProfile(): Promise<void> {
 	const current = ++generation;
+	closeConnections();
 	account.value = null;
+	remoteKind.value = null;
+	remoteFollowState.value = 'idle';
 	posts.value = [];
 	error.value = '';
 	postsError.value = '';
@@ -76,7 +186,12 @@ async function loadProfile(): Promise<void> {
 	hasMore.value = true;
 	loadedOnce.value = false;
 
-	if (handle.value === '' || isRemote.value) {
+	if (handle.value === '') {
+		return;
+	}
+
+	if (isRemoteProfile.value) {
+		await loadRemote(true);
 		return;
 	}
 
@@ -103,8 +218,70 @@ async function loadProfile(): Promise<void> {
 	}
 }
 
+async function loadRemote(reset: boolean): Promise<void> {
+	if (handle.value === '' || !isRemoteProfile.value) {
+		return;
+	}
+	if (!reset && (postsLoading.value || !hasMore.value)) {
+		return;
+	}
+
+	const current = generation;
+	postsLoading.value = true;
+	postsError.value = '';
+	error.value = '';
+	if (reset) {
+		loading.value = true;
+		posts.value = [];
+		cursor.value = null;
+		hasMore.value = true;
+	}
+
+	try {
+		const data: RemoteProfileData = await getApi().remoteProfile(handle.value, reset ? null : cursor.value);
+		if (current !== generation) {
+			return;
+		}
+
+		account.value = data.profile;
+		remoteKind.value = data.kind;
+
+		const collected = reset ? [] : [...posts.value];
+		const seen = new Set(collected.map((post) => post.id));
+		for (const post of data.posts) {
+			if (!seen.has(post.id)) {
+				seen.add(post.id);
+				collected.push(post);
+			}
+		}
+
+		posts.value = collected;
+		cursor.value = data.cursor;
+		hasMore.value = data.cursor !== null && data.posts.length > 0;
+		loadedOnce.value = true;
+	} catch (caught) {
+		const message = caught instanceof Error ? caught.message : 'Das entfernte Profil konnte nicht geladen werden.';
+		if (current === generation) {
+			if (reset) {
+				error.value = message;
+			} else {
+				postsError.value = message;
+			}
+		}
+	} finally {
+		if (current === generation) {
+			loading.value = false;
+			postsLoading.value = false;
+		}
+	}
+}
+
 async function loadPosts(reset: boolean): Promise<void> {
-	if (handle.value === '' || isRemote.value) {
+	if (handle.value === '') {
+		return;
+	}
+	if (isRemoteProfile.value) {
+		await loadRemote(reset);
 		return;
 	}
 	if (!reset && (postsLoading.value || !hasMore.value)) {
@@ -176,6 +353,100 @@ async function loadPosts(reset: boolean): Promise<void> {
 	}
 }
 
+async function openConnections(type: 'followers' | 'following'): Promise<void> {
+	if (!isRemoteProfile.value || account.value === null) {
+		return;
+	}
+
+	const current = ++connectionGeneration.value;
+	connectionType.value = type;
+	connectionProfiles.value = [];
+	connectionCursor.value = null;
+	connectionError.value = '';
+	connectionLoading.value = false;
+	await loadConnections(true, current);
+}
+
+async function loadConnections(reset: boolean, expected = connectionGeneration.value): Promise<void> {
+	if (connectionType.value === null || handle.value === '') {
+		return;
+	}
+	if (!reset && (connectionLoading.value || connectionCursor.value === null)) {
+		return;
+	}
+
+	connectionLoading.value = true;
+	connectionError.value = '';
+	if (reset) {
+		connectionProfiles.value = [];
+		connectionCursor.value = null;
+	}
+
+	try {
+		const data = await getApi().remoteConnections(
+			handle.value,
+			connectionType.value,
+			reset ? null : connectionCursor.value,
+		);
+		if (expected !== connectionGeneration.value) {
+			return;
+		}
+
+		const collected = reset ? [] : [...connectionProfiles.value];
+		const seen = new Set(collected.map((profile) => profile.id));
+		for (const profile of data.profiles) {
+			if (!seen.has(profile.id)) {
+				seen.add(profile.id);
+				collected.push(profile);
+			}
+		}
+
+		connectionProfiles.value = collected;
+		connectionCursor.value = data.cursor;
+		connectionNetwork.value = data.network;
+	} catch (caught) {
+		if (expected === connectionGeneration.value) {
+			connectionError.value = caught instanceof Error
+				? caught.message
+				: 'Die Verbindungen konnten nicht geladen werden.';
+		}
+	} finally {
+		if (expected === connectionGeneration.value) {
+			connectionLoading.value = false;
+		}
+	}
+}
+
+function closeConnections(): void {
+	connectionGeneration.value += 1;
+	connectionType.value = null;
+	connectionProfiles.value = [];
+	connectionCursor.value = null;
+	connectionError.value = '';
+	connectionLoading.value = false;
+}
+
+function connectionProfileHref(profile: Account): string {
+	return `#/u/${encodeURIComponent(profile.handle)}`;
+}
+
+async function followRemote(): Promise<void> {
+	const profile = account.value;
+	if (profile === null || !canRemoteFollow.value || remoteFollowState.value !== 'idle') {
+		return;
+	}
+
+	remoteFollowState.value = 'sending';
+	try {
+		await getApi().followRemote(profile.id, profile.inbox as string);
+		remoteFollowState.value = 'sent';
+		showToast(`Follow-Anfrage an ${profile.handle} gesendet.`, 'success');
+	} catch (caught) {
+		remoteFollowState.value = 'idle';
+		showToast(caught instanceof Error ? caught.message : 'Die Follow-Anfrage ist fehlgeschlagen.', 'error');
+	}
+}
+
 async function share(): Promise<void> {
 	try {
 		await navigator.clipboard.writeText(profileUrl.value);
@@ -241,11 +512,14 @@ async function saveProfile(): Promise<void> {
 
 function onFollowChanged(following: boolean): void {
 	if (account.value !== null) {
-		account.value.followers_count = Math.max(0, account.value.followers_count + (following ? 1 : -1));
+		account.value.followers_count = Math.max(0, (account.value.followers_count ?? 0) + (following ? 1 : -1));
 	}
 }
 
 const stopCreated = onPostCreated((post) => {
+	if (isRemoteProfile.value) {
+		return;
+	}
 	const author = post.object_author_id ?? post.author_id;
 	if (author !== handle.value || posts.value.some((existing) => existing.id === post.id)) {
 		return;
@@ -256,6 +530,16 @@ const stopCreated = onPostCreated((post) => {
 	));
 });
 
+const stopUpdated = onPostUpdated((post) => {
+	posts.value = posts.value.map((item) => {
+		if (item.id !== post.id) {
+			return item;
+		}
+
+		return { ...item, ...post, interaction: item.interaction ?? post.interaction };
+	});
+});
+
 const stopDeleted = onPostDeleted((postId) => {
 	posts.value = posts.value.filter((post) => post.id !== postId && post.object_id !== postId);
 });
@@ -263,6 +547,7 @@ const stopDeleted = onPostDeleted((postId) => {
 onUnmounted(() => {
 	generation += 1;
 	stopCreated();
+	stopUpdated();
 	stopDeleted();
 });
 </script>
@@ -282,20 +567,15 @@ onUnmounted(() => {
 			</template>
 		</PageHeader>
 
-		<div v-if="isRemote" class="a-login-panel">
-			<span class="a-login-panel__icon"><AppIcon name="globe" :size="26" /></span>
-			<h2>Profil auf einem anderen Server</h2>
-			<p>Dieses Profil gehört nicht zu dieser Instanz. Du kannst es an seinem Ursprungsort öffnen.</p>
-			<a class="a-btn a-btn--primary" :href="handle" target="_blank" rel="noopener noreferrer">
-				Profil öffnen <AppIcon name="external" :size="15" />
-			</a>
-		</div>
-
-		<TimelineSkeleton v-else-if="loading" :count="2" />
+		<TimelineSkeleton v-if="loading && account === null" :count="2" />
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Profil nicht gefunden</strong><p>{{ error }}</p></div>
+			<div>
+				<strong>{{ isRemoteProfile ? 'Entferntes Profil nicht erreichbar' : 'Profil nicht gefunden' }}</strong>
+				<p>{{ error }}</p>
+			</div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadProfile">Erneut versuchen</button>
 			<a class="a-btn a-btn--ghost a-btn--small" href="#/explore">Zurück zu Entdecken</a>
 		</div>
 
@@ -306,7 +586,14 @@ onUnmounted(() => {
 				</div>
 				<div class="a-profile__body">
 					<div class="a-profile__top">
-						<Avatar :id="handle" :name="displayName" :size="94" ring class="a-profile__avatar" />
+						<Avatar
+							:id="handle"
+							:name="displayName"
+							:src="account.avatar"
+							:size="94"
+							ring
+							class="a-profile__avatar"
+						/>
 						<div class="a-profile__actions">
 							<template v-if="isSelf">
 								<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="openEdit">
@@ -316,6 +603,35 @@ onUnmounted(() => {
 									<AppIcon name="pen" :size="15" /> Beitrag schreiben
 								</button>
 							</template>
+
+							<template v-else-if="isRemoteProfile">
+								<button
+									v-if="canRemoteFollow"
+									type="button"
+									class="a-btn a-btn--primary a-btn--small"
+									:disabled="remoteFollowState === 'sending' || remoteFollowState === 'sent'"
+									@click="followRemote"
+								>
+									<AppIcon
+										:name="remoteFollowState === 'sent' ? 'check' : 'plus'"
+										:size="15"
+									/>
+									{{ remoteFollowState === 'sent'
+										? 'Anfrage gesendet'
+										: remoteFollowState === 'sending' ? 'Wird gesendet…' : 'Folgen' }}
+								</button>
+								<a
+									v-if="externalProfileUrl !== ''"
+									class="a-btn a-btn--ghost a-btn--small"
+									:href="externalProfileUrl"
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									<AppIcon name="external" :size="15" />
+									{{ remoteKind === 'bluesky' ? 'Auf Bluesky öffnen' : 'Original öffnen' }}
+								</a>
+							</template>
+
 							<FollowButton v-else :account="account" @changed="onFollowChanged" />
 						</div>
 					</div>
@@ -323,30 +639,78 @@ onUnmounted(() => {
 					<div class="a-profile__identity">
 						<h1>{{ displayName }}</h1>
 						<p v-if="showHandle" class="a-profile__handle">{{ handleText }}</p>
-						<p v-if="relationship?.followed_by" class="a-profile__follows-you">
+						<p v-if="isRemoteProfile" class="a-profile__network">
+							<AppIcon :name="networkIcon" :size="13" />
+							{{ networkLabel }}
+							<span v-if="remoteKind === 'activitypub'">· ActivityPub</span>
+							<span v-else-if="remoteKind === 'bluesky'">· AT Protocol</span>
+						</p>
+						<p v-else-if="relationship?.followed_by" class="a-profile__follows-you">
 							<AppIcon name="users" :size="14" /> Folgt dir
 						</p>
 					</div>
 
+					<p v-if="isRemoteProfile && account.bio" class="a-profile__bio">{{ account.bio }}</p>
+
 					<p class="a-profile__note">
 						<AppIcon name="globe" :size="15" />
-						Öffentliches Profil auf {{ appState.instance?.name ?? 'Aloha Social' }}
+						<template v-if="isRemoteProfile">
+							Profil auf {{ networkLabel }}
+						</template>
+						<template v-else>
+							Öffentliches Profil auf {{ appState.instance?.name ?? 'Aloha Social' }}
+						</template>
 					</p>
 
 					<dl class="a-profile__stats">
-						<div>
+						<div
+							v-if="isRemoteProfile"
+							class="a-profile__stat--button"
+							role="button"
+							tabindex="0"
+							:aria-label="`Gefolgte Profile von ${displayName} anzeigen`"
+							@click="openConnections('following')"
+							@keydown.enter.prevent="openConnections('following')"
+							@keydown.space.prevent="openConnections('following')"
+						>
 							<dt>{{ formatCount(account.following_count) }}</dt>
 							<dd>folgt</dd>
 						</div>
-						<div>
+						<div v-else>
+							<dt>{{ formatCount(account.following_count) }}</dt>
+							<dd>folgt</dd>
+						</div>
+						<div
+							v-if="isRemoteProfile"
+							class="a-profile__stat--button"
+							role="button"
+							tabindex="0"
+							:aria-label="`Follower von ${displayName} anzeigen`"
+							@click="openConnections('followers')"
+							@keydown.enter.prevent="openConnections('followers')"
+							@keydown.space.prevent="openConnections('followers')"
+						>
 							<dt>{{ formatCount(account.followers_count) }}</dt>
 							<dd>Follower</dd>
 						</div>
-						<div>
-							<dt>{{ posts.length }}+</dt>
+						<div v-else>
+							<dt>{{ formatCount(account.followers_count) }}</dt>
+							<dd>Follower</dd>
+						</div>
+						<div v-if="isRemoteProfile && account.posts_count !== null && account.posts_count !== undefined">
+							<dt>{{ formatCount(account.posts_count) }}</dt>
+							<dd>Beiträge</dd>
+						</div>
+						<div v-else>
+							<dt>{{ posts.length }}{{ hasMore ? '+' : '' }}</dt>
 							<dd>Beiträge geladen</dd>
 						</div>
 					</dl>
+
+					<p v-if="isRemoteProfile && joinedLabel !== ''" class="a-profile__joined">
+						<AppIcon name="calendar" :size="14" />
+						Beigetreten am {{ joinedLabel }}
+					</p>
 				</div>
 			</section>
 
@@ -385,9 +749,7 @@ onUnmounted(() => {
 				v-else-if="loadedOnce && visiblePosts.length === 0"
 				:icon="tab === 'media' ? 'image' : 'pen'"
 				:title="tab === 'media' ? 'Noch keine Bilder' : 'Noch keine öffentlichen Beiträge'"
-				:text="isSelf
-					? 'Schreib den ersten Beitrag – er erscheint dann hier.'
-					: 'Diese Person hat in den zuletzt geladenen öffentlichen Beiträgen noch nichts geschrieben.'"
+				:text="emptyText"
 			>
 				<button v-if="isSelf" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
 					Beitrag schreiben
@@ -407,7 +769,7 @@ onUnmounted(() => {
 				:disabled="postsLoading"
 				@click="loadPosts(false)"
 			>
-				{{ postsLoading ? 'Wird gesucht…' : 'Weitere Beiträge suchen' }}
+				{{ postsLoading ? 'Wird geladen…' : 'Weitere Beiträge laden' }}
 			</button>
 
 			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error">{{ postsError }}</p>
@@ -459,6 +821,95 @@ onUnmounted(() => {
 					</button>
 				</footer>
 			</form>
+		</div>
+	</Teleport>
+
+	<Teleport to="body">
+		<div
+			v-if="connectionType !== null"
+			class="a-modal-overlay"
+			role="presentation"
+			@click.self="closeConnections"
+			@keydown.esc="closeConnections"
+		>
+			<section
+				class="a-connections"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="a-connections-title"
+			>
+				<header class="a-connections__head">
+					<div>
+						<p class="a-profile-edit__eyebrow">{{ account?.handle ?? handleText }}</p>
+						<h2 id="a-connections-title">{{ connectionTitle }}</h2>
+					</div>
+					<button type="button" class="a-icon-btn" aria-label="Liste schließen" @click="closeConnections">
+						<AppIcon name="x" :size="19" />
+					</button>
+				</header>
+
+				<p class="a-connections__meta">
+					<AppIcon :name="connectionNetwork === 'bluesky' ? 'sparkles' : 'globe'" :size="14" />
+					{{ connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'Fediverse · ActivityPub' }}
+					<span>· {{ connectionProfiles.length }} geladen</span>
+				</p>
+
+				<p v-if="connectionError !== ''" class="a-form-error" role="alert">{{ connectionError }}</p>
+
+				<ul v-if="connectionProfiles.length > 0" class="a-connections__list">
+					<li v-for="profile in connectionProfiles" :key="profile.id">
+						<a :href="connectionProfileHref(profile)" class="a-connections__item" @click="closeConnections">
+							<Avatar
+								:id="profile.handle"
+								:name="profile.display_name"
+								:src="profile.avatar"
+								:size="42"
+							/>
+							<span class="a-connections__body">
+								<span class="a-connections__name">
+									<strong>{{ profile.display_name }}</strong>
+									<span v-if="profile.display_name !== profile.handle">{{ profile.handle }}</span>
+								</span>
+								<span v-if="profile.bio" class="a-connections__bio">{{ truncate(profile.bio, 170) }}</span>
+								<span class="a-connections__stats">
+									<span>{{ formatCount(profile.followers_count) }} Follower</span>
+									<span>{{ formatCount(profile.following_count) }} folgt</span>
+									<span v-if="profile.posts_count !== null && profile.posts_count !== undefined">
+										{{ formatCount(profile.posts_count) }} Beiträge
+									</span>
+								</span>
+							</span>
+							<AppIcon name="external" :size="15" class="a-connections__arrow" />
+						</a>
+					</li>
+				</ul>
+
+				<EmptyState
+					v-else-if="!connectionLoading && connectionError === ''"
+					icon="users"
+					title="Keine Profile"
+					:text="connectionEmptyText"
+				/>
+
+				<div class="a-connections__footer">
+					<button
+						v-if="connectionCursor !== null"
+						type="button"
+						class="a-btn a-btn--ghost a-btn--small"
+						:disabled="connectionLoading"
+						@click="loadConnections(false)"
+					>
+						<AppIcon v-if="connectionLoading" name="refresh" :size="15" class="a-spin" />
+						{{ connectionLoading ? 'Wird geladen…' : 'Weitere laden' }}
+					</button>
+					<span v-else-if="connectionProfiles.length > 0" class="a-connections__end">
+						Ende der öffentlich sichtbaren Liste
+					</span>
+					<span v-if="connectionLoading && connectionProfiles.length === 0" class="a-connections__end">
+						Wird geladen…
+					</span>
+				</div>
+			</section>
 		</div>
 	</Teleport>
 </template>

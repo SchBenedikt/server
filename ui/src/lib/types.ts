@@ -45,10 +45,16 @@ export interface Poll {
 export interface TimelineItem {
 	id: string;
 	author_id: string;
+	author_handle?: string | null;
+	author_display_name?: string | null;
+	author_avatar?: string | null;
+	is_remote?: boolean;
 	content: string;
 	content_warning: string | null;
 	visibility: string | null;
 	published_at: string;
+	edited_at?: string | null;
+	revision?: number;
 	deleted_at?: string | null;
 	in_reply_to_id?: string | null;
 	recipient_ids?: string[];
@@ -59,6 +65,10 @@ export interface TimelineItem {
 	object_author_id?: string | null;
 	boosted_by?: string | null;
 	interaction?: PostInteraction;
+	likes_count?: number | null;
+	replies_count?: number | null;
+	boosts_count?: number | null;
+	external_url?: string | null;
 }
 
 export interface Relationship {
@@ -73,9 +83,40 @@ export interface Account {
 	handle: string;
 	display_name: string;
 	url: string;
-	followers_count: number;
-	following_count: number;
+	followers_count: number | null;
+	following_count: number | null;
+	posts_count?: number | null;
+	avatar?: string | null;
+	banner?: string | null;
+	bio?: string | null;
+	network?: 'activitypub' | 'bluesky';
+	can_follow?: boolean;
+	inbox?: string | null;
+	did?: string | null;
+	is_remote?: boolean;
 	relationship: Relationship | null;
+	published_at?: string | null;
+}
+
+export interface RemoteProfileData {
+	kind: 'activitypub' | 'bluesky';
+	profile: Account;
+	posts: TimelineItem[];
+	cursor: string | null;
+}
+
+export interface RemotePostData {
+	network: 'activitypub' | 'bluesky';
+	post: TimelineItem;
+	parent: TimelineItem | null;
+	replies: TimelineItem[];
+	profile: Account | null;
+}
+
+export interface RemoteConnectionsData {
+	network: 'activitypub' | 'bluesky';
+	profiles: Account[];
+	cursor: string | null;
 }
 
 export interface NotificationItem {
@@ -138,6 +179,14 @@ export interface CreatePostPayload {
 	in_reply_to_id?: string | null;
 	attachment_ids?: string[];
 	recipient_ids?: string[];
+}
+
+export interface UpdatePostPayload {
+	content: string;
+	visibility: 'public' | 'unlisted' | 'followers';
+	content_warning: string | null;
+	attachment_ids?: string[];
+	revision?: number;
 }
 
 export type ThemeName = 'dark' | 'light';

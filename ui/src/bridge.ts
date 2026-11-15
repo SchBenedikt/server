@@ -30,7 +30,9 @@ export interface AlohaHostBridge extends HostBridge {
 }
 
 export const bridge: AlohaHostBridge = {
-	apiBase: '',
+	// The shared UI validates this field; the host's `request()` already
+	// receives absolute core paths, so the value only declares the prefix.
+	apiBase: '/api/v1',
 
 	async currentUser(): Promise<UiUser | null> {
 		if (handle === '') {

@@ -51,9 +51,9 @@ export function absoluteTime(value: string): string {
 	return absoluteDate.format(date);
 }
 
-export function formatCount(value: number): string {
-	if (!Number.isFinite(value)) {
-		return '0';
+export function formatCount(value: number | null | undefined): string {
+	if (value === null || value === undefined || !Number.isFinite(value)) {
+		return '–';
 	}
 
 	return compactNumber.format(Math.max(0, value));
