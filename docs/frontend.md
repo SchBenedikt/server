@@ -71,6 +71,18 @@ Accounts, sessions and CSRF are host-owned per
   composer in edit mode. It calls the core's `PATCH /api/v1/posts/{id}` with the
   `revision` that was read and rebroadcasts the saved record; a stale revision
   is reported as a conflict instead of overwriting the newer edit.
+- **Reader features.** The host app also mounts the shared screens for
+  bookmarks, search, lists, mutes, blocks, keyword filters, scheduled posts and
+  enriched notifications. Those screens call the core's Mastodon-compatible
+  surface under `/api/mastodon/v1` where it exists (bookmarks, search, lists,
+  poll voting, notifications) and the neutral `/api/v1` routes otherwise
+  (blocks, filters, scheduled posts). The Mastodon API is enabled by default in
+  `HostConfig`; first-party sessions get the `['*']` scope, so no separate
+  bearer token is issued for the UI.
+- **Composer extras.** The composer can publish a poll or schedule a post.
+  Polls use `POST /api/mastodon/v1/statuses` with the `poll` object; scheduling
+  uses `POST /api/v1/scheduled-posts`. The two are mutually exclusive because a
+  scheduled post stores no poll.
 - **CSP.** The `/app` response uses
   `script-src 'self'`, `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: https:` and `connect-src 'self'`, so the bundle and the

@@ -14,12 +14,20 @@ import RightRail from './components/RightRail.vue';
 import SidebarNav from './components/SidebarNav.vue';
 import ToastHost from './components/ToastHost.vue';
 import AboutView from './views/AboutView.vue';
+import BlocksView from './views/BlocksView.vue';
+import BookmarksView from './views/BookmarksView.vue';
 import ExploreView from './views/ExploreView.vue';
+import FiltersView from './views/FiltersView.vue';
 import HomeView from './views/HomeView.vue';
+import ListView from './views/ListView.vue';
+import ListsView from './views/ListsView.vue';
+import MutesView from './views/MutesView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import NotificationsView from './views/NotificationsView.vue';
 import PostView from './views/PostView.vue';
 import ProfileView from './views/ProfileView.vue';
+import ScheduledView from './views/ScheduledView.vue';
+import SearchView from './views/SearchView.vue';
 import TagView from './views/TagView.vue';
 import { loadHostDisplayNames, setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
@@ -49,6 +57,22 @@ const currentView = computed(() => {
 			return PostView;
 		case 'tag':
 			return TagView;
+		case 'bookmarks':
+			return BookmarksView;
+		case 'search':
+			return SearchView;
+		case 'lists':
+			return ListsView;
+		case 'list':
+			return ListView;
+		case 'muted':
+			return MutesView;
+		case 'blocked':
+			return BlocksView;
+		case 'filters':
+			return FiltersView;
+		case 'scheduled':
+			return ScheduledView;
 		case 'home':
 			return HomeView;
 		default:
@@ -65,6 +89,8 @@ const viewKey = computed(() => {
 			return `post:${current.id}`;
 		case 'tag':
 			return `tag:${current.tag}`;
+		case 'list':
+			return `list:${current.id}`;
 		default:
 			return current.name;
 	}

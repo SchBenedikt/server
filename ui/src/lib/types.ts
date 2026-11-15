@@ -30,12 +30,16 @@ export interface PostInteraction {
 }
 
 export interface Poll {
+	id?: string;
 	options: PollOption[];
 	multiple: boolean;
 	hide_totals: boolean;
 	expires_at: string;
 	votes_count: number;
 	voters_count: number;
+	voted?: boolean;
+	own_votes?: number[];
+	expired?: boolean;
 }
 
 /**
@@ -68,6 +72,7 @@ export interface TimelineItem {
 	likes_count?: number | null;
 	replies_count?: number | null;
 	boosts_count?: number | null;
+	bookmarked?: boolean;
 	external_url?: string | null;
 }
 
@@ -121,11 +126,13 @@ export interface RemoteConnectionsData {
 
 export interface NotificationItem {
 	id: string;
-	type: 'favourite' | 'follow' | 'mention' | 'reblog';
+	type: string;
 	actor_id: string;
 	post_id: string | null;
 	created_at: string;
 	read: boolean;
+	account?: Account | null;
+	status?: TimelineItem | null;
 }
 
 export interface NotificationPageData {
@@ -187,6 +194,100 @@ export interface UpdatePostPayload {
 	content_warning: string | null;
 	attachment_ids?: string[];
 	revision?: number;
+}
+
+export interface AccountList {
+	id: string;
+	title: string;
+	replies_policy: 'followed' | 'list' | 'none';
+	exclusive: boolean;
+}
+
+export interface FilterKeyword {
+	text: string;
+	whole_word: boolean;
+}
+
+export type FilterAction = 'warn' | 'hide';
+
+export type FilterContext = 'home' | 'public' | 'notifications' | 'thread' | 'account';
+
+export interface FilterRule {
+	id: string;
+	name: string;
+	action: FilterAction;
+	contexts: FilterContext[];
+	keywords: FilterKeyword[];
+	created_at: string;
+	expires_at: string | null;
+}
+
+export interface FilterPayload {
+	name: string;
+	action: FilterAction;
+	contexts: FilterContext[];
+	keywords: FilterKeyword[];
+	expires_at?: string | null;
+}
+
+export interface ScheduledPost {
+	id: string;
+	author_id: string;
+	content: string;
+	content_warning: string | null;
+	visibility: 'public' | 'unlisted' | 'followers' | 'direct';
+	attachment_ids: string[];
+	recipient_ids: string[];
+	in_reply_to_id: string | null;
+	scheduled_at: string;
+	created_at: string;
+	state: 'scheduled' | 'published' | 'failed' | 'cancelled';
+	published_at: string | null;
+	failure_reason: string | null;
+}
+
+export interface ScheduledPostPayload {
+	content: string;
+	visibility: 'public' | 'unlisted' | 'followers' | 'direct';
+	content_warning?: string | null;
+	attachment_ids?: string[];
+	recipient_ids?: string[];
+	in_reply_to_id?: string | null;
+	scheduled_at: string;
+}
+
+export interface BlockEntry {
+	id: string;
+	actor: string;
+	blocked_at: string;
+}
+
+export interface HashtagResult {
+	name: string;
+	url: string;
+}
+
+export interface SearchResults {
+	accounts: Account[];
+	statuses: TimelineItem[];
+	hashtags: HashtagResult[];
+}
+
+export interface PollInput {
+	options: string[];
+	expires_in: number;
+	multiple: boolean;
+	hide_totals?: boolean;
+}
+
+export interface CreateStatusPayload {
+	status: string;
+	visibility: 'public' | 'unlisted' | 'followers' | 'direct';
+	spoiler_text?: string | null;
+	media_ids?: string[];
+	in_reply_to_id?: string | null;
+	recipient_ids?: string[];
+	poll?: PollInput | null;
 }
 
 export type ThemeName = 'dark' | 'light';

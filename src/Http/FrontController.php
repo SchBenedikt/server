@@ -290,7 +290,14 @@ final class FrontController
             return $rateLimited;
         }
 
-        return $this->runtime->app->handle($request->withUserId($userId));
+        // A first-party session is full access, so the compatibility routes'
+        // scope middleware sees every scope. Bearer-token requests keep the
+        // scopes their authenticator supplied.
+        $authenticated = $userId === null
+            ? $request->withUserId(null)
+            : $request->withUserId($userId)->withScopes(['*']);
+
+        return $this->runtime->app->handle($authenticated);
     }
 
     /**

@@ -5,16 +5,27 @@
 import type { HostBridge, UiMethod } from '@alohasocial/ui';
 import type {
 	Account,
+	AccountList,
 	Attachment,
+	BlockEntry,
 	CreatePostPayload,
+	CreateStatusPayload,
+	FilterPayload,
+	FilterRule,
 	FollowedTag,
+	HashtagResult,
 	InstanceInfo,
+	NotificationItem,
 	NotificationPageData,
+	Poll,
 	PostInteraction,
 	Relationship,
 	RemoteConnectionsData,
 	RemotePostData,
 	RemoteProfileData,
+	ScheduledPost,
+	ScheduledPostPayload,
+	SearchResults,
 	TimelineItem,
 	UpdatePostPayload,
 } from './types';
@@ -41,6 +52,7 @@ export interface Api {
 	homeTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
 	tagTimeline(tag: string, limit?: number, before?: string | null): Promise<TimelineItem[]>;
 	followedTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
+	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
 	post(id: string): Promise<TimelineItem>;
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	account(id: string): Promise<Account>;
@@ -52,10 +64,12 @@ export interface Api {
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
 	notifications(limit?: number, before?: string | null): Promise<NotificationPageData>;
+	mastodonNotifications(limit?: number, maxId?: string | null): Promise<NotificationItem[]>;
 	unreadCount(): Promise<number>;
 	dismissNotification(id: string): Promise<void>;
 	clearNotifications(): Promise<number>;
 	createPost(payload: CreatePostPayload): Promise<TimelineItem>;
+	createStatus(payload: CreateStatusPayload): Promise<TimelineItem>;
 	updatePost(id: string, payload: UpdatePostPayload): Promise<TimelineItem>;
 	deletePost(id: string): Promise<void>;
 	boostPost(id: string): Promise<void>;
@@ -67,6 +81,33 @@ export interface Api {
 	followedTags(): Promise<FollowedTag[]>;
 	followTag(tag: string): Promise<void>;
 	unfollowTag(tag: string): Promise<void>;
+	bookmarks(limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
+	bookmarkPost(id: string): Promise<void>;
+	unbookmarkPost(id: string): Promise<void>;
+	search(query: string, limit?: number): Promise<SearchResults>;
+	lists(): Promise<AccountList[]>;
+	createList(title: string): Promise<AccountList>;
+	updateList(id: string, title: string): Promise<AccountList>;
+	deleteList(id: string): Promise<void>;
+	listAccounts(id: string): Promise<Account[]>;
+	addListAccounts(id: string, accountIds: string[]): Promise<void>;
+	removeListAccounts(id: string, accountIds: string[]): Promise<void>;
+	mutes(): Promise<Account[]>;
+	muteAccount(id: string, notifications?: boolean): Promise<void>;
+	unmuteAccount(id: string): Promise<void>;
+	blocks(): Promise<BlockEntry[]>;
+	blockActor(actor: string): Promise<void>;
+	unblockActor(id: string): Promise<void>;
+	filters(): Promise<FilterRule[]>;
+	createFilter(payload: FilterPayload): Promise<FilterRule>;
+	updateFilter(id: string, payload: FilterPayload): Promise<FilterRule>;
+	deleteFilter(id: string): Promise<void>;
+	scheduledPosts(): Promise<ScheduledPost[]>;
+	createScheduledPost(payload: ScheduledPostPayload): Promise<ScheduledPost>;
+	updateScheduledPost(id: string, scheduledAt: string): Promise<ScheduledPost>;
+	deleteScheduledPost(id: string): Promise<void>;
+	poll(postId: string): Promise<Poll | null>;
+	votePoll(pollId: string, choices: number[]): Promise<Poll | null>;
 	uploadMedia(file: File, altText: string): Promise<Attachment>;
 	logout(): Promise<void>;
 }
@@ -276,6 +317,352 @@ function normalizeRelationship(value: unknown): Relationship {
 	};
 }
 
+function decodeEntities(value: string): string {
+	const named: Record<string, string> = {
+		amp: '&',
+		lt: '<',
+		gt: '>',
+		quot: '"',
+		apos: "'",
+		nbsp: ' ',
+	};
+
+	return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
+		if (entity.startsWith('#x') || entity.startsWith('#X')) {
+			const code = Number.parseInt(entity.slice(2), 16);
+			return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+		}
+		if (entity.startsWith('#')) {
+			const code = Number.parseInt(entity.slice(1), 10);
+			return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+		}
+
+		return named[entity.toLowerCase()] ?? match;
+	});
+}
+
+/**
+ * Mastodon returns HTML; the shared UI renders plain text with its own link,
+ * tag and mention detection, so block boundaries are kept as newlines and the
+ * markup itself is removed.
+ */
+function htmlToText(value: unknown): string {
+	if (typeof value !== 'string') {
+		return '';
+	}
+
+	const text = value
+		.replace(/<br\s*\/?>/gi, '\n')
+		.replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+		.replace(/<\/p>/gi, '\n\n')
+		.replace(/<[^>]+>/g, '');
+
+	return decodeEntities(text).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function isRemoteAccountId(id: string): boolean {
+	return /^https?:\/\//i.test(id);
+}
+
+export function normalizeMastodonAccount(value: unknown): Account | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const id = typeof value.id === 'string' ? value.id : '';
+	const acct = typeof value.acct === 'string' && value.acct !== ''
+		? value.acct
+		: (typeof value.username === 'string' ? value.username : '');
+	if (id === '' || acct === '') {
+		return null;
+	}
+
+	const remote = acct.includes('@') || isRemoteAccountId(id);
+
+	return {
+		id,
+		handle: acct,
+		display_name: typeof value.display_name === 'string' && value.display_name !== ''
+			? value.display_name
+			: acct,
+		url: typeof value.url === 'string' ? value.url : id,
+		followers_count: typeof value.followers_count === 'number' ? value.followers_count : null,
+		following_count: typeof value.following_count === 'number' ? value.following_count : null,
+		posts_count: typeof value.statuses_count === 'number' ? value.statuses_count : null,
+		avatar: typeof value.avatar === 'string' && value.avatar !== '' ? value.avatar : null,
+		banner: typeof value.header === 'string' && value.header !== '' ? value.header : null,
+		bio: typeof value.note === 'string' && value.note !== '' ? htmlToText(value.note) : null,
+		network: remote ? 'activitypub' : undefined,
+		is_remote: remote,
+		relationship: { following: false, followed_by: false, blocking: false, muting: false },
+		published_at: typeof value.created_at === 'string' ? value.created_at : null,
+	};
+}
+
+export function normalizeMastodonPoll(value: unknown): Poll | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	const options = Array.isArray(value.options)
+		? value.options
+			.filter(isRecord)
+			.map((option) => ({
+				title: typeof option.title === 'string' ? option.title : '',
+				votes_count: typeof option.votes_count === 'number' ? option.votes_count : 0,
+			}))
+		: [];
+
+	return {
+		id: typeof value.id === 'string' ? value.id : undefined,
+		options,
+		multiple: value.multiple === true,
+		hide_totals: value.hide_totals === true,
+		expires_at: typeof value.expires_at === 'string' ? value.expires_at : '',
+		votes_count: typeof value.votes_count === 'number' ? value.votes_count : 0,
+		voters_count: typeof value.voters_count === 'number' ? value.voters_count : 0,
+		voted: value.voted === true,
+		own_votes: Array.isArray(value.own_votes)
+			? value.own_votes.filter((choice): choice is number => typeof choice === 'number')
+			: [],
+		expired: value.expired === true,
+	};
+}
+
+function normalizeMastodonAttachment(value: unknown): Attachment | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.url !== 'string') {
+		return null;
+	}
+
+	const meta = isRecord(value.meta) && isRecord(value.meta.original) ? value.meta.original : {};
+	const type = typeof value.type === 'string' ? value.type : 'image';
+
+	return {
+		id: value.id,
+		media_type: type === 'video' || type === 'gifv' || type === 'audio' ? type : 'image',
+		mime_type: typeof value.mime_type === 'string' ? value.mime_type : 'image/*',
+		width: typeof meta.width === 'number' ? meta.width : 0,
+		height: typeof meta.height === 'number' ? meta.height : 0,
+		byte_size: 0,
+		alt_text: typeof value.description === 'string' ? value.description : null,
+		created_at: '',
+		url: value.url,
+		thumbnail_url: typeof value.preview_url === 'string' ? value.preview_url : null,
+	};
+}
+
+function visibilityFromMastodon(value: unknown): string {
+	switch (value) {
+		case 'private':
+			return 'followers';
+		case 'direct':
+			return 'direct';
+		case 'unlisted':
+			return 'unlisted';
+		default:
+			return 'public';
+	}
+}
+
+export function normalizeMastodonStatus(value: unknown): TimelineItem | null {
+	if (!isRecord(value)) {
+		return null;
+	}
+
+	if (isRecord(value.reblog)) {
+		const original = normalizeMastodonStatus(value.reblog);
+		if (original === null) {
+			return null;
+		}
+
+		return {
+			...original,
+			id: typeof value.id === 'string' ? value.id : original.id,
+			kind: 'boost',
+			object_id: original.id,
+			object_author_id: original.author_id,
+			boosted_by: isRecord(value.account) && typeof value.account.id === 'string'
+				? value.account.id
+				: null,
+			published_at: typeof value.created_at === 'string' ? value.created_at : original.published_at,
+			likes_count: original.likes_count,
+			replies_count: original.replies_count,
+			boosts_count: original.boosts_count,
+			external_url: original.external_url,
+		};
+	}
+
+	const account = normalizeMastodonAccount(value.account);
+	const id = typeof value.id === 'string' ? value.id : '';
+	if (account === null || id === '') {
+		return null;
+	}
+
+	const attachments = Array.isArray(value.media_attachments)
+		? value.media_attachments
+			.map(normalizeMastodonAttachment)
+			.filter((attachment): attachment is Attachment => attachment !== null)
+		: [];
+	const warning = typeof value.spoiler_text === 'string' && value.spoiler_text.trim() !== ''
+		? value.spoiler_text
+		: null;
+
+	return {
+		id,
+		author_id: account.id,
+		author_handle: account.handle,
+		author_display_name: account.display_name,
+		author_avatar: account.avatar,
+		is_remote: account.is_remote === true,
+		content: htmlToText(value.content),
+		content_warning: warning,
+		visibility: visibilityFromMastodon(value.visibility),
+		published_at: typeof value.created_at === 'string' ? value.created_at : '',
+		edited_at: typeof value.edited_at === 'string' ? value.edited_at : null,
+		deleted_at: null,
+		in_reply_to_id: typeof value.in_reply_to_id === 'string' ? value.in_reply_to_id : null,
+		recipient_ids: [],
+		attachments,
+		poll: normalizeMastodonPoll(value.poll),
+		kind: 'post',
+		object_id: null,
+		object_author_id: null,
+		boosted_by: null,
+		likes_count: typeof value.favourites_count === 'number' ? value.favourites_count : null,
+		replies_count: typeof value.replies_count === 'number' ? value.replies_count : null,
+		boosts_count: typeof value.reblogs_count === 'number' ? value.reblogs_count : null,
+		bookmarked: value.bookmarked === true,
+		external_url: typeof value.url === 'string' ? value.url : null,
+	};
+}
+
+function normalizeMastodonStatuses(value: unknown): TimelineItem[] {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+
+	return value
+		.map(normalizeMastodonStatus)
+		.filter((item): item is TimelineItem => item !== null);
+}
+
+function normalizeAccountList(value: unknown): AccountList | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.title !== 'string') {
+		return null;
+	}
+
+	const policy = value.replies_policy === 'list' || value.replies_policy === 'none'
+		? value.replies_policy
+		: 'followed';
+
+	return {
+		id: value.id,
+		title: value.title,
+		replies_policy: policy,
+		exclusive: value.exclusive === true,
+	};
+}
+
+function normalizeFilter(value: unknown): FilterRule | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string') {
+		return null;
+	}
+
+	const keywords = Array.isArray(value.keywords)
+		? value.keywords
+			.filter(isRecord)
+			.map((keyword) => ({
+				text: typeof keyword.text === 'string' ? keyword.text : '',
+				whole_word: keyword.whole_word === true,
+			}))
+			.filter((keyword) => keyword.text !== '')
+		: [];
+	const contexts = Array.isArray(value.contexts)
+		? value.contexts.filter((context): context is FilterRule['contexts'][number] => (
+			context === 'home'
+			|| context === 'public'
+			|| context === 'notifications'
+			|| context === 'thread'
+			|| context === 'account'
+		))
+		: [];
+
+	return {
+		id: value.id,
+		name: value.name,
+		action: value.action === 'hide' ? 'hide' : 'warn',
+		contexts,
+		keywords,
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		expires_at: typeof value.expires_at === 'string' ? value.expires_at : null,
+	};
+}
+
+function normalizeScheduledPost(value: unknown): ScheduledPost | null {
+	if (!isRecord(value) || typeof value.id !== 'string') {
+		return null;
+	}
+
+	const visibility = value.visibility === 'unlisted' || value.visibility === 'followers' || value.visibility === 'direct'
+		? value.visibility
+		: 'public';
+	const state = value.state === 'published' || value.state === 'failed' || value.state === 'cancelled'
+		? value.state
+		: 'scheduled';
+
+	return {
+		id: value.id,
+		author_id: typeof value.author_id === 'string' ? value.author_id : '',
+		content: typeof value.content === 'string' ? value.content : '',
+		content_warning: typeof value.content_warning === 'string' ? value.content_warning : null,
+		visibility,
+		attachment_ids: Array.isArray(value.attachment_ids)
+			? value.attachment_ids.filter((id): id is string => typeof id === 'string')
+			: [],
+		recipient_ids: Array.isArray(value.recipient_ids)
+			? value.recipient_ids.filter((id): id is string => typeof id === 'string')
+			: [],
+		in_reply_to_id: typeof value.in_reply_to_id === 'string' ? value.in_reply_to_id : null,
+		scheduled_at: typeof value.scheduled_at === 'string' ? value.scheduled_at : '',
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		state,
+		published_at: typeof value.published_at === 'string' ? value.published_at : null,
+		failure_reason: typeof value.failure_reason === 'string' ? value.failure_reason : null,
+	};
+}
+
+function normalizeBlock(value: unknown): BlockEntry | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.actor !== 'string') {
+		return null;
+	}
+
+	return {
+		id: value.id,
+		actor: value.actor,
+		blocked_at: typeof value.blocked_at === 'string' ? value.blocked_at : '',
+	};
+}
+
+function normalizeMastodonNotification(value: unknown): NotificationItem | null {
+	if (!isRecord(value) || typeof value.id !== 'string') {
+		return null;
+	}
+
+	const account = normalizeMastodonAccount(value.account);
+	const status = normalizeMastodonStatus(value.status);
+
+	return {
+		id: value.id,
+		type: typeof value.type === 'string' ? value.type : 'unknown',
+		actor_id: account?.id ?? '',
+		post_id: status?.id ?? null,
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		read: value.unread !== true,
+		account,
+		status,
+	};
+}
+
 export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 	async function request<T>(
 		method: UiMethod,
@@ -340,6 +727,21 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		followedTimeline(limit = 20, before = null): Promise<TimelineItem[]> {
 			return timeline('/api/v1/timelines/followed_tags', limit, before);
+		},
+
+		async listTimeline(id: string, limit = 20, maxId: string | null = null): Promise<TimelineItem[]> {
+			const query: Record<string, string> = { limit: String(limit) };
+			if (maxId !== null && maxId !== '') {
+				query.max_id = maxId;
+			}
+
+			const data = await request<unknown>(
+				'GET',
+				`/api/mastodon/v1/timelines/list/${encodeURIComponent(id)}`,
+				query,
+			);
+
+			return normalizeMastodonStatuses(data);
 		},
 
 		async hostProfiles(): Promise<Record<string, string>> {
@@ -548,6 +950,22 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return typeof data?.count === 'number' ? data.count : 0;
 		},
 
+		async mastodonNotifications(limit = 20, maxId: string | null = null): Promise<NotificationItem[]> {
+			const query: Record<string, string> = { limit: String(limit) };
+			if (maxId !== null && maxId !== '') {
+				query.max_id = maxId;
+			}
+
+			const data = await request<unknown>('GET', '/api/mastodon/v1/notifications', query);
+			if (!Array.isArray(data)) {
+				return [];
+			}
+
+			return data
+				.map(normalizeMastodonNotification)
+				.filter((item): item is NotificationItem => item !== null);
+		},
+
 		async dismissNotification(id: string): Promise<void> {
 			await request<unknown>('POST', `/api/v1/notifications/${encodeURIComponent(id)}/dismiss`);
 		},
@@ -583,6 +1001,301 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return post;
+		},
+
+		async createStatus(payload: CreateStatusPayload): Promise<TimelineItem> {
+			const body: JsonRecord = {
+				status: payload.status,
+				visibility: payload.visibility === 'followers' ? 'private' : payload.visibility,
+			};
+
+			if (payload.spoiler_text !== undefined && payload.spoiler_text !== null && payload.spoiler_text.trim() !== '') {
+				body.spoiler_text = payload.spoiler_text;
+			}
+			if (payload.media_ids !== undefined && payload.media_ids.length > 0) {
+				body.media_ids = payload.media_ids;
+			}
+			if (payload.in_reply_to_id !== undefined && payload.in_reply_to_id !== null && payload.in_reply_to_id !== '') {
+				body.in_reply_to_id = payload.in_reply_to_id;
+			}
+			if (payload.recipient_ids !== undefined && payload.recipient_ids.length > 0) {
+				body.recipient_ids = payload.recipient_ids;
+			}
+			if (payload.poll !== undefined && payload.poll !== null) {
+				body.poll = payload.poll;
+			}
+
+			const data = await request<unknown>('POST', '/api/mastodon/v1/statuses', undefined, body);
+			const post = normalizeMastodonStatus(data);
+			if (post === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+			}
+
+			return post;
+		},
+
+		async bookmarks(limit = 20, maxId: string | null = null): Promise<TimelineItem[]> {
+			const query: Record<string, string> = { limit: String(limit) };
+			if (maxId !== null && maxId !== '') {
+				query.max_id = maxId;
+			}
+
+			const data = await request<unknown>('GET', '/api/mastodon/v1/bookmarks', query);
+			return normalizeMastodonStatuses(data);
+		},
+
+		async bookmarkPost(id: string): Promise<void> {
+			await request<unknown>('POST', `/api/mastodon/v1/statuses/${encodeURIComponent(id)}/bookmark`);
+		},
+
+		async unbookmarkPost(id: string): Promise<void> {
+			await request<unknown>('POST', `/api/mastodon/v1/statuses/${encodeURIComponent(id)}/unbookmark`);
+		},
+
+		async search(query: string, limit = 20): Promise<SearchResults> {
+			const data = await request<{
+				accounts?: unknown;
+				statuses?: unknown;
+				hashtags?: unknown;
+			}>('GET', '/api/mastodon/v1/search', { q: query, limit: String(limit) });
+
+			const hashtags: HashtagResult[] = Array.isArray(data?.hashtags)
+				? data.hashtags
+					.filter(isRecord)
+					.map((tag) => ({
+						name: typeof tag.name === 'string' ? tag.name : '',
+						url: typeof tag.url === 'string' ? tag.url : '',
+					}))
+					.filter((tag) => tag.name !== '')
+				: [];
+
+			return {
+				accounts: Array.isArray(data?.accounts)
+					? data.accounts
+						.map(normalizeMastodonAccount)
+						.filter((account): account is Account => account !== null)
+					: [],
+				statuses: normalizeMastodonStatuses(data?.statuses),
+				hashtags,
+			};
+		},
+
+		async lists(): Promise<AccountList[]> {
+			const data = await request<unknown>('GET', '/api/mastodon/v1/lists');
+			if (!Array.isArray(data)) {
+				return [];
+			}
+
+			return data
+				.map(normalizeAccountList)
+				.filter((list): list is AccountList => list !== null);
+		},
+
+		async createList(title: string): Promise<AccountList> {
+			const data = await request<unknown>('POST', '/api/mastodon/v1/lists', undefined, { title });
+			const list = normalizeAccountList(data);
+			if (list === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Liste.');
+			}
+
+			return list;
+		},
+
+		async updateList(id: string, title: string): Promise<AccountList> {
+			const data = await request<unknown>(
+				'PUT',
+				`/api/mastodon/v1/lists/${encodeURIComponent(id)}`,
+				undefined,
+				{ title },
+			);
+			const list = normalizeAccountList(data);
+			if (list === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Liste.');
+			}
+
+			return list;
+		},
+
+		async deleteList(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/mastodon/v1/lists/${encodeURIComponent(id)}`);
+		},
+
+		async listAccounts(id: string): Promise<Account[]> {
+			const data = await request<unknown>(
+				'GET',
+				`/api/mastodon/v1/lists/${encodeURIComponent(id)}/accounts`,
+				{ limit: '80' },
+			);
+			if (!Array.isArray(data)) {
+				return [];
+			}
+
+			return data
+				.map(normalizeMastodonAccount)
+				.filter((account): account is Account => account !== null);
+		},
+
+		async addListAccounts(id: string, accountIds: string[]): Promise<void> {
+			await request<unknown>(
+				'POST',
+				`/api/mastodon/v1/lists/${encodeURIComponent(id)}/accounts`,
+				undefined,
+				{ account_ids: accountIds },
+			);
+		},
+
+		async removeListAccounts(id: string, accountIds: string[]): Promise<void> {
+			await request<unknown>(
+				'DELETE',
+				`/api/mastodon/v1/lists/${encodeURIComponent(id)}/accounts`,
+				undefined,
+				{ account_ids: accountIds },
+			);
+		},
+
+		async mutes(): Promise<Account[]> {
+			const data = await request<unknown>('GET', '/api/mastodon/v1/mutes', { limit: '80' });
+			if (!Array.isArray(data)) {
+				return [];
+			}
+
+			return data
+				.map(normalizeMastodonAccount)
+				.filter((account): account is Account => account !== null);
+		},
+
+		async muteAccount(id: string): Promise<void> {
+			await request<unknown>('POST', `/api/mastodon/v1/accounts/${encodeURIComponent(id)}/mute`, undefined, {
+				notifications: true,
+			});
+		},
+
+		async unmuteAccount(id: string): Promise<void> {
+			await request<unknown>('POST', `/api/mastodon/v1/accounts/${encodeURIComponent(id)}/unmute`);
+		},
+
+		async blocks(): Promise<BlockEntry[]> {
+			const data = await request<{ blocks?: unknown }>('GET', '/api/v1/blocks', { limit: '80' });
+			if (!Array.isArray(data?.blocks)) {
+				return [];
+			}
+
+			return data.blocks
+				.map(normalizeBlock)
+				.filter((block): block is BlockEntry => block !== null);
+		},
+
+		async blockActor(actor: string): Promise<void> {
+			await request<unknown>('POST', '/api/v1/blocks', undefined, { actor });
+		},
+
+		async unblockActor(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/blocks/${encodeURIComponent(id)}`);
+		},
+
+		async filters(): Promise<FilterRule[]> {
+			const data = await request<{ filters?: unknown }>('GET', '/api/v1/filters');
+			if (!Array.isArray(data?.filters)) {
+				return [];
+			}
+
+			return data.filters
+				.map(normalizeFilter)
+				.filter((filter): filter is FilterRule => filter !== null);
+		},
+
+		async createFilter(payload: FilterPayload): Promise<FilterRule> {
+			const data = await request<{ filter?: unknown }>('POST', '/api/v1/filters', undefined, payload);
+			const filter = normalizeFilter(data?.filter);
+			if (filter === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Filter.');
+			}
+
+			return filter;
+		},
+
+		async updateFilter(id: string, payload: FilterPayload): Promise<FilterRule> {
+			const data = await request<{ filter?: unknown }>(
+				'PATCH',
+				`/api/v1/filters/${encodeURIComponent(id)}`,
+				undefined,
+				payload,
+			);
+			const filter = normalizeFilter(data?.filter);
+			if (filter === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Filter.');
+			}
+
+			return filter;
+		},
+
+		async deleteFilter(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/filters/${encodeURIComponent(id)}`);
+		},
+
+		async scheduledPosts(): Promise<ScheduledPost[]> {
+			const data = await request<{ scheduled_posts?: unknown }>('GET', '/api/v1/scheduled-posts', {
+				limit: '80',
+			});
+			if (!Array.isArray(data?.scheduled_posts)) {
+				return [];
+			}
+
+			return data.scheduled_posts
+				.map(normalizeScheduledPost)
+				.filter((post): post is ScheduledPost => post !== null);
+		},
+
+		async createScheduledPost(payload: ScheduledPostPayload): Promise<ScheduledPost> {
+			const data = await request<{ scheduled_post?: unknown }>(
+				'POST',
+				'/api/v1/scheduled-posts',
+				undefined,
+				payload,
+			);
+			const scheduled = normalizeScheduledPost(data?.scheduled_post);
+			if (scheduled === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen geplanten Beitrag.');
+			}
+
+			return scheduled;
+		},
+
+		async updateScheduledPost(id: string, scheduledAt: string): Promise<ScheduledPost> {
+			const data = await request<{ scheduled_post?: unknown }>(
+				'PATCH',
+				`/api/v1/scheduled-posts/${encodeURIComponent(id)}`,
+				undefined,
+				{ scheduled_at: scheduledAt },
+			);
+			const scheduled = normalizeScheduledPost(data?.scheduled_post);
+			if (scheduled === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen geplanten Beitrag.');
+			}
+
+			return scheduled;
+		},
+
+		async deleteScheduledPost(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/scheduled-posts/${encodeURIComponent(id)}`);
+		},
+
+		async poll(postId: string): Promise<Poll | null> {
+			const data = await request<unknown>(
+				'GET',
+				`/api/mastodon/v1/polls/${encodeURIComponent(`poll-${postId}`)}`,
+			);
+			return normalizeMastodonPoll(data);
+		},
+
+		async votePoll(pollId: string, choices: number[]): Promise<Poll | null> {
+			const data = await request<unknown>(
+				'POST',
+				`/api/mastodon/v1/polls/${encodeURIComponent(pollId)}/votes`,
+				undefined,
+				{ choices },
+			);
+			return normalizeMastodonPoll(data);
 		},
 
 		async updatePost(id: string, payload: UpdatePostPayload): Promise<TimelineItem> {

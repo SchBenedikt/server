@@ -38,6 +38,13 @@ const images = ref<PendingImage[]>([]);
 const existing = ref<Attachment[]>([]);
 const submitting = ref(false);
 const error = ref('');
+const scheduledAt = ref('');
+const scheduleOpen = ref(false);
+const showPoll = ref(false);
+const pollOptions = ref<string[]>(['', '']);
+const pollMultiple = ref(false);
+const pollHideTotals = ref(false);
+const pollExpiresIn = ref('86400');
 let imageSequence = 0;
 let draftTimer: number | null = null;
 
@@ -53,6 +60,10 @@ const submitLabel = computed(() => {
 		return isEdit.value ? 'Wird gespeichert…' : 'Wird gesendet…';
 	}
 
+	if (scheduledAt.value !== '') {
+		return 'Planen';
+	}
+
 	return isEdit.value ? 'Speichern' : isReply.value ? 'Antworten' : 'Posten';
 });
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
@@ -63,13 +74,32 @@ const length = computed(() => Array.from(content.value).length);
 const warningLength = computed(() => Array.from(contentWarning.value).length);
 const overLimit = computed(() => length.value > MAX_LENGTH);
 const warningOverLimit = computed(() => warningLength.value > MAX_WARNING);
+const pollReady = computed(() => (
+	!showPoll.value
+	|| (pollOptions.value.filter((option) => option.trim() !== '').length >= 2
+		&& pollOptions.value.filter((option) => option.trim() !== '').length === pollOptions.value.length)
+));
+const scheduleDate = computed(() => {
+	if (scheduledAt.value === '') {
+		return null;
+	}
+
+	const date = new Date(scheduledAt.value);
+	return Number.isNaN(date.getTime()) ? null : date;
+});
+const scheduleReady = computed(() => (
+	scheduledAt.value === '' || (scheduleDate.value !== null && scheduleDate.value.getTime() > Date.now() + 30_000)
+));
 const canSubmit = computed(() => (
 	appState.session.user !== null
 	&& content.value.trim() !== ''
 	&& !overLimit.value
 	&& !warningOverLimit.value
 	&& !submitting.value
+	&& pollReady.value
+	&& scheduleReady.value
 	&& (isReply.value ? replyId.value !== null : true)
+	&& !(scheduledAt.value !== '' && showPoll.value)
 ));
 
 const currentHandle = computed(() => appState.session.user?.handle ?? '');
@@ -115,6 +145,8 @@ function saveDraft(): void {
 }
 
 function restoreDraft(): void {
+	resetExtras();
+
 	if (isReply.value || isEdit.value) {
 		content.value = '';
 		contentWarning.value = '';
@@ -158,6 +190,7 @@ watch([content, contentWarning, showWarning, visibility], saveDraft, { deep: tru
 
 function populateEditor(post: TimelineItem): void {
 	resetImages();
+	resetExtras();
 	existing.value = [...(post.attachments ?? [])];
 	content.value = post.content;
 	contentWarning.value = post.content_warning ?? '';
@@ -165,6 +198,47 @@ function populateEditor(post: TimelineItem): void {
 	visibility.value = post.visibility === 'unlisted' || post.visibility === 'followers'
 		? post.visibility
 		: 'public';
+}
+
+function resetExtras(): void {
+	scheduledAt.value = '';
+	scheduleOpen.value = false;
+	showPoll.value = false;
+	pollOptions.value = ['', ''];
+	pollMultiple.value = false;
+	pollHideTotals.value = false;
+	pollExpiresIn.value = '86400';
+}
+
+function addPollOption(): void {
+	if (pollOptions.value.length < 4) {
+		pollOptions.value.push('');
+	}
+}
+
+function removePollOption(index: number): void {
+	if (pollOptions.value.length <= 2) {
+		return;
+	}
+
+	pollOptions.value.splice(index, 1);
+}
+
+function togglePoll(): void {
+	showPoll.value = !showPoll.value;
+	if (showPoll.value) {
+		scheduleOpen.value = false;
+		scheduledAt.value = '';
+	}
+}
+
+function toggleSchedule(): void {
+	scheduleOpen.value = !scheduleOpen.value;
+	if (scheduleOpen.value) {
+		showPoll.value = false;
+	} else {
+		scheduledAt.value = '';
+	}
 }
 
 watch(() => appState.composer.open, async (open) => {
@@ -286,12 +360,76 @@ async function submit(): Promise<void> {
 		}
 
 		const replying = isReply.value;
+		const attachmentIds = attachments.map((attachment) => attachment.id);
+
+		if (scheduledAt.value !== '') {
+			if (scheduleDate.value === null) {
+				throw new Error('Bitte wähle einen gültigen Zeitpunkt.');
+			}
+
+			const scheduled = await getApi().createScheduledPost({
+				content: content.value,
+				visibility: visibility.value,
+				content_warning: showWarning.value ? contentWarning.value : null,
+				in_reply_to_id: replyId.value,
+				attachment_ids: attachmentIds,
+				scheduled_at: scheduleDate.value.toISOString(),
+			});
+
+			clearDraft();
+			resetImages();
+			existing.value = [];
+			content.value = '';
+			contentWarning.value = '';
+			showWarning.value = false;
+			resetExtras();
+			closeComposer();
+			showToast(
+				`Beitrag für ${new Date(scheduled.scheduled_at).toLocaleString('de-DE')} geplant.`,
+				'success',
+			);
+			return;
+		}
+
+		if (showPoll.value) {
+			const options = pollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
+			if (options.length < 2) {
+				throw new Error('Eine Umfrage braucht mindestens zwei Antworten.');
+			}
+
+			const post = await getApi().createStatus({
+				status: content.value,
+				visibility: visibility.value,
+				spoiler_text: showWarning.value ? contentWarning.value : null,
+				media_ids: attachmentIds,
+				in_reply_to_id: replyId.value,
+				poll: {
+					options,
+					expires_in: Number(pollExpiresIn.value),
+					multiple: pollMultiple.value,
+					hide_totals: pollHideTotals.value,
+				},
+			});
+
+			announcePostCreated(post);
+			clearDraft();
+			resetImages();
+			existing.value = [];
+			content.value = '';
+			contentWarning.value = '';
+			showWarning.value = false;
+			resetExtras();
+			closeComposer();
+			showToast('Beitrag mit Umfrage veröffentlicht.', 'success');
+			return;
+		}
+
 		const post = await getApi().createPost({
 			content: content.value,
 			visibility: visibility.value,
 			content_warning: showWarning.value ? contentWarning.value : null,
 			in_reply_to_id: replyId.value,
-			attachment_ids: attachments.map((attachment) => attachment.id),
+			attachment_ids: attachmentIds,
 		});
 
 		announcePostCreated(post);
@@ -302,6 +440,7 @@ async function submit(): Promise<void> {
 		contentWarning.value = '';
 		showWarning.value = false;
 		visibility.value = 'public';
+		resetExtras();
 		closeComposer();
 		showToast(replying ? 'Antwort veröffentlicht.' : 'Beitrag veröffentlicht.', 'success');
 	} catch (caught) {
@@ -366,6 +505,72 @@ async function submit(): Promise<void> {
 						placeholder="Worum geht es? (optional)"
 					/>
 					<span :class="{ 'a-count--over': warningOverLimit }">{{ warningLength }} / {{ MAX_WARNING }}</span>
+				</div>
+
+				<div v-if="scheduleOpen && !isEdit" class="a-composer__extras">
+					<div class="a-composer__extras-head">
+						<AppIcon name="calendar" :size="16" />
+						<strong>Beitrag planen</strong>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="scheduleOpen = false; scheduledAt = ''">
+							Entfernen
+						</button>
+					</div>
+					<label class="a-composer__field">
+						<span>Veröffentlichen am</span>
+						<input v-model="scheduledAt" type="datetime-local" />
+					</label>
+					<p v-if="scheduledAt !== '' && !scheduleReady" class="a-form-error" role="alert">
+						Der Zeitpunkt muss in der Zukunft liegen.
+					</p>
+					<p class="a-composer__hint">
+						Geplante Beiträge können keine Umfrage enthalten.
+					</p>
+				</div>
+
+				<div v-if="showPoll && !isEdit" class="a-composer__extras">
+					<div class="a-composer__extras-head">
+						<AppIcon name="hash" :size="16" />
+						<strong>Umfrage</strong>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="showPoll = false">
+							Entfernen
+						</button>
+					</div>
+					<label v-for="(option, index) in pollOptions" :key="index" class="a-composer__field a-composer__poll-option">
+						<span>Antwort {{ index + 1 }}</span>
+						<input v-model="pollOptions[index]" type="text" maxlength="50" :placeholder="`Antwort ${index + 1}`" />
+						<button
+							v-if="pollOptions.length > 2"
+							type="button"
+							class="a-icon-btn"
+							:aria-label="`Antwort ${index + 1} entfernen`"
+							@click="removePollOption(index)"
+						>
+							<AppIcon name="x" :size="16" />
+						</button>
+					</label>
+					<button v-if="pollOptions.length < 4" type="button" class="a-btn a-btn--ghost a-btn--small" @click="addPollOption">
+						<AppIcon name="plus" :size="14" /> Antwort hinzufügen
+					</button>
+					<div class="a-composer__poll-settings">
+						<label class="a-composer__field">
+							<span>Laufzeit</span>
+							<select v-model="pollExpiresIn">
+								<option value="300">5 Minuten</option>
+								<option value="3600">1 Stunde</option>
+								<option value="86400">1 Tag</option>
+								<option value="259200">3 Tage</option>
+								<option value="604800">7 Tage</option>
+							</select>
+						</label>
+						<label class="a-composer__check">
+							<input v-model="pollMultiple" type="checkbox" />
+							<span>Mehrfachauswahl</span>
+						</label>
+						<label class="a-composer__check">
+							<input v-model="pollHideTotals" type="checkbox" />
+							<span>Ergebnisse erst nach Ablauf</span>
+						</label>
+					</div>
 				</div>
 
 				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
@@ -435,6 +640,28 @@ async function submit(): Promise<void> {
 						@click="showWarning = !showWarning"
 					>
 						<AppIcon name="info" :size="20" />
+					</button>
+					<button
+						v-if="!isEdit"
+						type="button"
+						class="a-icon-btn"
+						:class="{ 'a-icon-btn--active': showPoll }"
+						aria-label="Umfrage hinzufügen"
+						title="Umfrage"
+						@click="togglePoll"
+					>
+						<AppIcon name="hash" :size="20" />
+					</button>
+					<button
+						v-if="!isEdit"
+						type="button"
+						class="a-icon-btn"
+						:class="{ 'a-icon-btn--active': scheduleOpen }"
+						aria-label="Beitrag planen"
+						title="Beitrag planen"
+						@click="toggleSchedule"
+					>
+						<AppIcon name="calendar" :size="20" />
 					</button>
 					<label class="a-composer__visibility">
 						<AppIcon name="globe" :size="16" />

@@ -164,7 +164,7 @@ final readonly class HostConfig
             sessionCookieName: (string) $pick('session_cookie_name', 'ALOHASOCIAL_SESSION_COOKIE_NAME', 'alohasocial_session'),
             sessionLifetimeSeconds: $lifetime,
             remoteMedia: $bool($pick('remote_media', 'ALOHASOCIAL_REMOTE_MEDIA', true)),
-            mastodonApi: $bool($pick('mastodon_api', 'ALOHASOCIAL_MASTODON_API', false)),
+            mastodonApi: $bool($pick('mastodon_api', 'ALOHASOCIAL_MASTODON_API', true)),
             mastodonPrefix: (string) $pick('mastodon_prefix', 'ALOHASOCIAL_MASTODON_PREFIX', '/api/mastodon/v1'),
             mailTransport: $mailTransport,
             mailFrom: $mailFrom,
