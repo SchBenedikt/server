@@ -16,6 +16,7 @@ const items = computed(() => {
 		{ name: 'home', label: 'Start', icon: 'home', href: '#/' },
 		{ name: 'explore', label: 'Entdecken', icon: 'compass', href: '#/explore' },
 		{ name: 'search', label: 'Suchen', icon: 'search', href: '#/search' },
+		{ name: 'messages', label: 'Nachrichten', icon: 'message', href: '#/messages' },
 		{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
 		{
 			name: 'profile',

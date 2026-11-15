@@ -4436,3 +4436,149 @@ dialog.a-modal::backdrop {
 	-webkit-line-clamp: 4;
 	overflow-wrap: anywhere;
 }
+
+/* ------------------------------------------------------------- messages */
+
+.a-dm-list {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.a-dm-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 12px;
+	border: 1px solid transparent;
+	border-radius: 14px;
+	background: transparent;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.a-dm-row:hover {
+	background: var(--a-surface);
+	border-color: var(--a-border);
+}
+
+.a-dm-row__copy {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+
+.a-dm-row__copy strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.a-dm-row__copy small {
+	overflow: hidden;
+	color: var(--a-muted);
+	font-size: 12.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.a-dm-row__meta {
+	display: grid;
+	justify-items: end;
+	gap: 4px;
+	color: var(--a-faint);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+.a-dm-row__meta small {
+	min-width: 20px;
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: var(--a-primary-soft);
+	color: var(--a-primary);
+	font-weight: 700;
+	text-align: center;
+}
+
+.a-dm-picker {
+	display: grid;
+	gap: 10px;
+	margin-bottom: 18px;
+	padding: 14px;
+	border: 1px solid var(--a-border);
+	border-radius: 16px;
+	background: var(--a-surface);
+}
+
+.a-dm-person {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 16px;
+	padding: 12px 14px;
+	border: 1px solid var(--a-border);
+	border-radius: 16px;
+	background: var(--a-surface);
+}
+
+.a-dm-person div {
+	display: grid;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+
+.a-dm-person span {
+	color: var(--a-muted);
+	font-size: 12.5px;
+}
+
+.a-dm-thread {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.a-dm-thread__item {
+	max-width: 100%;
+}
+
+.a-dm-thread__item .a-post {
+	border-color: var(--a-border-strong);
+}
+
+.a-dm-thread__item--mine .a-post {
+	border-color: color-mix(in srgb, var(--a-primary) 30%, var(--a-border));
+	background: color-mix(in srgb, var(--a-primary-soft) 40%, var(--a-surface));
+}
+
+.a-composer__direct {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 18px 4px;
+	padding: 10px 12px;
+	border: 1px solid var(--a-border-strong);
+	border-radius: 12px;
+	background: var(--a-bg-soft);
+}
+
+.a-composer__direct div {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+}
+
+.a-composer__direct span {
+	color: var(--a-muted);
+	font-size: 12px;
+}

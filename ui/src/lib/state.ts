@@ -62,6 +62,7 @@ export const appState = reactive({
 		replyTo: null as TimelineItem | null,
 		quoteTo: null as TimelineItem | null,
 		editPost: null as TimelineItem | null,
+		directTo: null as Account | null,
 	},
 	lightbox: {
 		open: false,
@@ -106,9 +107,14 @@ export function setHomeTab(tab: HomeTab): void {
 	}
 }
 
-export function openComposer(replyTo: TimelineItem | null = null, quoteTo: TimelineItem | null = null): void {
+export function openComposer(
+	replyTo: TimelineItem | null = null,
+	quoteTo: TimelineItem | null = null,
+	directTo: Account | null = null,
+): void {
 	appState.composer.replyTo = replyTo;
 	appState.composer.quoteTo = quoteTo;
+	appState.composer.directTo = directTo;
 	appState.composer.editPost = null;
 	appState.composer.open = true;
 }
@@ -121,11 +127,19 @@ export function openQuote(quoteTo: TimelineItem): void {
 }
 
 /**
+ * Opens the composer as a private direct message to one local account.
+ */
+export function openDirectMessage(account: Account): void {
+	openComposer(null, null, account);
+}
+
+/**
  * Opens the composer in edit mode for one of the signed-in account's posts.
  */
 export function openEditor(post: TimelineItem): void {
 	appState.composer.replyTo = null;
 	appState.composer.quoteTo = null;
+	appState.composer.directTo = null;
 	appState.composer.editPost = post;
 	appState.composer.open = true;
 }
@@ -134,6 +148,7 @@ export function closeComposer(): void {
 	appState.composer.open = false;
 	appState.composer.replyTo = null;
 	appState.composer.quoteTo = null;
+	appState.composer.directTo = null;
 	appState.composer.editPost = null;
 }
 

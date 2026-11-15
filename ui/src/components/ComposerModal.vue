@@ -54,6 +54,17 @@ const replyTo = computed(() => appState.composer.replyTo);
 const isReply = computed(() => replyTo.value !== null);
 const quoteTo = computed(() => appState.composer.quoteTo);
 const isQuote = computed(() => quoteTo.value !== null);
+const directTo = computed(() => appState.composer.directTo);
+const isDirect = computed(() => directTo.value !== null);
+const directHandle = computed(() => directTo.value === null ? '' : directTo.value.handle);
+const directName = computed(() => {
+	const account = directTo.value;
+	if (account === null) {
+		return '';
+	}
+
+	return account.display_name !== '' ? account.display_name : account.handle;
+});
 const quoteHandle = computed(() => quoteTo.value === null ? '' : handleLabel(quoteTo.value.object_author_id ?? quoteTo.value.author_id));
 const quoteTargetId = computed(() => {
 	const target = quoteTo.value;
@@ -64,7 +75,7 @@ const quoteTargetId = computed(() => {
 	return target.object_id ?? target.id;
 });
 const title = computed(() => (
-	isEdit.value ? 'Beitrag bearbeiten' : isQuote.value ? 'Beitrag zitieren' : isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag'
+	isEdit.value ? 'Beitrag bearbeiten' : isDirect.value ? 'Neue Nachricht' : isQuote.value ? 'Beitrag zitieren' : isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag'
 ));
 const submitLabel = computed(() => {
 	if (submitting.value) {
@@ -75,7 +86,7 @@ const submitLabel = computed(() => {
 		return 'Planen';
 	}
 
-	return isEdit.value ? 'Speichern' : isReply.value ? 'Antworten' : isQuote.value ? 'Zitieren' : 'Posten';
+	return isEdit.value ? 'Speichern' : isDirect.value ? 'Senden' : isReply.value ? 'Antworten' : isQuote.value ? 'Zitieren' : 'Posten';
 });
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
@@ -111,6 +122,7 @@ const canSubmit = computed(() => (
 	&& scheduleReady.value
 	&& (isReply.value ? replyId.value !== null : true)
 	&& (isQuote.value ? quoteTargetId.value !== null : true)
+	&& (isDirect.value ? directTo.value !== null : true)
 	&& !(scheduledAt.value !== '' && showPoll.value)
 ));
 
@@ -159,7 +171,7 @@ function saveDraft(): void {
 function restoreDraft(): void {
 	resetExtras();
 
-	if (isReply.value || isEdit.value || isQuote.value) {
+	if (isReply.value || isEdit.value || isQuote.value || isDirect.value) {
 		content.value = '';
 		contentWarning.value = '';
 		showWarning.value = false;
@@ -447,13 +459,15 @@ async function submit(): Promise<void> {
 			return;
 		}
 
+		const direct = isDirect.value && directTo.value !== null;
 		const post = await getApi().createPost({
 			content: content.value,
-			visibility: visibility.value,
+			visibility: direct ? 'direct' : visibility.value,
 			content_warning: showWarning.value ? contentWarning.value : null,
 			in_reply_to_id: replyId.value,
 			quoted_post_id: isQuote.value ? quoteTargetId.value : null,
 			attachment_ids: attachmentIds,
+			recipient_ids: direct && directTo.value !== null ? [directTo.value.id] : [],
 		});
 
 		announcePostCreated(post);
@@ -467,7 +481,9 @@ async function submit(): Promise<void> {
 		resetExtras();
 		closeComposer();
 		showToast(
-			replying ? 'Antwort veröffentlicht.' : isQuote.value ? 'Zitat veröffentlicht.' : 'Beitrag veröffentlicht.',
+			direct
+				? 'Nachricht gesendet.'
+				: replying ? 'Antwort veröffentlicht.' : isQuote.value ? 'Zitat veröffentlicht.' : 'Beitrag veröffentlicht.',
 			'success',
 		);
 	} catch (caught) {
@@ -499,6 +515,14 @@ async function submit(): Promise<void> {
 					<strong>{{ replyAuthor }}</strong>
 					<span v-if="replyAuthor !== replyHandle">{{ replyHandle }}</span>
 					<p>{{ truncate(replyTo.content, 160) }}</p>
+				</div>
+			</div>
+
+			<div v-if="directTo" class="a-composer__direct">
+				<Avatar :id="directTo.id" :name="directName" :src="directTo.avatar" :size="30" />
+				<div>
+					<strong>Nachricht an {{ directName }}</strong>
+					<span>{{ directHandle }} · nur für dieses Konto sichtbar</span>
 				</div>
 			</div>
 
@@ -680,7 +704,7 @@ async function submit(): Promise<void> {
 						<AppIcon name="info" :size="20" />
 					</button>
 					<button
-						v-if="!isEdit && !isQuote"
+						v-if="!isEdit && !isQuote && !isDirect"
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showPoll }"
@@ -691,7 +715,7 @@ async function submit(): Promise<void> {
 						<AppIcon name="hash" :size="20" />
 					</button>
 					<button
-						v-if="!isEdit && !isQuote"
+						v-if="!isEdit && !isQuote && !isDirect"
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': scheduleOpen }"
@@ -701,7 +725,11 @@ async function submit(): Promise<void> {
 					>
 						<AppIcon name="calendar" :size="20" />
 					</button>
-					<label class="a-composer__visibility">
+					<label v-if="isDirect" class="a-composer__visibility">
+						<AppIcon name="lock" :size="16" />
+						<span>Direktnachricht</span>
+					</label>
+					<label v-else class="a-composer__visibility">
 						<AppIcon name="globe" :size="16" />
 						<select v-model="visibility" aria-label="Sichtbarkeit">
 							<option value="public">Öffentlich</option>
