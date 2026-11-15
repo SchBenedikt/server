@@ -9,9 +9,8 @@ import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { displayNameFor, hasDistinctDisplayName, resolveAccount } from '../lib/account';
+import { accountName, handleLabel, postHref, relativeTime, truncate } from '../lib/format';
 import { getApi } from '../lib/api';
-import { handleLabel, relativeTime } from '../lib/format';
 import { appState, setUnread, showToast } from '../lib/state';
 import type { NotificationItem } from '../lib/types';
 
@@ -25,18 +24,15 @@ const hasMore = ref(true);
 const mutating = ref('');
 const confirmClear = ref(false);
 
-const typeMeta: Record<NotificationItem['type'], { icon: string; label: string; tone: string }> = {
+const typeMeta: Record<string, { icon: string; label: string; tone: string }> = {
 	favourite: { icon: 'heart', label: 'hat deinen Beitrag favorisiert', tone: 'rose' },
 	follow: { icon: 'user', label: 'folgt dir jetzt', tone: 'mint' },
 	mention: { icon: 'message', label: 'hat dich erwähnt', tone: 'violet' },
 	reblog: { icon: 'repeat', label: 'hat deinen Beitrag geboostet', tone: 'amber' },
+	poll: { icon: 'hash', label: 'hat an deiner Umfrage teilgenommen', tone: 'amber' },
+	update: { icon: 'pen', label: 'hat einen Beitrag bearbeitet', tone: 'violet' },
+	'follow_request': { icon: 'user', label: 'möchte dir folgen', tone: 'mint' },
 };
-
-watch(items, (list) => {
-	for (const item of list) {
-		void resolveAccount(item.actor_id);
-	}
-}, { immediate: true, deep: true });
 
 onMounted(() => {
 	if (signedIn.value) {
@@ -61,17 +57,20 @@ async function load(reset: boolean): Promise<void> {
 	}
 
 	try {
-		const page = await getApi().notifications(20, reset ? null : cursor.value);
+		const page = await getApi().mastodonNotifications(20, reset ? null : cursor.value);
 		if (reset) {
-			items.value = page.notifications;
-			cursor.value = page.notifications.length > 0 ? page.notifications[page.notifications.length - 1].id : null;
+			items.value = page;
 		} else {
 			const seen = new Set(items.value.map((item) => item.id));
-			items.value = [...items.value, ...page.notifications.filter((item) => !seen.has(item.id))];
-			cursor.value = page.notifications.length > 0 ? page.notifications[page.notifications.length - 1].id : cursor.value;
+			items.value = [...items.value, ...page.filter((item) => !seen.has(item.id))];
 		}
-		hasMore.value = page.notifications.length >= 20;
-		setUnread(page.unread_count);
+		cursor.value = page.length > 0 ? page[page.length - 1].id : cursor.value;
+		hasMore.value = page.length === 20;
+		try {
+			setUnread(await getApi().unreadCount());
+		} catch {
+			// The Mastodon surface has no unread counter; the core one is optional.
+		}
 	} catch (caught) {
 		error.value = caught instanceof Error ? caught.message : 'Benachrichtigungen konnten nicht geladen werden.';
 	} finally {
@@ -121,8 +120,41 @@ async function clearAll(): Promise<void> {
 	}
 }
 
-function metaFor(type: NotificationItem['type']): { icon: string; label: string; tone: string } {
+function metaFor(type: string): { icon: string; label: string; tone: string } {
 	return typeMeta[type] ?? typeMeta.mention;
+}
+
+function actorId(item: NotificationItem): string {
+	return item.account?.id ?? item.actor_id;
+}
+
+function actorName(item: NotificationItem): string {
+	return item.account ? accountName(item.account, actorId(item)) : handleLabel(item.actor_id);
+}
+
+function actorHandle(item: NotificationItem): string {
+	return handleLabel(item.account?.handle ?? item.actor_id);
+}
+
+function actorHref(item: NotificationItem): string {
+	const account = item.account;
+	if (account && account.is_remote === true && account.url !== '') {
+		return account.url;
+	}
+
+	return `#/u/${encodeURIComponent(account?.handle ?? item.actor_id)}`;
+}
+
+function actorIsExternal(item: NotificationItem): boolean {
+	return item.account?.is_remote === true;
+}
+
+function statusHref(item: NotificationItem): string | null {
+	return item.status ? postHref(item.status) : (item.post_id ? `#/p/${encodeURIComponent(item.post_id)}` : null);
+}
+
+function statusPreview(item: NotificationItem): string {
+	return item.status ? truncate(item.status.content.replace(/\s+/g, ' ').trim(), 160) : '';
 }
 </script>
 
@@ -172,30 +204,41 @@ function metaFor(type: NotificationItem['type']): { icon: string; label: string;
 		</EmptyState>
 
 		<ol v-else class="a-notifications">
-			<li v-for="item in items" :key="item.id" class="a-notification">
+			<li v-for="item in items" :key="item.id" class="a-notification" :class="{ 'a-notification--unread': !item.read }">
 				<span class="a-notification__badge" :class="`a-notification__badge--${metaFor(item.type).tone}`">
 					<AppIcon :name="metaFor(item.type).icon" :size="16" />
 				</span>
-				<a :href="`#/u/${encodeURIComponent(item.actor_id)}`" class="a-notification__avatar">
-					<Avatar :id="item.actor_id" :name="displayNameFor(item.actor_id)" :size="38" />
+				<a
+					:href="actorHref(item)"
+					class="a-notification__avatar"
+					:target="actorIsExternal(item) ? '_blank' : undefined"
+					:rel="actorIsExternal(item) ? 'noopener noreferrer' : undefined"
+				>
+					<Avatar :id="actorId(item)" :name="actorName(item)" :src="item.account?.avatar" :size="38" />
 				</a>
 				<div class="a-notification__body">
 					<p>
-						<a :href="`#/u/${encodeURIComponent(item.actor_id)}`" class="a-notification__actor">
-							{{ displayNameFor(item.actor_id) }}
-						</a>
+						<a
+							:href="actorHref(item)"
+							class="a-notification__actor"
+							:target="actorIsExternal(item) ? '_blank' : undefined"
+							:rel="actorIsExternal(item) ? 'noopener noreferrer' : undefined"
+						>{{ actorName(item) }}</a>
 						{{ metaFor(item.type).label }}
 					</p>
 					<p class="a-notification__meta">
-						<template v-if="hasDistinctDisplayName(item.actor_id)">
-							<span>{{ handleLabel(item.actor_id) }}</span>
-							<span aria-hidden="true">·</span>
-						</template>
+						<span>{{ actorHandle(item) }}</span>
+						<span aria-hidden="true">·</span>
 						<time :datetime="item.created_at">{{ relativeTime(item.created_at) }}</time>
 					</p>
+
+					<a v-if="statusPreview(item) !== ''" :href="statusHref(item) ?? '#'" class="a-notification__excerpt">
+						{{ statusPreview(item) }}
+					</a>
+
 					<a
-						v-if="item.post_id"
-						:href="`#/p/${encodeURIComponent(item.post_id)}`"
+						v-if="statusHref(item)"
+						:href="statusHref(item) ?? '#'"
 						class="a-notification__post-link"
 					>
 						Beitrag ansehen <AppIcon name="arrowLeft" :size="13" />

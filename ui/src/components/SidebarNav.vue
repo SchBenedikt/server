@@ -40,12 +40,17 @@ const items = computed(() => {
 	];
 
 	if (signedIn.value) {
-		base.push({
-			name: 'profile' as const,
-			label: 'Profil',
-			icon: 'user',
-			href: `#/u/${encodeURIComponent(handle.value)}`,
-		});
+		base.push(
+			{ name: 'bookmarks' as const, label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
+			{ name: 'lists' as const, label: 'Listen', icon: 'list', href: '#/lists' },
+			{ name: 'scheduled' as const, label: 'Geplante Beiträge', icon: 'calendar', href: '#/scheduled' },
+			{
+				name: 'profile' as const,
+				label: 'Profil',
+				icon: 'user',
+				href: `#/u/${encodeURIComponent(handle.value)}`,
+			},
+		);
 	}
 
 	return base;
@@ -54,6 +59,9 @@ const items = computed(() => {
 function isActive(name: string): boolean {
 	if (name === 'profile') {
 		return route.value.name === 'profile' && route.value.handle === handle.value;
+	}
+	if (name === 'lists') {
+		return route.value.name === 'lists' || route.value.name === 'list';
 	}
 
 	return route.value.name === name;
@@ -132,6 +140,24 @@ async function logout(): Promise<void> {
 		<div class="a-sidebar__spacer" />
 
 		<nav class="a-sidebar__secondary" aria-label="Weitere Seiten">
+			<a href="#/search" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'search' }">
+				<AppIcon name="search" :size="18" />
+				<span>Suchen</span>
+			</a>
+			<template v-if="signedIn">
+				<a href="#/filters" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'filters' }">
+					<AppIcon name="filter" :size="18" />
+					<span>Filter</span>
+				</a>
+				<a href="#/muted" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'muted' }">
+					<AppIcon name="bellOff" :size="18" />
+					<span>Stummgeschaltet</span>
+				</a>
+				<a href="#/blocked" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'blocked' }">
+					<AppIcon name="ban" :size="18" />
+					<span>Blockiert</span>
+				</a>
+			</template>
 			<a href="#/about" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'about' }">
 				<AppIcon name="info" :size="18" />
 				<span>Über diese Instanz</span>

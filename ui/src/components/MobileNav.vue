@@ -14,6 +14,7 @@ const handle = computed(() => appState.session.user?.handle ?? '');
 const items = computed(() => [
 	{ name: 'home', label: 'Start', icon: 'home', href: '#/' },
 	{ name: 'explore', label: 'Entdecken', icon: 'compass', href: '#/explore' },
+	{ name: 'search', label: 'Suchen', icon: 'search', href: '#/search' },
 	{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
 	{
 		name: 'profile',
@@ -26,6 +27,9 @@ const items = computed(() => [
 function isActive(name: string): boolean {
 	if (name === 'profile' && signedIn.value) {
 		return route.value.name === 'profile' && route.value.handle === handle.value;
+	}
+	if (name === 'search') {
+		return route.value.name === 'search' || route.value.name === 'tag';
 	}
 
 	return route.value.name === name;

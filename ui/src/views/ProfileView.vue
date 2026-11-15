@@ -120,6 +120,94 @@ const coverStyle = computed(() => {
 });
 const profileUrl = computed(() => `${window.location.origin}/app#/u/${encodeURIComponent(handle.value)}`);
 const relationship = computed(() => account.value?.relationship ?? null);
+const isMuted = computed(() => relationship.value?.muting === true);
+const isBlocked = computed(() => relationship.value?.blocking === true);
+const canModerate = computed(() => (
+	signedIn.value
+	&& !isSelf.value
+	&& account.value !== null
+	&& (!isRemoteProfile.value || remoteKind.value === 'activitypub')
+));
+const moderationBusy = ref<'mute' | 'block' | ''>('');
+
+function setRelationshipFlag(name: 'muting' | 'blocking', value: boolean): void {
+	if (account.value === null) {
+		return;
+	}
+
+	if (account.value.relationship === null) {
+		account.value.relationship = {
+			following: false,
+			followed_by: false,
+			blocking: false,
+			muting: false,
+		};
+	}
+
+	account.value.relationship[name] = value;
+}
+
+async function toggleMute(): Promise<void> {
+	const target = account.value;
+	if (target === null || !canModerate.value || moderationBusy.value !== '') {
+		return;
+	}
+
+	moderationBusy.value = 'mute';
+	try {
+		if (isMuted.value) {
+			await getApi().unmuteAccount(target.id);
+			setRelationshipFlag('muting', false);
+			showToast(`@${target.handle} wird nicht mehr stummgeschaltet.`, 'success');
+		} else {
+			await getApi().muteAccount(target.id);
+			setRelationshipFlag('muting', true);
+			showToast(`@${target.handle} ist jetzt stummgeschaltet.`, 'success');
+		}
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Die Stummschaltung konnte nicht geändert werden.', 'error');
+	} finally {
+		moderationBusy.value = '';
+	}
+}
+
+function sameActor(left: string, right: string): boolean {
+	return left.replace(/\/+$/, '') === right.replace(/\/+$/, '');
+}
+
+async function toggleBlock(): Promise<void> {
+	const target = account.value;
+	if (target === null || !canModerate.value || moderationBusy.value !== '') {
+		return;
+	}
+
+	moderationBusy.value = 'block';
+	try {
+		if (isBlocked.value) {
+			const entries = await getApi().blocks();
+			const entry = entries.find((candidate) => (
+				sameActor(candidate.actor, target.id) || sameActor(candidate.actor, target.url)
+			));
+			if (entry === undefined) {
+				throw new Error('Die Blockierung wurde nicht gefunden.');
+			}
+
+			await getApi().unblockActor(entry.id);
+			setRelationshipFlag('blocking', false);
+			showToast(`Blockierung von @${target.handle} aufgehoben.`, 'success');
+		} else {
+			const actor = target.id.startsWith('http') ? target.id : target.url;
+			await getApi().blockActor(actor);
+			setRelationshipFlag('blocking', true);
+			showToast(`@${target.handle} ist jetzt blockiert.`, 'success');
+		}
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Die Blockierung konnte nicht geändert werden.', 'error');
+	} finally {
+		moderationBusy.value = '';
+	}
+}
+
 const visiblePosts = computed(() => tab.value === 'media'
 	? posts.value.filter((post) => (post.attachments?.length ?? 0) > 0)
 	: posts.value);
@@ -633,6 +721,31 @@ onUnmounted(() => {
 							</template>
 
 							<FollowButton v-else :account="account" @changed="onFollowChanged" />
+
+							<button
+								v-if="canModerate"
+								type="button"
+								class="a-icon-btn"
+								:class="{ 'a-icon-btn--danger': isMuted }"
+								:aria-label="isMuted ? 'Stummschaltung aufheben' : 'Konto stummschalten'"
+								:title="isMuted ? 'Stummschaltung aufheben' : 'Stummschalten'"
+								:disabled="moderationBusy !== ''"
+								@click="toggleMute"
+							>
+								<AppIcon name="bellOff" :size="17" />
+							</button>
+							<button
+								v-if="canModerate"
+								type="button"
+								class="a-icon-btn"
+								:class="{ 'a-icon-btn--danger': isBlocked }"
+								:aria-label="isBlocked ? 'Blockierung aufheben' : 'Konto blockieren'"
+								:title="isBlocked ? 'Blockierung aufheben' : 'Blockieren'"
+								:disabled="moderationBusy !== ''"
+								@click="toggleBlock"
+							>
+								<AppIcon name="ban" :size="17" />
+							</button>
 						</div>
 					</div>
 

@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import MediaGrid from './MediaGrid.vue';
@@ -14,7 +14,7 @@ import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
 import { ensureInteractions, interactionFor, patchInteraction, rememberInteraction } from '../lib/interactions';
 import { appState, openComposer, openEditor, showToast } from '../lib/state';
-import type { TimelineItem } from '../lib/types';
+import type { Poll, TimelineItem } from '../lib/types';
 
 const props = withDefaults(defineProps<{
 	post: TimelineItem;
@@ -22,6 +22,8 @@ const props = withDefaults(defineProps<{
 }>(), {
 	detail: false,
 });
+
+const emit = defineEmits<{ bookmark: [bookmarked: boolean] }>();
 
 const authorId = computed(() => props.post.object_author_id ?? props.post.author_id);
 const author = computed(() => {
@@ -150,6 +152,61 @@ const sharing = ref(false);
 const deleting = ref(false);
 const confirmingDelete = ref(false);
 const menuOpen = ref(false);
+const bookmarked = ref(props.post.bookmarked === true);
+const bookmarking = ref(false);
+
+watch(() => props.post.bookmarked, (value) => {
+	if (value !== undefined) {
+		bookmarked.value = value;
+	}
+});
+
+const pollState = ref<Poll | null>(props.post.poll ?? null);
+const selectedChoices = ref<number[]>([]);
+const voting = ref(false);
+const pollError = ref('');
+
+watch(() => props.post.poll, (value) => {
+	pollState.value = value ?? null;
+	selectedChoices.value = [];
+}, { deep: true });
+
+const pollOpen = computed(() => {
+	const poll = pollState.value;
+	if (poll === null) {
+		return false;
+	}
+
+	return poll.expired !== true && poll.expires_at !== '' && new Date(poll.expires_at).getTime() > Date.now();
+});
+
+const canVote = computed(() => (
+	localId.value !== null
+	&& pollState.value !== null
+	&& pollState.value.voted !== true
+	&& pollOpen.value
+	&& appState.session.user !== null
+));
+
+async function loadPollState(): Promise<void> {
+	if (localId.value === null || pollState.value === null) {
+		return;
+	}
+
+	try {
+		const poll = await getApi().poll(localId.value);
+		if (poll !== null) {
+			pollState.value = { ...poll, options: poll.options.length > 0 ? poll.options : pollState.value.options };
+		}
+	} catch {
+		// Anonymous readers and hosts without the compatibility API keep the
+		// counts from the post; only the viewer-scoped vote state is missing.
+	}
+}
+
+onMounted(() => {
+	void loadPollState();
+});
 
 function storageKey(): string {
 	return `aloha.boosted.${localId.value ?? props.post.id}`;
@@ -175,7 +232,7 @@ watch(() => interaction.value?.reblogged, (value) => {
 });
 
 const pollTotal = computed(() => {
-	const poll = props.post.poll;
+	const poll = pollState.value;
 	if (!poll) {
 		return 0;
 	}
@@ -185,6 +242,53 @@ const pollTotal = computed(() => {
 
 function pollPercent(votes: number): number {
 	return pollTotal.value === 0 ? 0 : Math.round((votes / pollTotal.value) * 100);
+}
+
+function toggleChoice(index: number): void {
+	const poll = pollState.value;
+	if (poll === null || !canVote.value) {
+		return;
+	}
+
+	if (poll.multiple) {
+		selectedChoices.value = selectedChoices.value.includes(index)
+			? selectedChoices.value.filter((choice) => choice !== index)
+			: [...selectedChoices.value, index];
+		return;
+	}
+
+	selectedChoices.value = [index];
+}
+
+async function submitVote(): Promise<void> {
+	const poll = pollState.value;
+	if (poll === null || !canVote.value || selectedChoices.value.length === 0 || voting.value) {
+		return;
+	}
+
+	voting.value = true;
+	pollError.value = '';
+	try {
+		const pollId = poll.id ?? (localId.value === null ? '' : `poll-${localId.value}`);
+		if (pollId === '') {
+			throw new Error('Diese Umfrage kann hier nicht abgestimmt werden.');
+		}
+
+		const saved = await getApi().votePoll(pollId, selectedChoices.value);
+		if (saved !== null) {
+			pollState.value = {
+				...saved,
+				options: saved.options.length > 0 ? saved.options : poll.options,
+			};
+		} else {
+			pollState.value = { ...poll, voted: true, own_votes: [...selectedChoices.value] };
+		}
+		showToast('Stimme gespeichert.', 'success');
+	} catch (error) {
+		pollError.value = error instanceof Error ? error.message : 'Die Stimme konnte nicht gespeichert werden.';
+	} finally {
+		voting.value = false;
+	}
 }
 
 function reply(): void {
@@ -272,6 +376,35 @@ async function toggleLike(): Promise<void> {
 		showToast(error instanceof Error ? error.message : 'Der Like konnte nicht gespeichert werden.', 'error');
 	} finally {
 		liking.value = false;
+	}
+}
+
+async function toggleBookmark(): Promise<void> {
+	if (localId.value === null || bookmarking.value) {
+		return;
+	}
+	if (appState.session.user === null) {
+		window.location.assign('/login');
+		return;
+	}
+
+	bookmarking.value = true;
+	menuOpen.value = false;
+	try {
+		if (bookmarked.value) {
+			await getApi().unbookmarkPost(localId.value);
+			bookmarked.value = false;
+			showToast('Lesezeichen entfernt.', 'success');
+		} else {
+			await getApi().bookmarkPost(localId.value);
+			bookmarked.value = true;
+			showToast('Beitrag als Lesezeichen gespeichert.', 'success');
+		}
+		emit('bookmark', bookmarked.value);
+	} catch (error) {
+		showToast(error instanceof Error ? error.message : 'Das Lesezeichen konnte nicht geändert werden.', 'error');
+	} finally {
+		bookmarking.value = false;
 	}
 }
 
@@ -396,6 +529,10 @@ onUnmounted(() => {
 				</button>
 
 				<div v-if="menuOpen" class="a-post__menu" role="menu">
+					<button v-if="localId" type="button" role="menuitem" :disabled="bookmarking" @click.stop="toggleBookmark">
+						<AppIcon name="bookmark" :size="15" />
+						{{ bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern' }}
+					</button>
 					<button type="button" role="menuitem" @click.stop="share">
 						<AppIcon name="share" :size="15" /> Link kopieren
 					</button>
@@ -460,23 +597,49 @@ onUnmounted(() => {
 			:author-handle="handle"
 		/>
 
-		<div v-if="post.poll" class="a-post__poll">
+		<div v-if="pollState" class="a-post__poll">
 			<p class="a-post__poll-head">
 				<AppIcon name="hash" :size="15" />
-				{{ post.poll.multiple ? 'Umfrage · Mehrfachauswahl' : 'Umfrage' }}
+				{{ pollState.multiple ? 'Umfrage · Mehrfachauswahl' : 'Umfrage' }}
 				<span>{{ pollTotal }} {{ pollTotal === 1 ? 'Stimme' : 'Stimmen' }}</span>
 			</p>
 			<ul>
-				<li v-for="(option, index) in post.poll.options" :key="index">
-					<div class="a-post__poll-row">
-						<span>{{ option.title }}</span>
+				<li v-for="(option, index) in pollState.options" :key="index">
+					<label
+						class="a-post__poll-choice"
+						:class="{ 'a-post__poll-choice--voted': pollState.own_votes?.includes(index) }"
+					>
+						<input
+							v-if="canVote"
+							:type="pollState.multiple ? 'checkbox' : 'radio'"
+							:name="`poll-${localId ?? post.id}`"
+							:value="index"
+							:checked="selectedChoices.includes(index)"
+							@change="toggleChoice(index)"
+						/>
+						<span class="a-post__poll-label">{{ option.title }}</span>
 						<strong>{{ pollPercent(option.votes_count) }}%</strong>
-					</div>
+					</label>
 					<span class="a-post__poll-bar" aria-hidden="true">
 						<span :style="{ width: `${pollPercent(option.votes_count)}%` }" />
 					</span>
 				</li>
 			</ul>
+			<div class="a-post__poll-foot">
+				<span v-if="pollState.voted">Du hast abgestimmt.</span>
+				<span v-else-if="pollState.expired || !pollOpen">Umfrage beendet.</span>
+				<span v-else>{{ pollState.voters_count }} Teilnehmende · endet {{ relativeTime(pollState.expires_at) }}</span>
+				<button
+					v-if="canVote"
+					type="button"
+					class="a-btn a-btn--primary a-btn--small"
+					:disabled="selectedChoices.length === 0 || voting"
+					@click="submitVote"
+				>
+					{{ voting ? 'Wird gespeichert…' : 'Abstimmen' }}
+				</button>
+			</div>
+			<p v-if="pollError" class="a-form-error" role="alert">{{ pollError }}</p>
 		</div>
 
 		<footer class="a-post__actions">
@@ -563,6 +726,21 @@ onUnmounted(() => {
 					<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 				</span>
 			</span>
+
+			<button
+				v-if="localId && appState.session.user !== null"
+				type="button"
+				class="a-post__action"
+				:class="{ 'a-post__action--active': bookmarked }"
+				:aria-label="bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'"
+				:aria-pressed="bookmarked"
+				:title="bookmarked ? 'Lesezeichen entfernen' : 'Lesezeichen'"
+				:disabled="bookmarking"
+				@click="toggleBookmark"
+			>
+				<AppIcon name="bookmark" :size="18" />
+				<span>{{ bookmarked ? 'Gespeichert' : 'Merken' }}</span>
+			</button>
 
 			<button type="button" class="a-post__action" aria-label="Link teilen" title="Link teilen" @click="share">
 				<AppIcon name="share" :size="18" />

@@ -12,6 +12,14 @@ export type Route =
 	| { name: 'profile'; handle: string }
 	| { name: 'post'; id: string }
 	| { name: 'tag'; tag: string }
+	| { name: 'bookmarks' }
+	| { name: 'search' }
+	| { name: 'lists' }
+	| { name: 'list'; id: string }
+	| { name: 'muted' }
+	| { name: 'blocked' }
+	| { name: 'filters' }
+	| { name: 'scheduled' }
 	| { name: 'notfound' };
 
 function decode(value: string): string {
@@ -40,6 +48,38 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'about' && parts.length === 1) {
 		return { name: 'about' };
+	}
+
+	if (parts[0] === 'bookmarks' && parts.length === 1) {
+		return { name: 'bookmarks' };
+	}
+
+	if (parts[0] === 'search' && parts.length === 1) {
+		return { name: 'search' };
+	}
+
+	if (parts[0] === 'lists' && parts.length === 1) {
+		return { name: 'lists' };
+	}
+
+	if (parts[0] === 'l' && parts[1] !== undefined) {
+		return { name: 'list', id: decode(parts[1]) };
+	}
+
+	if (parts[0] === 'muted' && parts.length === 1) {
+		return { name: 'muted' };
+	}
+
+	if (parts[0] === 'blocked' && parts.length === 1) {
+		return { name: 'blocked' };
+	}
+
+	if (parts[0] === 'filters' && parts.length === 1) {
+		return { name: 'filters' };
+	}
+
+	if (parts[0] === 'scheduled' && parts.length === 1) {
+		return { name: 'scheduled' };
 	}
 
 	if (parts[0] === 'u' && parts[1] !== undefined) {
@@ -109,6 +149,22 @@ export function routeTitle(current: Route): string {
 			return 'Beitrag';
 		case 'tag':
 			return `#${current.tag}`;
+		case 'bookmarks':
+			return 'Lesezeichen';
+		case 'search':
+			return 'Suchen';
+		case 'lists':
+			return 'Listen';
+		case 'list':
+			return 'Liste';
+		case 'muted':
+			return 'Stummgeschaltet';
+		case 'blocked':
+			return 'Blockiert';
+		case 'filters':
+			return 'Filter';
+		case 'scheduled':
+			return 'Geplante Beiträge';
 		default:
 			return 'Nicht gefunden';
 	}

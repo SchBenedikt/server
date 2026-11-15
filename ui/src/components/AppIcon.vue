@@ -49,6 +49,11 @@ const paths: Record<string, string> = {
 	moon: '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>',
 	reply: '<path d="M9 17H5a2 2 0 0 1-2-2v-3a8 8 0 0 1 8-8h1a8 8 0 0 1 8 8v1a8 8 0 0 1-8 8h-1"/><path d="m9 13-4 4 4 4"/>',
 	bookmark: '<path d="M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4z"/>',
+	list: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/>',
+	bellOff: '<path d="M18 8a6 6 0 0 0-9.3-5"/><path d="M6 8c0 7-3 7-3 9h13"/><path d="M10 21h4"/><path d="m2 2 20 20"/>',
+	ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+	filter: '<path d="M3 4h18l-7 8v7l-4 2v-9z"/>',
+	clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
 };
 
 const markup = computed(() => paths[props.name] ?? paths.info);

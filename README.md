@@ -178,6 +178,31 @@ posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
 `FrontController`.
 
+### Reading, organising and scheduling
+
+The core's Mastodon-compatible API at `/api/mastodon/v1` is enabled by default
+in `HostConfig` (`mastodon_api`), and the standalone UI uses it for the features
+Mastodon clients expect instead of duplicating federation logic in the host:
+
+| Screen | Route | What it uses |
+| --- | --- | --- |
+| Lesezeichen | `#/bookmarks` | `GET /bookmarks`, `POST /statuses/{id}/bookmark` and `/unbookmark`. Bookmark state is also rendered on every post. |
+| Suchen | `#/search` | `GET /search` for local accounts, statuses and hashtags; an `@handle` additionally resolves through the remote profile lookup. |
+| Listen | `#/lists`, `#/l/<id>` | List CRUD and membership through `/lists`, and the list timeline through `/timelines/list/{id}`. Only local accounts can be members. |
+| Stummgeschaltet | `#/muted` | `GET /mutes`, mute/unmute per account. Profiles can mute and unmute directly. |
+| Blockiert | `#/blocked` | `GET /api/v1/blocks` and block/unblock per actor URL. Profiles can block and unblock directly. |
+| Filter | `#/filters` | Full filter rules through `/api/v1/filters` with action, contexts, keywords and optional expiry. |
+| Geplante Beiträge | `#/scheduled` | `/api/v1/scheduled-posts`; a schedule can be re-timed or cancelled, but not edited after queueing. |
+| Benachrichtigungen | `#/notifications` | `GET /api/mastodon/v1/notifications` with actor and status previews, plus the core dismiss/clear actions. |
+
+The composer can attach a poll (2–4 options, multiple choice, hide totals,
+expiry) or schedule a post. Polls are created through
+`POST /api/mastodon/v1/statuses` because the neutral create route has no poll
+field; poll voting uses `GET /polls/{id}` and `POST /polls/{id}/votes`. A poll
+cannot be combined with scheduling, because a schedule stores no poll. First-party
+sessions receive the `['*']` scope, so these routes work without a separately
+issued bearer token; bearer clients keep their own scopes.
+
 ### Remote profiles and Bluesky
 
 `#/u/<handle>` opens a profile that is not hosted here. The handle may be an
