@@ -44,6 +44,7 @@ final readonly class HostConfig
         public bool $remoteMedia,
         public bool $mastodonApi,
         public string $mastodonPrefix,
+        public string $discoveryInstance,
         public string $mailTransport,
         public string $mailFrom,
         public string $mailLogDirectory,
@@ -166,6 +167,7 @@ final readonly class HostConfig
             remoteMedia: $bool($pick('remote_media', 'ALOHASOCIAL_REMOTE_MEDIA', true)),
             mastodonApi: $bool($pick('mastodon_api', 'ALOHASOCIAL_MASTODON_API', true)),
             mastodonPrefix: (string) $pick('mastodon_prefix', 'ALOHASOCIAL_MASTODON_PREFIX', '/api/mastodon/v1'),
+            discoveryInstance: self::normalizeDiscoveryHost((string) $pick('discovery_instance', 'ALOHASOCIAL_DISCOVERY_INSTANCE', 'mastodon.social')),
             mailTransport: $mailTransport,
             mailFrom: $mailFrom,
             mailLogDirectory: self::resolvePath((string) $pick('mail_log_directory', 'ALOHASOCIAL_MAIL_LOG_DIR', $varDirectory . '/mail'), $root),
@@ -209,6 +211,29 @@ final readonly class HostConfig
         $host = parse_url($this->instanceUrl, PHP_URL_HOST);
 
         return is_string($host) && $host !== '' ? $host : 'localhost';
+    }
+
+    /**
+     * The discovery host used for federated keyword and hashtag search.
+     *
+     * A plain host (`mastodon.social`), an `http(s)://` URL and an empty value
+     * (disable remote discovery) are all accepted. The search is a public,
+     * unauthenticated read; the operator can point it at a different
+     * Mastodon-compatible instance or turn it off.
+     */
+    public static function normalizeDiscoveryHost(string $value): string
+    {
+        $value = strtolower(trim($value));
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_contains($value, '://')) {
+            $host = parse_url($value, PHP_URL_HOST);
+            $value = is_string($host) ? $host : '';
+        }
+
+        return preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $value) === 1 ? $value : '';
     }
 
     /**

@@ -80,6 +80,7 @@ final class RemoteDirectory
     public function __construct(
         private readonly BoundedHttpClient $http,
         private readonly FederationTargetGuard $guard,
+        private readonly string $discoveryInstance = 'mastodon.social',
     ) {
     }
 
@@ -148,6 +149,399 @@ final class RemoteDirectory
         }
 
         return $this->activityPubConnections($query, $type, $cursor);
+    }
+
+    /**
+     * Searches both networks without requiring a local account.
+     *
+     * Bluesky uses the public AppView's actor and post search. The Fediverse
+     * has no shared search endpoint, so a handle is resolved through WebFinger
+     * and an outbox, while keywords and hashtags are read from the configured
+     * public discovery instance. That instance is a read-only convenience:
+     * point `ALOHASOCIAL_DISCOVERY_INSTANCE` at another host, or set it empty
+     * to turn the federated keyword search off.
+     *
+     * @return array{
+     *     query: string,
+     *     accounts: list<array<string, mixed>>,
+     *     posts: list<array<string, mixed>>,
+     *     cursor: ?string,
+     *     notes: list<string>
+     * }
+     */
+    public function search(string $query, string $type = 'all', string $network = 'all', ?string $cursor = null): array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            throw new RemoteDirectoryException('remote_search_missing', 'Bitte gib einen Suchbegriff an.', 422);
+        }
+        if (mb_strlen($query) > 200) {
+            throw new RemoteDirectoryException('remote_search_too_long', 'Der Suchbegriff ist zu lang.', 422);
+        }
+
+        $type = in_array($type, ['accounts', 'posts'], true) ? $type : 'all';
+        $network = in_array($network, ['activitypub', 'bluesky'], true) ? $network : 'all';
+
+        $accounts = [];
+        $posts = [];
+        $next = null;
+        $notes = [];
+
+        if ($network !== 'activitypub') {
+            try {
+                $result = $this->blueskySearch($query, $type, $cursor);
+                $accounts = array_merge($accounts, $result['accounts']);
+                $posts = array_merge($posts, $result['posts']);
+                $next = $result['cursor'];
+            } catch (RemoteDirectoryException $exception) {
+                $notes[] = 'Bluesky: ' . $exception->getMessage();
+            }
+        }
+
+        if ($network !== 'bluesky') {
+            try {
+                $result = $this->activityPubSearch($query, $type, $cursor);
+                $accounts = array_merge($accounts, $result['accounts']);
+                $posts = array_merge($posts, $result['posts']);
+                $next ??= $result['cursor'];
+                foreach ($result['notes'] as $note) {
+                    $notes[] = $note;
+                }
+            } catch (RemoteDirectoryException $exception) {
+                $notes[] = 'Fediverse: ' . $exception->getMessage();
+            }
+        }
+
+        return [
+            'query' => $query,
+            'accounts' => $this->uniqueProfiles($accounts),
+            'posts' => $this->uniquePosts($posts),
+            'cursor' => $next,
+            'notes' => $notes,
+        ];
+    }
+
+    /**
+     * Reads who liked or reposted one remote post.
+     *
+     * Mastodon-compatible servers expose two public collections for a status;
+     * Bluesky exposes them as AppView endpoints. Both return profile cards in
+     * the shape the rest of the remote views already understand.
+     *
+     * @return array{network: string, type: string, profiles: list<array<string, mixed>>, cursor: ?string}
+     */
+    public function remoteEngagement(string $id, string $type = 'likes', ?string $cursor = null): array
+    {
+        $id = trim($id);
+        $type = strtolower(trim($type));
+        if (!in_array($type, ['likes', 'reposts'], true)) {
+            throw new RemoteDirectoryException('remote_engagement_type_invalid', 'Unbekannte Reaktionsart.', 422);
+        }
+        if ($id === '') {
+            throw new RemoteDirectoryException('remote_post_missing', 'Bitte gib einen Beitrag an.', 422);
+        }
+
+        if (str_starts_with($id, 'at://')) {
+            return $this->blueskyEngagement($id, $type, $cursor);
+        }
+
+        $host = parse_url($id, PHP_URL_HOST);
+        $statusId = $this->mastodonStatusId($id);
+        if (!is_string($host) || $host === '' || $statusId === null) {
+            throw new RemoteDirectoryException(
+                'remote_engagement_unsupported',
+                'Dieser Server veröffentlicht keine öffentliche Liste der Reaktionen.',
+                404,
+            );
+        }
+
+        $collection = $type === 'likes' ? 'favourited_by' : 'reblogged_by';
+        $url = 'https://' . $host . '/api/v1/statuses/' . rawurlencode($statusId) . '/' . $collection . '?limit=40';
+        if ($cursor !== null && $cursor !== '') {
+            $url .= '&max_id=' . rawurlencode($cursor);
+        }
+
+        $list = $this->fetchJson($url, self::JSON_ACCEPT);
+        if (!array_is_list($list)) {
+            throw new RemoteDirectoryException('remote_invalid_response', 'Der entfernte Server hat eine unerwartete Antwort geliefert.');
+        }
+
+        $profiles = [];
+        $next = null;
+        foreach ($list as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $profiles[] = $this->mastodonProfile($entry, $host);
+            $entryId = $this->string($entry['id'] ?? null);
+            if ($entryId !== null) {
+                $next = $entryId;
+            }
+        }
+
+        return [
+            'network' => 'activitypub',
+            'type' => $type,
+            'profiles' => $profiles,
+            'cursor' => count($profiles) >= 40 ? $next : null,
+        ];
+    }
+
+    /**
+     * @return array{accounts: list<array<string, mixed>>, posts: list<array<string, mixed>>, cursor: ?string}
+     */
+    private function blueskySearch(string $query, string $type, ?string $cursor): array
+    {
+        $accounts = [];
+        $posts = [];
+        $next = null;
+        $failures = [];
+
+        if ($type !== 'posts') {
+            try {
+                $data = $this->fetchJson(
+                    self::BSKY_APPVIEW . 'app.bsky.actor.searchActors?q=' . rawurlencode($query) . '&limit=20',
+                    self::JSON_ACCEPT,
+                );
+                foreach (is_array($data['actors'] ?? null) ? $data['actors'] : [] as $actor) {
+                    if (is_array($actor)) {
+                        $accounts[] = $this->blueskyProfile($actor);
+                    }
+                }
+            } catch (RemoteDirectoryException $exception) {
+                $failures[] = $exception->getMessage();
+            }
+        }
+
+        if ($type !== 'accounts') {
+            try {
+                $url = self::BSKY_APPVIEW . 'app.bsky.feed.searchPosts?q=' . rawurlencode($query) . '&limit=25&sort=latest';
+                if ($cursor !== null && $cursor !== '') {
+                    $url .= '&cursor=' . rawurlencode($cursor);
+                }
+                $data = $this->fetchJson($url, self::JSON_ACCEPT);
+                foreach (is_array($data['posts'] ?? null) ? $data['posts'] : [] as $post) {
+                    if (!is_array($post)) {
+                        continue;
+                    }
+                    $mapped = $this->blueskyPost($post);
+                    if ($mapped !== null) {
+                        $posts[] = $mapped;
+                    }
+                    if (count($posts) >= self::MAX_POSTS) {
+                        break;
+                    }
+                }
+                $next = $this->string($data['cursor'] ?? null);
+            } catch (RemoteDirectoryException $exception) {
+                // The public AppView blocks post search on some addresses. The
+                // actor results are still worth showing, so a partial failure
+                // must not discard them.
+                $failures[] = $exception->getMessage();
+            }
+        }
+
+        if ($accounts === [] && $posts === [] && $failures !== []) {
+            throw new RemoteDirectoryException(
+                'remote_search_failed',
+                $failures[0],
+            );
+        }
+
+        return ['accounts' => $accounts, 'posts' => $posts, 'cursor' => $next];
+    }
+
+    /**
+     * @return array{accounts: list<array<string, mixed>>, posts: list<array<string, mixed>>, cursor: ?string, notes: list<string>}
+     */
+    private function activityPubSearch(string $query, string $type, ?string $cursor): array
+    {
+        $accounts = [];
+        $posts = [];
+        $notes = [];
+
+        if ($this->parseHandle($query) !== null || str_starts_with($query, 'did:')) {
+            $lookup = $this->lookup($query, $cursor);
+
+            return [
+                'accounts' => [$lookup['profile']],
+                'posts' => $lookup['posts'],
+                'cursor' => $lookup['cursor'],
+                'notes' => $notes,
+            ];
+        }
+
+        $host = $this->discoveryHost();
+        if ($host === null) {
+            $notes[] = 'Für die Stichwortsuche im Fediverse ist keine Discovery-Instanz konfiguriert.';
+
+            return ['accounts' => [], 'posts' => [], 'cursor' => null, 'notes' => $notes];
+        }
+
+        $base = 'https://' . $host . '/api/';
+
+        if ($type !== 'posts') {
+            $search = $this->mastodonSearch($host, $query, 'accounts', $cursor);
+            foreach ($search['accounts'] as $account) {
+                $accounts[] = $this->mastodonProfile($account, $host);
+            }
+        }
+
+        if ($type !== 'accounts') {
+            if (str_starts_with($query, '#')) {
+                $tag = ltrim($query, '#');
+                $url = $base . 'v1/timelines/tag/' . rawurlencode($tag) . '?limit=25';
+                $list = $this->fetchJson($url, self::JSON_ACCEPT);
+                foreach (is_array($list) ? $list : [] as $status) {
+                    if (!is_array($status)) {
+                        continue;
+                    }
+                    $mapped = $this->mastodonPost($status, $host);
+                    if ($mapped !== null) {
+                        $posts[] = $mapped;
+                    }
+                }
+            } else {
+                $search = $this->mastodonSearch($host, $query, 'statuses', $cursor);
+                foreach ($search['statuses'] as $status) {
+                    if (!is_array($status)) {
+                        continue;
+                    }
+                    $mapped = $this->mastodonPost($status, $host);
+                    if ($mapped !== null) {
+                        $posts[] = $mapped;
+                    }
+                }
+            }
+        }
+
+        return [
+            'accounts' => $accounts,
+            'posts' => $posts,
+            'cursor' => null,
+            'notes' => $notes,
+        ];
+    }
+
+    /**
+     * Mastodon's v2 search shape, with a v1 fallback for older servers.
+     *
+     * @return array{accounts: list<array<string, mixed>>, statuses: list<array<string, mixed>>}
+     */
+    private function mastodonSearch(string $host, string $query, string $type, ?string $cursor): array
+    {
+        $parameters = '?q=' . rawurlencode($query) . '&type=' . $type . '&limit=20&resolve=false';
+        if ($cursor !== null && $cursor !== '') {
+            $parameters .= '&max_id=' . rawurlencode($cursor);
+        }
+
+        try {
+            $data = $this->fetchJson('https://' . $host . '/api/v2/search' . $parameters, self::JSON_ACCEPT);
+        } catch (RemoteDirectoryException) {
+            $data = $this->fetchJson('https://' . $host . '/api/v1/search' . $parameters, self::JSON_ACCEPT);
+        }
+
+        $accounts = is_array($data['accounts'] ?? null) ? $data['accounts'] : [];
+        $statuses = is_array($data['statuses'] ?? null) ? $data['statuses'] : [];
+
+        return [
+            'accounts' => array_values(array_filter($accounts, 'is_array')),
+            'statuses' => array_values(array_filter($statuses, 'is_array')),
+        ];
+    }
+
+    /**
+     * @return array{network: string, type: string, profiles: list<array<string, mixed>>, cursor: ?string}
+     */
+    private function blueskyEngagement(string $uri, string $type, ?string $cursor): array
+    {
+        $parameters = '?uri=' . rawurlencode($uri) . '&limit=50';
+        if ($cursor !== null && $cursor !== '') {
+            $parameters .= '&cursor=' . rawurlencode($cursor);
+        }
+
+        $profiles = [];
+        if ($type === 'likes') {
+            $data = $this->fetchJson(self::BSKY_APPVIEW . 'app.bsky.feed.getLikes' . $parameters, self::JSON_ACCEPT);
+            foreach (is_array($data['likes'] ?? null) ? $data['likes'] : [] as $like) {
+                if (is_array($like) && is_array($like['actor'] ?? null)) {
+                    $profiles[] = $this->blueskyProfile($like['actor']);
+                }
+            }
+        } else {
+            $data = $this->fetchJson(self::BSKY_APPVIEW . 'app.bsky.feed.getRepostedBy' . $parameters, self::JSON_ACCEPT);
+            foreach (is_array($data['repostedBy'] ?? null) ? $data['repostedBy'] : [] as $profile) {
+                if (is_array($profile)) {
+                    $profiles[] = $this->blueskyProfile($profile);
+                }
+            }
+        }
+
+        return [
+            'network' => 'bluesky',
+            'type' => $type,
+            'profiles' => $profiles,
+            'cursor' => $this->string($data['cursor'] ?? null),
+        ];
+    }
+
+    private function discoveryHost(): ?string
+    {
+        $value = strtolower(trim($this->discoveryInstance));
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_contains($value, '://')) {
+            $host = parse_url($value, PHP_URL_HOST);
+
+            return is_string($host) && $host !== '' ? $host : null;
+        }
+
+        return preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $value) === 1 ? $value : null;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $profiles
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function uniqueProfiles(array $profiles): array
+    {
+        $seen = [];
+        $unique = [];
+        foreach ($profiles as $profile) {
+            $id = $this->string($profile['id'] ?? null) ?? '';
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $unique[] = $profile;
+        }
+
+        return $unique;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $posts
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function uniquePosts(array $posts): array
+    {
+        $seen = [];
+        $unique = [];
+        foreach ($posts as $post) {
+            $id = $this->string($post['id'] ?? null) ?? '';
+            if ($id === '' || isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $unique[] = $post;
+        }
+
+        return array_slice($unique, 0, 50);
     }
 
     /**

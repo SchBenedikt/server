@@ -77,7 +77,11 @@ final class ApplicationFactory
         // 5. HTTP client and DNS policy (shared by federation, media, threads)
         $httpClient = new CurlHttpClient();
         $hostResolver = new DnsHostResolver();
-        $remoteDirectory = new RemoteDirectory($httpClient, new FederationTargetGuard($hostResolver));
+        $remoteDirectory = new RemoteDirectory(
+            $httpClient,
+            new FederationTargetGuard($hostResolver),
+            $this->config->discoveryInstance,
+        );
 
         // 6.-8. Repositories, queue/log and the core assembly
         $accounts = new AccountRepository($database, $clock);

@@ -14,7 +14,8 @@ import { hostDisplayName, resolveAccount } from '../lib/account';
 import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
 import { ensureInteractions, interactionFor, patchInteraction, rememberInteraction } from '../lib/interactions';
-import { appState, openComposer, openEditor, showToast } from '../lib/state';
+import { cachedQuote, loadQuote } from '../lib/quotes';
+import { appState, openComposer, openEditor, openQuote, showToast } from '../lib/state';
 import type { Poll, TimelineItem } from '../lib/types';
 
 const props = withDefaults(defineProps<{
@@ -100,6 +101,90 @@ const canReport = computed(() => (
 	&& !isMine.value
 	&& reportTargetId.value !== ''
 ));
+
+// --- Quote posts ---------------------------------------------------------
+const quoteObjectId = computed(() => props.post.quoted_object_id ?? '');
+const quotedPost = ref<TimelineItem | null>(null);
+const quoteLoading = ref(false);
+const quoteStateLabel = computed(() => {
+	switch (props.post.quote_state) {
+		case 'pending':
+			return 'Freigabe des Zitats steht noch aus';
+		case 'rejected':
+			return 'Zitat wurde abgelehnt';
+		case 'revoked':
+			return 'Zitatfreigabe wurde entzogen';
+		default:
+			return '';
+	}
+});
+const canQuote = computed(() => {
+	if (appState.session.user === null || props.post.deleted_at !== null || props.post.kind === 'boost') {
+		return false;
+	}
+	if (localId.value === null) {
+		return true;
+	}
+
+	return props.post.visibility === 'public' || props.post.visibility === 'unlisted';
+});
+
+watch(quoteObjectId, async (objectId) => {
+	if (objectId === '') {
+		quotedPost.value = null;
+		return;
+	}
+
+	const hit = cachedQuote(objectId);
+	if (hit !== undefined) {
+		quotedPost.value = hit;
+		return;
+	}
+
+	quoteLoading.value = true;
+	quotedPost.value = await loadQuote(objectId);
+	quoteLoading.value = false;
+}, { immediate: true });
+
+function quoteAuthor(post: TimelineItem): string {
+	const name = post.author_display_name?.trim() ?? '';
+	if (name !== '') {
+		return name;
+	}
+
+	const remoteHandle = post.author_handle?.trim() ?? '';
+	if (remoteHandle !== '') {
+		return remoteHandle;
+	}
+
+	return handleLabel(post.object_author_id ?? post.author_id);
+}
+
+function quoteAuthorHandle(post: TimelineItem): string {
+	const remoteHandle = post.author_handle?.trim() ?? '';
+	return remoteHandle !== '' ? remoteHandle : handleLabel(post.object_author_id ?? post.author_id);
+}
+
+function quoteAuthorHref(post: TimelineItem): string {
+	const target = post.author_handle?.trim() || post.object_author_id || post.author_id;
+	return `#/u/${encodeURIComponent(target)}`;
+}
+
+function quotedHref(post: TimelineItem): string | null {
+	const local = postRouteId(post);
+	const target = local ?? (isRemoteId(post.object_id ?? '') ? post.object_id : null)
+		?? (isRemoteId(post.id) || post.id.startsWith('at://') ? post.id : null);
+	return target === null ? null : `#/p/${encodeURIComponent(target)}`;
+}
+
+function quote(): void {
+	if (appState.session.user === null) {
+		window.location.assign('/login');
+		return;
+	}
+
+	openQuote(props.post);
+}
 
 function blueskyPostUrl(id: string): string | null {
 	if (!id.startsWith('at://')) {
@@ -554,6 +639,9 @@ onUnmounted(() => {
 					<button type="button" role="menuitem" @click.stop="share">
 						<AppIcon name="share" :size="15" /> Link kopieren
 					</button>
+					<button v-if="canQuote" type="button" role="menuitem" @click.stop="quote(); menuOpen = false">
+						<AppIcon name="quote" :size="15" /> Beitrag zitieren
+					</button>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
 						<AppIcon name="flag" :size="15" /> Beitrag melden
 					</button>
@@ -611,6 +699,50 @@ onUnmounted(() => {
 			<RichText :text="post.content" />
 		</details>
 		<RichText v-else :text="post.content" class="a-post__content" />
+
+		<article v-if="quoteObjectId !== ''" class="a-quote-embed">
+			<p v-if="quoteStateLabel !== ''" class="a-quote-embed__state">
+				<AppIcon name="info" :size="13" />
+				{{ quoteStateLabel }}
+			</p>
+			<a
+				v-if="quotedPost"
+				class="a-quote-embed__link"
+				:href="quotedHref(quotedPost) ?? undefined"
+			>
+				<header class="a-quote-embed__head">
+					<Avatar
+						:id="quotedPost.object_author_id ?? quotedPost.author_id"
+						:name="quoteAuthor(quotedPost)"
+						:src="quotedPost.author_avatar"
+						:size="26"
+					/>
+					<strong>{{ quoteAuthor(quotedPost) }}</strong>
+					<a
+						v-if="quoteAuthor(quotedPost) !== quoteAuthorHandle(quotedPost)"
+						:href="quoteAuthorHref(quotedPost)"
+						class="a-quote-embed__handle"
+						@click.stop
+					>{{ quoteAuthorHandle(quotedPost) }}</a>
+					<time :datetime="quotedPost.published_at">{{ relativeTime(quotedPost.published_at) }}</time>
+				</header>
+				<p v-if="quotedPost.content_warning" class="a-quote-embed__cw">
+					<AppIcon name="info" :size="13" /> {{ quotedPost.content_warning }}
+				</p>
+				<RichText v-else :text="quotedPost.content" class="a-quote-embed__text" />
+				<img
+					v-if="quotedPost.attachments && quotedPost.attachments.length > 0"
+					class="a-quote-embed__media"
+					:src="quotedPost.attachments[0].thumbnail_url ?? quotedPost.attachments[0].url"
+					:alt="quotedPost.attachments[0].alt_text ?? ''"
+					loading="lazy"
+				/>
+			</a>
+			<p v-else-if="quoteLoading" class="a-quote-embed__missing">Zitierter Beitrag wird geladen …</p>
+			<p v-else class="a-quote-embed__missing">
+				Der zitierte Beitrag ist nicht mehr öffentlich abrufbar.
+			</p>
+		</article>
 
 		<MediaGrid
 			v-if="post.attachments && post.attachments.length > 0"
@@ -713,6 +845,17 @@ onUnmounted(() => {
 				<AppIcon name="repeat" :size="18" />
 				<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
 			</span>
+
+			<button
+				v-if="canQuote"
+				type="button"
+				class="a-post__action"
+				aria-label="Beitrag zitieren"
+				title="Beitrag zitieren"
+				@click="quote"
+			>
+				<AppIcon name="quote" :size="18" />
+			</button>
 
 			<button
 				v-if="localId"

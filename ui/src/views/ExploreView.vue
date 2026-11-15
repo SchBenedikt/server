@@ -17,12 +17,26 @@ import { discover, discoveryPeople, loadDiscover, popularTags } from '../lib/dis
 import { handleLabel, normalizeTag } from '../lib/format';
 import { navigate } from '../lib/router';
 import { appState, showToast } from '../lib/state';
-import type { FollowedTag } from '../lib/types';
+import type {
+	Account,
+	FollowedTag,
+	RemoteSearchData,
+	RemoteSearchNetwork,
+	RemoteSearchType,
+} from '../lib/types';
 
 const query = ref('');
 const followedTags = ref<FollowedTag[]>([]);
 const followedLoading = ref(false);
 const tagBusy = ref('');
+
+const remote = ref<RemoteSearchData | null>(null);
+const remoteLoading = ref(false);
+const remoteError = ref('');
+const remoteType = ref<RemoteSearchType>('all');
+const remoteNetwork = ref<RemoteSearchNetwork>('all');
+const remoteOpen = ref(false);
+let remoteGeneration = 0;
 
 const signedIn = computed(() => appState.session.user !== null);
 const cleanedQuery = computed(() => query.value.trim());
@@ -105,7 +119,106 @@ function submitSearch(): void {
 
 	if (looksLikeProfile.value) {
 		openProfile();
+		return;
 	}
+
+	void searchRemote(true);
+}
+
+async function searchRemote(reset: boolean): Promise<void> {
+	const term = cleanedQuery.value;
+	if (term === '') {
+		return;
+	}
+
+	if (!reset && (remoteLoading.value || remote.value?.cursor == null)) {
+		return;
+	}
+
+	const generation = ++remoteGeneration;
+	remoteOpen.value = true;
+	remoteLoading.value = true;
+	if (reset) {
+		remoteError.value = '';
+		remote.value = null;
+	}
+
+	try {
+		const data = await getApi().remoteSearch(
+			term,
+			remoteType.value,
+			remoteNetwork.value,
+			reset ? null : remote.value?.cursor ?? null,
+		);
+		if (generation !== remoteGeneration) {
+			return;
+		}
+
+		if (reset) {
+			remote.value = data;
+		} else if (remote.value !== null) {
+			remote.value = {
+				...data,
+				accounts: dedupeAccounts([...remote.value.accounts, ...data.accounts]),
+				posts: dedupePosts([...remote.value.posts, ...data.posts]),
+			};
+		}
+	} catch (error) {
+		if (generation !== remoteGeneration) {
+			return;
+		}
+		remoteError.value = error instanceof Error ? error.message : 'Die Suche ist fehlgeschlagen.';
+	} finally {
+		if (generation === remoteGeneration) {
+			remoteLoading.value = false;
+		}
+	}
+}
+
+function dedupeAccounts(accounts: Account[]): Account[] {
+	const seen = new Set<string>();
+	return accounts.filter((account) => {
+		if (seen.has(account.id)) {
+			return false;
+		}
+		seen.add(account.id);
+		return true;
+	});
+}
+
+function dedupePosts(posts: RemoteSearchData['posts']): RemoteSearchData['posts'] {
+	const seen = new Set<string>();
+	return posts.filter((post) => {
+		if (seen.has(post.id)) {
+			return false;
+		}
+		seen.add(post.id);
+		return true;
+	});
+}
+
+function setRemoteFilters(type: RemoteSearchType, network: RemoteSearchNetwork): void {
+	if (remoteType.value === type && remoteNetwork.value === network) {
+		return;
+	}
+
+	remoteType.value = type;
+	remoteNetwork.value = network;
+	void searchRemote(true);
+}
+
+function openRemoteAccount(account: Account): void {
+	const target = account.handle !== '' ? account.handle : account.id;
+	navigate(`/u/${encodeURIComponent(target)}`);
+}
+
+function remoteAccountSubtitle(account: Account): string {
+	const network = account.network === 'bluesky' ? 'Bluesky' : 'Fediverse';
+	if (account.followers_count !== null && account.followers_count !== undefined) {
+		return `${network} · ${account.followers_count} Follower`;
+	}
+
+	return network;
 }
 
 function openProfile(): void {
@@ -204,6 +317,105 @@ function isFollowingTag(tag: string): boolean {
 					#{{ suggestedTag }} ansehen
 				</button>
 			</EmptyState>
+
+			<section class="a-explore-section a-remote-search">
+				<header class="a-section-head">
+					<h2>
+						<AppIcon name="globe" :size="16" />
+						Im ganzen Netz
+					</h2>
+					<button
+						v-if="!remoteOpen"
+						type="button"
+						class="a-btn a-btn--small"
+						@click="searchRemote(true)"
+					>
+						Fediverse &amp; Bluesky durchsuchen
+					</button>
+					<span v-else>Profile und Beiträge außerhalb dieser Instanz</span>
+				</header>
+
+				<div v-if="remoteOpen" class="a-remote-search__filters">
+					<div class="a-chip-row" role="group" aria-label="Art der Treffer">
+						<button
+							v-for="option in ([['all', 'Alles'], ['accounts', 'Profile'], ['posts', 'Beiträge']] as const)"
+							:key="option[0]"
+							type="button"
+							class="a-tag-chip"
+							:class="{ 'a-tag-chip--active': remoteType === option[0] }"
+							@click="setRemoteFilters(option[0], remoteNetwork)"
+						>
+							{{ option[1] }}
+						</button>
+					</div>
+					<div class="a-chip-row" role="group" aria-label="Netzwerk">
+						<button
+							v-for="option in ([['all', 'Alle Netze'], ['activitypub', 'Fediverse'], ['bluesky', 'Bluesky']] as const)"
+							:key="option[0]"
+							type="button"
+							class="a-tag-chip"
+							:class="{ 'a-tag-chip--active': remoteNetwork === option[0] }"
+							@click="setRemoteFilters(remoteType, option[0])"
+						>
+							{{ option[1] }}
+						</button>
+					</div>
+				</div>
+
+				<TimelineSkeleton v-if="remoteLoading && remote === null" :count="2" />
+
+				<p v-if="remoteError !== ''" class="a-feed__inline-error">{{ remoteError }}</p>
+
+				<template v-if="remote !== null">
+					<ul v-if="remote.accounts.length > 0" class="a-people a-people--wide">
+						<li v-for="account in remote.accounts" :key="account.id" class="a-person">
+							<a
+								:href="`#/u/${encodeURIComponent(account.handle !== '' ? account.handle : account.id)}`"
+								class="a-person__link"
+								@click.prevent="openRemoteAccount(account)"
+							>
+								<Avatar :id="account.id" :name="account.display_name" :src="account.avatar" :size="42" />
+								<span class="a-person__copy">
+									<strong>{{ account.display_name }}</strong>
+									<small>{{ account.handle }}</small>
+									<small class="a-person__network">{{ remoteAccountSubtitle(account) }}</small>
+								</span>
+							</a>
+						</li>
+					</ul>
+
+					<ol v-if="remote.posts.length > 0" class="a-feed__list">
+						<li v-for="post in remote.posts" :key="post.id">
+							<PostCard :post="post" />
+						</li>
+					</ol>
+
+					<EmptyState
+						v-if="!remoteLoading && remote.accounts.length === 0 && remote.posts.length === 0"
+						icon="search"
+						title="Im Netz nichts gefunden"
+						:text="remote.notes.length > 0 ? remote.notes.join(' ') : 'Versuche ein anderes Wort oder eine vollständige Adresse wie @name@server.'"
+					/>
+
+					<p v-for="note in remote.notes" :key="note" class="a-remote-search__note">
+						<AppIcon name="info" :size="13" />
+						{{ note }}
+					</p>
+
+					<div class="a-feed__more">
+						<button
+							v-if="remote.cursor !== null"
+							type="button"
+							class="a-btn a-btn--small"
+							:disabled="remoteLoading"
+							@click="searchRemote(false)"
+						>
+							{{ remoteLoading ? 'Lädt …' : 'Mehr Treffer laden' }}
+						</button>
+						<span v-else-if="remoteLoading">Suche läuft …</span>
+					</div>
+				</template>
+			</section>
 		</template>
 
 		<template v-else>

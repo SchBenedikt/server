@@ -60,6 +60,7 @@ export const appState = reactive({
 	composer: {
 		open: false,
 		replyTo: null as TimelineItem | null,
+		quoteTo: null as TimelineItem | null,
 		editPost: null as TimelineItem | null,
 	},
 	lightbox: {
@@ -105,10 +106,18 @@ export function setHomeTab(tab: HomeTab): void {
 	}
 }
 
-export function openComposer(replyTo: TimelineItem | null = null): void {
+export function openComposer(replyTo: TimelineItem | null = null, quoteTo: TimelineItem | null = null): void {
 	appState.composer.replyTo = replyTo;
+	appState.composer.quoteTo = quoteTo;
 	appState.composer.editPost = null;
 	appState.composer.open = true;
+}
+
+/**
+ * Opens the composer with an embedded quote of another post.
+ */
+export function openQuote(quoteTo: TimelineItem): void {
+	openComposer(null, quoteTo);
 }
 
 /**
@@ -116,6 +125,7 @@ export function openComposer(replyTo: TimelineItem | null = null): void {
  */
 export function openEditor(post: TimelineItem): void {
 	appState.composer.replyTo = null;
+	appState.composer.quoteTo = null;
 	appState.composer.editPost = post;
 	appState.composer.open = true;
 }
@@ -123,6 +133,7 @@ export function openEditor(post: TimelineItem): void {
 export function closeComposer(): void {
 	appState.composer.open = false;
 	appState.composer.replyTo = null;
+	appState.composer.quoteTo = null;
 	appState.composer.editPost = null;
 }
 

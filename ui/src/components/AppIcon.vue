@@ -63,6 +63,7 @@ const paths: Record<string, string> = {
 	alert: '<path d="M12 3 2 21h20z"/><path d="M12 9v5M12 17.5v.5"/>',
 	arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 	chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+	quote: '<path d="M9 7H5v4c0 3 1.7 5.2 4 6"/><path d="M19 7h-4v4c0 3 1.7 5.2 4 6"/>',
 };
 
 const markup = computed(() => paths[props.name] ?? paths.info);

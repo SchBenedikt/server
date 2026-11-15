@@ -207,6 +207,70 @@ final class FrontController
             }
         }
 
+        // Cross-network discovery. Bluesky is read from the public AppView, the
+        // Fediverse from the configured discovery instance (see
+        // HostConfig::$discoveryInstance). Nothing is stored locally.
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/search') {
+            $identity = $session?->userId() ?? $ip ?? 'anonymous';
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_search', $identity, 40, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Zu viele Suchanfragen. Bitte warte kurz.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $query = trim((string) ($request->queryParam('q') ?? ''));
+            $type = trim((string) ($request->queryParam('type') ?? 'all'));
+            $network = trim((string) ($request->queryParam('network') ?? 'all'));
+            $cursor = $request->queryParam('cursor');
+            $cursor = is_string($cursor) && $cursor !== '' ? $cursor : null;
+
+            try {
+                return Response::json($this->runtime->remoteDirectory->search($query, $type, $network, $cursor));
+            } catch (RemoteDirectoryException $exception) {
+                return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
+            } catch (Throwable) {
+                return $this->apiError(502, 'remote_search_failed', 'Die Suche konnte nicht ausgeführt werden.');
+            }
+        }
+
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/remote-engagement') {
+            $identity = $session?->userId() ?? $ip ?? 'anonymous';
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_engagement', $identity, 60, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Zu viele Reaktions-Abrufe. Bitte warte kurz.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $id = trim((string) ($request->queryParam('id') ?? ''));
+            $type = trim((string) ($request->queryParam('type') ?? 'likes'));
+            $cursor = $request->queryParam('cursor');
+            $cursor = is_string($cursor) && $cursor !== '' ? $cursor : null;
+
+            try {
+                return Response::json($this->runtime->remoteDirectory->remoteEngagement($id, $type, $cursor));
+            } catch (RemoteDirectoryException $exception) {
+                return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
+            } catch (Throwable) {
+                return $this->apiError(502, 'remote_engagement_failed', 'Die Reaktionen konnten nicht geladen werden.');
+            }
+        }
+
         if ($request->method === 'GET' && $request->path === '/api/v1/host/interactions') {
             $ids = array_slice(explode(',', (string) ($request->queryParam('ids') ?? '')), 0, 80);
 
@@ -234,6 +298,72 @@ final class FrontController
             }
 
             return Response::json(['posts' => $posts]);
+        }
+
+        // A quote stores the quoted object id, which is the ActivityPub note
+        // URL for a local post (see ActivityFactory::noteIdFor). The UI needs
+        // the summary back to draw the embedded card; resolve local notes from
+        // the post table and remote notes through the same guarded fetcher the
+        // remote views use. Unavailable or pending targets are simply absent.
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/quoted') {
+            $identity = $session?->userId() ?? $ip ?? 'anonymous';
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.quoted', $identity, 120, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Zu viele Zitat-Abrufe. Bitte warte kurz.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $ids = array_slice(explode(',', (string) ($request->queryParam('ids') ?? '')), 0, 40);
+            $prefix = rtrim($this->runtime->config->instanceUrl, '/') . '/api/v1/posts/';
+            $quoted = [];
+            foreach ($ids as $objectId) {
+                $objectId = trim($objectId);
+                if ($objectId === '' || mb_strlen($objectId) > 2048) {
+                    continue;
+                }
+
+                if (str_starts_with($objectId, $prefix)) {
+                    $localId = rawurldecode(substr($objectId, strlen($prefix)));
+                    if ($localId === '' || str_contains($localId, '/')) {
+                        continue;
+                    }
+
+                    try {
+                        $post = $this->runtime->app->posts->getVisible($localId, $session?->userId());
+                    } catch (PostNotFoundException) {
+                        continue;
+                    }
+
+                    $quoted[$objectId] = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
+                    continue;
+                }
+
+                if (!preg_match('#^https?://#i', $objectId)) {
+                    continue;
+                }
+
+                try {
+                    $remote = $this->runtime->remoteDirectory->remotePost($objectId);
+                } catch (Throwable) {
+                    // A removed, private or not-yet-fetched quote target stays
+                    // an empty card rather than failing the whole feed.
+                    continue;
+                }
+
+                if (isset($remote['post']) && is_array($remote['post'])) {
+                    $quoted[$objectId] = $remote['post'];
+                }
+            }
+
+            return Response::json(['quoted' => $quoted]);
         }
 
         $userId = $session?->userId();
