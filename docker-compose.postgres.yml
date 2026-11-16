@@ -1,0 +1,47 @@
+# PostgreSQL overlay for docker-compose.yml.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#
+# The database password defaults to a local-only value. Set
+# ALOHASOCIAL_DB_PASSWORD in `.env` before exposing the instance to the
+# internet. The database is not published on a host port; only the app and
+# worker can reach it.
+
+services:
+  app:
+    environment:
+      ALOHASOCIAL_DB_DSN: pgsql:host=db;port=5432;dbname=alohasocial
+      ALOHASOCIAL_DB_USER: alohasocial
+      ALOHASOCIAL_DB_PASSWORD: ${ALOHASOCIAL_DB_PASSWORD:-alohasocial}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    environment:
+      ALOHASOCIAL_DB_DSN: pgsql:host=db;port=5432;dbname=alohasocial
+      ALOHASOCIAL_DB_USER: alohasocial
+      ALOHASOCIAL_DB_PASSWORD: ${ALOHASOCIAL_DB_PASSWORD:-alohasocial}
+    depends_on:
+      app:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: alohasocial
+      POSTGRES_USER: alohasocial
+      POSTGRES_PASSWORD: ${ALOHASOCIAL_DB_PASSWORD:-alohasocial}
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C
+    volumes:
+      - aloha-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alohasocial -d alohasocial"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  aloha-db:

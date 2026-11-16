@@ -9,19 +9,27 @@ delivery and cleanup; the social behaviour lives in the Composer package
 
 | I want to… | Read |
 | --- | --- |
+| Start with Docker in one command | [Docker installation](docker.md) |
 | Install locally or in production | [Installation and setup](installation.md) |
 | Understand every environment variable | [Configuration](configuration.md) |
 | Run, back up, upgrade or repair an instance | [Operations](operations.md) |
 | Understand where the frontend lives and how it is built | [Frontend hosting decision](frontend.md) |
 | See the project overview and architecture | [README](../README.md) |
 
-## The short local path
+## The short path
+
+Docker:
 
 ```shell
-composer install
 cp .env.example .env
-php bin/migrate.php
-php bin/create-account.php alice alice@example.com --admin
+docker compose up -d --build
+```
+
+Bare metal:
+
+```shell
+scripts/install.sh --url=http://localhost:3000 \
+  --handle=alice --email=alice@example.com
 php -S localhost:3000 -t public public/index.php
 ```
 
