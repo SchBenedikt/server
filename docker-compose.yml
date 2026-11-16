@@ -11,6 +11,10 @@
 #
 # The first admin account is created automatically when
 # ALOHASOCIAL_ADMIN_HANDLE and ALOHASOCIAL_ADMIN_PASSWORD are set in `.env`.
+#
+# The default image is the one published to GitHub Container Registry on every
+# push to main. `docker compose pull` fetches it; `docker compose build` builds
+# the same tag from this checkout instead.
 
 name: aloha-social
 
@@ -19,7 +23,7 @@ x-app-environment: &app-environment
   ALOHASOCIAL_DB_DSN: ${ALOHASOCIAL_DB_DSN:-sqlite:var/server.sqlite}
 
 x-app-service: &app-service
-  image: alohasocial/server:${ALOHASOCIAL_IMAGE_TAG:-local}
+  image: ghcr.io/schbenedikt/server:${ALOHASOCIAL_IMAGE_TAG:-latest}
   env_file:
     - path: .env
       required: false

@@ -60,13 +60,15 @@ are unaffected; the fix belongs in the core package, not in this host.
 ## Quick start
 
 The fastest path is Docker, with no PHP, Composer or database installed on the
-host:
+host. `docker-compose.yml` uses the image published to GitHub Container
+Registry on every push to `main`:
 
 ```shell
 git clone https://github.com/SchBenedikt/server.git aloha
 cd aloha
 cp .env.example .env          # optional; defaults use SQLite
-docker compose up -d --build
+docker compose up -d          # pulls ghcr.io/schbenedikt/server:latest
+docker compose up -d --build  # alternative: build the same tag from source
 ```
 
 Open `http://localhost:3000/login`. Set `ALOHASOCIAL_ADMIN_HANDLE`,
@@ -76,14 +78,20 @@ the first admin on boot, or run
 PostgreSQL overlay and reverse-proxy examples are in
 [Docker installation](docs/docker.md).
 
-Without Docker, the installer script checks the PHP runtime and does the rest:
+Without Docker, the installer script checks the PHP runtime and does the rest.
+Run it without arguments on a terminal for an interactive setup, or pass the
+answers as options:
 
 ```shell
 git clone https://github.com/SchBenedikt/server.git aloha
 cd aloha
+scripts/install.sh            # interactive: URL, name, database, admin
+php -S localhost:3000 -t public public/index.php
+```
+
+```shell
 scripts/install.sh --url=http://localhost:3000 \
   --handle=alice --email=alice@example.com
-php -S localhost:3000 -t public public/index.php
 ```
 
 For every local and production procedure use

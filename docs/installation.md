@@ -17,10 +17,12 @@ needs Docker:
 git clone https://github.com/SchBenedikt/server.git aloha
 cd aloha
 cp .env.example .env
-docker compose up -d --build
+docker compose up -d
 ```
 
-Migrations run on start, and setting `ALOHASOCIAL_ADMIN_HANDLE`,
+This pulls the published image `ghcr.io/schbenedikt/server:latest`; add
+`--build` to build it from the checkout instead. Migrations run on start, and
+setting `ALOHASOCIAL_ADMIN_HANDLE`,
 `ALOHASOCIAL_ADMIN_EMAIL` and `ALOHASOCIAL_ADMIN_PASSWORD` in `.env` creates
 the first admin account. Use the
 [PostgreSQL overlay](docker.md#postgresql) for a database container instead of
@@ -35,6 +37,19 @@ below and is safe to run again:
 ```shell
 git clone https://github.com/SchBenedikt/server.git aloha
 cd aloha
+scripts/install.sh
+```
+
+Started on a terminal without arguments, the script opens a short interactive
+setup and asks for the public URL, the instance name, SQLite or PostgreSQL and
+the first admin account. Every question has a default, so pressing Enter walks
+through the whole installation. Nothing is written before the final
+confirmation.
+
+For unattended installs pass the answers as options (or use
+`--non-interactive`):
+
+```shell
 scripts/install.sh \
   --url=https://social.example \
   --db-dsn='pgsql:host=127.0.0.1;port=5432;dbname=alohasocial' \
@@ -42,10 +57,12 @@ scripts/install.sh \
   --handle=admin --email=admin@example.com
 ```
 
-`scripts/install.sh --help` lists every option, including
+`scripts/install.sh --help` lists every option, including `--interactive` to
+force the wizard, `--non-interactive` to never prompt, and
 `--write-service-files` for a matching systemd unit and Nginx server block.
-Without `--handle` it leaves account creation to you. The script does not
-start PHP-FPM, Nginx or the worker; the sections below cover those services.
+Without `--handle` and without the wizard it leaves account creation to you.
+The script does not start PHP-FPM, Nginx or the worker; the sections below
+cover those services.
 
 ## What you are installing
 

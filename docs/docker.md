@@ -8,14 +8,25 @@ Docker runs the same PHP code as the manual installation. The image contains
 Apache with `mod_php`, the compiled Vue bundle, both PDO drivers and the
 worker command. Node.js is only needed to rebuild the UI, never to run it.
 
+The image is published to GitHub Container Registry on every push to `main`:
+
+```shell
+docker pull ghcr.io/schbenedikt/server:latest
+```
+
 ## Quick start (SQLite)
 
 ```shell
 git clone https://github.com/SchBenedikt/server.git aloha
 cd aloha
 cp .env.example .env
-docker compose up -d --build
+docker compose up -d
 ```
+
+`docker-compose.yml` references `ghcr.io/schbenedikt/server:latest`, so the
+stack starts from the published image without a local build. Use
+`docker compose up -d --build` to build the same tag from this checkout
+instead, for example after changing PHP code.
 
 Open <http://localhost:3000/login>.
 
@@ -52,6 +63,25 @@ docker compose logs -f app worker
 
 Both services should report `healthy`/`running`. The worker waits for the app
 healthcheck before it starts, so migrations never run twice.
+
+## Images and tags
+
+| Tag | Source |
+| --- | --- |
+| `latest` | Newest push to `main` |
+| `sha-<commit>` | Immutable image for one commit |
+| `vX.Y.Z`, `vX.Y` | A `vX.Y.Z` git tag |
+
+Pin a version on a production host by setting the tag in `.env`:
+
+```dotenv
+ALOHASOCIAL_IMAGE_TAG=sha-1a2b3c4
+```
+
+The workflow in `.github/workflows/docker.yml` builds `linux/amd64` and
+`linux/arm64` and authenticates with the repository's `GITHUB_TOKEN`, so no
+separate registry secret is required. A private image needs
+`docker login ghcr.io` with a personal access token that has `read:packages`.
 
 ## Choosing the public URL
 
@@ -129,7 +159,7 @@ most useful Docker-specific values are:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ALOHASOCIAL_PORT` | `3000` | Host port published by the app service. |
-| `ALOHASOCIAL_IMAGE_TAG` | `local` | Tag for the built image. |
+| `ALOHASOCIAL_IMAGE_TAG` | `latest` | Tag of the `ghcr.io/schbenedikt/server` image. |
 | `ALOHASOCIAL_ADMIN_HANDLE` | empty | First admin handle; created on boot. |
 | `ALOHASOCIAL_ADMIN_EMAIL` | `<handle>@example.invalid` | First admin email. |
 | `ALOHASOCIAL_ADMIN_PASSWORD` | empty | First admin password (8+ characters). |
@@ -168,12 +198,14 @@ See [Operations](operations.md) for restore, rotation and troubleshooting.
 
 ```shell
 git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 The entrypoint applies pending migrations before Apache starts. The worker is
 recreated after the app is healthy. If you pinned `ALOHASOCIAL_IMAGE_TAG`,
-update the tag or rebuild it.
+update the tag. To follow a source change instead of the published image, use
+`docker compose up -d --build` (and rebuild the UI bundle first, see below).
 
 For a source change to the Vue app rebuild the committed bundle first:
 

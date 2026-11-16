@@ -7,12 +7,15 @@
 # first admin account. It never starts a web server, so the same script works
 # on a laptop (php -S) and on a server (PHP-FPM + Nginx/Apache).
 #
+#   scripts/install.sh                     # interactive wizard
 #   scripts/install.sh --url=https://social.example \
 #       --db-dsn='pgsql:host=127.0.0.1;port=5432;dbname=alohasocial' \
 #       --db-user=alohasocial --db-password='…' \
 #       --handle=admin --email=admin@example --password='…'
 #
-# Run with --help for every option.
+# Run with no arguments on a terminal to answer a short questionnaire. Run
+# with options (or --non-interactive) for unattended installs. Run with
+# --help for every option.
 
 set -euo pipefail
 
@@ -32,9 +35,11 @@ SKIP_COMPOSER=0
 SKIP_MIGRATE=0
 NO_ADMIN=0
 NON_INTERACTIVE=0
+INTERACTIVE=0
 FORCE_ENV=0
 WITH_SERVICE_FILES=0
 WITH_DEV=0
+ARGUMENT_COUNT=$#
 
 log() { printf '[aloha] %s\n' "$*"; }
 fail() { printf '[aloha] error: %s\n' "$*" >&2; exit 1; }
@@ -54,6 +59,7 @@ Options:
   --password=PASSWORD      Admin password (at least 8 characters)
   --display-name=NAME      Admin display name
   --no-admin               Do not create an account
+  -i, --interactive        Ask for URL, name, database and admin account
   --non-interactive        Never prompt; missing admin values are skipped
   --skip-composer          Use the existing vendor/ directory
   --skip-migrate           Do not run bin/migrate.php
@@ -84,6 +90,7 @@ for argument in "$@"; do
         --skip-composer) SKIP_COMPOSER=1 ;;
         --skip-migrate) SKIP_MIGRATE=1 ;;
         --no-admin) NO_ADMIN=1 ;;
+        -i|--interactive) INTERACTIVE=1 ;;
         --non-interactive) NON_INTERACTIVE=1 ;;
         --force) FORCE_ENV=1 ;;
         --write-service-files) WITH_SERVICE_FILES=1 ;;
@@ -93,10 +100,112 @@ for argument in "$@"; do
     esac
 done
 
+ask() {
+    local label="$1"
+    local default_value="${2:-}"
+    local answer=""
+    if [ -n "$default_value" ]; then
+        printf '%s [%s]: ' "$label" "$default_value" >&2
+    else
+        printf '%s: ' "$label" >&2
+    fi
+    IFS= read -r answer || answer=""
+    printf '%s' "${answer:-$default_value}"
+}
+
+ask_secret() {
+    local label="$1"
+    local answer=""
+    printf '%s: ' "$label" >&2
+    IFS= read -r -s answer || answer=""
+    printf '\n' >&2
+    printf '%s' "$answer"
+}
+
+ask_yes_no() {
+    local label="$1"
+    local default_value="${2:-n}"
+    local answer=""
+    local suffix="y/N"
+    if [ "$default_value" = "y" ]; then
+        suffix="Y/n"
+    fi
+    printf '%s [%s]: ' "$label" "$suffix" >&2
+    IFS= read -r answer || answer=""
+    answer="${answer:-$default_value}"
+    case "$answer" in
+        y|Y|yes|YES|j|J|ja|JA) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+interactive_wizard() {
+    log "interactive setup (Enter keeps the value in brackets)"
+
+    URL="$(ask 'Public URL' "${URL:-${ALOHASOCIAL_INSTANCE_URL:-http://localhost:3000}}")"
+    NAME="$(ask 'Instance name' "${NAME:-${ALOHASOCIAL_INSTANCE_NAME:-Aloha Social}}")"
+
+    printf '\nDatabase\n  1) SQLite (no database server, simplest)\n  2) PostgreSQL (recommended for a real instance)\n' >&2
+    db_choice="$(ask 'Database' '1')"
+    case "$db_choice" in
+        2|p|pg|postgres|postgresql)
+            DB_DSN="$(ask 'PostgreSQL DSN' "${DB_DSN:-pgsql:host=127.0.0.1;port=5432;dbname=alohasocial}")"
+            DB_USER="$(ask 'PostgreSQL user' "${DB_USER:-${ALOHASOCIAL_DB_USER:-alohasocial}}")"
+            if [ -z "$DB_PASSWORD" ]; then
+                DB_PASSWORD="$(ask_secret 'PostgreSQL password (hidden)')"
+            fi
+            ;;
+        *)
+            DB_DSN="$(ask 'SQLite DSN' "${DB_DSN:-sqlite:var/server.sqlite}")"
+            ;;
+    esac
+
+    printf '\n' >&2
+    if [ "$NO_ADMIN" -eq 0 ] && ask_yes_no 'Create the first admin account now?' 'y'; then
+        ADMIN_HANDLE="$(ask 'Admin handle' "$ADMIN_HANDLE")"
+        [ -n "$ADMIN_HANDLE" ] || fail "an admin handle is required"
+        ADMIN_EMAIL="$(ask 'Admin email' "${ADMIN_EMAIL:-${ADMIN_HANDLE}@example.com}")"
+        [ -n "$ADMIN_EMAIL" ] || fail "an admin email address is required"
+        ADMIN_NAME="$(ask 'Admin display name' "${ADMIN_NAME:-$ADMIN_HANDLE}")"
+        if [ -z "$ADMIN_PASSWORD" ]; then
+            ADMIN_PASSWORD="$(ask_secret 'Admin password (at least 8 characters, hidden)')"
+            if [ "${#ADMIN_PASSWORD}" -lt 8 ]; then
+                fail "the admin password must be at least 8 characters long"
+            fi
+            confirmation="$(ask_secret 'Repeat the admin password')"
+            if [ "$confirmation" != "$ADMIN_PASSWORD" ]; then
+                fail "the admin passwords do not match"
+            fi
+        fi
+    elif [ "$NO_ADMIN" -eq 0 ]; then
+        NO_ADMIN=1
+    fi
+
+    printf '\n' >&2
+    printf '  Public URL : %s\n' "$URL" >&2
+    printf '  Name       : %s\n' "$NAME" >&2
+    printf '  Database   : %s\n' "$DB_DSN" >&2
+    if [ "$NO_ADMIN" -eq 0 ] && [ -n "$ADMIN_HANDLE" ]; then
+        printf '  Admin      : @%s <%s>\n' "$ADMIN_HANDLE" "$ADMIN_EMAIL" >&2
+    else
+        printf '  Admin      : none (create one later)\n' >&2
+    fi
+    printf '\n' >&2
+
+    if ! ask_yes_no 'Continue with this configuration?' 'y'; then
+        log "installation aborted"
+        exit 0
+    fi
+}
+
 ADMIN_HANDLE="${ADMIN_HANDLE:-${ALOHASOCIAL_ADMIN_HANDLE:-}}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-${ALOHASOCIAL_ADMIN_EMAIL:-}}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-${ALOHASOCIAL_ADMIN_PASSWORD:-}}"
 ADMIN_NAME="${ADMIN_NAME:-${ALOHASOCIAL_ADMIN_DISPLAY_NAME:-}}"
+
+if [ "$INTERACTIVE" -eq 1 ] || { [ "$ARGUMENT_COUNT" -eq 0 ] && [ "$NON_INTERACTIVE" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; }; then
+    interactive_wizard
+fi
 
 cd "$ROOT"
 
