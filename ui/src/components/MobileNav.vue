@@ -21,6 +21,7 @@ const items = computed(() => {
 		{ name: 'drafts', label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
 		{ name: 'archived', label: 'Archiv', icon: 'archive', href: '#/archived' },
 		{ name: 'settings', label: 'Einstellungen', icon: 'settings', href: '#/settings' },
+		{ name: 'follow-requests', label: 'Folgenanfragen', icon: 'lock', href: '#/follow-requests' },
 		{ name: 'collections', label: 'Sammlungen', icon: 'list', href: '#/collections' },
 		{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
 		{

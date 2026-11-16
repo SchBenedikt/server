@@ -370,6 +370,32 @@ final class CommunityApiController
                 ]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/follow-requests') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um Folgenanfragen zu sehen.');
+                }
+
+                return Response::json([
+                    'requests' => $this->runtime->followRequests->forAccount($userId),
+                    'locked' => (bool) $this->runtime->preferences->forAccount($userId)['locked'],
+                ]);
+            }
+
+            if (preg_match('#^/api/v1/host/follow-requests/([^/]+)/(accept|reject)$#', $path, $matches) === 1
+                && $method === 'POST'
+            ) {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                $requestId = rawurldecode($matches[1]);
+                $request = $matches[2] === 'accept'
+                    ? $this->runtime->followRequests->accept($requestId, $userId)
+                    : $this->runtime->followRequests->reject($requestId, $userId);
+
+                return Response::json(['request' => $request]);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/preferences') {
                 if ($userId === null) {
                     return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Einstellungen zu sehen.');

@@ -44,6 +44,8 @@ import type {
 	ArchivedPost,
 	ForYouData,
 	AccountPreferences,
+	FollowRequest,
+	FollowRequestData,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -327,6 +329,7 @@ function normalizeAccount(value: unknown): Account | null {
 			followed_by: value.relationship.followed_by === true,
 			blocking: value.relationship.blocking === true,
 			muting: value.relationship.muting === true,
+			requested: value.relationship.requested === true,
 		}
 		: null;
 
@@ -374,7 +377,7 @@ function normalizeInteraction(value: unknown): PostInteraction | null {
 
 function normalizeRelationship(value: unknown): Relationship {
 	if (!isRecord(value)) {
-		return { following: false, followed_by: false, blocking: false, muting: false };
+		return { following: false, followed_by: false, blocking: false, muting: false, requested: false };
 	}
 
 	return {
@@ -382,6 +385,7 @@ function normalizeRelationship(value: unknown): Relationship {
 		followed_by: value.followed_by === true,
 		blocking: value.blocking === true,
 		muting: value.muting === true,
+		requested: value.requested === true,
 	};
 }
 
@@ -743,6 +747,7 @@ function normalizePreferences(value: unknown): AccountPreferences {
 		dm_policy: typeof value.dm_policy === 'string' ? value.dm_policy : 'everyone',
 		show_boosts: value.show_boosts !== false,
 		discoverable: value.discoverable !== false,
+		locked: value.locked === true,
 		notify_follows: value.notify_follows !== false,
 		notify_favourites: value.notify_favourites !== false,
 		notify_boosts: value.notify_boosts !== false,
@@ -1158,6 +1163,60 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				`/api/v1/accounts/${encodeURIComponent(id)}/follow`,
 			);
 			return normalizeRelationship(data?.relationship);
+		},
+
+		async followRequests(): Promise<FollowRequestData> {
+			const data = await request<{ requests?: unknown; locked?: unknown }>(
+				'GET',
+				'/api/v1/host/follow-requests',
+			);
+
+			const requests = Array.isArray(data?.requests)
+				? data.requests.filter(isRecord).map((entry): FollowRequest => ({
+					id: typeof entry.id === 'string' ? entry.id : '',
+					target_account_id: typeof entry.target_account_id === 'string' ? entry.target_account_id : '',
+					actor_id: typeof entry.actor_id === 'string' ? entry.actor_id : '',
+					actor_handle: typeof entry.actor_handle === 'string' ? entry.actor_handle : '',
+					is_local: entry.is_local !== false,
+					created_at: typeof entry.created_at === 'string' ? entry.created_at : '',
+				}))
+				: [];
+
+			return { requests, locked: data?.locked === true };
+		},
+
+		async acceptFollowRequest(id: string): Promise<FollowRequest> {
+			const data = await request<{ request?: unknown }>(
+				'POST',
+				`/api/v1/host/follow-requests/${encodeURIComponent(id)}/accept`,
+			);
+			const entry = isRecord(data?.request) ? data.request : {};
+
+			return {
+				id: typeof entry.id === 'string' ? entry.id : id,
+				target_account_id: typeof entry.target_account_id === 'string' ? entry.target_account_id : '',
+				actor_id: typeof entry.actor_id === 'string' ? entry.actor_id : '',
+				actor_handle: typeof entry.actor_handle === 'string' ? entry.actor_handle : '',
+				is_local: entry.is_local !== false,
+				created_at: typeof entry.created_at === 'string' ? entry.created_at : '',
+			};
+		},
+
+		async rejectFollowRequest(id: string): Promise<FollowRequest> {
+			const data = await request<{ request?: unknown }>(
+				'POST',
+				`/api/v1/host/follow-requests/${encodeURIComponent(id)}/reject`,
+			);
+			const entry = isRecord(data?.request) ? data.request : {};
+
+			return {
+				id: typeof entry.id === 'string' ? entry.id : id,
+				target_account_id: typeof entry.target_account_id === 'string' ? entry.target_account_id : '',
+				actor_id: typeof entry.actor_id === 'string' ? entry.actor_id : '',
+				actor_handle: typeof entry.actor_handle === 'string' ? entry.actor_handle : '',
+				is_local: entry.is_local !== false,
+				created_at: typeof entry.created_at === 'string' ? entry.created_at : '',
+			};
 		},
 
 		async notifications(limit = 20, before = null): Promise<NotificationPageData> {

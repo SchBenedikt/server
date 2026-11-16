@@ -30,6 +30,7 @@ export type Route =
 	| { name: 'drafts' }
 	| { name: 'archived' }
 	| { name: 'settings' }
+	| { name: 'follow-requests' }
 	| { name: 'admin'; section: AdminSection }
 	| { name: 'notfound' };
 
@@ -115,6 +116,10 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'settings' && parts.length === 1) {
 		return { name: 'settings' };
+	}
+
+	if (parts[0] === 'follow-requests' && parts.length === 1) {
+		return { name: 'follow-requests' };
 	}
 
 	if (parts[0] === 'collections' && parts.length === 1) {
@@ -225,6 +230,8 @@ export function routeTitle(current: Route): string {
 			return 'Archiv';
 		case 'settings':
 			return 'Einstellungen';
+		case 'follow-requests':
+			return 'Folgenanfragen';
 		case 'admin':
 			return current.section === 'overview'
 				? 'Administration'

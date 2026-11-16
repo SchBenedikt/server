@@ -5411,3 +5411,35 @@ dialog.a-modal::backdrop {
 	flex: none;
 	accent-color: var(--a-accent);
 }
+
+.a-follow--requested {
+	border-color: var(--a-border-strong);
+	background: transparent;
+	color: var(--a-muted);
+}
+
+.a-settings__follow-requests {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	flex-wrap: wrap;
+	padding: 10px 12px;
+	border: 1px dashed var(--a-border-strong);
+	border-radius: 12px;
+	background: var(--a-bg-soft);
+	color: var(--a-muted);
+	font-size: 12.5px;
+	line-height: 1.5;
+}
+
+.a-follow-requests {
+	display: grid;
+	gap: 14px;
+}
+
+.a-follow-requests__note {
+	display: grid;
+	gap: 8px;
+	justify-items: start;
+}

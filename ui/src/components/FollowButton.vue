@@ -21,9 +21,14 @@ const emit = defineEmits<{ changed: [following: boolean] }>();
 
 const busy = ref(false);
 const following = ref(props.account?.relationship?.following === true);
+const requested = ref(props.account?.relationship?.requested === true);
 
 watch(() => props.account?.relationship?.following, (value) => {
 	following.value = value === true;
+}, { immediate: true });
+
+watch(() => props.account?.relationship?.requested, (value) => {
+	requested.value = value === true;
 }, { immediate: true });
 
 const isSelf = computed(() => props.account?.id === appState.session.user?.handle);
@@ -46,10 +51,15 @@ async function toggle(): Promise<void> {
 			? await getApi().unfollowAccount(account.id)
 			: await getApi().followAccount(account.id);
 		following.value = relationship.following;
+		requested.value = relationship.requested === true;
 		applyRelationship(account.id, relationship);
 		emit('changed', relationship.following);
 		showToast(
-			relationship.following ? `Du folgst jetzt @${account.id}.` : `Du folgst @${account.id} nicht mehr.`,
+			relationship.following
+				? `Du folgst jetzt @${account.id}.`
+				: relationship.requested === true
+					? `Folgenanfrage an @${account.id} gesendet.`
+					: `Du folgst @${account.id} nicht mehr.`,
 			'success',
 		);
 	} catch (error) {
@@ -67,14 +77,15 @@ async function toggle(): Promise<void> {
 		class="a-follow"
 		:class="{
 			'a-follow--following': following,
+			'a-follow--requested': requested && !following,
 			'a-follow--compact': compact,
 		}"
 		:disabled="busy"
-		:aria-pressed="following"
+		:aria-pressed="following || requested"
 		@click.stop="toggle"
 	>
-		<AppIcon :name="following ? 'check' : 'plus'" :size="compact ? 14 : 16" />
-		<span>{{ following ? 'Gefolgt' : 'Folgen' }}</span>
+		<AppIcon :name="following ? 'check' : (requested ? 'clock' : 'plus')" :size="compact ? 14 : 16" />
+		<span>{{ following ? 'Gefolgt' : (requested ? 'Angefragt' : 'Folgen') }}</span>
 	</button>
 	<a
 		v-else-if="appState.session.user === null && account !== null && !isSelf"

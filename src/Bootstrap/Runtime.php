@@ -27,6 +27,7 @@ use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\Preferences;
@@ -76,6 +77,7 @@ final readonly class Runtime
         public ForYouFeed $forYou,
         public Preferences $preferences,
         public Exports $exports,
+        public FollowRequests $followRequests,
         public PostRevisionRepository $postRevisions,
     ) {
     }

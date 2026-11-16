@@ -72,6 +72,7 @@ async function save(): Promise<void> {
 			dm_policy: current.dm_policy,
 			show_boosts: current.show_boosts,
 			discoverable: current.discoverable,
+			locked: current.locked,
 			notify_follows: current.notify_follows,
 			notify_favourites: current.notify_favourites,
 			notify_boosts: current.notify_boosts,
@@ -227,6 +228,26 @@ watch(signedIn, (value) => {
 			<section class="a-settings__section">
 				<h2>Privatsphäre</h2>
 				<p class="a-settings__hint">Wer dich finden und dir schreiben darf.</p>
+
+				<label class="a-settings__row">
+					<span>
+						<strong>Geschütztes Profil</strong>
+						<small>Neue Follower müssen von dir bestätigt werden. Deine Beiträge bleiben für bestehende Follower sichtbar.</small>
+					</span>
+					<input
+						type="checkbox"
+						:checked="preferences.locked"
+						@change="toggleFlag('locked')"
+					>
+				</label>
+
+				<div v-if="preferences.locked" class="a-settings__follow-requests">
+					<span>Offene Anfragen werden gesammelt, bis du sie bestätigst oder ablehnst.</span>
+					<a class="a-btn a-btn--ghost a-btn--small" href="#/follow-requests">
+						<AppIcon name="lock" :size="15" />
+						Folgenanfragen ansehen
+					</a>
+				</div>
 
 				<label class="a-settings__row">
 					<span>

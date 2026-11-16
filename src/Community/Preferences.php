@@ -55,6 +55,7 @@ final class Preferences
      *     dm_policy: string,
      *     show_boosts: bool,
      *     discoverable: bool,
+     *     locked: bool,
      *     notify_follows: bool,
      *     notify_favourites: bool,
      *     notify_boosts: bool,
@@ -86,6 +87,7 @@ final class Preferences
                 : self::DEFAULT_DM_POLICY,
             'show_boosts' => (bool) ($row['show_boosts'] ?? true),
             'discoverable' => (bool) ($row['discoverable'] ?? true),
+            'locked' => (bool) ($row['locked'] ?? false),
             'notify_follows' => (bool) ($row['notify_follows'] ?? true),
             'notify_favourites' => (bool) ($row['notify_favourites'] ?? true),
             'notify_boosts' => (bool) ($row['notify_boosts'] ?? true),
@@ -129,7 +131,7 @@ final class Preferences
             );
         }
 
-        foreach (['show_boosts', 'discoverable', 'notify_follows', 'notify_favourites', 'notify_boosts', 'notify_mentions'] as $flag) {
+        foreach (['show_boosts', 'discoverable', 'locked', 'notify_follows', 'notify_favourites', 'notify_boosts', 'notify_mentions'] as $flag) {
             if (array_key_exists($flag, $payload)) {
                 if (!is_bool($payload[$flag])) {
                     throw CommunityException::invalid(
@@ -144,15 +146,16 @@ final class Preferences
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, notify_follows, notify_favourites, notify_boosts, notify_mentions, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
             . ' dm_policy = excluded.dm_policy,'
             . ' show_boosts = excluded.show_boosts,'
             . ' discoverable = excluded.discoverable,'
+            . ' locked = excluded.locked,'
             . ' notify_follows = excluded.notify_follows,'
             . ' notify_favourites = excluded.notify_favourites,'
             . ' notify_boosts = excluded.notify_boosts,'
@@ -165,6 +168,7 @@ final class Preferences
                 'dm_policy' => $next['dm_policy'],
                 'show_boosts' => $next['show_boosts'] ? 1 : 0,
                 'discoverable' => $next['discoverable'] ? 1 : 0,
+                'locked' => $next['locked'] ? 1 : 0,
                 'notify_follows' => $next['notify_follows'] ? 1 : 0,
                 'notify_favourites' => $next['notify_favourites'] ? 1 : 0,
                 'notify_boosts' => $next['notify_boosts'] ? 1 : 0,
@@ -188,6 +192,7 @@ final class Preferences
             'dm_policy' => self::DEFAULT_DM_POLICY,
             'show_boosts' => true,
             'discoverable' => true,
+            'locked' => false,
             'notify_follows' => true,
             'notify_favourites' => true,
             'notify_boosts' => true,

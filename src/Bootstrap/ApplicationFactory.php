@@ -19,6 +19,7 @@ use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Http\CurlHttpClient;
 use AlohaSocial\Core\Platform\Network\DnsHostResolver;
 use AlohaSocial\Core\Platform\Storage\LocalBlobStore;
+use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Protocol\ActivityPub\HttpActorResolver;
 use AlohaSocial\Core\Security\OpenSslSecretBox;
 use AlohaSocial\Core\Security\SecretBox;
@@ -36,6 +37,7 @@ use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\Preferences;
@@ -186,6 +188,13 @@ final class ApplicationFactory
             forYou: new ForYouFeed($database, $clock),
             preferences: new Preferences($database, $clock),
             exports: new Exports($database, $clock, new Preferences($database, $clock), $this->config),
+            followRequests: new FollowRequests(
+                $database,
+                $clock,
+                $app->followers,
+                new ActivityFactory($this->config->coreConfig()),
+                new NotificationService(new PdoNotificationRepository($database), $clock, new ErrorLogLogger()),
+            ),
             postRevisions: new PdoPostRevisionRepository($database),
         );
     }

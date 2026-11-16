@@ -46,6 +46,7 @@ const items = computed(() => {
 			{ name: 'drafts' as const, label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
 			{ name: 'archived' as const, label: 'Archiv', icon: 'archive', href: '#/archived' },
 			{ name: 'settings' as const, label: 'Einstellungen', icon: 'settings', href: '#/settings' },
+			{ name: 'follow-requests' as const, label: 'Folgenanfragen', icon: 'lock', href: '#/follow-requests' },
 			{ name: 'collections' as const, label: 'Sammlungen', icon: 'list', href: '#/collections' },
 			{ name: 'bookmarks' as const, label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
 			{ name: 'lists' as const, label: 'Listen', icon: 'list', href: '#/lists' },
