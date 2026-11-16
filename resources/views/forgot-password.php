@@ -15,20 +15,20 @@ declare(strict_types=1);
 
 ?>
 <section class="card">
-    <h1>Passwort zurücksetzen</h1>
+    <h1>Reset password</h1>
 
     <?php if ($sent): ?>
         <p>
-            Wenn ein Konto zu dieser Angabe existiert, ist eine E-Mail mit einem
-            Reset-Link unterwegs. Der Link ist eine Stunde gültig.
+            If an account matches this identifier, an email with a reset link is on its way.
+            The link is valid for one hour.
         </p>
         <p class="muted">
-            Entwicklung ohne SMTP: Die Nachricht liegt als Datei unter
+            Development without SMTP: the message is stored as a file under
             <code>var/mail/</code>.
         </p>
-        <p><a href="/login">Zurück zur Anmeldung</a></p>
+        <p><a href="/login">Back to sign in</a></p>
     <?php else: ?>
-        <p class="muted">Gib dein Handle oder deine E-Mail-Adresse ein.</p>
+        <p class="muted">Enter your handle or email address.</p>
 
         <?php if ($error !== null): ?>
             <p class="error"><?= $escape($error) ?></p>
@@ -37,12 +37,12 @@ declare(strict_types=1);
         <form method="post" action="/forgot-password">
             <input type="hidden" name="_csrf" value="<?= $escape($csrf) ?>">
 
-            <label for="identifier">Handle oder E-Mail</label>
+            <label for="identifier">Handle or email</label>
             <input id="identifier" name="identifier" autocomplete="username" required autofocus value="<?= $escape($value) ?>">
 
-            <button type="submit">Link anfordern</button>
+            <button type="submit">Request link</button>
         </form>
 
-        <p><a href="/login">Zurück zur Anmeldung</a></p>
+        <p><a href="/login">Back to sign in</a></p>
     <?php endif; ?>
 </section>

@@ -43,7 +43,7 @@ onMounted(async () => {
 </script>
 
 <template>
-	<section v-if="announcements.some((entry) => !dismissed.has(entry.id))" class="a-announcements" aria-label="Ankündigungen">
+	<section v-if="announcements.some((entry) => !dismissed.has(entry.id))" class="a-announcements" aria-label="Announcements">
 		<article
 			v-for="entry in announcements.filter((item) => !dismissed.has(item.id))"
 			:key="entry.id"
@@ -55,15 +55,15 @@ onMounted(async () => {
 			<div class="a-announcement__copy">
 				<p>{{ entry.content }}</p>
 				<small>
-					Instanz-Ankündigung · {{ relativeTime(entry.created_at) }}
-					<template v-if="entry.expires_at"> · bis {{ new Date(entry.expires_at).toLocaleString('de-DE') }}</template>
+					instance-announcement · {{ relativeTime(entry.created_at) }}
+					<template v-if="entry.expires_at"> · until {{ new Date(entry.expires_at).toLocaleString() }}</template>
 				</small>
 			</div>
 			<button
 				type="button"
 				class="a-icon-btn"
-				aria-label="Ankündigung ausblenden"
-				title="Ausblenden"
+				aria-label="Hide announcement"
+				title="Hide"
 				@click="dismiss(entry.id)"
 			>
 				<AppIcon name="x" :size="16" />

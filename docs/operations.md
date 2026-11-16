@@ -75,7 +75,7 @@ gets `401`.
 php bin/create-account.php admin admin@example.com --admin
 
 # After that, use the admin UI:
-#   Konten -> role toggle, display name, password reset, session revoke,
+#   Accounts -> role toggle, display name, password reset, session revoke,
 #   disable/enable, create account.
 ```
 
@@ -229,7 +229,7 @@ checkout with dev dependencies installed.
   assembly. `GET /app` checks that the mount page is served.
 - **Worker:** check `systemctl status aloha-worker` or the cron mail. The worker
   writes a heartbeat to `runtime_state` (`worker`) every loop and in
-  `--once`; **Administration → Übersicht** and **Instanz** show it as online
+  `--once`; **Administration → Overview** and **Instance** show it as online
   when it is younger than 90 seconds. A growing job queue means delivery or
   cleanup is not making progress.
 - **Disk:** watch `var/blobs/`, database size and backup storage. Uploads and

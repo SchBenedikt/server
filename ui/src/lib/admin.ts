@@ -25,14 +25,14 @@ export interface AdminSectionDefinition {
 }
 
 export const ADMIN_SECTIONS: AdminSectionDefinition[] = [
-	{ id: 'overview', label: 'Übersicht', icon: 'activity', hint: 'Kennzahlen, Gesundheit und letzte Aktivität' },
-	{ id: 'users', label: 'Konten', icon: 'users', hint: 'Konten anlegen, Rollen und Zugänge verwalten' },
-	{ id: 'reports', label: 'Meldungen', icon: 'flag', hint: 'Gemeldete Beiträge und Profile bearbeiten' },
-	{ id: 'federation', label: 'Föderation', icon: 'globe', hint: 'Peers, Blockierungen und entfernte Beiträge' },
-	{ id: 'queue', label: 'Warteschlange', icon: 'server', hint: 'Jobs, Wiederholungen und tote Aufgaben' },
-	{ id: 'settings', label: 'Instanz', icon: 'settings', hint: 'Laufzeit, Grenzen und Konfigurationswarnungen' },
-	{ id: 'announcements', label: 'Ankündigungen', icon: 'bell', hint: 'Hinweise als Banner auf der Startseite veröffentlichen' },
-	{ id: 'audit', label: 'Protokoll', icon: 'shield', hint: 'Jede administrative Änderung, nachvollziehbar' },
+	{ id: 'overview', label: 'Overview', icon: 'activity', hint: 'Metrics, health and recent activity' },
+	{ id: 'users', label: 'Accounts', icon: 'users', hint: 'Create accounts, manage roles and access' },
+	{ id: 'reports', label: 'Reports', icon: 'flag', hint: 'Review reported posts and profiles' },
+	{ id: 'federation', label: 'Federation', icon: 'globe', hint: 'Peers, blocks and remote posts' },
+	{ id: 'queue', label: 'Queue', icon: 'server', hint: 'Jobs, retries and dead tasks' },
+	{ id: 'settings', label: 'Instance', icon: 'settings', hint: 'Runtime, limits and configuration warnings' },
+	{ id: 'announcements', label: 'Announcements', icon: 'bell', hint: 'Publish notices as a banner on the home page' },
+	{ id: 'audit', label: 'Audit log', icon: 'shield', hint: 'Every administrative change, fully traceable' },
 ];
 
 const SECTION_IDS = new Set<string>(ADMIN_SECTIONS.map((section) => section.id));
@@ -342,7 +342,7 @@ function errorMessage(body: string, status: number): { code: string; message: st
 				code: typeof parsed.error.code === 'string' ? parsed.error.code : 'http_error',
 				message: typeof parsed.error.message === 'string' && parsed.error.message !== ''
 					? parsed.error.message
-					: `Die Anfrage ist fehlgeschlagen (HTTP ${status}).`,
+					: `The request failed (HTTP ${status}).`,
 				fields,
 			};
 		}
@@ -352,7 +352,7 @@ function errorMessage(body: string, status: number): { code: string; message: st
 
 	return {
 		code: 'http_error',
-		message: `Die Anfrage ist fehlgeschlagen (HTTP ${status}).`,
+		message: `The request failed (HTTP ${status}).`,
 		fields: {},
 	};
 }
@@ -542,11 +542,11 @@ export function getAdminApi(): AdminApi {
 }
 
 export const REPORT_CATEGORIES: { id: ReportCategory; label: string; hint: string }[] = [
-	{ id: 'spam', label: 'Spam oder Werbung', hint: 'Unaufgeforderte Werbung, Wiederholungen oder Bots.' },
-	{ id: 'abuse', label: 'Missbrauch', hint: 'Beleidigungen, Drohungen oder diskriminierende Inhalte.' },
-	{ id: 'harassment', label: 'Belästigung', hint: 'Gezieltes Nachstellen, Bloßstellen oder Einschüchtern.' },
-	{ id: 'misinformation', label: 'Falschinformation', hint: 'Nachweislich falsche oder irreführende Behauptungen.' },
-	{ id: 'other', label: 'Sonstiges', hint: 'Ein anderer Grund, den du unten beschreibst.' },
+	{ id: 'spam', label: 'Spam or advertising', hint: 'Unsolicited advertising, repetition or bots.' },
+	{ id: 'abuse', label: 'Abuse', hint: 'Insults, threats or discriminatory content.' },
+	{ id: 'harassment', label: 'Harassment', hint: 'Targeted stalking, public shaming or intimidation.' },
+	{ id: 'misinformation', label: 'Misinformation', hint: 'Demonstrably false or misleading claims.' },
+	{ id: 'other', label: 'Other', hint: 'Another reason you describe below.' },
 ];
 
 export function reportCategoryLabel(category: string): string {
@@ -556,11 +556,11 @@ export function reportCategoryLabel(category: string): string {
 export function reportStateLabel(state: string): string {
 	switch (state) {
 		case 'open':
-			return 'Offen';
+			return 'Open';
 		case 'resolved':
-			return 'Gelöst';
+			return 'Resolved';
 		case 'dismissed':
-			return 'Verworfen';
+			return 'Dismissed';
 		default:
 			return state;
 	}

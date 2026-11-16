@@ -24,28 +24,28 @@ const blueskyPassword = ref('');
 const blueskyBusy = ref(false);
 
 const visibilityOptions = [
-	{ value: 'public', label: 'Öffentlich', hint: 'Alle können den Beitrag sehen.' },
-	{ value: 'unlisted', label: 'Nicht gelistet', hint: 'Lesbar per Link, aber nicht in Zeitleisten.' },
-	{ value: 'followers', label: 'Follower', hint: 'Nur Menschen, die dir folgen.' },
+	{ value: 'public', label: 'Public', hint: 'Everyone can see the post.' },
+	{ value: 'unlisted', label: 'Unlisted', hint: 'Readable via link, but not shown in timelines.' },
+	{ value: 'followers', label: 'followers', hint: 'Only people who follow you.' },
 ];
 
 const quoteOptions = [
-	{ value: 'public', label: 'Alle' },
-	{ value: 'followers', label: 'Nur Follower' },
-	{ value: 'nobody', label: 'Niemand' },
+	{ value: 'public', label: 'Public' },
+	{ value: 'followers', label: 'Followers only' },
+	{ value: 'nobody', label: 'Nobody' },
 ];
 
 const dmOptions = [
-	{ value: 'everyone', label: 'Alle' },
-	{ value: 'followers', label: 'Nur Follower' },
-	{ value: 'nobody', label: 'Niemand' },
+	{ value: 'everyone', label: 'Everyone' },
+	{ value: 'followers', label: 'Followers only' },
+	{ value: 'nobody', label: 'Nobody' },
 ];
 
 const notificationOptions: { key: keyof AccountPreferences; label: string; hint: string }[] = [
-	{ key: 'notify_follows', label: 'Neue Follower', hint: 'Wenn dir jemand folgt.' },
-	{ key: 'notify_favourites', label: 'Favoriten', hint: 'Wenn jemand deinen Beitrag favorisiert.' },
-	{ key: 'notify_boosts', label: 'Boosts', hint: 'Wenn jemand deinen Beitrag teilt.' },
-	{ key: 'notify_mentions', label: 'Erwähnungen', hint: 'Wenn dich jemand in einem Beitrag nennt.' },
+	{ key: 'notify_follows', label: 'New followers', hint: 'When someone follows you.' },
+	{ key: 'notify_favourites', label: 'Favorites', hint: 'When someone likes your post.' },
+	{ key: 'notify_boosts', label: 'Boosts', hint: 'When someone shares your post.' },
+	{ key: 'notify_mentions', label: 'Mentions', hint: 'When someone mentions you in a post.' },
 ];
 
 async function load(): Promise<void> {
@@ -65,7 +65,7 @@ async function load(): Promise<void> {
 			bluesky.value = { connected: false };
 		}
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Einstellungen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -80,9 +80,9 @@ async function connectBluesky(): Promise<void> {
 	try {
 		bluesky.value = await getApi().connectBluesky(blueskyHandle.value, blueskyPassword.value);
 		blueskyPassword.value = '';
-		showToast('Bluesky-Konto verbunden.', 'success');
+		showToast('Bluesky account connected.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Verbindung ist fehlgeschlagen.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The connection failed.', 'error');
 	} finally {
 		blueskyBusy.value = false;
 	}
@@ -97,9 +97,9 @@ async function disconnectBluesky(): Promise<void> {
 	try {
 		await getApi().disconnectBluesky();
 		bluesky.value = { connected: false };
-		showToast('Bluesky-Verbindung getrennt.', 'success');
+		showToast('Bluesky disconnected.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Verbindung konnte nicht getrennt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The connection could not be disconnected.', 'error');
 	} finally {
 		blueskyBusy.value = false;
 	}
@@ -125,9 +125,9 @@ async function save(): Promise<void> {
 			notify_boosts: current.notify_boosts,
 			notify_mentions: current.notify_mentions,
 		});
-		showToast('Einstellungen gespeichert.', 'success');
+		showToast('Settings saved.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Einstellungen konnten nicht gespeichert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'Settings could not be saved.', 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -178,9 +178,9 @@ async function exportAccount(): Promise<void> {
 		link.click();
 		link.remove();
 		URL.revokeObjectURL(url);
-		showToast('Export wurde heruntergeladen.', 'success');
+		showToast('Export downloaded.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Export konnte nicht erstellt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The export could not be created.', 'error');
 	} finally {
 		exporting.value = false;
 	}
@@ -199,10 +199,10 @@ watch(signedIn, (value) => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Einstellungen"
-			subtitle="Voreinstellungen für neue Beiträge, Privatsphäre und Benachrichtigungen."
+			title="Settings"
+			subtitle="Defaults for new posts, privacy and notifications."
 			back-href="#/"
-			back-label="Zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
 				<button
@@ -213,7 +213,7 @@ watch(signedIn, (value) => {
 					@click="save"
 				>
 					<AppIcon :name="saving ? 'refresh' : 'check'" :size="15" :class="{ 'a-spin': saving }" />
-					{{ saving ? 'Speichert…' : 'Speichern' }}
+					{{ saving ? 'Saving…' : 'Save' }}
 				</button>
 			</template>
 		</PageHeader>
@@ -221,16 +221,16 @@ watch(signedIn, (value) => {
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Anmeldung erforderlich</strong>
-				<p>Einstellungen gehören zu deinem Konto.</p>
+				<strong>Sign-in required</strong>
+				<p>Settings belong to your account.</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
 		<p v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</p>
 
 		<div v-else-if="loading && preferences === null" class="a-management-skeleton" aria-hidden="true">
@@ -239,11 +239,11 @@ watch(signedIn, (value) => {
 
 		<div v-else-if="preferences !== null" class="a-settings">
 			<section class="a-settings__section">
-				<h2>Neue Beiträge</h2>
-				<p class="a-settings__hint">Womit der Composer startet, wenn du nichts anderes wählst.</p>
+				<h2>New posts</h2>
+				<p class="a-settings__hint">What the composer starts with when you don't choose otherwise.</p>
 
 				<fieldset class="a-settings__fieldset">
-					<legend>Sichtbarkeit</legend>
+					<legend>Visibility</legend>
 					<label v-for="option in visibilityOptions" :key="option.value" class="a-settings__choice">
 						<input
 							type="radio"
@@ -261,8 +261,8 @@ watch(signedIn, (value) => {
 
 				<label class="a-settings__row">
 					<span>
-						<strong>Boosts im Feed zeigen</strong>
-						<small>Geteilte Beiträge anderer erscheinen in deinen Zeitleisten.</small>
+						<strong>Show boosts in the feed</strong>
+						<small>Shared posts from others appear in your timelines.</small>
 					</span>
 					<input
 						type="checkbox"
@@ -273,13 +273,13 @@ watch(signedIn, (value) => {
 			</section>
 
 			<section class="a-settings__section">
-				<h2>Privatsphäre</h2>
-				<p class="a-settings__hint">Wer dich finden und dir schreiben darf.</p>
+				<h2>Privacy</h2>
+				<p class="a-settings__hint">Who can find you and message you.</p>
 
 				<label class="a-settings__row">
 					<span>
-						<strong>Geschütztes Profil</strong>
-						<small>Neue Follower müssen von dir bestätigt werden. Deine Beiträge bleiben für bestehende Follower sichtbar.</small>
+						<strong>Protected profile</strong>
+						<small>New followers must be approved by you. Your posts remain visible to existing followers.</small>
 					</span>
 					<input
 						type="checkbox"
@@ -289,17 +289,17 @@ watch(signedIn, (value) => {
 				</label>
 
 				<div v-if="preferences.locked" class="a-settings__follow-requests">
-					<span>Offene Anfragen werden gesammelt, bis du sie bestätigst oder ablehnst.</span>
+					<span>Pending requests are collected until you approve or decline them.</span>
 					<a class="a-btn a-btn--ghost a-btn--small" href="#/follow-requests">
 						<AppIcon name="lock" :size="15" />
-						Folgenanfragen ansehen
+						View follow requests
 					</a>
 				</div>
 
 				<label class="a-settings__row">
 					<span>
-						<strong>Profil auffindbar</strong>
-						<small>Dein Profil erscheint in der Suche und in Empfehlungen.</small>
+						<strong>Profile discoverable</strong>
+						<small>Your profile appears in search and recommendations.</small>
 					</span>
 					<input
 						type="checkbox"
@@ -309,7 +309,7 @@ watch(signedIn, (value) => {
 				</label>
 
 				<fieldset class="a-settings__fieldset">
-					<legend>Direktnachrichten erlauben</legend>
+					<legend>Allow direct messages</legend>
 					<label v-for="option in dmOptions" :key="option.value" class="a-settings__choice a-settings__choice--inline">
 						<input
 							type="radio"
@@ -323,7 +323,7 @@ watch(signedIn, (value) => {
 				</fieldset>
 
 				<fieldset class="a-settings__fieldset">
-					<legend>Zitieren erlauben</legend>
+					<legend>Allow quotes</legend>
 					<label v-for="option in quoteOptions" :key="option.value" class="a-settings__choice a-settings__choice--inline">
 						<input
 							type="radio"
@@ -338,8 +338,8 @@ watch(signedIn, (value) => {
 			</section>
 
 			<section class="a-settings__section">
-				<h2>Benachrichtigungen</h2>
-				<p class="a-settings__hint">Welche Ereignisse einen Eintrag in deinen Benachrichtigungen erzeugen.</p>
+				<h2>Notifications</h2>
+				<p class="a-settings__hint">Which events create an entry in your notifications.</p>
 				<label v-for="option in notificationOptions" :key="option.key" class="a-settings__row">
 					<span>
 						<strong>{{ option.label }}</strong>
@@ -356,8 +356,8 @@ watch(signedIn, (value) => {
 			<section class="a-settings__section">
 				<h2>Bluesky</h2>
 				<p class="a-settings__hint">
-					Verbinde dein Bluesky-Konto, um öffentliche Beiträge zusätzlich dort zu veröffentlichen.
-					Dafür brauchst du ein App-Passwort aus den Bluesky-Einstellungen – nicht dein normales Passwort.
+					Connect your Bluesky account to publish public posts there as well.
+					You need an app password from Bluesky settings — not your regular password.
 				</p>
 
 				<div v-if="bluesky.connected" class="a-settings__bluesky">
@@ -365,16 +365,16 @@ watch(signedIn, (value) => {
 						<AppIcon name="check" :size="18" />
 						<span>
 							<strong>@{{ bluesky.handle }}</strong>
-							<small>Verbunden mit {{ bluesky.pds_url }}</small>
+							<small>Connected to {{ bluesky.pds_url }}</small>
 						</span>
 					</div>
 					<p v-if="blueskyPublishEnabled" class="a-settings__hint">
-						Neue öffentliche Beiträge werden automatisch gespiegelt. Du kannst einzelne Beiträge
-						zusätzlich über das Beitragsmenü veröffentlichen.
+						New public posts are mirrored automatically. You can also publish individual
+						posts from the post menu.
 					</p>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="blueskyBusy" @click="disconnectBluesky">
 						<AppIcon :name="blueskyBusy ? 'refresh' : 'x'" :size="15" :class="{ 'a-spin': blueskyBusy }" />
-						Verbindung trennen
+						Disconnect
 					</button>
 				</div>
 
@@ -391,7 +391,7 @@ watch(signedIn, (value) => {
 						>
 					</label>
 					<label class="a-settings__field">
-						<span>App-Passwort</span>
+						<span>App-password</span>
 						<input
 							v-model="blueskyPassword"
 							type="password"
@@ -399,24 +399,24 @@ watch(signedIn, (value) => {
 							placeholder="xxxx-xxxx-xxxx-xxxx"
 							required
 						>
-						<small>Du findest es in Bluesky unter Einstellungen → Datenschutz und Sicherheit → App-Passwörter.</small>
+						<small>You can find it in Bluesky under Settings → Privacy and Security → App Passwords.</small>
 					</label>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="blueskyBusy">
 						<AppIcon :name="blueskyBusy ? 'refresh' : 'plus'" :size="15" :class="{ 'a-spin': blueskyBusy }" />
-						{{ blueskyBusy ? 'Verbindet…' : 'Bluesky verbinden' }}
+						{{ blueskyBusy ? 'Connecting…' : 'Connect Bluesky' }}
 					</button>
 				</form>
 			</section>
 
 			<section class="a-settings__section">
-				<h2>Deine Daten</h2>
+				<h2>Your data</h2>
 				<p class="a-settings__hint">
-					Lade eine JSON-Datei mit deinem Profil, deinen Beiträgen, deinen Followern und deinen
-					privaten Markierungen herunter. Der Export enthält keine Passwörter und keine Daten anderer Konten.
+					Download a JSON file with your profile, posts, followers and private
+					bookmarks. The export contains no passwords and no data from other accounts.
 				</p>
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="exporting" @click="exportAccount">
 					<AppIcon :name="exporting ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': exporting }" />
-					{{ exporting ? 'Wird erstellt…' : 'Daten exportieren' }}
+					{{ exporting ? 'Creating…' : 'Data export' }}
 				</button>
 			</section>
 		</div>

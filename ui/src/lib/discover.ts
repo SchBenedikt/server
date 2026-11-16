@@ -64,7 +64,7 @@ export async function loadDiscover(force = false): Promise<void> {
 			discover.posts = collected;
 			discover.loaded = true;
 		} catch (error) {
-			discover.error = error instanceof Error ? error.message : 'Die öffentlichen Beiträge konnten nicht geladen werden.';
+			discover.error = error instanceof Error ? error.message : 'Public posts could not be loaded.';
 		} finally {
 			discover.loading = false;
 			inFlight = null;

@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 ?>
 <section class="card">
-    <h1>Das hat nicht geklappt</h1>
+    <h1>Something went wrong</h1>
     <p class="error"><?= $escape($message) ?></p>
-    <p><a href="/">Zurück zur Übersicht</a></p>
+    <p><a href="/">Back to overview</a></p>
 </section>

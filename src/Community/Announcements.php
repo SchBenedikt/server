@@ -82,7 +82,7 @@ final class Announcements
             ],
         );
 
-        return $this->find($id) ?? throw CommunityException::notFound('Die Ankündigung wurde nicht gespeichert.');
+        return $this->find($id) ?? throw CommunityException::notFound('The announcement was not saved.');
     }
 
     /**
@@ -92,7 +92,7 @@ final class Announcements
     {
         $current = $this->find($id);
         if ($current === null) {
-            throw CommunityException::notFound('Diese Ankündigung gibt es nicht mehr.');
+            throw CommunityException::notFound('This announcement no longer exists.');
         }
 
         $text = $content === null ? $current['content'] : $this->content($content);
@@ -111,7 +111,7 @@ final class Announcements
             ],
         );
 
-        return $this->find($id) ?? throw CommunityException::notFound('Diese Ankündigung gibt es nicht mehr.');
+        return $this->find($id) ?? throw CommunityException::notFound('This announcement no longer exists.');
     }
 
     public function delete(string $id): void
@@ -134,14 +134,14 @@ final class Announcements
         $text = is_string($value) ? trim($value) : '';
         if ($text === '') {
             throw CommunityException::invalid(
-                'Eine Ankündigung braucht einen Text.',
-                ['content' => 'Bitte gib einen Text ein.'],
+                'An announcement needs text.',
+                ['content' => 'Please enter text.'],
             );
         }
         if (mb_strlen($text) > 500) {
             throw CommunityException::invalid(
-                'Die Ankündigung ist zu lang.',
-                ['content' => 'Höchstens 500 Zeichen.'],
+                'The announcement is too long.',
+                ['content' => 'At most 500 characters.'],
             );
         }
 
@@ -154,17 +154,17 @@ final class Announcements
             return null;
         }
         if (!is_string($value)) {
-            throw CommunityException::invalid('Das Ablaufdatum ist ungültig.', ['expires_at' => 'Bitte ein Datum angeben.']);
+            throw CommunityException::invalid('The expiration date is invalid.', ['expires_at' => 'Please provide a date.']);
         }
 
         try {
             $date = Time::parse($value);
         } catch (\Throwable) {
-            throw CommunityException::invalid('Das Ablaufdatum ist ungültig.', ['expires_at' => 'Bitte ein gültiges Datum angeben.']);
+            throw CommunityException::invalid('The expiration date is invalid.', ['expires_at' => 'Please provide a valid date.']);
         }
 
         if ($date <= $this->clock->now()) {
-            throw CommunityException::invalid('Das Ablaufdatum liegt in der Vergangenheit.', ['expires_at' => 'Wähle einen Zeitpunkt in der Zukunft.']);
+            throw CommunityException::invalid('The expiration date is in the past.', ['expires_at' => 'Choose a time in the future.']);
         }
 
         return Time::format($date);

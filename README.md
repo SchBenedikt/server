@@ -181,9 +181,9 @@ the standalone `HostBridge` (`src` under `ui/`). The bridge attaches the session
 cookie and `X-CSRF-Token`, and the shared screens consume only `/api/v1`.
 
 The desktop shell keeps its navigation in a fixed sidebar: six primary entries,
-a composer button and a **Mehr** popover for the library, moderation and
+a composer button and a **More** popover for the library, moderation and
 instance pages, so the sidebar never needs to scroll. Below 900 px the shell
-becomes a single column with a five-tab bottom bar and the same **Mehr** entries
+becomes a single column with a five-tab bottom bar and the same **More** entries
 in a bottom sheet. Touch targets and media layouts adapt to small screens.
 
 ```shell
@@ -245,8 +245,8 @@ Mastodon clients expect instead of duplicating federation logic in the host:
 | Stummgeschaltet | `#/muted` | `GET /mutes`, mute/unmute per account. Profiles can mute and unmute directly. |
 | Blockiert | `#/blocked` | `GET /api/v1/blocks` and block/unblock per actor URL. Profiles can block and unblock directly. |
 | Filter | `#/filters` | Full filter rules through `/api/v1/filters` with action, contexts, keywords and optional expiry. |
-| Geplante Beiträge | `#/scheduled` | `/api/v1/scheduled-posts`; a schedule can be re-timed or cancelled, but not edited after queueing. |
-| Benachrichtigungen | `#/notifications` | `GET /api/mastodon/v1/notifications` with actor and status previews, plus the core dismiss/clear actions. |
+| Scheduled posts | `#/scheduled` | `/api/v1/scheduled-posts`; a schedule can be re-timed or cancelled, but not edited after queueing. |
+| Notifications | `#/notifications` | `GET /api/mastodon/v1/notifications` with actor and status previews, plus the core dismiss/clear actions. |
 
 The composer can attach a poll (2–4 options, multiple choice, hide totals,
 expiry) or schedule a post. Polls are created through
@@ -306,12 +306,12 @@ the core deliberately has no administration API.
 
 | Section | What it does |
 | --- | --- |
-| Übersicht | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
-| Konten | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
+| Overview | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
+| Accounts | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
 | Meldungen | Open, resolved and dismissed reports with target preview, reporter, category and internal note; delete the reported post or disable the reported local account. |
-| Föderation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
+| Federation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
 | Warteschlange | Pending, running and dead jobs with payload inspection, single retry/delete, retry-all, purge of old dead jobs and an immediate worker run. |
-| Instanz | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
+| Instance | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
 | Protokoll | Every administrative mutation with actor, action, target, details and time. |
 
 Every signed-in reader can report a post from its action bar or a profile from

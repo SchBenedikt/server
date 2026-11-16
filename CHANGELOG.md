@@ -24,10 +24,18 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   the same media rendering.
 - Explore gained a Videos section built from the newest public posts that carry
   a video attachment.
-- The desktop sidebar has a "Mehr" popover for library, moderation and instance
-  pages, so the navigation fits on one screen without scrolling.
-- The mobile shell now uses five primary tabs and a "Mehr" bottom sheet. The
+- The desktop sidebar has a "More" popover for library, moderation and instance
+  pages, so the navigation fits on one screen without scrolling. A settings
+  dialog lets each user pin, reorder and reset the primary entries; the choice
+  is stored locally.
+- The mobile shell now uses five primary tabs and a "More" bottom sheet. The
   previous bar tried to render twelve entries in a fixed-height row.
+- Remote profiles read the viewer's follow edges and show whether a follow is
+  pending or accepted, with an unfollow action. The state survives a reload.
+- Stories open in a full viewer with auto-advance, keyboard navigation and a
+  progress bar, and adapt to small screens.
+- The complete interface, including the server-rendered sign-in, password and
+  error pages and all API error messages, is English-only.
 
 ### Changed
 

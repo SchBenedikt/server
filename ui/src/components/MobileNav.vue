@@ -14,9 +14,9 @@ const sheetOpen = ref(false);
 
 const primaryItems = [
 	{ name: 'home', label: 'Start', icon: 'home', href: '#/' },
-	{ name: 'explore', label: 'Entdecken', icon: 'compass', href: '#/explore' },
-	{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
-	{ name: 'messages', label: 'Nachrichten', icon: 'message', href: '#/messages' },
+	{ name: 'explore', label: 'Explore', icon: 'compass', href: '#/explore' },
+	{ name: 'notifications', label: 'Notifications', icon: 'bell', href: '#/notifications' },
+	{ name: 'messages', label: 'messages', icon: 'message', href: '#/messages' },
 ];
 
 const sheetGroups = computed(() => {
@@ -27,60 +27,60 @@ const sheetGroups = computed(() => {
 
 	if (signedIn.value) {
 		groups.push({
-			title: 'Dein Konto',
+			title: 'Your account',
 			items: [
-				{ name: 'profile', label: 'Profil', icon: 'user', href: `#/u/${encodeURIComponent(handle.value)}` },
-				{ name: 'settings', label: 'Einstellungen', icon: 'settings', href: '#/settings' },
-				{ name: 'follow-requests', label: 'Folgenanfragen', icon: 'lock', href: '#/follow-requests' },
+				{ name: 'profile', label: 'profiles', icon: 'user', href: `#/u/${encodeURIComponent(handle.value)}` },
+				{ name: 'settings', label: 'Settings', icon: 'settings', href: '#/settings' },
+				{ name: 'follow-requests', label: 'Follow requests', icon: 'lock', href: '#/follow-requests' },
 			],
 		});
 	}
 
 	groups.push({
-		title: 'Entdecken',
+		title: 'Explore',
 		items: [
-			{ name: 'search', label: 'Suchen', icon: 'search', href: '#/search' },
-			{ name: 'memories', label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
+			{ name: 'search', label: 'Search', icon: 'search', href: '#/search' },
+			{ name: 'memories', label: 'memories', icon: 'clock', href: '#/memories' },
 		],
 	});
 
 	if (signedIn.value) {
 		groups.push(
 			{
-				title: 'Bibliothek',
+				title: 'Library',
 				items: [
-					{ name: 'bookmarks', label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
-					{ name: 'collections', label: 'Sammlungen', icon: 'list', href: '#/collections' },
-					{ name: 'lists', label: 'Listen', icon: 'list', href: '#/lists' },
-					{ name: 'drafts', label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
-					{ name: 'archived', label: 'Archiv', icon: 'archive', href: '#/archived' },
-					{ name: 'scheduled', label: 'Geplant', icon: 'calendar', href: '#/scheduled' },
+					{ name: 'bookmarks', label: 'bookmarks', icon: 'bookmark', href: '#/bookmarks' },
+					{ name: 'collections', label: 'collections', icon: 'list', href: '#/collections' },
+					{ name: 'lists', label: 'lists', icon: 'list', href: '#/lists' },
+					{ name: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts' },
+					{ name: 'archived', label: 'Archive', icon: 'archive', href: '#/archived' },
+					{ name: 'scheduled', label: 'Scheduled', icon: 'calendar', href: '#/scheduled' },
 				],
 			},
 			{
 				title: 'Moderation',
 				items: [
-					{ name: 'filters', label: 'Filter', icon: 'filter', href: '#/filters' },
-					{ name: 'muted', label: 'Stumm', icon: 'bellOff', href: '#/muted' },
-					{ name: 'blocked', label: 'Blockiert', icon: 'ban', href: '#/blocked' },
+					{ name: 'filters', label: 'filter', icon: 'filter', href: '#/filters' },
+					{ name: 'muted', label: 'Muted', icon: 'bellOff', href: '#/muted' },
+					{ name: 'blocked', label: 'Blocked', icon: 'ban', href: '#/blocked' },
 				],
 			},
 		);
 	}
 
 	const instanceItems = [
-		{ name: 'about', label: 'Über diese Instanz', icon: 'info', href: '#/about' },
+		{ name: 'about', label: 'About this instance', icon: 'info', href: '#/about' },
 	];
 	if (appState.session.admin) {
-		instanceItems.unshift({ name: 'admin', label: 'Administration', icon: 'shield', href: '#/admin' });
+		instanceItems.unshift({ name: 'admin', label: 'administration', icon: 'shield', href: '#/admin' });
 	}
 	instanceItems.push({ name: 'dashboard', label: 'Server-Dashboard', icon: 'server', href: '/' });
-	groups.push({ title: 'Instanz', items: instanceItems });
+	groups.push({ title: 'instance', items: instanceItems });
 
 	if (!signedIn.value) {
 		groups.push({
-			title: 'Anmelden',
-			items: [{ name: 'login', label: 'Anmelden', icon: 'logout', href: '/login' }],
+			title: 'Sign in',
+			items: [{ name: 'login', label: 'Sign in', icon: 'logout', href: '/login' }],
 		});
 	}
 
@@ -147,20 +147,20 @@ watch(route, () => {
 			@click="sheetOpen = !sheetOpen"
 		>
 			<span class="a-mobile-nav__icon"><AppIcon name="list" :size="21" /></span>
-			<span>Mehr</span>
+			<span>More</span>
 		</button>
 
-		<button v-if="signedIn" type="button" class="a-mobile-fab" aria-label="Neuen Beitrag schreiben" @click="compose">
+		<button v-if="signedIn" type="button" class="a-mobile-fab" aria-label="Write a new post" @click="compose">
 			<AppIcon name="pen" :size="21" />
 		</button>
 	</nav>
 
 	<Transition name="a-sheet">
 		<div v-if="sheetOpen" class="a-mobile-sheet-backdrop" @click.self="sheetOpen = false">
-			<div id="a-mobile-sheet" class="a-mobile-sheet" role="dialog" aria-modal="true" aria-label="Weitere Bereiche">
+			<div id="a-mobile-sheet" class="a-mobile-sheet" role="dialog" aria-modal="true" aria-label="More sections">
 				<header class="a-mobile-sheet__head">
-					<strong>Alle Bereiche</strong>
-					<button type="button" class="a-icon-btn" aria-label="Schließen" @click="sheetOpen = false">
+					<strong>All sections</strong>
+					<button type="button" class="a-icon-btn" aria-label="Close" @click="sheetOpen = false">
 						<AppIcon name="x" :size="20" />
 					</button>
 				</header>
@@ -187,7 +187,7 @@ watch(route, () => {
 				<footer class="a-mobile-sheet__foot">
 					<button type="button" class="a-btn a-btn--ghost" @click="toggleTheme">
 						<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="17" />
-						{{ appState.theme === 'dark' ? 'Helle Ansicht' : 'Dunkle Ansicht' }}
+						{{ appState.theme === 'dark' ? 'Light mode' : 'Dark mode' }}
 					</button>
 				</footer>
 			</div>

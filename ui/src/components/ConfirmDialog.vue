@@ -14,8 +14,8 @@ withDefaults(defineProps<{
 	tone?: 'primary' | 'danger';
 	busy?: boolean;
 }>(), {
-	confirmLabel: 'Bestätigen',
-	cancelLabel: 'Abbrechen',
+	confirmLabel: 'Confirm',
+	cancelLabel: 'Cancel',
 	tone: 'primary',
 	busy: false,
 });
@@ -35,10 +35,10 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
 			<div class="a-management-dialog a-admin-confirm" role="dialog" aria-modal="true" :aria-label="title">
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Bestätigung</p>
+						<p class="a-profile-edit__eyebrow">Confirmation</p>
 						<h2>{{ title }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Dialog schließen" :disabled="busy" @click="emit('cancel')">
+					<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="busy" @click="emit('cancel')">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
@@ -55,7 +55,7 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
 						@click="emit('confirm')"
 					>
 						<AppIcon v-if="busy" name="refresh" :size="15" class="a-spin" />
-						{{ busy ? 'Wird ausgeführt…' : confirmLabel }}
+						{{ busy ? 'Running…' : confirmLabel }}
 					</button>
 				</footer>
 			</div>

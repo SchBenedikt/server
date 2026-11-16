@@ -50,16 +50,16 @@ const confirmCopy = computed(() => {
 
 	if (confirmKind.value === 'revoke') {
 		return {
-			title: 'Sitzungen beenden',
-			message: `Alle aktiven Sitzungen von @${target.handle} werden ungültig. Das Konto muss sich neu anmelden.`,
-			label: 'Sitzungen beenden',
+			title: 'End sessions',
+			message: `All active sessions for @${target.handle} become invalid. The account must sign in again.`,
+			label: 'End sessions',
 		};
 	}
 
 	return {
-		title: 'Konto deaktivieren',
-		message: `@${target.handle} kann sich danach nicht mehr anmelden. Beiträge und Follower bleiben erhalten. Du kannst das Konto jederzeit wieder aktivieren.`,
-		label: 'Konto deaktivieren',
+		title: 'account deactivate',
+		message: `@${target.handle} will no longer be able to sign in. Posts and followers are kept. You can re-enable the account at any time.`,
+		label: 'account deactivate',
 	};
 });
 
@@ -69,7 +69,7 @@ async function load(): Promise<void> {
 	try {
 		page.value = await getAdminApi().users(query.value.trim(), currentPage.value, 20);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Konten konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Accounts could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -122,7 +122,7 @@ async function createUser(): Promise<void> {
 			display_name: draft.value.display_name?.trim() === '' ? undefined : draft.value.display_name?.trim(),
 		});
 		createOpen.value = false;
-		showToast(`Konto @${created.handle} angelegt.`, 'success');
+		showToast(`Account @${created.handle} created.`, 'success');
 		currentPage.value = 1;
 		await load();
 	} catch (caught) {
@@ -130,7 +130,7 @@ async function createUser(): Promise<void> {
 			createError.value = caught.message;
 			createFields.value = caught.fields;
 		} else {
-			createError.value = caught instanceof Error ? caught.message : 'Das Konto konnte nicht angelegt werden.';
+			createError.value = caught instanceof Error ? caught.message : 'The account could not be created.';
 		}
 	} finally {
 		createSaving.value = false;
@@ -147,9 +147,9 @@ async function toggleRole(user: AdminUser): Promise<void> {
 	try {
 		const saved = await getAdminApi().updateUser(user.id, { role: next });
 		replace(saved);
-		showToast(`@${user.handle} ist jetzt ${saved.role === 'admin' ? 'Administrator' : 'Mitglied'}.`, 'success');
+		showToast(`@${user.handle} is now ${saved.role === 'admin' ? 'an administrator' : 'a member'}.`, 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Rolle konnte nicht geändert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The role could not be changed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -164,9 +164,9 @@ async function enable(user: AdminUser): Promise<void> {
 	try {
 		const saved = await getAdminApi().setUserDisabled(user.id, false);
 		replace(saved);
-		showToast(`@${user.handle} ist wieder aktiv.`, 'success');
+		showToast(`@${user.handle} is active again.`, 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Das Konto konnte nicht aktiviert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The account could not be activated.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -195,14 +195,14 @@ async function confirmAction(): Promise<void> {
 		if (confirmKind.value === 'disable') {
 			const saved = await getAdminApi().setUserDisabled(target.id, true);
 			replace(saved);
-			showToast(`@${target.handle} wurde deaktiviert.`, 'success');
+			showToast(`@${target.handle} has been deactivated.`, 'success');
 		} else {
 			const revoked = await getAdminApi().revokeSessions(target.id);
-			showToast(`${revoked} Sitzung${revoked === 1 ? '' : 'en'} beendet.`, 'success');
+			showToast(`${revoked} session${revoked === 1 ? '' : 's'} ended.`, 'success');
 		}
 		confirmOpen.value = false;
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Aktion konnte nicht ausgeführt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The action could not be completed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -227,7 +227,7 @@ async function savePassword(): Promise<void> {
 		return;
 	}
 	if (passwordValue.value.length < 8) {
-		passwordError.value = 'Das Passwort braucht mindestens 8 Zeichen.';
+		passwordError.value = 'The password needs at least 8 characters.';
 		return;
 	}
 
@@ -236,9 +236,9 @@ async function savePassword(): Promise<void> {
 	try {
 		const revoked = await getAdminApi().resetPassword(target.id, passwordValue.value);
 		passwordOpen.value = false;
-		showToast(`Passwort von @${target.handle} geändert. ${revoked} Sitzung${revoked === 1 ? '' : 'en'} beendet.`, 'success');
+		showToast(`Password for @${target.handle} changed. ${revoked} session${revoked === 1 ? '' : 's'} ended.`, 'success');
 	} catch (caught) {
-		passwordError.value = caught instanceof Error ? caught.message : 'Das Passwort konnte nicht geändert werden.';
+		passwordError.value = caught instanceof Error ? caught.message : 'The password could not be changed.';
 	} finally {
 		passwordSaving.value = false;
 	}
@@ -261,31 +261,31 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Zugänge</p>
-				<h2>Konten und Rollen</h2>
+				<p class="a-admin-eyebrow">Access</p>
+				<h2>Accounts and roles</h2>
 				<p class="a-admin-lead">
-					Lege Konten an, ändere Anzeigenamen, vergib Administratorrechte oder sperre
-					Zugänge. Passwortänderungen beenden alle bestehenden Sitzungen.
+					Create accounts, change display names, grant administrator rights or suspend
+					access. Password changes end all existing sessions.
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">
 				<AppIcon name="plus" :size="15" />
-				Konto anlegen
+				Create account
 			</button>
 		</div>
 
 		<form class="a-admin-toolbar" @submit.prevent="search">
 			<label class="a-admin-search">
 				<AppIcon name="search" :size="17" />
-				<input v-model="query" type="search" placeholder="Handle, E-Mail oder Anzeigename" autocomplete="off">
+				<input v-model="query" type="search" placeholder="Handle, email or display name" autocomplete="off">
 			</label>
-			<button type="submit" class="a-btn a-btn--ghost a-btn--small" :disabled="loading">Suchen</button>
+			<button type="submit" class="a-btn a-btn--ghost a-btn--small" :disabled="loading">Search</button>
 			<button
 				v-if="query !== ''"
 				type="button"
 				class="a-btn a-btn--ghost a-btn--small"
 				@click="query = ''; search()"
-			>Zurücksetzen</button>
+			>Reset</button>
 		</form>
 
 		<p v-if="error !== ''" class="a-form-error" role="alert">{{ error }}</p>
@@ -299,13 +299,13 @@ onMounted(() => {
 				<table class="a-admin-table">
 					<thead>
 						<tr>
-							<th scope="col">Konto</th>
-							<th scope="col">Rolle</th>
+							<th scope="col">account</th>
+							<th scope="col">role</th>
 							<th scope="col">Status</th>
-							<th scope="col">Beiträge</th>
-							<th scope="col">Beziehungen</th>
-							<th scope="col">Angelegt</th>
-							<th scope="col"><span class="a-admin-sr">Aktionen</span></th>
+							<th scope="col">Posts</th>
+							<th scope="col">Relationships</th>
+							<th scope="col">Created</th>
+							<th scope="col"><span class="a-admin-sr">actions</span></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -321,17 +321,17 @@ onMounted(() => {
 							</td>
 							<td>
 								<span class="a-admin-badge" :class="user.role === 'admin' ? 'a-admin-badge--primary' : ''">
-									{{ user.role === 'admin' ? 'Admin' : 'Mitglied' }}
+									{{ user.role === 'admin' ? 'Admin' : 'Member' }}
 								</span>
 							</td>
 							<td>
 								<span class="a-admin-badge" :class="user.disabled_at !== null ? 'a-admin-badge--danger' : 'a-admin-badge--ok'">
-									{{ user.disabled_at !== null ? 'Deaktiviert' : 'Aktiv' }}
+									{{ user.disabled_at !== null ? 'Deactivated' : 'Active' }}
 								</span>
 							</td>
 							<td class="a-admin-num">
 								{{ user.posts }}
-								<small>{{ user.followers }} Follower · {{ user.following }} folgt</small>
+								<small>{{ user.followers }} followers · {{ user.following }} following</small>
 							</td>
 							<td class="a-admin-nowrap" :title="absoluteTime(user.created_at)">
 								{{ relativeTime(user.created_at) }}
@@ -341,8 +341,8 @@ onMounted(() => {
 									<button
 										type="button"
 										class="a-icon-btn"
-										:title="user.role === 'admin' ? 'Zum Mitglied machen' : 'Zum Admin machen'"
-										:aria-label="user.role === 'admin' ? 'Zum Mitglied machen' : 'Zum Administrator machen'"
+										:title="user.role === 'admin' ? 'Make member' : 'Make admin'"
+										:aria-label="user.role === 'admin' ? 'Make member' : 'Make administrator'"
 										:disabled="busy !== ''"
 										@click="toggleRole(user)"
 									>
@@ -351,8 +351,8 @@ onMounted(() => {
 									<button
 										type="button"
 										class="a-icon-btn"
-										title="Passwort zurücksetzen"
-										aria-label="Passwort zurücksetzen"
+										title="Reset password"
+										aria-label="Reset password"
 										:disabled="busy !== ''"
 										@click="openPassword(user)"
 									>
@@ -361,8 +361,8 @@ onMounted(() => {
 									<button
 										type="button"
 										class="a-icon-btn"
-										title="Sitzungen beenden"
-										aria-label="Sitzungen beenden"
+										title="End sessions"
+										aria-label="End sessions"
 										:disabled="busy !== ''"
 										@click="askRevoke(user)"
 									>
@@ -372,8 +372,8 @@ onMounted(() => {
 										v-if="user.disabled_at === null"
 										type="button"
 										class="a-icon-btn a-icon-btn--danger"
-										title="Konto deaktivieren"
-										aria-label="Konto deaktivieren"
+										title="account deactivate"
+										aria-label="account deactivate"
 										:disabled="busy !== '' || user.handle === me"
 										@click="askDisable(user)"
 									>
@@ -383,8 +383,8 @@ onMounted(() => {
 										v-else
 										type="button"
 										class="a-icon-btn"
-										title="Konto aktivieren"
-										aria-label="Konto aktivieren"
+										title="account activate"
+										aria-label="account activate"
 										:disabled="busy !== ''"
 										@click="enable(user)"
 									>
@@ -395,7 +395,7 @@ onMounted(() => {
 						</tr>
 						<tr v-if="page.users.length === 0">
 							<td colspan="7" class="a-admin-empty">
-								{{ query !== '' ? 'Kein Konto passt zu dieser Suche.' : 'Noch keine Konten angelegt.' }}
+								{{ query !== '' ? 'No account matches this search.' : 'No accounts created yet.' }}
 							</td>
 						</tr>
 					</tbody>
@@ -403,13 +403,13 @@ onMounted(() => {
 			</div>
 
 			<div class="a-admin-pagination">
-				<span>{{ page.total }} Konten · Seite {{ page.page }} von {{ page.pages }}</span>
+				<span>{{ page.total }} accounts · page {{ page.page }} of {{ page.pages }}</span>
 				<div>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="page.page <= 1 || loading" @click="go(-1)">
-						<AppIcon name="arrowLeft" :size="15" /> Zurück
+						<AppIcon name="arrowLeft" :size="15" /> Back
 					</button>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="page.page >= page.pages || loading" @click="go(1)">
-						Weiter <AppIcon name="arrowRight" :size="15" />
+						Next <AppIcon name="arrowRight" :size="15" />
 					</button>
 				</div>
 			</div>
@@ -420,49 +420,49 @@ onMounted(() => {
 				<form class="a-management-dialog a-admin-user-dialog" role="dialog" aria-modal="true" aria-labelledby="a-admin-create-title" @submit.prevent="createUser">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Neues Konto</p>
-							<h2 id="a-admin-create-title">Konto anlegen</h2>
+							<p class="a-profile-edit__eyebrow">New account</p>
+							<h2 id="a-admin-create-title">Create account</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Dialog schließen" :disabled="createSaving" @click="closeCreate">
+						<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="createSaving" @click="closeCreate">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 
 					<div class="a-admin-form-grid">
 						<label class="a-profile-edit__label" for="a-admin-handle">Handle</label>
-						<input id="a-admin-handle" v-model="draft.handle" type="text" maxlength="30" autocomplete="off" placeholder="z. B. mara" required>
+						<input id="a-admin-handle" v-model="draft.handle" type="text" maxlength="30" autocomplete="off" placeholder="e.g. mara" required>
 						<p v-if="createFields.handle" class="a-form-error">{{ createFields.handle }}</p>
 
 						<label class="a-profile-edit__label" for="a-admin-email">E-Mail</label>
 						<input id="a-admin-email" v-model="draft.email" type="email" autocomplete="off" placeholder="mara@example.com" required>
 						<p v-if="createFields.email" class="a-form-error">{{ createFields.email }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-name">Anzeigename <span class="a-admin-muted">(optional)</span></label>
+						<label class="a-profile-edit__label" for="a-admin-name">display name <span class="a-admin-muted">(optional)</span></label>
 						<input id="a-admin-name" v-model="draft.display_name" type="text" maxlength="80" autocomplete="off" placeholder="Mara Muster">
 						<p v-if="createFields.display_name" class="a-form-error">{{ createFields.display_name }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-password">Startpasswort</label>
+						<label class="a-profile-edit__label" for="a-admin-password">Initial password</label>
 						<input id="a-admin-password" v-model="draft.password" type="password" minlength="8" autocomplete="new-password" required>
 						<p v-if="createFields.password" class="a-form-error">{{ createFields.password }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-role">Rolle</label>
+						<label class="a-profile-edit__label" for="a-admin-role">role</label>
 						<select id="a-admin-role" v-model="draft.role" class="a-admin-select">
-							<option value="user">Mitglied</option>
+							<option value="user">Member</option>
 							<option value="admin">Administrator</option>
 						</select>
 					</div>
 
 					<p class="a-profile-edit__hint">
-						Das Konto erhält sofort Zugang. Teile das Startpasswort über einen sicheren
-						Kanal und bitte um eine Änderung nach der ersten Anmeldung.
+						The account gets access immediately. Share the initial password through a secure
+						channel and ask the user to change it after first sign-in.
 					</p>
 					<p v-if="createError !== ''" class="a-form-error" role="alert">{{ createError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="createSaving" @click="closeCreate">Abbrechen</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="createSaving" @click="closeCreate">Cancel</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="createSaving">
 							<AppIcon v-if="createSaving" name="refresh" :size="15" class="a-spin" />
-							{{ createSaving ? 'Wird angelegt…' : 'Konto anlegen' }}
+							{{ createSaving ? 'Creating…' : 'Create account' }}
 						</button>
 					</footer>
 				</form>
@@ -472,25 +472,25 @@ onMounted(() => {
 				<form class="a-management-dialog" role="dialog" aria-modal="true" aria-labelledby="a-admin-password-title" @submit.prevent="savePassword">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Zugang</p>
-							<h2 id="a-admin-password-title">Passwort zurücksetzen</h2>
+							<p class="a-profile-edit__eyebrow">Access</p>
+							<h2 id="a-admin-password-title">Reset password</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Dialog schließen" :disabled="passwordSaving" @click="closePassword">
+						<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="passwordSaving" @click="closePassword">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 					<p class="a-admin-muted">
-						Neues Passwort für <strong>@{{ passwordTarget?.handle }}</strong>. Alle Sitzungen
-						dieses Kontos werden danach beendet.
+						New password for <strong>@{{ passwordTarget?.handle }}</strong>. All sessions
+						for this account will be ended afterwards.
 					</p>
-					<label class="a-profile-edit__label" for="a-admin-new-password">Neues Passwort</label>
+					<label class="a-profile-edit__label" for="a-admin-new-password">New password</label>
 					<input id="a-admin-new-password" v-model="passwordValue" type="password" minlength="8" autocomplete="new-password" required>
-					<p class="a-profile-edit__hint">Mindestens 8 Zeichen.</p>
+					<p class="a-profile-edit__hint">At least 8 characters.</p>
 					<p v-if="passwordError !== ''" class="a-form-error" role="alert">{{ passwordError }}</p>
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="passwordSaving" @click="closePassword">Abbrechen</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="passwordSaving" @click="closePassword">Cancel</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="passwordSaving">
-							{{ passwordSaving ? 'Wird gespeichert…' : 'Passwort ändern' }}
+							{{ passwordSaving ? 'Saving…' : 'Change password' }}
 						</button>
 					</footer>
 				</form>

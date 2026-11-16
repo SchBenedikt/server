@@ -121,7 +121,7 @@ export const bridge: AlohaHostBridge = {
 		const payload = text.trim() === '' ? null : JSON.parse(text) as { attachment?: Attachment; error?: { message?: string } };
 
 		if (!response.ok || payload?.attachment === undefined) {
-			throw new Error(payload?.error?.message ?? 'Das Bild konnte nicht hochgeladen werden.');
+			throw new Error(payload?.error?.message ?? 'The file could not be uploaded.');
 		}
 
 		return payload.attachment;

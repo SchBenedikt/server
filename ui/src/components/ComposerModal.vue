@@ -95,18 +95,18 @@ const quoteTargetId = computed(() => {
 	return target.object_id ?? target.id;
 });
 const title = computed(() => (
-	isEdit.value ? 'Beitrag bearbeiten' : isDirect.value ? 'Neue Nachricht' : isQuote.value ? 'Beitrag zitieren' : isReply.value ? 'Antwort schreiben' : 'Neuer Beitrag'
+	isEdit.value ? 'Edit post' : isDirect.value ? 'New message' : isQuote.value ? 'Quote post' : isReply.value ? 'Write a reply' : 'New post'
 ));
 const submitLabel = computed(() => {
 	if (submitting.value) {
-		return isEdit.value ? 'Wird gespeichert…' : 'Wird gesendet…';
+		return isEdit.value ? 'Saving…' : 'Sending…';
 	}
 
 	if (scheduledAt.value !== '') {
-		return 'Planen';
+		return 'Schedule';
 	}
 
-	return isEdit.value ? 'Speichern' : isDirect.value ? 'Senden' : isReply.value ? 'Antworten' : isQuote.value ? 'Zitieren' : 'Posten';
+	return isEdit.value ? 'Save' : isDirect.value ? 'Send' : isReply.value ? 'Reply' : isQuote.value ? 'Quote' : 'Post';
 });
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
@@ -371,16 +371,16 @@ function addFiles(event: Event): void {
 
 	for (const file of selected) {
 		if (images.value.length + existing.value.length >= MAX_FILES) {
-			showToast(`Höchstens ${MAX_FILES} Anhänge pro Beitrag.`, 'error');
+			showToast(`Up to ${MAX_FILES} attachments per post.`, 'error');
 			break;
 		}
 		const kind = ACCEPTED_TYPES[file.type];
 		if (kind === undefined) {
-			showToast('Erlaubt sind JPEG, PNG, WebP, GIF, MP4/WebM, MP3, M4A, Ogg und WAV.', 'error');
+			showToast('Supported formats: JPEG, PNG, WebP, GIF, MP4/WebM, MP3, M4A, Ogg and WAV.', 'error');
 			continue;
 		}
 		if (file.size > MAX_BYTES[kind]) {
-			showToast(`Ein ${kind === 'image' ? 'Bild' : kind === 'video' ? 'Video' : 'Audio'} darf höchstens ${MAX_BYTES[kind] / 1024 / 1024} MiB groß sein.`, 'error');
+			showToast(`A ${kind === 'image' ? 'image' : kind === 'video' ? 'video' : 'audio file'} may be at most ${MAX_BYTES[kind] / 1024 / 1024} MiB.`, 'error');
 			continue;
 		}
 
@@ -427,7 +427,7 @@ async function saveAsDraft(): Promise<void> {
 		&& restoredAttachmentIds.value.length === 0
 		&& !showPoll.value
 	) {
-		showToast('Der Entwurf ist leer.', 'error');
+		showToast('The draft is empty.', 'error');
 		return;
 	}
 
@@ -460,10 +460,10 @@ async function saveAsDraft(): Promise<void> {
 		appState.composer.draft = draft;
 		clearDraft();
 		resetImages();
-		showToast('Entwurf gespeichert. Du findest ihn unter „Entwürfe“.', 'success');
+		showToast('Draft saved. You can find it under “Drafts”.', 'success');
 		closeComposer();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Entwurf konnte nicht gespeichert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The draft could not be saved.', 'error');
 	} finally {
 		savingDraft.value = false;
 	}
@@ -486,7 +486,7 @@ async function submit(): Promise<void> {
 
 	if (!canSubmit.value) {
 		if (content.value.trim() === '') {
-			error.value = 'Ein Beitrag braucht Text.';
+			error.value = 'A post needs text.';
 		}
 		return;
 	}
@@ -516,7 +516,7 @@ async function submit(): Promise<void> {
 			resetImages();
 			existing.value = [];
 			closeComposer();
-			showToast('Beitrag aktualisiert.', 'success');
+			showToast('Post updated.', 'success');
 			return;
 		}
 
@@ -525,7 +525,7 @@ async function submit(): Promise<void> {
 
 		if (scheduledAt.value !== '') {
 			if (scheduleDate.value === null) {
-				throw new Error('Bitte wähle einen gültigen Zeitpunkt.');
+				throw new Error('Please choose a valid time.');
 			}
 
 			const scheduled = await getApi().createScheduledPost({
@@ -547,7 +547,7 @@ async function submit(): Promise<void> {
 			resetExtras();
 			closeComposer();
 			showToast(
-				`Beitrag für ${new Date(scheduled.scheduled_at).toLocaleString('de-DE')} geplant.`,
+				`Post scheduled for ${new Date(scheduled.scheduled_at).toLocaleString()}.`,
 				'success',
 			);
 			return;
@@ -556,7 +556,7 @@ async function submit(): Promise<void> {
 		if (showPoll.value) {
 			const options = pollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
 			if (options.length < 2) {
-				throw new Error('Eine Umfrage braucht mindestens zwei Antworten.');
+				throw new Error('A poll needs at least two options.');
 			}
 
 			const post = await getApi().createStatus({
@@ -583,7 +583,7 @@ async function submit(): Promise<void> {
 			showWarning.value = false;
 			resetExtras();
 			closeComposer();
-			showToast('Beitrag mit Umfrage veröffentlicht.', 'success');
+			showToast('Post with poll published.', 'success');
 			return;
 		}
 
@@ -611,16 +611,16 @@ async function submit(): Promise<void> {
 		closeComposer();
 		showToast(
 			direct
-				? 'Nachricht gesendet.'
-				: replying ? 'Antwort veröffentlicht.' : isQuote.value ? 'Zitat veröffentlicht.' : 'Beitrag veröffentlicht.',
+				? 'Message sent.'
+				: replying ? 'Reply published.' : isQuote.value ? 'Quote published.' : 'Post published.',
 			'success',
 		);
 	} catch (caught) {
 		error.value = caught instanceof Error
 			? caught.message
 			: isEdit.value
-				? 'Der Beitrag konnte nicht gespeichert werden.'
-				: 'Der Beitrag konnte nicht veröffentlicht werden.';
+				? 'The post could not be saved.'
+				: 'The post could not be published.';
 	} finally {
 		submitting.value = false;
 	}
@@ -631,7 +631,7 @@ async function submit(): Promise<void> {
 	<dialog ref="dialog" class="a-modal a-composer" aria-labelledby="a-composer-title" @cancel.prevent="requestClose">
 		<div class="a-modal__panel">
 			<header class="a-modal__head">
-				<button type="button" class="a-icon-btn" aria-label="Composer schließen" @click="requestClose">
+				<button type="button" class="a-icon-btn" aria-label="Close composer" @click="requestClose">
 					<AppIcon name="x" :size="20" />
 				</button>
 				<h2 id="a-composer-title">{{ title }}</h2>
@@ -650,19 +650,19 @@ async function submit(): Promise<void> {
 			<div v-if="directTo" class="a-composer__direct">
 				<Avatar :id="directTo.id" :name="directName" :src="directTo.avatar" :size="30" />
 				<div>
-					<strong>Nachricht an {{ directName }}</strong>
-					<span>{{ directHandle }} · nur für dieses Konto sichtbar</span>
+					<strong>message an {{ directName }}</strong>
+					<span>{{ directHandle }} · visible only to this account</span>
 				</div>
 			</div>
 
 			<div v-if="quoteTo" class="a-composer__quote">
 				<p class="a-composer__quote-head">
 					<AppIcon name="quote" :size="15" />
-					<span>Du zitierst <strong>{{ quoteHandle }}</strong></span>
+					<span>You are quoting <strong>{{ quoteHandle }}</strong></span>
 				</p>
 				<p class="a-composer__quote-text">{{ truncate(quoteTo.content, 240) }}</p>
 				<p v-if="quoteTo.quote_state === 'pending'" class="a-composer__hint">
-					Bei entfernten Beiträgen kann die Freigabe noch ausstehen; der Beitrag wird trotzdem veröffentlicht.
+					Remote posts may still be awaiting approval; the post will be published anyway.
 				</p>
 			</div>
 
@@ -673,7 +673,7 @@ async function submit(): Promise<void> {
 						:name="appState.session.user?.displayName || appState.session.profile?.display_name"
 						:size="38"
 					/>
-					<span>Beitrag als <strong>@{{ appState.session.user?.handle ?? 'Gast' }}</strong></span>
+					<span>Post as <strong>@{{ appState.session.user?.handle ?? 'Guest' }}</strong></span>
 				</div>
 
 				<textarea
@@ -682,18 +682,18 @@ async function submit(): Promise<void> {
 					class="a-composer__textarea"
 					rows="5"
 					maxlength="5200"
-					placeholder="Was beschäftigt dich gerade?"
-					aria-label="Beitragstext"
+					placeholder="What's on your mind?"
+					aria-label="Post text"
 				/>
 
 				<div v-if="showWarning" class="a-composer__cw">
-					<label for="a-composer-cw">Inhaltswarnung</label>
+					<label for="a-composer-cw">Content warning</label>
 					<input
 						id="a-composer-cw"
 						v-model="contentWarning"
 						type="text"
 						maxlength="220"
-						placeholder="Worum geht es? (optional)"
+						placeholder="What is it about? (optional)"
 					/>
 					<span :class="{ 'a-count--over': warningOverLimit }">{{ warningLength }} / {{ MAX_WARNING }}</span>
 				</div>
@@ -701,71 +701,71 @@ async function submit(): Promise<void> {
 				<div v-if="scheduleOpen && !isEdit" class="a-composer__extras">
 					<div class="a-composer__extras-head">
 						<AppIcon name="calendar" :size="16" />
-						<strong>Beitrag planen</strong>
+						<strong>Schedule post</strong>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="scheduleOpen = false; scheduledAt = ''">
-							Entfernen
+							Remove
 						</button>
 					</div>
 					<label class="a-composer__field">
-						<span>Veröffentlichen am</span>
+						<span>Publish at</span>
 						<input v-model="scheduledAt" type="datetime-local" />
 					</label>
 					<p v-if="scheduledAt !== '' && !scheduleReady" class="a-form-error" role="alert">
-						Der Zeitpunkt muss in der Zukunft liegen.
+						The time must be in the future.
 					</p>
 					<p class="a-composer__hint">
-						Geplante Beiträge können keine Umfrage enthalten.
+						Scheduled posts cannot contain a poll.
 					</p>
 				</div>
 
 				<div v-if="showPoll && !isEdit" class="a-composer__extras">
 					<div class="a-composer__extras-head">
 						<AppIcon name="hash" :size="16" />
-						<strong>Umfrage</strong>
+						<strong>poll</strong>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="showPoll = false">
-							Entfernen
+							Remove
 						</button>
 					</div>
 					<label v-for="(option, index) in pollOptions" :key="index" class="a-composer__field a-composer__poll-option">
-						<span>Antwort {{ index + 1 }}</span>
-						<input v-model="pollOptions[index]" type="text" maxlength="50" :placeholder="`Antwort ${index + 1}`" />
+						<span>Reply {{ index + 1 }}</span>
+						<input v-model="pollOptions[index]" type="text" maxlength="50" :placeholder="`Reply ${index + 1}`" />
 						<button
 							v-if="pollOptions.length > 2"
 							type="button"
 							class="a-icon-btn"
-							:aria-label="`Antwort ${index + 1} entfernen`"
+							:aria-label="`Remove option ${index + 1}`"
 							@click="removePollOption(index)"
 						>
 							<AppIcon name="x" :size="16" />
 						</button>
 					</label>
 					<button v-if="pollOptions.length < 4" type="button" class="a-btn a-btn--ghost a-btn--small" @click="addPollOption">
-						<AppIcon name="plus" :size="14" /> Antwort hinzufügen
+						<AppIcon name="plus" :size="14" /> Add option
 					</button>
 					<div class="a-composer__poll-settings">
 						<label class="a-composer__field">
-							<span>Laufzeit</span>
+							<span>Duration</span>
 							<select v-model="pollExpiresIn">
-								<option value="300">5 Minuten</option>
-								<option value="3600">1 Stunde</option>
+								<option value="300">5 minutes</option>
+								<option value="3600">1 hour</option>
 								<option value="86400">1 Tag</option>
-								<option value="259200">3 Tage</option>
-								<option value="604800">7 Tage</option>
+								<option value="259200">3 days</option>
+								<option value="604800">7 days</option>
 							</select>
 						</label>
 						<label class="a-composer__check">
 							<input v-model="pollMultiple" type="checkbox" />
-							<span>Mehrfachauswahl</span>
+							<span>Multiple choice</span>
 						</label>
 						<label class="a-composer__check">
 							<input v-model="pollHideTotals" type="checkbox" />
-							<span>Ergebnisse erst nach Ablauf</span>
+							<span>Results only after the poll closes</span>
 						</label>
 					</div>
 				</div>
 
 				<p v-if="restoredAttachmentIds.length > 0" class="a-composer__hint">
-					{{ restoredAttachmentIds.length }} gespeicherte {{ restoredAttachmentIds.length === 1 ? 'Anlage' : 'Anlagen' }} aus dem Entwurf werden mitgesendet.
+					{{ restoredAttachmentIds.length }} saved {{ restoredAttachmentIds.length === 1 ? 'attachment' : 'attachments' }} from the draft will be sent too.
 				</p>
 				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
 					<figure v-for="attachment in existing" :key="attachment.id" class="a-composer__image">
@@ -784,17 +784,17 @@ async function submit(): Promise<void> {
 						/>
 						<span v-else class="a-composer__audio">
 							<AppIcon :name="attachment.mime_type.startsWith('audio/') ? 'music' : 'image'" :size="18" />
-							{{ attachment.mime_type.startsWith('audio/') ? 'Audio' : 'Anhang' }}
+							{{ attachment.mime_type.startsWith('audio/') ? 'Audio' : 'attachment' }}
 						</span>
 						<button
 							type="button"
 							class="a-composer__image-remove"
-							:aria-label="`${attachment.media_type === 'image' ? 'Bild' : 'Anhang'} entfernen`"
+							:aria-label="`${attachment.media_type === 'image' ? 'Image' : 'attachment'} removed`"
 							@click="removeExisting(attachment.id)"
 						>
 							<AppIcon name="x" :size="15" />
 						</button>
-						<span class="a-composer__image-note">Vorhandener Anhang</span>
+						<span class="a-composer__image-note">Existing attachment</span>
 					</figure>
 					<figure v-for="(image, index) in images" :key="image.key" class="a-composer__image">
 						<video
@@ -808,17 +808,17 @@ async function submit(): Promise<void> {
 							<AppIcon name="music" :size="22" />
 							{{ image.file.name }}
 						</span>
-						<img v-else :src="image.preview" :alt="image.alt || `Bild ${index + 1}`" />
-						<button type="button" class="a-composer__image-remove" aria-label="Anhang entfernen" @click="removeImage(image.key)">
+						<img v-else :src="image.preview" :alt="image.alt || `Image ${index + 1}`" />
+						<button type="button" class="a-composer__image-remove" aria-label="Remove attachment" @click="removeImage(image.key)">
 							<AppIcon name="x" :size="15" />
 						</button>
 						<label>
-							<span>{{ image.kind === 'image' ? `Alt-Text für Bild ${index + 1}` : `Beschreibung für Anhang ${index + 1}` }}</span>
+							<span>{{ image.kind === 'image' ? `Alt text for image ${index + 1}` : `Description for attachment ${index + 1}` }}</span>
 							<input
 								v-model="image.alt"
 								type="text"
 								maxlength="1000"
-								placeholder="Beschreibe den Anhang für alle, die ihn nicht sehen können."
+								placeholder="Describe the attachment for people who cannot see it."
 							/>
 						</label>
 					</figure>
@@ -839,8 +839,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:disabled="images.length + existing.length >= MAX_FILES || submitting"
-						aria-label="Bilder, Videos oder Audio hinzufügen"
-						title="Medien hinzufügen"
+						aria-label="Add images, video or audio"
+						title="Add media"
 						@click="fileInput?.click()"
 					>
 						<AppIcon name="image" :size="20" />
@@ -849,8 +849,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showWarning }"
-						aria-label="Inhaltswarnung hinzufügen"
-						title="Inhaltswarnung"
+						aria-label="Add content warning"
+						title="Content warning"
 						@click="showWarning = !showWarning"
 					>
 						<AppIcon name="info" :size="20" />
@@ -860,8 +860,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showPoll }"
-						aria-label="Umfrage hinzufügen"
-						title="Umfrage"
+						aria-label="Add poll"
+						title="poll"
 						@click="togglePoll"
 					>
 						<AppIcon name="hash" :size="20" />
@@ -871,22 +871,22 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': scheduleOpen }"
-						aria-label="Beitrag planen"
-						title="Beitrag planen"
+						aria-label="Schedule post"
+						title="Schedule post"
 						@click="toggleSchedule"
 					>
 						<AppIcon name="calendar" :size="20" />
 					</button>
 					<label v-if="isDirect" class="a-composer__visibility">
 						<AppIcon name="lock" :size="16" />
-						<span>Direktnachricht</span>
+						<span>Direct message</span>
 					</label>
 					<label v-else class="a-composer__visibility">
 						<AppIcon name="globe" :size="16" />
-						<select v-model="visibility" aria-label="Sichtbarkeit">
-							<option value="public">Öffentlich</option>
-							<option value="unlisted">Nicht gelistet</option>
-							<option value="followers">Nur Follower</option>
+						<select v-model="visibility" aria-label="Visibility">
+							<option value="public">Public</option>
+							<option value="unlisted">Unlisted</option>
+							<option value="followers">Followers only</option>
 						</select>
 					</label>
 					<span class="a-composer__count" :class="{ 'a-count--over': overLimit }">
@@ -900,7 +900,7 @@ async function submit(): Promise<void> {
 						@click="saveAsDraft"
 					>
 						<AppIcon name="pen" :size="15" />
-						{{ savingDraft ? 'Speichert…' : 'Entwurf' }}
+						{{ savingDraft ? 'Saving…' : 'draft' }}
 					</button>
 					<button type="submit" class="a-btn a-btn--primary" :disabled="!canSubmit">
 						<AppIcon v-if="submitting" name="refresh" :size="16" class="a-spin" />

@@ -166,6 +166,14 @@ export interface AccountConnectionsData {
 	cursor: string | null;
 }
 
+export interface RemoteFollowingEntry {
+	id: string;
+	actor: string;
+	inbox: string;
+	state: 'pending' | 'accepted' | 'rejected' | string;
+	followed_at: string;
+}
+
 export interface RemoteEngagementData {
 	network: 'activitypub' | 'bluesky';
 	type: 'likes' | 'reposts';

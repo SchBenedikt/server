@@ -18,7 +18,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().federation();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Föderationsdaten konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Federation data could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -33,16 +33,16 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Netzwerk</p>
-				<h2>Föderation und Blockierungen</h2>
+				<p class="a-admin-eyebrow">Network</p>
+				<h2>Federation and blocks</h2>
 				<p class="a-admin-lead">
-					Welche Gegenstellen Beiträge liefern, wie viele entfernte Akteure bekannt sind und
-					welche Konten blockiert wurden. Entfernte Beiträge liegen nur als Lesezugriff im Cache.
+					Which peers deliver posts, how many remote actors are known and
+					which accounts are blocked. Remote posts are cached read-only.
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Aktualisieren
+				Refresh
 			</button>
 		</div>
 
@@ -57,33 +57,33 @@ onMounted(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="server" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Gegenstellen</p>
+						<p class="a-admin-stat__label">Peers</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.peers) }}</strong>
-						<p class="a-admin-stat__meta">Domains mit zwischengespeicherten Beiträgen</p>
+						<p class="a-admin-stat__meta">Domains with cached posts</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="message" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Entfernte Beiträge</p>
+						<p class="a-admin-stat__label">Remote posts</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.remote_posts) }}</strong>
-						<p class="a-admin-stat__meta">{{ formatCount(data.counts.remote_actors) }} Akteure</p>
+						<p class="a-admin-stat__meta">{{ formatCount(data.counts.remote_actors) }} actors</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="users" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Verbindungen</p>
+						<p class="a-admin-stat__label">Connections</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.followers + data.counts.following) }}</strong>
-						<p class="a-admin-stat__meta">{{ data.counts.followers }} Follower · {{ data.counts.following }} folgt</p>
+						<p class="a-admin-stat__meta">{{ data.counts.followers }} followers · {{ data.counts.following }} following</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="ban" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Blockierungen</p>
+						<p class="a-admin-stat__label">blocks</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.blocks) }}</strong>
-						<p class="a-admin-stat__meta">Aktive Blockierungen lokaler Konten</p>
+						<p class="a-admin-stat__meta">Active blocks of local accounts</p>
 					</div>
 				</article>
 			</div>
@@ -92,8 +92,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Stärkste Gegenstellen</h3>
-							<p>Domains mit den meisten zwischengespeicherten Beiträgen.</p>
+							<h3>Top peers</h3>
+							<p>Domains with the most cached posts.</p>
 						</div>
 					</header>
 					<div class="a-admin-table-wrap a-admin-table-wrap--flush">
@@ -101,9 +101,9 @@ onMounted(() => {
 							<thead>
 								<tr>
 									<th scope="col">Domain</th>
-									<th scope="col">Beiträge</th>
-									<th scope="col">Akteure</th>
-									<th scope="col">Anteil</th>
+									<th scope="col">Posts</th>
+									<th scope="col">actors</th>
+									<th scope="col">Share</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -118,7 +118,7 @@ onMounted(() => {
 									</td>
 								</tr>
 								<tr v-if="data.peers.length === 0">
-									<td colspan="4" class="a-admin-empty">Noch keine Gegenstellen gesehen.</td>
+									<td colspan="4" class="a-admin-empty">No peers seen yet.</td>
 								</tr>
 							</tbody>
 						</table>
@@ -128,19 +128,19 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Blockierte Akteure</h3>
-							<p>Blockierungen werden lokal gespeichert und wirken in beide Richtungen.</p>
+							<h3>Blocked actors</h3>
+							<p>Blocks are stored locally and apply in both directions.</p>
 						</div>
 					</header>
 					<ul class="a-admin-list">
 						<li v-for="block in data.blocks" :key="block.id" class="a-admin-list__row">
 							<div>
 								<strong>{{ block.actor }}</strong>
-								<small>{{ block.domain }} · von @{{ block.local_user_id }} · {{ relativeTime(block.blocked_at) }}</small>
+								<small>{{ block.domain }} · by @{{ block.local_user_id }} · {{ relativeTime(block.blocked_at) }}</small>
 							</div>
 							<span class="a-admin-badge a-admin-badge--danger">{{ block.domain }}</span>
 						</li>
-						<li v-if="data.blocks.length === 0" class="a-admin-empty">Keine aktiven Blockierungen.</li>
+						<li v-if="data.blocks.length === 0" class="a-admin-empty">No active blocks.</li>
 					</ul>
 				</section>
 			</div>
@@ -148,8 +148,8 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Zuletzt gesehene entfernte Beiträge</h3>
-						<p>Ein Auszug aus dem Lesezugriff-Cache.</p>
+						<h3>Recently seen remote posts</h3>
+						<p>An excerpt from the read-only cache.</p>
 					</div>
 				</header>
 				<ul class="a-admin-list">
@@ -160,7 +160,7 @@ onMounted(() => {
 							<small>{{ post.domain }} · {{ absoluteTime(post.published_at) }}</small>
 						</a>
 					</li>
-					<li v-if="data.recent.length === 0" class="a-admin-empty">Noch keine entfernten Beiträge im Cache.</li>
+					<li v-if="data.recent.length === 0" class="a-admin-empty">No remote posts in the cache yet.</li>
 				</ul>
 			</section>
 		</template>

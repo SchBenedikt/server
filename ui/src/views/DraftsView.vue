@@ -29,7 +29,7 @@ async function load(): Promise<void> {
 	try {
 		drafts.value = await getApi().drafts();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Entwürfe konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Drafts could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -37,18 +37,18 @@ async function load(): Promise<void> {
 
 function contextLabel(draft: Draft): string {
 	if (draft.in_reply_to_id !== null) {
-		return 'Antwort';
+		return 'Reply';
 	}
 	if (draft.quoted_post_id !== null) {
-		return 'Zitat';
+		return 'Quote';
 	}
 
-	return 'Eigener Beitrag';
+	return 'Your post';
 }
 
 function preview(draft: Draft): string {
 	const text = truncate(draft.content, 140);
-	return text !== '' ? text : 'Entwurf ohne Text';
+	return text !== '' ? text : 'Draft without text';
 }
 
 function resume(draft: Draft): void {
@@ -56,7 +56,7 @@ function resume(draft: Draft): void {
 }
 
 async function remove(draft: Draft): Promise<void> {
-	if (deleting.value !== '' || !window.confirm('Diesen Entwurf wirklich löschen?')) {
+	if (deleting.value !== '' || !window.confirm('Really delete this draft?')) {
 		return;
 	}
 
@@ -64,9 +64,9 @@ async function remove(draft: Draft): Promise<void> {
 	try {
 		await getApi().deleteDraft(draft.id);
 		drafts.value = drafts.value.filter((entry) => entry.id !== draft.id);
-		showToast('Entwurf gelöscht.', 'success');
+		showToast('Draft deleted.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Entwurf konnte nicht gelöscht werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The draft could not be deleted.', 'error');
 	} finally {
 		deleting.value = '';
 	}
@@ -94,17 +94,17 @@ watch(signedIn, (value) => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Entwürfe"
-			subtitle="Gespeichert auf deinem Konto, damit sie auf jedem Gerät wieder auftauchen."
+			title="Drafts"
+			subtitle="Saved to your account so they reappear on every device."
 			back-href="#/"
-			back-label="Zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Entwürfe neu laden" title="Aktualisieren" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" aria-label="Reload drafts" title="Refresh" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-					<AppIcon name="pen" :size="15" /> Neuer Beitrag
+					<AppIcon name="pen" :size="15" /> New post
 				</button>
 			</template>
 		</PageHeader>
@@ -112,16 +112,16 @@ watch(signedIn, (value) => {
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Anmeldung erforderlich</strong>
-				<p>Entwürfe gehören zu deinem Konto und sind nur für dich sichtbar.</p>
+				<strong>Sign-in required</strong>
+				<p>Drafts belong to your account and are visible only to you.</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
 		<p v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</p>
 
 		<div v-else-if="loading && drafts.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -131,10 +131,10 @@ watch(signedIn, (value) => {
 		<EmptyState
 			v-else-if="drafts.length === 0"
 			icon="pen"
-			title="Keine Entwürfe"
-			text="Was du im Composer als Entwurf speicherst, wartet hier aufs Weiterschreiben."
+			title="No drafts"
+			text="Drafts you save in the composer wait here for you to continue."
 		>
-			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Beitrag schreiben</button>
+			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Write post</button>
 		</EmptyState>
 
 		<ul v-else class="a-draft-list">
@@ -150,20 +150,20 @@ watch(signedIn, (value) => {
 					</span>
 					<strong>{{ preview(draft) }}</strong>
 					<span class="a-draft-card__detail">
-						<template v-if="draft.content_warning">Inhaltswarnung · </template>
+						<template v-if="draft.content_warning">Content warning · </template>
 						<template v-if="draft.attachment_ids.length > 0">
-							{{ draft.attachment_ids.length }} {{ draft.attachment_ids.length === 1 ? 'Anhang' : 'Anhänge' }}
+							{{ draft.attachment_ids.length }} {{ draft.attachment_ids.length === 1 ? 'attachment' : 'Attachments' }}
 						</template>
 						<template v-if="draft.poll !== null">
-							· Umfrage mit {{ draft.poll.options.length }} Antworten
+							· poll with {{ draft.poll.options.length }} replies
 						</template>
 					</span>
 				</button>
 				<button
 					type="button"
 					class="a-icon-btn a-icon-btn--danger"
-					aria-label="Entwurf löschen"
-					title="Löschen"
+					aria-label="Delete draft"
+					title="Delete"
 					:disabled="deleting === draft.id"
 					@click="remove(draft)"
 				>

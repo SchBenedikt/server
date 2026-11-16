@@ -84,14 +84,14 @@ final class Stories
         $text = is_string($content) ? trim($content) : '';
         if ($text === '') {
             throw CommunityException::invalid(
-                'Eine Story braucht einen Text.',
-                ['content' => 'Bitte gib einen Text ein.'],
+                'A story needs text.',
+                ['content' => 'Please enter text.'],
             );
         }
         if (mb_strlen($text) > 500) {
             throw CommunityException::invalid(
-                'Die Story ist zu lang.',
-                ['content' => 'Höchstens 500 Zeichen.'],
+                'The story is too long.',
+                ['content' => 'At most 500 characters.'],
             );
         }
 
@@ -116,7 +116,7 @@ final class Stories
             ],
         );
 
-        return $this->find($id) ?? throw CommunityException::notFound('Die Story wurde nicht gespeichert.');
+        return $this->find($id) ?? throw CommunityException::notFound('The story was not saved.');
     }
 
     /**
@@ -133,10 +133,10 @@ final class Stories
     {
         $story = $this->find($id);
         if ($story === null) {
-            throw CommunityException::notFound('Diese Story gibt es nicht mehr.');
+            throw CommunityException::notFound('This story no longer exists.');
         }
         if ((string) $story['account_id'] !== $accountId) {
-            throw CommunityException::forbidden('Du kannst nur deine eigenen Stories löschen.');
+            throw CommunityException::forbidden('You can only delete your own stories.');
         }
 
         $this->db->execute('DELETE FROM story WHERE id = :id', ['id' => $id]);

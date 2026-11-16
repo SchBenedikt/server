@@ -31,7 +31,7 @@ async function load(): Promise<void> {
 		requests.value = data.requests;
 		locked.value = data.locked;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Folgenanfragen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Follow requests could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -46,9 +46,9 @@ async function accept(request: FollowRequest): Promise<void> {
 	try {
 		await getApi().acceptFollowRequest(request.id);
 		requests.value = requests.value.filter((entry) => entry.id !== request.id);
-		showToast(`@${request.actor_handle} folgt dir jetzt.`, 'success');
+		showToast(`@${request.actor_handle} now follows you.`, 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Anfrage konnte nicht bestätigt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The request could not be confirmed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -63,9 +63,9 @@ async function reject(request: FollowRequest): Promise<void> {
 	try {
 		await getApi().rejectFollowRequest(request.id);
 		requests.value = requests.value.filter((entry) => entry.id !== request.id);
-		showToast('Anfrage abgelehnt.', 'success');
+		showToast('Request declined.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Anfrage konnte nicht abgelehnt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The request could not be declined.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -84,13 +84,13 @@ watch(signedIn, (value) => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Folgenanfragen"
-			subtitle="Menschen, die dir folgen möchten, weil dein Profil geschützt ist."
+			title="Follow requests"
+			subtitle="People who want to follow you because your profile is protected."
 			back-href="#/settings"
-			back-label="Einstellungen"
+			back-label="Settings"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Neu laden" title="Neu laden" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -98,9 +98,9 @@ watch(signedIn, (value) => {
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="lock" :size="26" /></span>
-			<h2>Folgenanfragen</h2>
-			<p>Melde dich an, um zu sehen, wer dir folgen möchte.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>Follow requests</h2>
+			<p>Sign in to see who wants to follow you.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<div v-else-if="loading && requests.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -109,25 +109,25 @@ watch(signedIn, (value) => {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Anfragen nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<div><strong>Requests unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</div>
 
 		<div v-else class="a-follow-requests">
 			<div v-if="!locked" class="a-settings__section a-follow-requests__note">
-				<h2>Dein Profil ist offen</h2>
+				<h2>Your profile is public</h2>
 				<p class="a-settings__hint">
-					Neue Follower werden sofort übernommen. Aktiviere den geschützten Modus in den
-					Einstellungen, wenn du jede Anfrage bestätigen möchtest.
+					New followers are added immediately. Enable protected mode in settings
+					if you want to approve every request.
 				</p>
-				<a class="a-btn a-btn--ghost a-btn--small" href="#/settings">Zu den Einstellungen</a>
+				<a class="a-btn a-btn--ghost a-btn--small" href="#/settings">Go to settings</a>
 			</div>
 
 			<EmptyState
 				v-if="requests.length === 0"
 				icon="lock"
-				title="Keine offenen Anfragen"
-				text="Sobald jemand dir folgen möchte, erscheint die Anfrage hier."
+				title="No open requests"
+				text="As soon as someone wants to follow you, the request appears here."
 			/>
 
 			<ul v-else class="a-management-people">
@@ -138,7 +138,7 @@ watch(signedIn, (value) => {
 						</span>
 						<span class="a-account-row__copy">
 							<strong>@{{ request.actor_handle }}</strong>
-							<small>Angefragt {{ absoluteTime(request.created_at) }}</small>
+							<small>Requested {{ absoluteTime(request.created_at) }}</small>
 						</span>
 					</a>
 					<div class="a-account-row__actions">
@@ -149,7 +149,7 @@ watch(signedIn, (value) => {
 							@click="accept(request)"
 						>
 							<AppIcon name="check" :size="14" />
-							Bestätigen
+							Confirm
 						</button>
 						<button
 							type="button"
@@ -158,7 +158,7 @@ watch(signedIn, (value) => {
 							@click="reject(request)"
 						>
 							<AppIcon name="x" :size="14" />
-							Ablehnen
+							Decline
 						</button>
 					</div>
 				</li>

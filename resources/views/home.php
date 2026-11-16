@@ -18,28 +18,28 @@ declare(strict_types=1);
 
 ?>
 <section class="card">
-    <h1>Hallo, <?= $escape($name) ?></h1>
+    <h1>Hello, <?= $escape($name) ?></h1>
     <p class="muted">
-        Angemeldet als <strong>@<?= $escape($handle) ?></strong><?= $isAdmin ? ' · Administrator' : '' ?>.
+        Signed in as <strong>@<?= $escape($handle) ?></strong><?= $isAdmin ? ' · Administrator' : '' ?>.
     </p>
 
     <dl>
         <dt>Actor</dt>
         <dd><a href="/@<?= $escape(rawurlencode($handle)) ?>"><?= $escape($actorUrl) ?></a></dd>
-        <dt>Instanz</dt>
+        <dt>Instance</dt>
         <dd><?= $escape($instanceUrl) ?></dd>
         <dt>Core</dt>
         <dd><?= $escape($version) ?></dd>
     </dl>
 
     <h2>App</h2>
-    <p><a href="/app">Gemeinsame Aloha-Oberfläche öffnen</a></p>
+    <p><a href="/app">Open the Aloha interface</a></p>
 
     <?php if ($isAdmin): ?>
     <h2>Administration</h2>
     <p>
-        <a href="/admin">Admin-Oberfläche öffnen</a> ·
-        Konten, Meldungen, Föderation, Warteschlange und Prüfprotokoll.
+        <a href="/admin">Open admin interface</a> ·
+        Accounts, reports, federation, queue and audit log.
     </p>
     <?php endif; ?>
 
@@ -53,6 +53,6 @@ declare(strict_types=1);
 
     <form method="post" action="/logout">
         <input type="hidden" name="_csrf" value="<?= $escape($csrf) ?>">
-        <button type="submit" class="secondary">Abmelden</button>
+        <button type="submit" class="secondary">Sign out</button>
     </form>
 </section>

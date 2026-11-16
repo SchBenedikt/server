@@ -48,7 +48,7 @@ final class AuthTest extends TestCase
         ], $cookies);
 
         self::assertSame(403, $response->status);
-        self::assertStringContainsString('abgelaufen', $response->body);
+        self::assertStringContainsString('expired', $response->body);
     }
 
     public function testWrongPasswordIsRejected(): void
@@ -64,7 +64,7 @@ final class AuthTest extends TestCase
         ], $cookies);
 
         self::assertSame(401, $response->status);
-        self::assertStringContainsString('falsch', $response->body);
+        self::assertStringContainsString('incorrect', $response->body);
     }
 
     public function testLoginRotatesTheSessionId(): void
@@ -137,6 +137,6 @@ final class AuthTest extends TestCase
         $login = $this->server->login('alice', TestServer::PASSWORD);
 
         self::assertSame(429, $login['response']->status);
-        self::assertStringContainsString('Fehlversuche', $login['response']->body);
+        self::assertStringContainsString('failed attempts', $login['response']->body);
     }
 }

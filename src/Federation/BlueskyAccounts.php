@@ -142,7 +142,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             throw new BlueskyException(
                 422,
                 'bluesky_handle_invalid',
-                'Bitte gib einen gültigen Bluesky-Handle an, zum Beispiel name.bsky.social.',
+                'Please enter a valid Bluesky handle, for example name.bsky.social.',
             );
         }
 
@@ -150,12 +150,12 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             throw new BlueskyException(
                 422,
                 'bluesky_password_missing',
-                'Ein Bluesky-App-Passwort ist erforderlich. Du erstellst es in den Bluesky-Einstellungen unter „App-Passwörter“.',
+                'A Bluesky app password is required. Create one in Bluesky settings under “App Passwords”.',
             );
         }
 
         if (strlen($appPassword) > 512) {
-            throw new BlueskyException(422, 'bluesky_password_invalid', 'Das App-Passwort ist zu lang.');
+            throw new BlueskyException(422, 'bluesky_password_invalid', 'The app password is too long.');
         }
 
         $did = $this->resolveHandle($handle);
@@ -167,7 +167,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
         $accessToken = is_string($session['accessJwt'] ?? null) ? $session['accessJwt'] : '';
         $refreshToken = is_string($session['refreshJwt'] ?? null) ? $session['refreshJwt'] : '';
         if ($accessToken === '' || $refreshToken === '') {
-            throw new BlueskyException(502, 'bluesky_session_failed', 'Bluesky hat keine vollständige Sitzung ausgestellt.');
+            throw new BlueskyException(502, 'bluesky_session_failed', 'Bluesky did not issue a complete session.');
         }
 
         $this->store(
@@ -213,17 +213,17 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             throw new BlueskyException(
                 422,
                 'bluesky_handle_unknown',
-                'Diesen Bluesky-Handle gibt es nicht. Prüfe die Schreibweise.',
+                'This Bluesky handle does not exist. Check the spelling.',
             );
         }
         if (!$response->isSuccessful()) {
-            throw new BlueskyException(502, 'bluesky_unreachable', 'Bluesky konnte den Handle nicht auflösen.');
+            throw new BlueskyException(502, 'bluesky_unreachable', 'Bluesky could not resolve the handle.');
         }
 
         $data = $this->decode($response);
         $did = $data['did'] ?? null;
         if (!is_string($did) || preg_match('/^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$/', $did) !== 1) {
-            throw new BlueskyException(502, 'bluesky_identity_invalid', 'Bluesky hat keine gültige DID geliefert.');
+            throw new BlueskyException(502, 'bluesky_identity_invalid', 'Bluesky did not return a valid DID.');
         }
 
         return $did;
@@ -236,16 +236,16 @@ final class BlueskyAccounts implements AtprotoAccountResolver
         } elseif (str_starts_with($did, 'did:web:')) {
             $host = rawurldecode(substr($did, 8));
             if (preg_match('/^[a-z0-9.-]+(?::[0-9]+)?$/', $host) !== 1) {
-                throw new BlueskyException(502, 'bluesky_identity_invalid', 'Die DID enthält keinen gültigen Web-Host.');
+                throw new BlueskyException(502, 'bluesky_identity_invalid', 'The DID does not contain a valid web host.');
             }
             $url = 'https://' . $host . '/.well-known/did.json';
         } else {
-            throw new BlueskyException(422, 'bluesky_identity_unsupported', 'Diese DID-Art wird nicht unterstützt.');
+            throw new BlueskyException(422, 'bluesky_identity_unsupported', 'This DID type is not supported.');
         }
 
         $response = $this->request('GET', $url);
         if (!$response->isSuccessful()) {
-            throw new BlueskyException(502, 'bluesky_identity_unavailable', 'Das Bluesky-Identitätsdokument ist nicht erreichbar.');
+            throw new BlueskyException(502, 'bluesky_identity_unavailable', 'The Bluesky identity document is unreachable.');
         }
 
         $document = $this->decode($response);
@@ -262,7 +262,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             }
         }
 
-        throw new BlueskyException(502, 'bluesky_pds_missing', 'Das Bluesky-Profil nennt keinen PDS.');
+        throw new BlueskyException(502, 'bluesky_pds_missing', 'The Bluesky profile does not specify a PDS.');
     }
 
     /**
@@ -281,11 +281,11 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             throw new BlueskyException(
                 422,
                 'bluesky_credentials_invalid',
-                'Handle oder App-Passwort stimmen nicht. Verwende ein App-Passwort, nicht dein normales Passwort.',
+                'Handle or app password is incorrect. Use an app password, not your regular password.',
             );
         }
         if (!$response->isSuccessful()) {
-            throw new BlueskyException(502, 'bluesky_session_failed', 'Bluesky hat die Anmeldung abgelehnt.');
+            throw new BlueskyException(502, 'bluesky_session_failed', 'Bluesky rejected the sign-in.');
         }
 
         return $this->decode($response);
@@ -386,7 +386,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             throw new BlueskyException(
                 409,
                 'bluesky_already_connected',
-                'Dieses Bluesky-Konto ist bereits mit einem anderen Aloha-Konto verbunden.',
+                'This Bluesky account is already connected to another Aloha account.',
             );
         }
     }
@@ -443,7 +443,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             throw new BlueskyException(
                 502,
                 'bluesky_unreachable',
-                'Bluesky ist nicht erreichbar: ' . $exception->getMessage(),
+                'Bluesky is unreachable: ' . $exception->getMessage(),
             );
         }
     }
@@ -456,11 +456,11 @@ final class BlueskyAccounts implements AtprotoAccountResolver
         try {
             $data = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
-            throw new BlueskyException(502, 'bluesky_response_invalid', 'Bluesky hat eine ungültige Antwort geliefert.');
+            throw new BlueskyException(502, 'bluesky_response_invalid', 'Bluesky returned an invalid response.');
         }
 
         if (!is_array($data)) {
-            throw new BlueskyException(502, 'bluesky_response_invalid', 'Bluesky hat eine ungültige Antwort geliefert.');
+            throw new BlueskyException(502, 'bluesky_response_invalid', 'Bluesky returned an invalid response.');
         }
 
         return $data;

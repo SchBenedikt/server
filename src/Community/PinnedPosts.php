@@ -83,23 +83,23 @@ final class PinnedPosts
     {
         $postId = trim($postId);
         if ($postId === '') {
-            throw CommunityException::invalid('Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+            throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
 
         try {
             $post = $this->posts->get($postId);
         } catch (PostNotFoundException) {
-            throw CommunityException::notFound('Diesen Beitrag gibt es nicht mehr.');
+            throw CommunityException::notFound('This post no longer exists.');
         }
 
         if ($post->authorId !== $accountId) {
-            throw CommunityException::forbidden('Nur eigene Beiträge können angepinnt werden.');
+            throw CommunityException::forbidden('Only your own posts can be pinned.');
         }
 
         if ($post->visibility === Visibility::Direct) {
             throw CommunityException::invalid(
-                'Direktnachrichten können nicht angepinnt werden.',
-                ['post_id' => 'Wähle einen öffentlichen Beitrag.'],
+                'Direct messages cannot be pinned.',
+                ['post_id' => 'Choose a public post.'],
             );
         }
 
@@ -113,8 +113,8 @@ final class PinnedPosts
         );
         if ($count >= self::MAX_PINS) {
             throw CommunityException::invalid(
-                'Du kannst höchstens ' . self::MAX_PINS . ' Beiträge anpinnen.',
-                ['post_id' => 'Löse zuerst eine andere Anheftung.'],
+                'You can pin at most ' . self::MAX_PINS . '  posts.',
+                ['post_id' => 'Unpin another post first.'],
             );
         }
 
@@ -139,7 +139,7 @@ final class PinnedPosts
     {
         $postId = trim($postId);
         if ($postId === '') {
-            throw CommunityException::invalid('Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+            throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
 
         $this->db->execute(

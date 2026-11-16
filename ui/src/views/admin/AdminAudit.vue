@@ -56,22 +56,22 @@ function actionTone(action: string): string {
 
 function actionLabel(action: string): string {
 	const labels: Record<string, string> = {
-		'user.create': 'Konto angelegt',
-		'user.role': 'Rolle geändert',
-		'user.display_name': 'Anzeigename geändert',
-		'user.disable': 'Konto deaktiviert',
-		'user.enable': 'Konto aktiviert',
-		'user.password': 'Passwort geändert',
-		'user.sessions': 'Sitzungen beendet',
-		'report.create': 'Meldung eingegangen',
-		'report.resolved': 'Meldung gelöst',
-		'report.dismissed': 'Meldung verworfen',
-		'post.delete': 'Beitrag gelöscht',
-		'job.retry': 'Job wiederholt',
-		'job.delete': 'Job gelöscht',
-		'job.retry_all': 'Tote Jobs wiederholt',
-		'job.purge': 'Alte Jobs gelöscht',
-		'queue.run': 'Worker-Lauf gestartet',
+		'user.create': 'Account created',
+		'user.role': 'Role changed',
+		'user.display_name': 'Display name changed',
+		'user.disable': 'account deactivated',
+		'user.enable': 'account activated',
+		'user.password': 'Password changed',
+		'user.sessions': 'Sessions ended',
+		'report.create': 'Report received',
+		'report.resolved': 'Report resolved',
+		'report.dismissed': 'Report dismissed',
+		'post.delete': 'Post deleted',
+		'job.retry': 'Job retried',
+		'job.delete': 'job deleted',
+		'job.retry_all': 'Dead jobs retried',
+		'job.purge': 'Old jobs deleted',
+		'queue.run': 'Worker run started',
 	};
 
 	return labels[action] ?? action;
@@ -98,7 +98,7 @@ async function load(): Promise<void> {
 	try {
 		entries.value = await getAdminApi().audit(limit.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Das Protokoll konnte nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'The audit log could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -117,30 +117,30 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Nachvollziehbarkeit</p>
-				<h2>Administrationsprotokoll</h2>
+				<p class="a-admin-eyebrow">Traceability</p>
+				<h2>Audit log</h2>
 				<p class="a-admin-lead">
-					Jede privilegierte Änderung wird mit Akteur, Ziel, Zeitpunkt und Details gespeichert.
-					Das Protokoll ist unveränderlich und dient der Nachprüfung.
+					Every privileged change is stored with actor, target, time and details.
+					The log is immutable and serves as an audit trail.
 				</p>
 			</div>
 			<div class="a-admin-actions">
-				<select v-model.number="limit" class="a-admin-select a-admin-select--small" aria-label="Anzahl Einträge" @change="changeLimit">
-					<option :value="50">50 Einträge</option>
-					<option :value="100">100 Einträge</option>
-					<option :value="250">250 Einträge</option>
-					<option :value="500">500 Einträge</option>
+				<select v-model.number="limit" class="a-admin-select a-admin-select--small" aria-label="Number of entries" @change="changeLimit">
+					<option :value="50">50 entries</option>
+					<option :value="100">100 entries</option>
+					<option :value="250">250 entries</option>
+					<option :value="500">500 entries</option>
 				</select>
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-					Aktualisieren
+					Refresh
 				</button>
 			</div>
 		</div>
 
 		<label class="a-admin-search a-admin-search--wide">
 			<AppIcon name="search" :size="17" />
-			<input v-model="query" type="search" placeholder="Aktion, Konto, Ziel oder Detail durchsuchen" autocomplete="off">
+			<input v-model="query" type="search" placeholder="Search action, account, target or detail" autocomplete="off">
 		</label>
 
 		<p v-if="error !== ''" class="a-form-error" role="alert">{{ error }}</p>
@@ -152,8 +152,8 @@ onMounted(() => {
 		<div v-else-if="filtered.length === 0" class="a-admin-empty-panel">
 			<AppIcon name="shield" :size="24" />
 			<div>
-				<strong>Keine passenden Einträge</strong>
-				<p>{{ query !== '' ? 'Passe die Suche an.' : 'Sobald eine administrative Aktion ausgeführt wird, erscheint sie hier.' }}</p>
+				<strong>No matching entries</strong>
+				<p>{{ query !== '' ? 'Adjust your search.' : 'As soon as an administrative action is performed, it appears here.' }}</p>
 			</div>
 		</div>
 
@@ -175,7 +175,7 @@ onMounted(() => {
 							</div>
 							<p v-if="entry.target_type || entry.target_id" class="a-admin-audit__target">
 								<AppIcon name="external" :size="13" />
-								{{ entry.target_type ?? 'Ziel' }}
+								{{ entry.target_type ?? 'Target' }}
 								<code v-if="entry.target_id" class="a-admin-mono">{{ entry.target_id }}</code>
 							</p>
 							<p v-if="Object.keys(entry.details).length > 0" class="a-admin-audit__details">

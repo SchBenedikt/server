@@ -37,56 +37,56 @@ const tabs = computed(() => {
 	}
 
 	return [
-		{ id: 'for-you' as const, label: 'Für dich' },
-		{ id: 'home' as const, label: 'Folge ich' },
-		{ id: 'public' as const, label: 'Öffentlich' },
-		{ id: 'tags' as const, label: 'Meine Tags' },
+		{ id: 'for-you' as const, label: 'For you' },
+		{ id: 'home' as const, label: 'Following' },
+		{ id: 'public' as const, label: 'Public' },
+		{ id: 'tags' as const, label: 'My Tags' },
 	];
 });
 
 const subtitle = computed(() => {
 	if (!signedIn.value) {
-		return 'Was diese Instanz und das Fediverse gerade bewegt.';
+		return "What's moving this instance and the fediverse right now.";
 	}
 
 	switch (currentTab.value) {
 		case 'for-you':
-			return 'Empfohlen aus dieser Instanz – nach Interesse, Beteiligung und Aktualität.';
+			return 'Recommended from this instance — based on interest, engagement and recency.';
 		case 'home':
-			return 'Beiträge der Menschen, denen du folgst.';
+			return 'Posts from people you follow.';
 		case 'followed':
-			return 'Alles unter den Hashtags, die du verfolgst.';
+			return 'Everything under the hashtags you follow.';
 		default:
-			return 'Die neuesten öffentlichen Beiträge dieser Instanz.';
+			return 'The latest public posts on this instance.';
 	}
 });
 
 const emptyTitle = computed(() => {
 	if (currentTab.value === 'followed') {
-		return 'Deine Tag-Timeline ist noch leer';
+		return 'Your hashtag timeline is still empty';
 	}
 	if (currentTab.value === 'for-you') {
-		return 'Noch keine Empfehlungen';
+		return 'No recommendations yet';
 	}
 	if (currentTab.value === 'home') {
-		return 'Deine Timeline ist noch ruhig';
+		return 'Your timeline is still quiet';
 	}
 
-	return 'Noch keine öffentlichen Beiträge';
+	return 'No public posts yet';
 });
 
 const emptyText = computed(() => {
 	if (currentTab.value === 'followed') {
-		return 'Folge Hashtags, die dich interessieren, und ihre Beiträge landen hier.';
+		return 'Follow hashtags you care about and their posts will show up here.';
 	}
 	if (currentTab.value === 'for-you') {
-		return 'Sobald es öffentliche Beiträge gibt, findest du hier eine Auswahl nach Interesse und Beteiligung.';
+		return "Once there are public posts, you'll find a selection here based on interest and engagement.";
 	}
 	if (currentTab.value === 'home') {
-		return 'Folge Menschen, die spannende Dinge teilen – oder schreib selbst den ersten Beitrag.';
+		return 'Follow people who share interesting things — or write the first post yourself.';
 	}
 
-	return 'Diese Instanz ist neu. Sei die erste Stimme, die hier zu hören ist.';
+	return 'This instance is new. Be the first voice heard here.';
 });
 
 function switchTab(tab: 'home' | 'for-you' | 'public' | 'tags'): void {
@@ -109,9 +109,9 @@ function refresh(): void {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Startseite" :subtitle="subtitle">
+		<PageHeader title="Home" :subtitle="subtitle">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Feed aktualisieren" title="Aktualisieren" @click="refresh">
+				<button type="button" class="a-icon-btn" aria-label="Feed refresh" title="Refresh" @click="refresh">
 					<AppIcon name="refresh" :size="19" />
 				</button>
 			</template>
@@ -125,20 +125,20 @@ function refresh(): void {
 			<div class="a-welcome__glow" aria-hidden="true" />
 			<p class="a-welcome__eyebrow">
 				<AppIcon name="globe" :size="15" />
-				Offen · föderiert · gemeinschaftlich
+				Open · federated · community-run
 			</p>
-			<h2>Das soziale Netz, das dir gehört.</h2>
+			<h2>The social network that belongs to you.</h2>
 			<p>
-				{{ instance?.description || 'Eine unabhängige Instanz für gute Gespräche, Bilder und Ideen – verbunden mit dem Fediverse.' }}
+				{{ instance?.description || 'An independent instance for good conversations, images and ideas — connected to the fediverse.' }}
 			</p>
 			<div class="a-welcome__actions">
-				<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
-				<a class="a-btn a-btn--ghost" href="#/explore">Erst einmal umsehen</a>
+				<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+				<a class="a-btn a-btn--ghost" href="#/explore">Take a look around</a>
 			</div>
 			<dl v-if="instance" class="a-welcome__stats">
-				<div><dt>Menschen</dt><dd>{{ formatCount(instance.stats.user_count) }}</dd></div>
-				<div><dt>Beiträge</dt><dd>{{ formatCount(instance.stats.status_count) }}</dd></div>
-				<div><dt>Verbunden mit</dt><dd>{{ formatCount(instance.stats.domain_count) }} Servern</dd></div>
+				<div><dt>People</dt><dd>{{ formatCount(instance.stats.user_count) }}</dd></div>
+				<div><dt>Posts</dt><dd>{{ formatCount(instance.stats.status_count) }}</dd></div>
+				<div><dt>Connected to</dt><dd>{{ formatCount(instance.stats.domain_count) }} servers</dd></div>
 			</dl>
 		</section>
 
@@ -148,15 +148,15 @@ function refresh(): void {
 				:name="selfName"
 				:size="42"
 			/>
-			<span class="a-inline-compose__placeholder">Was beschäftigt dich gerade, {{ selfName.split(' ')[0] }}?</span>
+			<span class="a-inline-compose__placeholder">What's on your mind, {{ selfName.split(' ')[0] }}?</span>
 			<span class="a-inline-compose__tools" aria-hidden="true">
 				<AppIcon name="image" :size="19" />
 				<AppIcon name="info" :size="19" />
-				<span class="a-btn a-btn--primary a-btn--small">Posten</span>
+				<span class="a-btn a-btn--primary a-btn--small">Post</span>
 			</span>
 		</button>
 
-		<div v-if="tabs.length > 0" class="a-tabs" role="tablist" aria-label="Feed auswählen">
+		<div v-if="tabs.length > 0" class="a-tabs" role="tablist" aria-label="Choose feed">
 			<button
 				v-for="tab in tabs"
 				:key="tab.id"
@@ -180,11 +180,11 @@ function refresh(): void {
 		>
 			<template #empty>
 				<EmptyState :icon="currentTab === 'followed' ? 'hash' : 'sparkles'" :title="emptyTitle" :text="emptyText">
-					<a v-if="currentTab === 'followed'" class="a-btn a-btn--primary a-btn--small" href="#/explore">Hashtags entdecken</a>
+					<a v-if="currentTab === 'followed'" class="a-btn a-btn--primary a-btn--small" href="#/explore">Discover hashtags</a>
 					<button v-else-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-						Ersten Beitrag schreiben
+						Write your first post
 					</button>
-					<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Teil der Instanz werden</a>
+					<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Join the instance</a>
 				</EmptyState>
 			</template>
 		</TimelineFeed>

@@ -13,7 +13,7 @@ withDefaults(defineProps<{
 }>(), {
 	subtitle: '',
 	backHref: '',
-	backLabel: 'Zurück',
+	backLabel: 'Back',
 });
 </script>
 

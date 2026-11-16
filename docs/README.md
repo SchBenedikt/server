@@ -60,10 +60,10 @@ Nginx, PHP-FPM, mail, the worker and verification: see
 - A migration runner, a worker, cleanup and route parity checks
 - A committed Vue bundle, so running the app does not require Node.js
 
-The UI is German; the repository documentation is English. The interface
+The UI and the repository documentation are English. The interface
 supports light and dark themes, a fixed desktop sidebar that does not scroll
-(primary entries plus a **Mehr** popover) and a mobile shell with five tabs and
-a **Mehr** bottom sheet. Layouts are checked down to 390 px.
+(primary entries plus a **More** popover) and a mobile shell with five tabs and
+a **More** bottom sheet. Layouts are checked down to 390 px.
 
 ## Development checks
 

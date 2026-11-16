@@ -48,7 +48,7 @@ async function search(): Promise<void> {
 	remoteTried.value = false;
 
 	if (!signedIn.value) {
-		error.value = 'Melde dich an, um Beiträge und Konten zu durchsuchen.';
+		error.value = 'Sign in to search posts and accounts.';
 		searching.value = false;
 		return;
 	}
@@ -57,7 +57,7 @@ async function search(): Promise<void> {
 		results.value = await getApi().search(value, 30);
 	} catch (caught) {
 		results.value = { accounts: [], statuses: [], hashtags: [] };
-		error.value = caught instanceof Error ? caught.message : 'Die Suche ist fehlgeschlagen.';
+		error.value = caught instanceof Error ? caught.message : 'The search failed.';
 	} finally {
 		searching.value = false;
 	}
@@ -84,27 +84,27 @@ function hashtagHref(tag: HashtagResult): string {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Suchen" subtitle="Konten, Beiträge und Hashtags auf dieser Instanz." />
+		<PageHeader title="Search" subtitle="Accounts, posts and hashtags on this instance." />
 
 		<form class="a-search" role="search" @submit.prevent="search">
 			<AppIcon name="search" :size="19" />
 			<input
 				v-model="query"
 				type="search"
-				placeholder="Suche nach @konto, #hashtag oder einem Wort …"
-				aria-label="Suchbegriff"
+				placeholder="Search for @account, #hashtag or a word…"
+				aria-label="Search term"
 				autocomplete="off"
 			/>
 			<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="searching || query.trim() === ''">
 				<AppIcon v-if="searching" name="refresh" :size="15" class="a-spin" />
-				{{ searching ? 'Suche…' : 'Suchen' }}
+				{{ searching ? 'Searching…' : 'Search' }}
 			</button>
 		</form>
 
 		<p v-if="!signedIn" class="a-search-hint">
 			<AppIcon name="lock" :size="14" />
-			<span>Die lokale Suche ist nur für angemeldete Konten verfügbar.</span>
-			<a href="/login">Anmelden</a>
+			<span>Local search is only available to signed-in accounts.</span>
+			<a href="/login">Sign in</a>
 		</p>
 
 		<p v-if="error" class="a-form-error" role="alert">{{ error }}</p>
@@ -115,13 +115,13 @@ function hashtagHref(tag: HashtagResult): string {
 			<EmptyState
 				v-if="!hasResults && error === ''"
 				icon="search"
-				title="Keine Treffer"
-				text="Versuche einen anderen Begriff, ein Konto mit @ oder einen Hashtag mit #."
+				title="No results"
+				text="Try another term, an account with @ or a hashtag with #."
 			/>
 
 			<section v-if="remote" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>Profil im Fediverse</h2>
+					<h2>Profile in the fediverse</h2>
 					<span>{{ remote.network === 'bluesky' ? 'Bluesky' : 'ActivityPub' }}</span>
 				</div>
 				<AccountRow :account="remote" :href="`#/u/${encodeURIComponent(remote.handle || remote.id)}`" />
@@ -129,13 +129,13 @@ function hashtagHref(tag: HashtagResult): string {
 
 			<section v-if="results.accounts.length > 0" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>Konten</h2>
+					<h2>accounts</h2>
 					<span>{{ results.accounts.length }}</span>
 				</div>
 				<div class="a-people">
 					<AccountRow v-for="account in results.accounts" :key="account.id" :account="account">
 						<template #actions>
-							<FollowButton :account="account" compact @changed="showToast($event ? `Du folgst jetzt @${account.handle}.` : `Du folgst @${account.handle} nicht mehr.`, 'success')" />
+							<FollowButton :account="account" compact @changed="showToast($event ? `You now follow @${account.handle}.` : `You no longer follow @${account.handle}.`, 'success')" />
 						</template>
 					</AccountRow>
 				</div>
@@ -143,7 +143,7 @@ function hashtagHref(tag: HashtagResult): string {
 
 			<section v-if="results.hashtags.length > 0" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>Hashtags</h2>
+					<h2>hashtags</h2>
 					<span>{{ results.hashtags.length }}</span>
 				</div>
 				<div class="a-tag-cloud">
@@ -155,7 +155,7 @@ function hashtagHref(tag: HashtagResult): string {
 
 			<section v-if="results.statuses.length > 0" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>Beiträge</h2>
+					<h2>Posts</h2>
 					<span>{{ results.statuses.length }}</span>
 				</div>
 				<div class="a-feed__list">
@@ -167,8 +167,8 @@ function hashtagHref(tag: HashtagResult): string {
 		<EmptyState
 			v-else
 			icon="search"
-			title="Finde Menschen und Gespräche"
-			text="Die Suche findet lokale Konten, öffentliche Beiträge und Hashtags. Ein @konto@server wird zusätzlich im Fediverse aufgelöst."
+			title="Find people and conversations"
+			text="Search finds local accounts, public posts and hashtags. An @account@server is also resolved in the fediverse."
 		/>
 	</div>
 </template>

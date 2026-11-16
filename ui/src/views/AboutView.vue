@@ -16,10 +16,10 @@ const host = computed(() => typeof window === 'undefined' ? '' : window.location
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Über diese Instanz"
-			subtitle="Wer hier zusammenkommt und wie die Instanz mit dem Fediverse verbunden ist."
+			title="About this instance"
+			subtitle="Who gathers here and how the instance connects to the fediverse."
 			back-href="#/"
-			back-label="Zurück zur Startseite"
+			back-label="Back to home"
 		/>
 
 		<section class="a-about-hero">
@@ -29,22 +29,22 @@ const host = computed(() => typeof window === 'undefined' ? '' : window.location
 				<h2>{{ instance?.name ?? 'Aloha Social' }}</h2>
 				<p class="a-about-hero__host">@{{ host }}</p>
 				<p>
-					{{ instance?.description || 'Eine unabhängige, offene Instanz im Fediverse. Beiträge, Bilder und Gespräche gehören den Menschen, die sie teilen.' }}
+					{{ instance?.description || 'An independent, open instance in the fediverse. Posts, images and conversations belong to the people who share them.' }}
 				</p>
 			</div>
 		</section>
 
 		<dl v-if="instance" class="a-about-stats">
 			<div>
-				<dt>Menschen</dt>
+				<dt>People</dt>
 				<dd>{{ formatCount(instance.stats.user_count) }}</dd>
 			</div>
 			<div>
-				<dt>Beiträge</dt>
+				<dt>Posts</dt>
 				<dd>{{ formatCount(instance.stats.status_count) }}</dd>
 			</div>
 			<div>
-				<dt>Bekannte Server</dt>
+				<dt>Known Server</dt>
 				<dd>{{ formatCount(instance.stats.domain_count) }}</dd>
 			</div>
 			<div>
@@ -55,30 +55,30 @@ const host = computed(() => typeof window === 'undefined' ? '' : window.location
 
 		<section class="a-about-grid">
 			<article class="a-rail__card">
-				<h3><AppIcon name="globe" :size="18" /> Föderation</h3>
+				<h3><AppIcon name="globe" :size="18" /> Federation</h3>
 				<p>
 					{{ instance?.federation
-						? 'Diese Instanz spricht ActivityPub und kann mit anderen Servern im Fediverse kommunizieren.'
-						: 'Die Föderation ist auf dieser Instanz derzeit deaktiviert.' }}
+						? 'This instance speaks ActivityPub and can communicate with other servers in the fediverse.'
+						: 'Federation is currently disabled on this instance.' }}
 				</p>
 				<p v-if="instance?.languages?.length" class="a-muted">
-					Sprachen: {{ instance.languages.join(', ') }}
+					Languages: {{ instance.languages.join(', ') }}
 				</p>
 			</article>
 
 			<article class="a-rail__card">
-				<h3><AppIcon name="users" :size="18" /> Mitmachen</h3>
+				<h3><AppIcon name="users" :size="18" /> Join in</h3>
 				<p>
 					{{ instance?.registrations
-						? 'Neue Konten können sich registrieren.'
-						: 'Diese Instanz nimmt neue Konten nur über Einladungen oder die Administration auf.' }}
+						? 'New accounts can register.'
+						: 'This instance only accepts new accounts through invitations or the administration.' }}
 				</p>
-				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
-				<a v-else class="a-btn a-btn--ghost a-btn--small" href="#/explore">Menschen entdecken</a>
+				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+				<a v-else class="a-btn a-btn--ghost a-btn--small" href="#/explore">Discover people</a>
 			</article>
 
 			<article class="a-rail__card">
-				<h3><AppIcon name="message" :size="18" /> Kontakt</h3>
+				<h3><AppIcon name="message" :size="18" /> Contact</h3>
 				<p v-if="instance?.contact_account">
 					<a :href="`#/u/${encodeURIComponent(instance.contact_account)}`">
 						{{ handleLabel(instance.contact_account) }}
@@ -88,15 +88,15 @@ const host = computed(() => typeof window === 'undefined' ? '' : window.location
 					<a :href="`mailto:${instance.email}`">{{ instance.email }}</a>
 				</p>
 				<p v-if="!instance?.contact_account && !instance?.email" class="a-muted">
-					Die Administration hat noch keine öffentlichen Kontaktdaten hinterlegt.
+					The administration has not published any public contact details yet.
 				</p>
 			</article>
 
 			<article class="a-rail__card">
-				<h3><AppIcon name="info" :size="18" /> Technik</h3>
+				<h3><AppIcon name="info" :size="18" /> Technology</h3>
 				<p>
-					Aloha Social {{ instance?.version ?? '' }} auf einem unabhängigen PHP-Host.
-					Der Quellcode ist frei verfügbar.
+					Aloha Social {{ instance?.version ?? '' }} on an independent PHP host.
+					The source code is freely available.
 				</p>
 				<div class="a-about-links">
 					<a href="https://github.com/SchBenedikt/server" target="_blank" rel="noopener noreferrer">
@@ -113,7 +113,7 @@ const host = computed(() => typeof window === 'undefined' ? '' : window.location
 		</section>
 
 		<p class="a-about-footnote">
-			Aloha Social ist freie Software unter der AGPL-3.0-or-later. Keine Werbung, kein algorithmischer Zwang – nur ein Ort für Menschen.
+			Aloha Social is free software under AGPL-3.0-or-later. No ads, no algorithmic pressure — just a place for people.
 		</p>
 	</div>
 </template>

@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import { getApi } from '../lib/api';
@@ -11,12 +11,15 @@ import { handleLabel, relativeTime } from '../lib/format';
 import { appState, showToast } from '../lib/state';
 import type { Story, StoryGroup } from '../lib/types';
 
+const STORY_DURATION = 8000;
+const TICK = 80;
+
 const backgrounds = [
-	{ id: 'ocean', label: 'Ozean' },
-	{ id: 'sunset', label: 'Sonnenuntergang' },
-	{ id: 'forest', label: 'Wald' },
-	{ id: 'berry', label: 'Beere' },
-	{ id: 'night', label: 'Nacht' },
+	{ id: 'ocean', label: 'Ocean' },
+	{ id: 'sunset', label: 'Sunset' },
+	{ id: 'forest', label: 'Forest' },
+	{ id: 'berry', label: 'Berry' },
+	{ id: 'night', label: 'Night' },
 	{ id: 'sand', label: 'Sand' },
 ];
 
@@ -29,11 +32,13 @@ const draft = ref('');
 const tone = ref('ocean');
 const saving = ref(false);
 const deleting = ref('');
+const progress = ref(0);
+let timer = 0;
 
 const signedIn = computed(() => appState.session.user !== null);
 const selfHandle = computed(() => appState.session.user?.handle ?? '');
-const ownGroupIndex = computed(() => groups.value.findIndex((group) => group.account_id === selfHandle.value));
 const visibleGroups = computed(() => groups.value.filter((group) => group.stories.length > 0));
+const ownGroupIndex = computed(() => visibleGroups.value.findIndex((group) => group.account_id === selfHandle.value));
 const activeStory = computed<Story | null>(() => {
 	const groupIndex = activeGroup.value;
 	if (groupIndex === null) {
@@ -42,6 +47,14 @@ const activeStory = computed<Story | null>(() => {
 
 	const group = visibleGroups.value[groupIndex];
 	return group?.stories[activeIndex.value] ?? null;
+});
+const activeGroupStories = computed(() => {
+	const groupIndex = activeGroup.value;
+	if (groupIndex === null) {
+		return [];
+	}
+
+	return visibleGroups.value[groupIndex]?.stories ?? [];
 });
 const activeAuthor = computed(() => activeStory.value?.account_id ?? '');
 const canDeleteActive = computed(() => signedIn.value && activeAuthor.value === selfHandle.value);
@@ -63,8 +76,10 @@ function open(groupIndex: number): void {
 }
 
 function close(): void {
+	stopTimer();
 	activeGroup.value = null;
 	activeIndex.value = 0;
+	progress.value = 0;
 }
 
 function step(delta: number): void {
@@ -95,6 +110,41 @@ function step(delta: number): void {
 	close();
 }
 
+function startTimer(): void {
+	stopTimer();
+	progress.value = 0;
+	timer = window.setInterval(() => {
+		progress.value = Math.min(1, progress.value + TICK / STORY_DURATION);
+		if (progress.value >= 1) {
+			step(1);
+		}
+	}, TICK);
+}
+
+function stopTimer(): void {
+	if (timer !== 0) {
+		window.clearInterval(timer);
+		timer = 0;
+	}
+}
+
+function onKeydown(event: KeyboardEvent): void {
+	if (activeStory.value === null) {
+		return;
+	}
+
+	if (event.key === 'Escape') {
+		event.preventDefault();
+		close();
+	} else if (event.key === 'ArrowLeft') {
+		event.preventDefault();
+		step(-1);
+	} else if (event.key === 'ArrowRight') {
+		event.preventDefault();
+		step(1);
+	}
+}
+
 async function submit(): Promise<void> {
 	if (saving.value) {
 		return;
@@ -111,9 +161,9 @@ async function submit(): Promise<void> {
 		draft.value = '';
 		composing.value = false;
 		await load();
-		showToast('Story ist 24 Stunden sichtbar.', 'success');
+		showToast('Your story is visible for 24 hours.', 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Die Story konnte nicht gespeichert werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The story could not be saved.', 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -130,9 +180,9 @@ async function removeActive(): Promise<void> {
 		await getApi().deleteStory(story.id);
 		step(1);
 		await load();
-		showToast('Story gelöscht.', 'success');
+		showToast('Story deleted.', 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Die Story konnte nicht gelöscht werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The story could not be deleted.', 'error');
 	} finally {
 		deleting.value = '';
 	}
@@ -146,13 +196,38 @@ function authorName(accountId: string): string {
 	return handleLabel(accountId);
 }
 
-onMounted(load);
+watch(activeStory, (story) => {
+	if (story === null) {
+		stopTimer();
+		document.body.style.removeProperty('overflow');
+	} else {
+		startTimer();
+		document.body.style.overflow = 'hidden';
+	}
+});
+
+watch(activeIndex, () => {
+	if (activeStory.value !== null) {
+		startTimer();
+	}
+});
+
+onMounted(() => {
+	void load();
+	window.addEventListener('keydown', onKeydown);
+});
+
+onUnmounted(() => {
+	stopTimer();
+	window.removeEventListener('keydown', onKeydown);
+	document.body.style.removeProperty('overflow');
+});
 </script>
 
 <template>
-	<section v-if="loading || visibleGroups.length > 0 || signedIn" class="a-stories" aria-label="Storys">
+	<section v-if="loading || visibleGroups.length > 0 || signedIn" class="a-stories" aria-label="Stories">
 		<header class="a-stories__head">
-			<h2>Storys</h2>
+			<h2>Stories</h2>
 			<button
 				v-if="signedIn"
 				type="button"
@@ -160,7 +235,7 @@ onMounted(load);
 				@click="composing = !composing"
 			>
 				<AppIcon name="plus" :size="15" />
-				Story teilen
+				Share a story
 			</button>
 		</header>
 
@@ -169,13 +244,13 @@ onMounted(load);
 				v-if="signedIn"
 				type="button"
 				class="a-story a-story--add"
-				aria-label="Neue Story schreiben"
+				aria-label="Write a new story"
 				@click="composing = true"
 			>
 				<span class="a-story__add">
 					<AppIcon name="plus" :size="20" />
 				</span>
-				<small>Deine Story</small>
+				<small>{{ ownGroupIndex >= 0 ? 'Add to your story' : 'Your story' }}</small>
 			</button>
 
 			<button
@@ -184,27 +259,27 @@ onMounted(load);
 				type="button"
 				class="a-story"
 				:class="{ 'a-story--own': group.account_id === selfHandle }"
-				:aria-label="`Story von ${authorName(group.account_id)} ansehen`"
+				:aria-label="`View the story by ${authorName(group.account_id)}`"
 				@click="open(index)"
 			>
 				<span class="a-story__ring">
 					<Avatar :id="group.account_id" :name="authorName(group.account_id)" :size="54" />
 				</span>
-				<small>{{ group.account_id === selfHandle ? 'Du' : authorName(group.account_id) }}</small>
+				<small>{{ group.account_id === selfHandle ? 'You' : authorName(group.account_id) }}</small>
 			</button>
 		</div>
 
 		<form v-if="composing" class="a-story-compose" @submit.prevent="submit">
 			<label>
-				<span>Story-Text</span>
+				<span>Story text</span>
 				<textarea
 					v-model="draft"
 					maxlength="500"
 					rows="3"
-					placeholder="Was passiert gerade?"
+					placeholder="What is happening right now?"
 				/>
 			</label>
-			<div class="a-story-compose__tones" role="group" aria-label="Hintergrund">
+			<div class="a-story-compose__tones" role="group" aria-label="Background">
 				<button
 					v-for="background in backgrounds"
 					:key="background.id"
@@ -217,9 +292,9 @@ onMounted(load);
 				/>
 			</div>
 			<div class="a-story-compose__actions">
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="composing = false">Abbrechen</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="composing = false">Cancel</button>
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || draft.trim() === ''">
-					{{ saving ? 'Wird geteilt …' : 'Story teilen' }}
+					{{ saving ? 'Sharing…' : 'Share story' }}
 				</button>
 			</div>
 		</form>
@@ -233,29 +308,35 @@ onMounted(load);
 						<strong>{{ authorName(activeStory.account_id) }}</strong>
 						<small>{{ relativeTime(activeStory.created_at) }}</small>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Story schließen" @click="close">
+					<button type="button" class="a-icon-btn" aria-label="Close story" @click="close">
 						<AppIcon name="x" :size="20" />
 					</button>
 				</header>
 
 				<div class="a-story-viewer__progress" aria-hidden="true">
 					<span
-						v-for="(_, index) in (visibleGroups[activeGroup ?? 0]?.stories ?? [])"
+						v-for="(_, index) in activeGroupStories"
 						:key="index"
 						class="a-story-viewer__segment"
-						:class="{ 'a-story-viewer__segment--done': index <= activeIndex }"
-					/>
+						:class="{ 'a-story-viewer__segment--done': index < activeIndex }"
+					>
+						<span
+							v-if="index === activeIndex"
+							class="a-story-viewer__segment-fill"
+							:style="{ width: `${Math.round(progress * 100)}%` }"
+						/>
+					</span>
 				</div>
 
 				<p class="a-story-viewer__text">{{ activeStory.content }}</p>
 
 				<footer class="a-story-viewer__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="step(-1)">Zurück</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="step(-1)">Back</button>
 					<button v-if="canDeleteActive" type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="deleting !== ''" @click="removeActive">
 						<AppIcon name="trash" :size="15" />
-						Löschen
+						Delete
 					</button>
-					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="step(1)">Weiter</button>
+					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="step(1)">Next</button>
 				</footer>
 			</article>
 		</div>

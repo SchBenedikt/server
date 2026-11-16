@@ -15,28 +15,28 @@ declare(strict_types=1);
 
 ?>
 <section class="card">
-    <h1>Neues Passwort</h1>
+    <h1>New password</h1>
 
     <?php if ($error !== null): ?>
         <p class="error"><?= $escape($error) ?></p>
     <?php endif; ?>
 
     <?php if (!$valid): ?>
-        <p><a href="/forgot-password">Neuen Link anfordern</a></p>
+        <p><a href="/forgot-password">Request a new link</a></p>
     <?php else: ?>
-        <p class="muted">Wähle ein neues Passwort mit mindestens 8 Zeichen.</p>
+        <p class="muted">Choose a new password with at least 8 characters.</p>
 
         <form method="post" action="/reset-password">
             <input type="hidden" name="_csrf" value="<?= $escape($csrf) ?>">
             <input type="hidden" name="token" value="<?= $escape($token) ?>">
 
-            <label for="password">Neues Passwort</label>
+            <label for="password">New password</label>
             <input id="password" name="password" type="password" autocomplete="new-password" required autofocus>
 
-            <label for="password_confirm">Passwort wiederholen</label>
+            <label for="password_confirm">Repeat password</label>
             <input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" required>
 
-            <button type="submit">Passwort speichern</button>
+            <button type="submit">Save password</button>
         </form>
     <?php endif; ?>
 </section>

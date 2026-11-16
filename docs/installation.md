@@ -453,7 +453,7 @@ Then verify in a browser over the real HTTPS origin:
 5. Open your profile and both follower/following lists.
 6. Edit the display name on your profile.
 7. Search, open notifications, and log out.
-8. At mobile width, open the **Mehr** sheet and check that every destination is
+8. At mobile width, open the **More** sheet and check that every destination is
    reachable without horizontal scrolling; repeat in both themes.
 
 ## Updating an installation

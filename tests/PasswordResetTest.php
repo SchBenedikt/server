@@ -31,7 +31,7 @@ final class PasswordResetTest extends TestCase
         ], $cookies);
 
         self::assertSame(200, $sent->status);
-        self::assertStringContainsString('E-Mail', $sent->body);
+        self::assertStringContainsString('email', $sent->body);
 
         $mails = $this->mails($server);
         self::assertCount(1, $mails);
@@ -89,7 +89,7 @@ final class PasswordResetTest extends TestCase
         ], $cookies);
 
         self::assertSame(200, $response->status);
-        self::assertStringContainsString('Wenn ein Konto', $response->body);
+        self::assertStringContainsString('If an account', $response->body);
         self::assertCount(0, $this->mails($server));
     }
 
@@ -129,7 +129,7 @@ final class PasswordResetTest extends TestCase
         ], $cookies);
 
         self::assertSame(422, $response->status);
-        self::assertStringContainsString('abgelaufen', $response->body);
+        self::assertStringContainsString('expired', $response->body);
         self::assertSame(303, $server->login('alice', TestServer::PASSWORD)['response']->status);
     }
 

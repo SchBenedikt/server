@@ -71,10 +71,13 @@ Accounts, sessions and CSRF are host-owned per
   Local follower and following lists do not need a host extension: they use the
   core's `/api/mastodon/v1/accounts/{handle}/followers|following` routes.
 - **Shell and navigation.** The desktop shell is a three-column grid. Its left
-  sidebar holds six primary entries, the composer and a **Mehr** popover for
-  the library, moderation and instance pages, so it fits without scrolling.
+  sidebar holds the user's pinned primary entries (six by default), the composer
+  and a **More** popover for the library, moderation and instance pages, so it
+  fits without scrolling. A settings dialog can pin, reorder and reset the
+  primary entries; the choice is stored in `localStorage` under
+  `aloha.sidebar.v1`.
   At 900 px and below the shell becomes one column: a sticky mobile header, the
-  timeline, a five-tab bottom bar and a **Mehr** bottom sheet for the remaining
+  timeline, a five-tab bottom bar and a **More** bottom sheet for the remaining
   destinations. The composer becomes a floating button. `ui/src/style.css`
   owns the breakpoints and touch-target sizes.
 - **Media.** The composer accepts images, video and audio (up to ten

@@ -58,17 +58,17 @@ final class AdminApiController
 
         $userId = $session?->userId();
         if ($userId === null) {
-            return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+            return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
         }
 
         if ($isAdmin && $session?->account?->isAdmin() !== true) {
-            return $this->error(403, 'admin_required', 'Diese Seite ist der Administration vorbehalten.');
+            return $this->error(403, 'admin_required', 'This page is reserved for the administration.');
         }
 
         try {
             if ($isReport) {
                 if ($request->method !== 'POST') {
-                    return $this->error(405, 'method_not_allowed', 'Diese Route akzeptiert nur POST.');
+                    return $this->error(405, 'method_not_allowed', 'This route only accepts POST.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -93,7 +93,7 @@ final class AdminApiController
                 $exception->fields,
             );
         } catch (Throwable) {
-            return $this->error(500, 'admin_action_failed', 'Die Aktion konnte nicht ausgeführt werden.');
+            return $this->error(500, 'admin_action_failed', 'The action could not be completed.');
         }
     }
 
@@ -237,7 +237,7 @@ final class AdminApiController
             ]);
         }
 
-        return $this->error(404, 'admin_route_not_found', 'Diese Admin-Route existiert nicht.');
+        return $this->error(404, 'admin_route_not_found', 'This admin route does not exist.');
     }
 
     /**

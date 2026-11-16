@@ -34,7 +34,7 @@ async function load(): Promise<void> {
 	try {
 		collections.value = await getApi().collections();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Sammlungen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'The collections could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -53,17 +53,17 @@ async function create(): Promise<void> {
 		description.value = '';
 		isPublic.value = true;
 		creating.value = false;
-		showToast('Sammlung angelegt.', 'success');
+		showToast('Collection created.', 'success');
 		navigate(`/c/${encodeURIComponent(collection.id)}`);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Sammlung konnte nicht angelegt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The collection could not be created.', 'error');
 	} finally {
 		saving.value = false;
 	}
 }
 
 async function remove(collection: Collection): Promise<void> {
-	if (deleting.value !== '' || !window.confirm(`Sammlung „${collection.title}“ wirklich löschen?`)) {
+	if (deleting.value !== '' || !window.confirm(`Delete the collection “${collection.title}”?`)) {
 		return;
 	}
 
@@ -71,9 +71,9 @@ async function remove(collection: Collection): Promise<void> {
 	try {
 		await getApi().deleteCollection(collection.id);
 		collections.value = collections.value.filter((entry) => entry.id !== collection.id);
-		showToast('Sammlung gelöscht.', 'success');
+		showToast('Collection deleted.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Sammlung konnte nicht gelöscht werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The collection could not be deleted.', 'error');
 	} finally {
 		deleting.value = '';
 	}
@@ -85,15 +85,15 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Sammlungen"
-			subtitle="Ordne Beiträge in benannten, geordneten Listen – öffentlich oder nur für dich."
+			title="collections"
+			subtitle="Organize posts into named, ordered lists — public or just for you."
 			back-href="#/"
-			back-label="Zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = !creating">
 					<AppIcon name="plus" :size="15" />
-					Neue Sammlung
+					New collection
 				</button>
 			</template>
 		</PageHeader>
@@ -101,44 +101,44 @@ onMounted(load);
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Anmeldung erforderlich</strong>
-				<p>Sammlungen gehören zu einem Konto.</p>
+				<strong>Sign-in required</strong>
+				<p>Collections belong to an account.</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
 		<template v-else>
 			<form v-if="creating" class="a-panel a-collection-form" @submit.prevent="create">
 				<label>
 					<span>Name</span>
-					<input v-model="title" maxlength="100" required placeholder="Zum Beispiel: Gute Gedanken" />
+					<input v-model="title" maxlength="100" required placeholder="For example: Good thoughts" />
 				</label>
 				<label>
-					<span>Beschreibung</span>
-					<textarea v-model="description" maxlength="500" rows="2" placeholder="Worum geht es in dieser Sammlung?" />
+					<span>Description</span>
+					<textarea v-model="description" maxlength="500" rows="2" placeholder="What is this collection about?" />
 				</label>
 				<label class="a-check">
 					<input v-model="isPublic" type="checkbox" />
-					<span>Öffentlich sichtbar</span>
+					<span>Publicly visible</span>
 				</label>
 				<div class="a-collection-form__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = false">Abbrechen</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = false">Cancel</button>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || title.trim() === ''">
-						{{ saving ? 'Speichert …' : 'Sammlung anlegen' }}
+						{{ saving ? 'Saving…' : 'Create collection' }}
 					</button>
 				</div>
 			</form>
 
 			<p v-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
-			<p v-if="loading && collections.length === 0" class="a-muted">Sammlungen werden geladen …</p>
+			<p v-if="loading && collections.length === 0" class="a-muted">Loading collections…</p>
 
 			<EmptyState
 				v-else-if="collections.length === 0"
 				icon="list"
-				title="Noch keine Sammlung"
-				text="Lege eine Sammlung an und füge ihr später über das Beitragsmenü Beiträge hinzu."
+				title="No collections yet"
+				text="Create a collection and add posts to it later from the post menu."
 			>
-				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = true">Erste Sammlung</button>
+				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = true">Create your first collection</button>
 			</EmptyState>
 
 			<ul v-else class="a-collection-grid">
@@ -146,17 +146,17 @@ onMounted(load);
 					<a :href="`#/c/${encodeURIComponent(collection.id)}`" class="a-collection-card__link">
 						<span class="a-collection-card__badge">
 							<AppIcon :name="collection.is_public ? 'globe' : 'lock'" :size="13" />
-							{{ collection.is_public ? 'Öffentlich' : 'Privat' }}
+							{{ collection.is_public ? 'Public' : 'Private' }}
 						</span>
 						<strong>{{ collection.title }}</strong>
 						<p v-if="collection.description !== ''">{{ collection.description }}</p>
-						<small>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Beitrag' : 'Beiträge' }}</small>
+						<small>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Post' : 'Posts' }}</small>
 					</a>
 					<button
 						type="button"
 						class="a-icon-btn a-icon-btn--danger"
-						aria-label="Sammlung löschen"
-						title="Löschen"
+						aria-label="Delete collection"
+						title="Delete"
 						:disabled="deleting === collection.id"
 						@click="remove(collection)"
 					>

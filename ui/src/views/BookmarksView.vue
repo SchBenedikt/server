@@ -47,7 +47,7 @@ async function load(reset: boolean): Promise<void> {
 		cursor.value = page.length > 0 ? page[page.length - 1].id : null;
 		hasMore.value = page.length === 20;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Lesezeichen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Bookmarks could not be loaded.';
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -64,11 +64,11 @@ function onBookmark(id: string, bookmarked: boolean): void {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Lesezeichen"
-			subtitle="Private gespeicherte Beiträge, nur für dich sichtbar."
+			title="bookmarks"
+			subtitle="Private saved posts, visible only to you."
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Neu laden" title="Neu laden" :disabled="loading" @click="load(true)">
+				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load(true)">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -77,10 +77,10 @@ function onBookmark(id: string, bookmarked: boolean): void {
 		<EmptyState
 			v-if="!signedIn"
 			icon="bookmark"
-			title="Anmelden zum Merken"
-			text="Lesezeichen sind privat. Melde dich an, um Beiträge zu speichern und später wiederzufinden."
+			title="Sign in to bookmark"
+			text="Bookmarks are private. Sign in to save posts and find them again later."
 		>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</EmptyState>
 
 		<TimelineSkeleton v-else-if="loading && items.length === 0" :count="4" />
@@ -93,8 +93,8 @@ function onBookmark(id: string, bookmarked: boolean): void {
 		<EmptyState
 			v-else-if="items.length === 0"
 			icon="bookmark"
-			title="Noch keine Lesezeichen"
-			text="Nutze das Lesezeichen-Symbol an einem Beitrag, um ihn hier zu sammeln."
+			title="No bookmarks yet"
+			text="Use the bookmark icon on a post to collect it here."
 		/>
 
 		<div v-else class="a-feed">
@@ -115,7 +115,7 @@ function onBookmark(id: string, bookmarked: boolean): void {
 				@click="load(false)"
 			>
 				<AppIcon v-if="loadingMore" name="refresh" :size="15" class="a-spin" />
-				{{ loadingMore ? 'Wird geladen…' : 'Weitere Lesezeichen' }}
+				{{ loadingMore ? 'Loading…' : 'More bookmarks' }}
 			</button>
 		</div>
 	</div>

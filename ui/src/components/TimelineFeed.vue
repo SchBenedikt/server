@@ -18,8 +18,8 @@ const props = withDefaults(defineProps<{
 }>(), {
 	tag: '',
 	emptyIcon: 'sparkles',
-	emptyTitle: 'Noch nichts hier',
-	emptyText: 'Sobald jemand schreibt, erscheint es hier.',
+	emptyTitle: 'Nothing here yet',
+	emptyText: 'As soon as someone posts, it appears here.',
 });
 
 const timeline = useTimeline(() => ({ kind: props.kind, tag: props.tag }));
@@ -36,11 +36,11 @@ defineExpose({
 		<div v-else-if="timeline.error.value !== '' && timeline.posts.value.length === 0" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
 			<div>
-				<strong>Der Feed ist gerade nicht erreichbar.</strong>
+				<strong>The feed is currently unavailable.</strong>
 				<p>{{ timeline.error.value }}</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="timeline.refresh">
-				Erneut versuchen
+				Try again
 			</button>
 		</div>
 
@@ -71,14 +71,14 @@ defineExpose({
 			@click="timeline.loadMore"
 		>
 			<AppIcon v-if="timeline.loadingMore.value" name="refresh" :size="16" class="a-spin" />
-			{{ timeline.loadingMore.value ? 'Wird geladen…' : 'Weitere Beiträge' }}
+			{{ timeline.loadingMore.value ? 'Loading…' : 'More posts' }}
 		</button>
 
 		<p
 			v-else-if="timeline.loaded.value && timeline.posts.value.length > 0 && !timeline.hasMore.value"
 			class="a-feed__end"
 		>
-			Du bist auf dem neuesten Stand.
+			You're all caught up.
 		</p>
 	</section>
 </template>
