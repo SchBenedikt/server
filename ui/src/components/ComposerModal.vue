@@ -15,13 +15,30 @@ import type { Attachment, Draft, TimelineItem } from '../lib/types';
 
 const MAX_LENGTH = 5000;
 const MAX_WARNING = 200;
-const MAX_FILES = 4;
-const MAX_FILE_BYTES = 5 * 1024 * 1024;
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_FILES = 10;
+type MediaKind = 'image' | 'video' | 'audio';
+const ACCEPTED_TYPES: Record<string, MediaKind> = {
+	'image/jpeg': 'image',
+	'image/png': 'image',
+	'image/webp': 'image',
+	'image/gif': 'image',
+	'video/mp4': 'video',
+	'video/webm': 'video',
+	'audio/mpeg': 'audio',
+	'audio/mp4': 'audio',
+	'audio/ogg': 'audio',
+	'audio/wav': 'audio',
+};
+const MAX_BYTES: Record<MediaKind, number> = {
+	image: 5 * 1024 * 1024,
+	video: 20 * 1024 * 1024,
+	audio: 10 * 1024 * 1024,
+};
 
 interface PendingImage {
 	key: number;
 	file: File;
+	kind: MediaKind;
 	preview: string;
 	alt: string;
 }
@@ -354,21 +371,23 @@ function addFiles(event: Event): void {
 
 	for (const file of selected) {
 		if (images.value.length + existing.value.length >= MAX_FILES) {
-			showToast(`Höchstens ${MAX_FILES} Bilder pro Beitrag.`, 'error');
+			showToast(`Höchstens ${MAX_FILES} Anhänge pro Beitrag.`, 'error');
 			break;
 		}
-		if (!ACCEPTED_TYPES.includes(file.type)) {
-			showToast('Nur JPEG, PNG und WebP sind erlaubt.', 'error');
+		const kind = ACCEPTED_TYPES[file.type];
+		if (kind === undefined) {
+			showToast('Erlaubt sind JPEG, PNG, WebP, GIF, MP4/WebM, MP3, M4A, Ogg und WAV.', 'error');
 			continue;
 		}
-		if (file.size > MAX_FILE_BYTES) {
-			showToast('Ein Bild darf höchstens 5 MiB groß sein.', 'error');
+		if (file.size > MAX_BYTES[kind]) {
+			showToast(`Ein ${kind === 'image' ? 'Bild' : kind === 'video' ? 'Video' : 'Audio'} darf höchstens ${MAX_BYTES[kind] / 1024 / 1024} MiB groß sein.`, 'error');
 			continue;
 		}
 
 		images.value.push({
 			key: ++imageSequence,
 			file,
+			kind,
 			preview: URL.createObjectURL(file),
 			alt: '',
 		});
@@ -755,8 +774,17 @@ async function submit(): Promise<void> {
 							:src="attachment.url"
 							:alt="attachment.alt_text ?? ''"
 						/>
-						<span v-else class="a-composer__image-note">
-							<AppIcon name="image" :size="18" /> {{ attachment.media_type }}
+						<video
+							v-else-if="attachment.media_type === 'video' || attachment.mime_type.startsWith('video/')"
+							:src="attachment.url"
+							:poster="attachment.thumbnail_url ?? undefined"
+							muted
+							playsinline
+							preload="metadata"
+						/>
+						<span v-else class="a-composer__audio">
+							<AppIcon :name="attachment.mime_type.startsWith('audio/') ? 'music' : 'image'" :size="18" />
+							{{ attachment.mime_type.startsWith('audio/') ? 'Audio' : 'Anhang' }}
 						</span>
 						<button
 							type="button"
@@ -769,17 +797,28 @@ async function submit(): Promise<void> {
 						<span class="a-composer__image-note">Vorhandener Anhang</span>
 					</figure>
 					<figure v-for="(image, index) in images" :key="image.key" class="a-composer__image">
-						<img :src="image.preview" :alt="image.alt || `Bild ${index + 1}`" />
-						<button type="button" class="a-composer__image-remove" aria-label="Bild entfernen" @click="removeImage(image.key)">
+						<video
+							v-if="image.kind === 'video'"
+							:src="image.preview"
+							muted
+							playsinline
+							preload="metadata"
+						/>
+						<span v-else-if="image.kind === 'audio'" class="a-composer__audio">
+							<AppIcon name="music" :size="22" />
+							{{ image.file.name }}
+						</span>
+						<img v-else :src="image.preview" :alt="image.alt || `Bild ${index + 1}`" />
+						<button type="button" class="a-composer__image-remove" aria-label="Anhang entfernen" @click="removeImage(image.key)">
 							<AppIcon name="x" :size="15" />
 						</button>
 						<label>
-							<span>Alt-Text für Bild {{ index + 1 }}</span>
+							<span>{{ image.kind === 'image' ? `Alt-Text für Bild ${index + 1}` : `Beschreibung für Anhang ${index + 1}` }}</span>
 							<input
 								v-model="image.alt"
 								type="text"
 								maxlength="1000"
-								placeholder="Beschreibe das Bild für alle, die es nicht sehen können."
+								placeholder="Beschreibe den Anhang für alle, die ihn nicht sehen können."
 							/>
 						</label>
 					</figure>
@@ -792,7 +831,7 @@ async function submit(): Promise<void> {
 						ref="fileInput"
 						class="a-visually-hidden"
 						type="file"
-						accept="image/jpeg,image/png,image/webp"
+						accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/mp4,audio/ogg,audio/wav"
 						multiple
 						@change="addFiles"
 					/>
@@ -800,8 +839,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:disabled="images.length + existing.length >= MAX_FILES || submitting"
-						aria-label="Bilder hinzufügen"
-						title="Bilder hinzufügen"
+						aria-label="Bilder, Videos oder Audio hinzufügen"
+						title="Medien hinzufügen"
 						@click="fileInput?.click()"
 					>
 						<AppIcon name="image" :size="20" />

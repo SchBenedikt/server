@@ -13,6 +13,16 @@ const dialog = ref<HTMLDialogElement | null>(null);
 const current = computed(() => appState.lightbox.attachments[appState.lightbox.index] ?? null);
 const multiple = computed(() => appState.lightbox.attachments.length > 1);
 const counter = computed(() => `${appState.lightbox.index + 1} / ${appState.lightbox.attachments.length}`);
+const currentIsVideo = computed(() => (
+	current.value !== null
+	&& (current.value.media_type === 'video'
+		|| current.value.media_type === 'gifv'
+		|| current.value.mime_type.startsWith('video/'))
+));
+const currentIsAudio = computed(() => (
+	current.value !== null
+	&& (current.value.media_type === 'audio' || current.value.mime_type.startsWith('audio/'))
+));
 
 function close(): void {
 	closeLightbox();
@@ -90,7 +100,16 @@ watch(() => appState.lightbox.open, async (open) => {
 			</button>
 
 			<figure class="a-lightbox__figure">
-				<img :src="mediaUrl(current.url)" :alt="current.alt_text ?? 'Anhang'" />
+				<video
+					v-if="currentIsVideo"
+					:src="mediaUrl(current.url)"
+					:poster="current.thumbnail_url !== null ? mediaUrl(current.thumbnail_url) : undefined"
+					controls
+					autoplay
+					playsinline
+				/>
+				<audio v-else-if="currentIsAudio" :src="mediaUrl(current.url)" controls />
+				<img v-else :src="mediaUrl(current.url)" :alt="current.alt_text ?? 'Anhang'" />
 				<figcaption v-if="current.alt_text" class="a-lightbox__caption">
 					{{ current.alt_text }}
 				</figcaption>

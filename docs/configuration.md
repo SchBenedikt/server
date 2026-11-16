@@ -88,9 +88,13 @@ account.
 | `ALOHASOCIAL_DISCOVERY_INSTANCE` | `discovery_instance` | `mastodon.social` | Public Mastodon-compatible instance used for federated keyword and hashtag search. Empty disables it; Bluesky search keeps working. |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `mastodon_prefix` | `/api/mastodon/v1` | Compatibility route prefix. |
 
-The application accepts JPEG, PNG and WebP images up to 5 MiB per file. Set
-PHP's `upload_max_filesize` to at least 6M and `post_max_size` to at least 8M,
-and set the web server's request-body limit to at least 6M.
+The application accepts images (JPEG, PNG, WebP, GIF) up to 5 MiB, video
+(MP4, WebM) up to 20 MiB and audio (MP3, M4A, Ogg, WAV) up to 10 MiB per file,
+with at most ten attachments per post. The core enforces the per-kind limits;
+the host does not override them. Set PHP's `upload_max_filesize` to at least
+`21M` and `post_max_size` to at least `64M` if video uploads should work; a
+post with several files needs room for their sum too. Set the web server's
+request-body limit to at least the same value.
 
 Federation is enabled by the host. Actor documents, WebFinger and inbox/outbox
 routes must be served from the same origin through `public/index.php`; do not

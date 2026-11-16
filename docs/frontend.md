@@ -68,6 +68,20 @@ Accounts, sessions and CSRF are host-owned per
   for likes, interaction counts, batch post hydration, profile updates, remote
   profiles, remote post detail, remote followers/following lists, remote
   likes/boosts, cross-network search and quote resolution (see the README).
+  Local follower and following lists do not need a host extension: they use the
+  core's `/api/mastodon/v1/accounts/{handle}/followers|following` routes.
+- **Shell and navigation.** The desktop shell is a three-column grid. Its left
+  sidebar holds six primary entries, the composer and a **Mehr** popover for
+  the library, moderation and instance pages, so it fits without scrolling.
+  At 900 px and below the shell becomes one column: a sticky mobile header, the
+  timeline, a five-tab bottom bar and a **Mehr** bottom sheet for the remaining
+  destinations. The composer becomes a floating button. `ui/src/style.css`
+  owns the breakpoints and touch-target sizes.
+- **Media.** The composer accepts images, video and audio (up to ten
+  attachments). `MediaGrid` renders video with native controls and a poster
+  frame and audio with a native player; the lightbox does the same. The old
+  markup treated every attachment as an image, so video and audio appeared as
+  broken previews.
 - **Discovery.** `#/explore` searches the public timeline locally and offers a
   cross-network search over Bluesky's AppView and a configurable public
   Mastodon-compatible instance (`ALOHASOCIAL_DISCOVERY_INSTANCE`). Results are
@@ -91,9 +105,10 @@ Accounts, sessions and CSRF are host-owned per
   sections call `/api/v1/host/admin/*`, and reporting uses
   `/api/v1/host/reports`. These routes are intentionally outside the core
   manifest because they depend on host-owned accounts, sessions and tables.
-- **Composer extras.** The composer can publish a poll or schedule a post.
-  Polls use `POST /api/mastodon/v1/statuses` with the `poll` object; scheduling
-  uses `POST /api/v1/scheduled-posts`. The two are mutually exclusive because a
+- **Composer extras.** The composer can attach up to ten images, videos or
+  audio files, publish a poll or schedule a post. Polls use
+  `POST /api/mastodon/v1/statuses` with the `poll` object; scheduling uses
+  `POST /api/v1/scheduled-posts`. The two are mutually exclusive because a
   scheduled post stores no poll.
 - **CSP.** The `/app` response uses
   `script-src 'self'`, `style-src 'self' 'unsafe-inline'`,
@@ -126,12 +141,14 @@ Reasons, in order of importance:
 2. **One deployment artifact.** `public/ui/` is committed and served by the same
    PHP application. There is no second build pipeline, no asset upload and no
    cross-repository version pin. A fresh checkout without Node can serve `/app`.
-3. **Version coupling.** `composer.json` requires `alohasocial/core: ^0.7`; the
-   shared UI is versioned with that core line (`@alohasocial/ui` 0.7.0 in the
-   installed package). At the time of writing, `@alohasocial/ui` is not
-   published on the public npm registry (`npm view @alohasocial/ui version`
-   returns 404), so an external web repository could not consume it as a normal
-   semver dependency yet.
+3. **Version coupling.** `composer.json` requires `alohasocial/core: dev-main`
+   and `composer.lock` pins the installed commit; the installed core reports
+   `0.7.0` in `vendor/alohasocial/core/src/Version.php`, and the shared UI is
+   versioned with that core line (`@alohasocial/ui` 0.7.0 in the installed
+   package). The server itself is released as `0.8.0` (see the changelog). At
+   the time of writing, `@alohasocial/ui` is not published on the public npm
+   registry (`npm view @alohasocial/ui version` returns 404), so an external web
+   repository could not consume it as a normal semver dependency yet.
 4. **Tests stay together.** The UI mount is covered by the same PHPUnit run as
    the server routes and the API it calls. A separate repository would add an
    integration boundary and a second test setup for one mount page.
@@ -177,5 +194,6 @@ grep -n 'file:../vendor/alohasocial/core/ui' ui/package.json
 grep -n 'outDir' ui/vite.config.ts
 grep -n 'appPage\|/app' src/Http/FrontController.php
 php vendor/bin/phpunit --filter UiMountTest
+php vendor/bin/phpunit --filter VersionTest
 npm view @alohasocial/ui version
 ```

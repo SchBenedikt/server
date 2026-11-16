@@ -1,7 +1,7 @@
 {
 	"name": "@alohasocial/server-ui",
 	"private": true,
-	"version": "0.0.0",
+	"version": "0.8.0",
 	"type": "module",
 	"description": "Standalone host page that mounts the shared @alohasocial/ui package through a HostBridge.",
 	"scripts": {

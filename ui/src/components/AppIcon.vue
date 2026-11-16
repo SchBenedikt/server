@@ -64,8 +64,10 @@ const paths: Record<string, string> = {
 	alert: '<path d="M12 3 2 21h20z"/><path d="M12 9v5M12 17.5v.5"/>',
 	arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 	chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
-	quote: '<path d="M9 7H5v4c0 3 1.7 5.2 4 6"/><path d="M19 7h-4v4c0 3 1.7 5.2 4 6"/>',
+	quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
 	archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/>',
+	play: '<path d="m8 5 11 7-11 7z"/>',
+	music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
 };
 
 const markup = computed(() => paths[props.name] ?? paths.info);

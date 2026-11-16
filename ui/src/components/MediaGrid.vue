@@ -22,6 +22,16 @@ function markBroken(id: string): void {
 	broken.add(id);
 }
 
+function isVideo(attachment: Attachment): boolean {
+	return attachment.media_type === 'video'
+		|| attachment.media_type === 'gifv'
+		|| attachment.mime_type.startsWith('video/');
+}
+
+function isAudio(attachment: Attachment): boolean {
+	return attachment.media_type === 'audio' || attachment.mime_type.startsWith('audio/');
+}
+
 function open(index: number): void {
 	openLightbox(props.attachments, index);
 }
@@ -33,29 +43,60 @@ function open(index: number): void {
 		class="a-media"
 		:class="`a-media--${Math.min(attachments.length, 4)}`"
 	>
-		<button
-			v-for="(attachment, index) in attachments"
-			:key="attachment.id"
-			type="button"
-			class="a-media__item"
-			:aria-label="attachment.alt_text !== null && attachment.alt_text !== ''
-				? `Bild öffnen: ${attachment.alt_text}`
-				: `Bild ${index + 1} von ${attachments.length} öffnen`"
-			@click="open(index)"
-		>
-			<img
-				v-if="!broken.has(attachment.id)"
-				:src="mediaUrl(attachment.thumbnail_url ?? attachment.url)"
-				:alt="attachment.alt_text ?? `Anhang von ${authorHandle}`"
-				loading="lazy"
-				decoding="async"
-				@error="markBroken(attachment.id)"
-			/>
-			<span v-else class="a-media__fallback">
-				<AppIcon name="image" :size="28" />
-				<span>Bild nicht verfügbar</span>
-			</span>
-			<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
-		</button>
+		<template v-for="(attachment, index) in attachments" :key="attachment.id">
+			<div
+				v-if="isVideo(attachment)"
+				class="a-media__item a-media__item--video"
+			>
+				<video
+					:src="mediaUrl(attachment.url)"
+					:poster="attachment.thumbnail_url !== null ? mediaUrl(attachment.thumbnail_url) : undefined"
+					controls
+					playsinline
+					preload="metadata"
+					:aria-label="attachment.alt_text !== null && attachment.alt_text !== ''
+						? `Video: ${attachment.alt_text}`
+						: `Video ${index + 1} von ${attachments.length}`"
+				/>
+				<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
+			</div>
+
+			<div
+				v-else-if="isAudio(attachment)"
+				class="a-media__item a-media__item--audio"
+			>
+				<span class="a-media__audio-label">
+					<AppIcon name="music" :size="16" />
+					{{ attachment.alt_text !== null && attachment.alt_text !== ''
+						? attachment.alt_text
+						: `Audio ${index + 1} von ${attachments.length}` }}
+				</span>
+				<audio :src="mediaUrl(attachment.url)" controls preload="metadata" />
+			</div>
+
+			<button
+				v-else
+				type="button"
+				class="a-media__item"
+				:aria-label="attachment.alt_text !== null && attachment.alt_text !== ''
+					? `Bild öffnen: ${attachment.alt_text}`
+					: `Bild ${index + 1} von ${attachments.length} öffnen`"
+				@click="open(index)"
+			>
+				<img
+					v-if="!broken.has(attachment.id)"
+					:src="mediaUrl(attachment.thumbnail_url ?? attachment.url)"
+					:alt="attachment.alt_text ?? `Anhang von ${authorHandle}`"
+					loading="lazy"
+					decoding="async"
+					@error="markBroken(attachment.id)"
+				/>
+				<span v-else class="a-media__fallback">
+					<AppIcon name="image" :size="28" />
+					<span>Bild nicht verfügbar</span>
+				</span>
+				<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
+			</button>
+		</template>
 	</div>
 </template>
