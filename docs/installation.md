@@ -94,16 +94,19 @@ php -v
 php -m | grep -E 'pdo_sqlite|pdo_pgsql|gd|mbstring|curl|openssl'
 ```
 
-Uploads are limited by the application to 5 MiB per image. PHP must accept at
-least that much:
+Uploads are limited by the application to 5 MiB per image, 20 MiB per video and
+10 MiB per audio file, with at most ten attachments per post. PHP must accept at
+least the largest single file; a post with several files needs room for their
+sum:
 
 ```ini
-upload_max_filesize = 6M
-post_max_size = 8M
+upload_max_filesize = 21M
+post_max_size = 64M
 max_execution_time = 60
 ```
 
-The web server's request-body limit must also be at least 6 MiB (see the Nginx
+If video is not needed, the smaller image limits (`6M` / `8M`) are enough. The
+web server's request-body limit must also match the chosen value (see the Nginx
 `client_max_body_size` example below).
 
 ## Local installation (SQLite)
@@ -377,8 +380,8 @@ group = www-data
 ```
 
 Add a separate port-80 server that redirects to HTTPS. Set PHP limits in the
-pool (`upload_max_filesize = 6M`, `post_max_size = 8M`,
-`max_execution_time = 60`). The UI bundle is served as static files from
+pool (`upload_max_filesize = 21M`, `post_max_size = 64M` for video, or
+`6M` / `8M` if only images are used, `max_execution_time = 60`). The UI bundle is served as static files from
 `public/ui/`; no Node process or asset server is needed.
 
 Restart PHP-FPM after changing the pool or deployment files:
@@ -444,10 +447,14 @@ Then verify in a browser over the real HTTPS origin:
 
 1. Sign in.
 2. Create a post with text and an image; reload and confirm the image remains.
-3. Reply, like, boost, and remove the like.
-4. Edit the display name on your profile.
-5. Search, open notifications, and log out.
-6. Repeat the core checks at mobile width and in both themes.
+3. Create a post with a short video and one with audio; confirm both play inline
+   and in the lightbox.
+4. Reply, like, boost, quote, and remove the like.
+5. Open your profile and both follower/following lists.
+6. Edit the display name on your profile.
+7. Search, open notifications, and log out.
+8. At mobile width, open the **Mehr** sheet and check that every destination is
+   reachable without horizontal scrolling; repeat in both themes.
 
 ## Updating an installation
 

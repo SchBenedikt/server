@@ -80,6 +80,13 @@ const results = computed(() => {
 });
 
 const recent = computed(() => discover.posts.slice(0, 4));
+const videoPosts = computed(() => discover.posts
+	.filter((post) => post.attachments?.some((attachment) => (
+		attachment.media_type === 'video'
+		|| attachment.media_type === 'gifv'
+		|| attachment.mime_type.startsWith('video/')
+	)))
+	.slice(0, 6));
 
 watch(discoveryPeople, (people) => {
 	for (const person of people) {
@@ -550,6 +557,22 @@ function isFollowingTag(tag: string): boolean {
 					text="Die öffentliche Timeline füllt sich, sobald jemand den ersten Beitrag schreibt."
 				/>
 				<p v-if="discover.error !== ''" class="a-feed__inline-error">{{ discover.error }}</p>
+			</section>
+
+			<section v-if="videoPosts.length > 0" class="a-explore-section">
+				<header class="a-section-head">
+					<h2>
+						<AppIcon name="play" :size="16" />
+						Videos
+					</h2>
+					<span>Bewegtbild aus den neuesten Beiträgen</span>
+				</header>
+
+				<ol class="a-feed__list">
+					<li v-for="post in videoPosts" :key="post.id">
+						<PostCard :post="post" />
+					</li>
+				</ol>
 			</section>
 		</template>
 	</div>

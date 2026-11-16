@@ -20,10 +20,13 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 | [Operations](docs/operations.md) | Backups, restore, upgrades, monitoring, security and troubleshooting |
 | [Frontend hosting](docs/frontend.md) | Where the Vue app lives, how it is built and the HostBridge boundary |
 | [Documentation index](docs/README.md) | A short route through all guides |
+| [Changelog](CHANGELOG.md) | Release history and versioning rules |
 
-**Status: phases 0–3 of the blueprint plus account mail, the shared UI and a
-federation smoke test** — a standalone instance that signs, delivers and
-accepts ActivityPub, resets passwords by email and serves the shared Vue app.
+**Status: release 0.8.0** — phases 0–6 of the blueprint plus account mail, the
+shared Vue UI, host-owned community and moderation features, and a federation
+smoke test. The standalone instance signs, delivers and accepts ActivityPub,
+resets passwords by email and serves the shared Vue app. Release history and
+the versioning rules are in [CHANGELOG.md](CHANGELOG.md).
 
 | Phase | Delivered | Check |
 | --- | --- | --- |
@@ -36,9 +39,11 @@ accepts ActivityPub, resets passwords by email and serves the shared Vue app.
 | 5 | Shared Vue UI mounted at `/app` | `HostBridge` page, timeline, composer, notifications; built assets committed |
 | 6 | Federation smoke against a real peer | two instances, signed Follow, follower edge, delivered Create |
 
-Not implemented yet (later blueprint phases): AT Protocol account linking
-(Bluesky profiles and posts are readable, but posting and following need
-ATProto OAuth) and the Nextcloud host. Installation is available as a
+Bluesky accounts can be connected with an app password and local posts
+published to AT Protocol; Bluesky profiles, posts and search are readable
+without an account. Native ATProto follows and OAuth-based publishing are not
+part of this host yet. The Nextcloud host is a separate application
+(`AlohaSocial/social`) and is not built here. Installation is available as a
 [Docker image](docs/docker.md), a [Compose stack](docker-compose.yml) and an
 [installer script](scripts/install.sh). The federation
 smoke also shows a core-level gap: an inbound `Accept` is not in the core's
@@ -50,8 +55,9 @@ are unaffected; the fix belongs in the core package, not in this host.
 
 - PHP 8.3 or newer with `pdo_sqlite` or `pdo_pgsql`, `gd`, `mbstring`,
   `curl`, `openssl` and `json`
-- `upload_max_filesize` and `post_max_size` at least the media limit (5 MiB
-  by default); PHP rejects a larger upload before the application sees it
+- `upload_max_filesize` and `post_max_size` at least the media limits (5 MiB
+  images, 20 MiB video, 10 MiB audio, up to ten attachments); PHP rejects a
+  larger upload before the application sees it
 - Composer 2
 - PostgreSQL (preferred for a real instance) or SQLite (small installs, tests)
 - Node 20+ only to rebuild the shared UI; the built bundle in `public/ui/` is
@@ -173,6 +179,12 @@ operator sees the failure instead of a silent drop.
 The page at `/app` is a small host app that mounts `@alohasocial/ui` through
 the standalone `HostBridge` (`src` under `ui/`). The bridge attaches the session
 cookie and `X-CSRF-Token`, and the shared screens consume only `/api/v1`.
+
+The desktop shell keeps its navigation in a fixed sidebar: six primary entries,
+a composer button and a **Mehr** popover for the library, moderation and
+instance pages, so the sidebar never needs to scroll. Below 900 px the shell
+becomes a single column with a five-tab bottom bar and the same **Mehr** entries
+in a bottom sheet. Touch targets and media layouts adapt to small screens.
 
 ```shell
 # Only needed after changing the shared package or the host app. The core's
@@ -335,9 +347,23 @@ any attempt to change state that a concurrent moderator already changed. The
 moderation tables (`moderation_report`, `admin_audit`) and the worker
 heartbeat (`runtime_state`) are created by host migration `202611150001`.
 
-Post actions — reply, boost, like, bookmark, share, report and open — render
-as icons with accessible labels. Counts appear only when they are greater than
-zero, so a quiet post stays quiet without losing the action.
+Post actions — reply, boost, quote, like, bookmark, share, report and open —
+render as icons with accessible labels. Counts appear only when they are greater
+than zero, so a quiet post stays quiet without losing the action. The quote icon
+is a closed glyph that stays legible at 15–18 px.
+
+Attachments support images (JPEG, PNG, WebP, GIF), video (MP4, WebM) and audio
+(MP3, M4A, Ogg, WAV), up to ten per post. Images render as a grid and open in
+the lightbox; video plays inline with native controls and its poster frame;
+audio uses a native player. The composer previews each kind before upload, and
+quoted posts render their first attachment with the same rules. The limits are
+5 MiB for images, 20 MiB for video and 10 MiB for audio, but PHP's
+`upload_max_filesize` and `post_max_size` still cap what reaches the app.
+
+Followers and following on a **local** profile open the same list dialog as a
+remote profile. The list is read from
+`/api/mastodon/v1/accounts/{handle}/followers|following`; remote profiles keep
+their existing public ActivityPub/Bluesky lookup.
 
 ## Configuration
 
@@ -414,8 +440,10 @@ Browser → public/index.php → HostConfig → ApplicationFactory::boot()
         → $app->kernel->handle(Request)   (the core's 84 routes)
 ```
 
-The core is a Composer VCS dependency pinned to the `0.7.x` line
-(`src/Version.php` is the authority). Nothing from the core is copied here.
+The core is a Composer VCS dependency (`alohasocial/core: dev-main` from the
+VCS repository) pinned by `composer.lock`. The installed core reports its
+release line in `vendor/alohasocial/core/src/Version.php` (currently `0.7.0`).
+Nothing from the core is copied here.
 
 ## Design notes
 
@@ -466,7 +494,11 @@ login/rotation/CSRF/logout/throttle, route budgets, a post written and read
 over HTTP, media upload/serving/attachment, batched host interactions, likes,
 profile updates, post hydration, password reset by mailed token, the UI mount
 and its bundle, actor document and WebFinger, the cleanup job through the
-worker, and route parity against the core manifest.
+worker, and route parity against the core manifest. The bundle test also checks
+the markers for the sidebar popover, the mobile sheet, video/audio rendering,
+the local account connection endpoint and the new quote glyph. `VersionTest`
+keeps `composer.json`, `ui/package.json` and the newest changelog heading on the
+same release number.
 
 ```shell
 composer smoke:federation      # or: php bin/federation-smoke.php

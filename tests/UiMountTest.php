@@ -56,6 +56,19 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('/api/v1/timelines/home', $script);
         self::assertStringContainsString('/api/v1/timelines/public', $script);
         self::assertStringContainsString('/api/v1/media', $script);
+        self::assertStringContainsString('a-sidebar__more-menu', $script);
+        self::assertStringContainsString('a-mobile-sheet', $script);
+        self::assertStringContainsString('a-media__item--video', $script);
+        self::assertStringContainsString('/api/mastodon/v1/accounts/', $script);
+        self::assertStringContainsString('video/mp4', $script);
+        self::assertStringContainsString('audio/wav', $script);
+        self::assertStringContainsString('M16 3a2 2 0 0 0-2 2v6', $script);
+
+        $style = (string) file_get_contents($root . '/public/ui/app.css');
+        self::assertStringContainsString('.a-sidebar__more-menu', $style);
+        self::assertStringContainsString('.a-mobile-sheet', $style);
+        self::assertStringContainsString('.a-media__item--video', $style);
+        self::assertStringContainsString('.a-composer__audio', $style);
     }
 
     public function testDashboardLinksTheSharedApp(): void

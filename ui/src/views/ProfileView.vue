@@ -80,13 +80,20 @@ const connectionCursor = ref<string | null>(null);
 const connectionLoading = ref(false);
 const connectionError = ref('');
 const connectionNetwork = ref<'activitypub' | 'bluesky'>('activitypub');
+const connectionLocal = ref(false);
 const connectionGeneration = ref(0);
 const connectionTitle = computed(() => connectionType.value === 'followers' ? 'Follower' : 'Gefolgt');
-const connectionEmptyText = computed(() => (
-	connectionType.value === 'followers'
+const connectionEmptyText = computed(() => {
+	if (connectionLocal.value) {
+		return connectionType.value === 'followers'
+			? 'Noch niemand auf dieser Instanz folgt diesem Profil.'
+			: 'Dieses Profil folgt noch niemandem auf dieser Instanz.';
+	}
+
+	return connectionType.value === 'followers'
 		? 'Dieses Profil hat keine öffentlich sichtbaren Follower.'
-		: 'Dieses Profil folgt niemandem öffentlich.'
-));
+		: 'Dieses Profil folgt niemandem öffentlich.';
+});
 const joinedLabel = computed(() => {
 	const value = account.value?.published_at ?? '';
 	return value !== '' ? absoluteTime(value) : '';
@@ -562,12 +569,13 @@ async function loadPosts(reset: boolean): Promise<void> {
 }
 
 async function openConnections(type: 'followers' | 'following'): Promise<void> {
-	if (!isRemoteProfile.value || account.value === null) {
+	if (account.value === null || handle.value === '') {
 		return;
 	}
 
 	const current = ++connectionGeneration.value;
 	connectionType.value = type;
+	connectionLocal.value = !isRemoteProfile.value;
 	connectionProfiles.value = [];
 	connectionCursor.value = null;
 	connectionError.value = '';
@@ -591,11 +599,17 @@ async function loadConnections(reset: boolean, expected = connectionGeneration.v
 	}
 
 	try {
-		const data = await getApi().remoteConnections(
-			handle.value,
-			connectionType.value,
-			reset ? null : connectionCursor.value,
-		);
+		const data = connectionLocal.value
+			? await getApi().accountConnections(
+				handle.value,
+				connectionType.value,
+				reset ? null : connectionCursor.value,
+			)
+			: await getApi().remoteConnections(
+				handle.value,
+				connectionType.value,
+				reset ? null : connectionCursor.value,
+			);
 		if (expected !== connectionGeneration.value) {
 			return;
 		}
@@ -611,7 +625,9 @@ async function loadConnections(reset: boolean, expected = connectionGeneration.v
 
 		connectionProfiles.value = collected;
 		connectionCursor.value = data.cursor;
-		connectionNetwork.value = data.network;
+		if ('network' in data) {
+			connectionNetwork.value = data.network;
+		}
 	} catch (caught) {
 		if (expected === connectionGeneration.value) {
 			connectionError.value = caught instanceof Error
@@ -1140,8 +1156,10 @@ onUnmounted(() => {
 				</header>
 
 				<p class="a-connections__meta">
-					<AppIcon :name="connectionNetwork === 'bluesky' ? 'sparkles' : 'globe'" :size="14" />
-					{{ connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'Fediverse · ActivityPub' }}
+					<AppIcon :name="connectionNetwork === 'bluesky' && !connectionLocal ? 'sparkles' : 'globe'" :size="14" />
+					{{ connectionLocal
+						? 'Diese Instanz · lokal'
+						: connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'Fediverse · ActivityPub' }}
 					<span>· {{ connectionProfiles.length }} geladen</span>
 				</p>
 

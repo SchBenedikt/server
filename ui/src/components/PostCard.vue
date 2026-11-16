@@ -18,7 +18,7 @@ import { announcePostDeleted } from '../lib/events';
 import { ensureInteractions, interactionFor, patchInteraction, rememberInteraction } from '../lib/interactions';
 import { cachedQuote, loadQuote } from '../lib/quotes';
 import { appState, openComposer, openEditor, openQuote, showToast } from '../lib/state';
-import type { Poll, TimelineItem } from '../lib/types';
+import type { Attachment, Poll, TimelineItem } from '../lib/types';
 
 const props = withDefaults(defineProps<{
 	post: TimelineItem;
@@ -174,6 +174,20 @@ function quoteAuthorHandle(post: TimelineItem): string {
 function quoteAuthorHref(post: TimelineItem): string {
 	const target = post.author_handle?.trim() || post.object_author_id || post.author_id;
 	return `#/u/${encodeURIComponent(target)}`;
+}
+
+function quoteMedia(post: TimelineItem): Attachment | null {
+	return post.attachments?.[0] ?? null;
+}
+
+function attachmentIsVideo(attachment: Attachment): boolean {
+	return attachment.media_type === 'video'
+		|| attachment.media_type === 'gifv'
+		|| attachment.mime_type.startsWith('video/');
+}
+
+function attachmentIsAudio(attachment: Attachment): boolean {
+	return attachment.media_type === 'audio' || attachment.mime_type.startsWith('audio/');
 }
 
 function quotedHref(post: TimelineItem): string | null {
@@ -885,13 +899,31 @@ onUnmounted(() => {
 					<AppIcon name="info" :size="13" /> {{ quotedPost.content_warning }}
 				</p>
 				<RichText v-else :text="quotedPost.content" class="a-quote-embed__text" />
-				<img
-					v-if="quotedPost.attachments && quotedPost.attachments.length > 0"
-					class="a-quote-embed__media"
-					:src="quotedPost.attachments[0].thumbnail_url ?? quotedPost.attachments[0].url"
-					:alt="quotedPost.attachments[0].alt_text ?? ''"
-					loading="lazy"
-				/>
+				<template v-if="quoteMedia(quotedPost) !== null">
+					<video
+						v-if="attachmentIsVideo(quoteMedia(quotedPost)!)"
+						class="a-quote-embed__media"
+						:src="quoteMedia(quotedPost)!.url"
+						:poster="quoteMedia(quotedPost)!.thumbnail_url ?? undefined"
+						muted
+						playsinline
+						preload="metadata"
+					/>
+					<span
+						v-else-if="attachmentIsAudio(quoteMedia(quotedPost)!)"
+						class="a-quote-embed__media a-quote-embed__media--audio"
+					>
+						<AppIcon name="music" :size="16" />
+						{{ quoteMedia(quotedPost)!.alt_text || 'Audio-Anhang' }}
+					</span>
+					<img
+						v-else
+						class="a-quote-embed__media"
+						:src="quoteMedia(quotedPost)!.thumbnail_url ?? quoteMedia(quotedPost)!.url"
+						:alt="quoteMedia(quotedPost)!.alt_text ?? ''"
+						loading="lazy"
+					/>
+				</template>
 			</a>
 			<p v-else-if="quoteLoading" class="a-quote-embed__missing">Zitierter Beitrag wird geladen …</p>
 			<p v-else class="a-quote-embed__missing">

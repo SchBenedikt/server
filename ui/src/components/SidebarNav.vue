@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import { route } from '../lib/router';
@@ -30,38 +30,87 @@ const instanceHost = computed(() => {
 const instanceName = computed(() => appState.instance?.name ?? 'Aloha Social');
 
 const menuOpen = ref(false);
+const moreOpen = ref(false);
 const loggingOut = ref(false);
 
-const items = computed(() => {
-	const base = [
+const primaryItems = computed(() => {
+	const items = [
 		{ name: 'home' as const, label: 'Startseite', icon: 'home', href: '#/' },
 		{ name: 'explore' as const, label: 'Entdecken', icon: 'compass', href: '#/explore' },
 		{ name: 'notifications' as const, label: 'Benachrichtigungen', icon: 'bell', href: '#/notifications' },
 	];
 
 	if (signedIn.value) {
-		base.push(
+		items.push(
 			{ name: 'messages' as const, label: 'Nachrichten', icon: 'message', href: '#/messages' },
-			{ name: 'memories' as const, label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
-			{ name: 'drafts' as const, label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
-			{ name: 'archived' as const, label: 'Archiv', icon: 'archive', href: '#/archived' },
-			{ name: 'settings' as const, label: 'Einstellungen', icon: 'settings', href: '#/settings' },
-			{ name: 'follow-requests' as const, label: 'Folgenanfragen', icon: 'lock', href: '#/follow-requests' },
-			{ name: 'collections' as const, label: 'Sammlungen', icon: 'list', href: '#/collections' },
-			{ name: 'bookmarks' as const, label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
-			{ name: 'lists' as const, label: 'Listen', icon: 'list', href: '#/lists' },
-			{ name: 'scheduled' as const, label: 'Geplante Beiträge', icon: 'calendar', href: '#/scheduled' },
 			{
 				name: 'profile' as const,
 				label: 'Profil',
 				icon: 'user',
 				href: `#/u/${encodeURIComponent(handle.value)}`,
 			},
+			{ name: 'settings' as const, label: 'Einstellungen', icon: 'settings', href: '#/settings' },
 		);
 	}
 
-	return base;
+	return items;
 });
+
+const moreGroups = computed(() => {
+	const groups: Array<{
+		title: string;
+		items: Array<{ name: string; label: string; icon: string; href: string }>;
+	}> = [
+		{
+			title: 'Entdecken',
+			items: [
+				{ name: 'search', label: 'Suchen', icon: 'search', href: '#/search' },
+			],
+		},
+	];
+
+	if (signedIn.value) {
+		groups.push(
+			{
+				title: 'Bibliothek',
+				items: [
+					{ name: 'memories', label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
+					{ name: 'bookmarks', label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
+					{ name: 'collections', label: 'Sammlungen', icon: 'list', href: '#/collections' },
+					{ name: 'lists', label: 'Listen', icon: 'list', href: '#/lists' },
+					{ name: 'drafts', label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
+					{ name: 'archived', label: 'Archiv', icon: 'archive', href: '#/archived' },
+					{ name: 'scheduled', label: 'Geplante Beiträge', icon: 'calendar', href: '#/scheduled' },
+					{ name: 'follow-requests', label: 'Folgenanfragen', icon: 'lock', href: '#/follow-requests' },
+				],
+			},
+			{
+				title: 'Moderation',
+				items: [
+					{ name: 'filters', label: 'Filter', icon: 'filter', href: '#/filters' },
+					{ name: 'muted', label: 'Stummgeschaltet', icon: 'bellOff', href: '#/muted' },
+					{ name: 'blocked', label: 'Blockiert', icon: 'ban', href: '#/blocked' },
+				],
+			},
+		);
+	}
+
+	const instanceItems = [
+		{ name: 'about', label: 'Über diese Instanz', icon: 'info', href: '#/about' },
+	];
+	if (appState.session.admin) {
+		instanceItems.unshift({ name: 'admin', label: 'Administration', icon: 'shield', href: '#/admin' });
+	}
+	instanceItems.push({ name: 'dashboard', label: 'Server-Dashboard', icon: 'server', href: '/' });
+
+	groups.push({ title: 'Instanz', items: instanceItems });
+
+	return groups;
+});
+
+const moreActive = computed(() => moreGroups.value.some((group) => (
+	group.items.some((item) => isActive(item.name))
+)));
 
 function isActive(name: string): boolean {
 	if (name === 'profile') {
@@ -72,6 +121,9 @@ function isActive(name: string): boolean {
 	}
 	if (name === 'collections') {
 		return route.value.name === 'collections' || route.value.name === 'collection';
+	}
+	if (name === 'search') {
+		return route.value.name === 'search' || route.value.name === 'tag';
 	}
 
 	return route.value.name === name;
@@ -84,7 +136,12 @@ function compose(): void {
 	}
 
 	menuOpen.value = false;
+	moreOpen.value = false;
 	openComposer();
+}
+
+function closeMore(): void {
+	moreOpen.value = false;
 }
 
 async function logout(): Promise<void> {
@@ -99,6 +156,29 @@ async function logout(): Promise<void> {
 		loggingOut.value = false;
 	}
 }
+
+function onDocumentClick(event: MouseEvent): void {
+	if (!moreOpen.value) {
+		return;
+	}
+	const target = event.target as HTMLElement | null;
+	if (target?.closest('.a-sidebar__more') === null) {
+		moreOpen.value = false;
+	}
+}
+
+watch(route, () => {
+	moreOpen.value = false;
+	menuOpen.value = false;
+}, { deep: true });
+
+onMounted(() => {
+	document.addEventListener('click', onDocumentClick);
+});
+
+onUnmounted(() => {
+	document.removeEventListener('click', onDocumentClick);
+});
 </script>
 
 <template>
@@ -113,9 +193,9 @@ async function logout(): Promise<void> {
 			</span>
 		</a>
 
-		<nav class="a-nav">
+		<nav class="a-nav" aria-label="Hauptbereiche">
 			<a
-				v-for="item in items"
+				v-for="item in primaryItems"
 				:key="item.name"
 				:href="item.href"
 				class="a-nav__item"
@@ -138,6 +218,39 @@ async function logout(): Promise<void> {
 			<span>{{ signedIn ? 'Beitrag schreiben' : 'Anmelden' }}</span>
 		</button>
 
+		<div class="a-sidebar__more">
+			<button
+				type="button"
+				class="a-nav__item a-nav__more-trigger"
+				:class="{ 'a-nav__item--active': moreActive || moreOpen }"
+				:aria-expanded="moreOpen"
+				aria-haspopup="menu"
+				@click.stop="moreOpen = !moreOpen"
+			>
+				<span class="a-nav__icon"><AppIcon name="list" :size="21" /></span>
+				<span>Mehr</span>
+				<AppIcon name="chevronDown" :size="16" class="a-nav__more-chevron" :class="{ 'a-nav__more-chevron--open': moreOpen }" />
+			</button>
+
+			<div v-if="moreOpen" class="a-sidebar__more-menu" role="menu">
+				<div v-for="group in moreGroups" :key="group.title" class="a-sidebar__more-group">
+					<p class="a-sidebar__more-title">{{ group.title }}</p>
+					<a
+						v-for="item in group.items"
+						:key="item.name"
+						:href="item.href"
+						role="menuitem"
+						class="a-nav__item a-nav__item--small"
+						:class="{ 'a-nav__item--active': isActive(item.name) }"
+						@click="closeMore"
+					>
+						<AppIcon :name="item.icon" :size="18" />
+						<span>{{ item.label }}</span>
+					</a>
+				</div>
+			</div>
+		</div>
+
 		<a
 			v-if="!signedIn"
 			class="a-sidebar__guest"
@@ -148,39 +261,6 @@ async function logout(): Promise<void> {
 		</a>
 
 		<div class="a-sidebar__spacer" />
-
-		<nav class="a-sidebar__secondary" aria-label="Weitere Seiten">
-			<a href="#/search" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'search' }">
-				<AppIcon name="search" :size="18" />
-				<span>Suchen</span>
-			</a>
-			<template v-if="signedIn">
-				<a href="#/filters" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'filters' }">
-					<AppIcon name="filter" :size="18" />
-					<span>Filter</span>
-				</a>
-				<a href="#/muted" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'muted' }">
-					<AppIcon name="bellOff" :size="18" />
-					<span>Stummgeschaltet</span>
-				</a>
-				<a href="#/blocked" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'blocked' }">
-					<AppIcon name="ban" :size="18" />
-					<span>Blockiert</span>
-				</a>
-			</template>
-			<a href="#/about" class="a-nav__item a-nav__item--small" :class="{ 'a-nav__item--active': route.name === 'about' }">
-				<AppIcon name="info" :size="18" />
-				<span>Über diese Instanz</span>
-			</a>
-			<a v-if="appState.session.admin" href="#/admin" class="a-nav__item a-nav__item--small a-nav__item--admin" :class="{ 'a-nav__item--active': route.name === 'admin' }">
-				<AppIcon name="shield" :size="18" />
-				<span>Administration</span>
-			</a>
-			<a href="/" class="a-nav__item a-nav__item--small">
-				<AppIcon name="settings" :size="18" />
-				<span>Server-Dashboard</span>
-			</a>
-		</nav>
 
 		<div v-if="signedIn" class="a-profile-menu">
 			<button

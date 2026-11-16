@@ -161,6 +161,11 @@ export interface RemoteConnectionsData {
 	cursor: string | null;
 }
 
+export interface AccountConnectionsData {
+	profiles: Account[];
+	cursor: string | null;
+}
+
 export interface RemoteEngagementData {
 	network: 'activitypub' | 'bluesky';
 	type: 'likes' | 'reposts';

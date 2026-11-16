@@ -20,6 +20,7 @@ import type {
 	Poll,
 	PostInteraction,
 	Relationship,
+	AccountConnectionsData,
 	RemoteConnectionsData,
 	RemoteEngagementData,
 	RemotePostData,
@@ -80,6 +81,7 @@ export interface Api {
 	remoteProfile(handle: string, cursor?: string | null): Promise<RemoteProfileData>;
 	remotePost(id: string): Promise<RemotePostData>;
 	remoteConnections(handle: string, type: 'followers' | 'following', cursor?: string | null): Promise<RemoteConnectionsData>;
+	accountConnections(account: string, type: 'followers' | 'following', maxId?: string | null): Promise<AccountConnectionsData>;
 	remoteEngagement(id: string, type: 'likes' | 'reposts', cursor?: string | null): Promise<RemoteEngagementData>;
 	remoteSearch(query: string, type?: RemoteSearchType, network?: RemoteSearchNetwork, cursor?: string | null): Promise<RemoteSearchData>;
 	followRemote(actor: string, inbox: string): Promise<void>;
@@ -1081,6 +1083,38 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				network: data?.network === 'bluesky' ? 'bluesky' : 'activitypub',
 				profiles,
 				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : null,
+			};
+		},
+
+		async accountConnections(
+			account: string,
+			type: 'followers' | 'following',
+			maxId: string | null = null,
+		): Promise<AccountConnectionsData> {
+			if (account === '') {
+				return { profiles: [], cursor: null };
+			}
+
+			const query: Record<string, string> = { limit: '40' };
+			if (maxId !== null && maxId !== '') {
+				query.max_id = maxId;
+			}
+
+			const data = await request<unknown>(
+				'GET',
+				`/api/mastodon/v1/accounts/${encodeURIComponent(account)}/${type}`,
+				query,
+			);
+			const rows = Array.isArray(data) ? data : [];
+			const profiles = rows
+				.map(normalizeMastodonAccount)
+				.filter((profile): profile is Account => profile !== null);
+
+			return {
+				profiles,
+				cursor: rows.length >= 40 && profiles.length > 0
+					? profiles[profiles.length - 1].id
+					: null,
 			};
 		},
 

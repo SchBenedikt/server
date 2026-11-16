@@ -72,10 +72,11 @@ healthcheck before it starts, so migrations never run twice.
 | `sha-<commit>` | Immutable image for one commit |
 | `vX.Y.Z`, `vX.Y` | A `vX.Y.Z` git tag |
 
-Pin a version on a production host by setting the tag in `.env`:
+Pin a version on a production host by setting the tag in `.env`. The current
+server release is `v0.8.0`; use a `sha-…` tag when an exact commit is needed:
 
 ```dotenv
-ALOHASOCIAL_IMAGE_TAG=sha-1a2b3c4
+ALOHASOCIAL_IMAGE_TAG=v0.8.0
 ```
 
 The workflow in `.github/workflows/docker.yml` builds `linux/amd64` and

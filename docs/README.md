@@ -1,5 +1,7 @@
 # Aloha Social server documentation
 
+Release **0.8.0** (see [the changelog](../CHANGELOG.md)).
+
 The application is a standalone Aloha Social host: PHP serves the accounts,
 sessions, API, dashboard and the Vue social UI at `/app`; a worker handles
 delivery and cleanup; the social behaviour lives in the Composer package
@@ -15,6 +17,7 @@ delivery and cleanup; the social behaviour lives in the Composer package
 | Run, back up, upgrade or repair an instance | [Operations](operations.md) |
 | Understand where the frontend lives and how it is built | [Frontend hosting decision](frontend.md) |
 | See the project overview and architecture | [README](../README.md) |
+| Read the release history and versioning rules | [Changelog](../CHANGELOG.md) |
 
 ## The short path
 
@@ -43,8 +46,12 @@ Nginx, PHP-FPM, mail, the worker and verification: see
 - Account creation and password reset (log mail in development, SMTP in
   production)
 - Sessions with rotation, CSRF protection and rate limits
-- The shared Aloha Social UI: feed, composer, replies, boosts, likes, media
-  uploads, profiles, profile editing, search, notifications and themes
+- The shared Aloha Social UI: feed, composer, replies, boosts, quotes, likes,
+  bookmarks, lists, filters, polls, scheduling, direct messages, collections,
+  stories, memories, search, notifications, profiles and themes
+- Image, video and audio attachments (up to ten per post) with inline players,
+  a lightbox and previews in the composer
+- Local and remote follower/following lists on profiles
 - A host-owned administration interface at `/admin` for accounts, reports,
   federation, the job queue, instance checks and the audit log
 - User-facing reporting for posts and profiles, with a moderation queue that
@@ -54,7 +61,9 @@ Nginx, PHP-FPM, mail, the worker and verification: see
 - A committed Vue bundle, so running the app does not require Node.js
 
 The UI is German; the repository documentation is English. The interface
-supports light and dark themes and a 390 px mobile layout.
+supports light and dark themes, a fixed desktop sidebar that does not scroll
+(primary entries plus a **Mehr** popover) and a mobile shell with five tabs and
+a **Mehr** bottom sheet. Layouts are checked down to 390 px.
 
 ## Development checks
 
