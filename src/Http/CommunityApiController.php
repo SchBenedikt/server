@@ -9,14 +9,20 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Http;
 
+use AlohaSocial\Core\Domain\Atproto\AtprotoPublishFailedException;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
+use AlohaSocial\Core\Service\Atproto\AtprotoAccountNotConnectedException;
+use AlohaSocial\Core\Service\Atproto\AtprotoNotConfiguredException;
+use AlohaSocial\Core\Service\Atproto\AtprotoPostRejectedException;
+use AlohaSocial\Core\Service\Atproto\AtprotoPublishDisabledException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Community\CommunityException;
 use AlohaSocial\Server\Community\Exports;
+use AlohaSocial\Server\Federation\BlueskyException;
 use Throwable;
 
 use function array_key_exists;
@@ -396,6 +402,80 @@ final class CommunityApiController
                 return Response::json(['request' => $request]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/bluesky') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Bluesky-Verbindung zu sehen.');
+                }
+
+                return Response::json([
+                    'account' => $this->runtime->blueskyAccounts->status($userId),
+                    'publish_enabled' => $this->runtime->config->atprotoPublish,
+                ]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/bluesky/connect') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'account' => $this->runtime->blueskyAccounts->connect(
+                        $userId,
+                        is_string($body['handle'] ?? null) ? $body['handle'] : '',
+                        is_string($body['app_password'] ?? null) ? $body['app_password'] : '',
+                    ),
+                ], 201);
+            }
+
+            if ($method === 'DELETE' && $path === '/api/v1/host/bluesky') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                return Response::json([
+                    'disconnected' => $this->runtime->blueskyAccounts->disconnect($userId),
+                ]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/bluesky/publish') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                $service = $this->runtime->app->atproto;
+                if ($service === null) {
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky ist auf dieser Instanz nicht eingerichtet.');
+                }
+
+                $body = $this->jsonBody($request);
+                $postId = is_string($body['post_id'] ?? null) ? $body['post_id'] : '';
+
+                try {
+                    return Response::json([
+                        'publication' => $service->publish($userId, $postId)->toArray(),
+                    ], 201);
+                } catch (PostNotFoundException) {
+                    return $this->error(404, 'not_found', 'Dieser Beitrag existiert nicht.');
+                } catch (AtprotoPublishDisabledException) {
+                    return $this->error(503, 'atproto_publish_disabled', 'Das Spiegeln nach Bluesky ist deaktiviert.');
+                } catch (AtprotoNotConfiguredException) {
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky ist auf dieser Instanz nicht eingerichtet.');
+                } catch (AtprotoAccountNotConnectedException) {
+                    return $this->error(409, 'atproto_account_not_connected', 'Verbinde zuerst dein Bluesky-Konto in den Einstellungen.');
+                } catch (AtprotoPostRejectedException $exception) {
+                    return $this->error(
+                        422,
+                        'atproto_post_unsupported',
+                        $exception->getMessage(),
+                        ['reason' => $exception->reason],
+                    );
+                } catch (AtprotoPublishFailedException) {
+                    return $this->error(502, 'atproto_publish_failed', 'Bluesky hat den Beitrag nicht angenommen.');
+                }
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/preferences') {
                 if ($userId === null) {
                     return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Einstellungen zu sehen.');
@@ -468,6 +548,8 @@ final class CommunityApiController
             }
         } catch (CommunityException $exception) {
             return $this->error($exception->status, $exception->errorCode, $exception->getMessage(), $exception->fields);
+        } catch (BlueskyException $exception) {
+            return $this->error($exception->status, $exception->errorCode, $exception->getMessage());
         } catch (Throwable) {
             return $this->error(500, 'community_failed', 'Die Anfrage konnte nicht verarbeitet werden.');
         }

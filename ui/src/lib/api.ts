@@ -46,6 +46,8 @@ import type {
 	AccountPreferences,
 	FollowRequest,
 	FollowRequestData,
+	BlueskyData,
+	BlueskyAccountStatus,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -732,6 +734,21 @@ function normalizeCollection(value: unknown): Collection | null {
 		post_ids: Array.isArray(value.post_ids)
 			? value.post_ids.filter((id): id is string => typeof id === 'string')
 			: undefined,
+	};
+}
+
+function normalizeBlueskyAccount(value: unknown): BlueskyAccountStatus {
+	if (!isRecord(value)) {
+		return { connected: false };
+	}
+
+	return {
+		connected: value.connected === true,
+		did: typeof value.did === 'string' ? value.did : undefined,
+		handle: typeof value.handle === 'string' ? value.handle : undefined,
+		pds_url: typeof value.pds_url === 'string' ? value.pds_url : undefined,
+		connected_at: typeof value.connected_at === 'string' ? value.connected_at : undefined,
+		updated_at: typeof value.updated_at === 'string' ? value.updated_at : undefined,
 	};
 }
 
@@ -2170,6 +2187,44 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return response.blob();
+		},
+
+		async blueskyAccount(): Promise<BlueskyData> {
+			const data = await request<{ account?: unknown; publish_enabled?: unknown }>(
+				'GET',
+				'/api/v1/host/bluesky',
+			);
+
+			return {
+				account: normalizeBlueskyAccount(data?.account),
+				publish_enabled: data?.publish_enabled !== false,
+			};
+		},
+
+		async connectBluesky(handle: string, appPassword: string): Promise<BlueskyAccountStatus> {
+			const data = await request<{ account?: unknown }>(
+				'POST',
+				'/api/v1/host/bluesky/connect',
+				undefined,
+				{ handle, app_password: appPassword },
+			);
+
+			return normalizeBlueskyAccount(data?.account);
+		},
+
+		async disconnectBluesky(): Promise<boolean> {
+			const data = await request<{ disconnected?: unknown }>('DELETE', '/api/v1/host/bluesky');
+
+			return data?.disconnected === true;
+		},
+
+		async publishToBluesky(postId: string): Promise<void> {
+			await request<unknown>(
+				'POST',
+				'/api/v1/host/bluesky/publish',
+				undefined,
+				{ post_id: postId },
+			);
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {

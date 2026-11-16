@@ -34,6 +34,7 @@ use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
@@ -78,6 +79,7 @@ final readonly class Runtime
         public Preferences $preferences,
         public Exports $exports,
         public FollowRequests $followRequests,
+        public BlueskyAccounts $blueskyAccounts,
         public PostRevisionRepository $postRevisions,
     ) {
     }

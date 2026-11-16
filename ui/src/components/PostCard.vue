@@ -252,6 +252,7 @@ const menuOpen = ref(false);
 const bookmarked = ref(props.post.bookmarked === true);
 const bookmarking = ref(false);
 const archiving = ref(false);
+const publishingBluesky = ref(false);
 const reportOpen = ref(false);
 const historyOpen = ref(false);
 const collectionOpen = ref(false);
@@ -564,6 +565,23 @@ async function sendFeedback(kind: 'less' | 'more'): Promise<void> {
 	}
 }
 
+async function publishToBluesky(): Promise<void> {
+	if (localId.value === null || publishingBluesky.value) {
+		return;
+	}
+
+	publishingBluesky.value = true;
+	menuOpen.value = false;
+	try {
+		await getApi().publishToBluesky(localId.value);
+		showToast('Beitrag wurde auf Bluesky veröffentlicht.', 'success');
+	} catch (error) {
+		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht auf Bluesky veröffentlicht werden.', 'error');
+	} finally {
+		publishingBluesky.value = false;
+	}
+}
+
 function edit(): void {
 	menuOpen.value = false;
 	openEditor(props.post);
@@ -724,6 +742,16 @@ onUnmounted(() => {
 						@click.stop="sendFeedback('more')"
 					>
 						<AppIcon name="sparkles" :size="15" /> Mehr davon anzeigen
+					</button>
+					<button
+						v-if="isMine && localId"
+						type="button"
+						role="menuitem"
+						:disabled="publishingBluesky"
+						@click.stop="publishToBluesky"
+					>
+						<AppIcon :name="publishingBluesky ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': publishingBluesky }" />
+						Auf Bluesky veröffentlichen
 					</button>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
 						<AppIcon name="flag" :size="15" /> Beitrag melden

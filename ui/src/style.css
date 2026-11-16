@@ -5443,3 +5443,67 @@ dialog.a-modal::backdrop {
 	gap: 8px;
 	justify-items: start;
 }
+
+.a-settings__bluesky {
+	display: grid;
+	gap: 10px;
+	justify-items: start;
+	padding: 12px;
+	border: 1px solid var(--a-border);
+	border-radius: 12px;
+	background: var(--a-bg-soft);
+}
+
+.a-settings__bluesky-status {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--a-accent);
+}
+
+.a-settings__bluesky-status span {
+	display: grid;
+	gap: 2px;
+	color: var(--a-text);
+}
+
+.a-settings__bluesky-status small {
+	color: var(--a-muted);
+	font-size: 12px;
+}
+
+.a-settings__field {
+	display: grid;
+	gap: 4px;
+	width: 100%;
+}
+
+.a-settings__field > span {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--a-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.a-settings__field input {
+	width: 100%;
+	padding: 9px 11px;
+	border: 1px solid var(--a-border);
+	border-radius: 10px;
+	background: var(--a-surface);
+	color: var(--a-text);
+	font: inherit;
+}
+
+.a-settings__field input:focus {
+	outline: 2px solid var(--a-accent);
+	outline-offset: 1px;
+	border-color: transparent;
+}
+
+.a-settings__field small {
+	color: var(--a-muted);
+	font-size: 12px;
+	line-height: 1.45;
+}
