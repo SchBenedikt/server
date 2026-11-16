@@ -27,6 +27,8 @@ export type Route =
 	| { name: 'memories' }
 	| { name: 'collections' }
 	| { name: 'collection'; id: string }
+	| { name: 'drafts' }
+	| { name: 'archived' }
 	| { name: 'admin'; section: AdminSection }
 	| { name: 'notfound' };
 
@@ -100,6 +102,14 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'memories' && parts.length === 1) {
 		return { name: 'memories' };
+	}
+
+	if (parts[0] === 'drafts' && parts.length === 1) {
+		return { name: 'drafts' };
+	}
+
+	if (parts[0] === 'archived' && parts.length === 1) {
+		return { name: 'archived' };
 	}
 
 	if (parts[0] === 'collections' && parts.length === 1) {
@@ -204,6 +214,10 @@ export function routeTitle(current: Route): string {
 			return 'Sammlungen';
 		case 'collection':
 			return 'Sammlung';
+		case 'drafts':
+			return 'Entwürfe';
+		case 'archived':
+			return 'Archiv';
 		case 'admin':
 			return current.section === 'overview'
 				? 'Administration'

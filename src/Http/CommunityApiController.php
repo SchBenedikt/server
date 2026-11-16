@@ -309,6 +309,79 @@ final class CommunityApiController
                     ),
                 ]);
             }
+
+            if ($method === 'GET' && $path === '/api/v1/host/drafts') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Entwürfe zu sehen.');
+                }
+
+                return Response::json(['drafts' => $this->runtime->drafts->forAccount($userId)]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/drafts') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                return Response::json([
+                    'draft' => $this->runtime->drafts->save($userId, $this->jsonBody($request)),
+                ], 201);
+            }
+
+            if (preg_match('#^/api/v1/host/drafts/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                return Response::json([
+                    'draft' => $this->runtime->drafts->delete(rawurldecode($matches[1]), $userId),
+                ]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/archived') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um dein Archiv zu sehen.');
+                }
+
+                return Response::json(['archived' => $this->runtime->archives->forAccount($userId)]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/archived') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                $body = $this->jsonBody($request);
+                $postId = is_string($body['post_id'] ?? null) ? $body['post_id'] : '';
+
+                return Response::json([
+                    'archived' => $this->runtime->archives->archive($userId, $postId),
+                ], 201);
+            }
+
+            if (preg_match('#^/api/v1/host/archived/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                return Response::json([
+                    'archived' => $this->runtime->archives->restore($userId, rawurldecode($matches[1])),
+                ]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/for-you') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine persönliche Zeitleiste zu sehen.');
+                }
+
+                return Response::json(
+                    $this->runtime->forYou->page(
+                        $userId,
+                        $this->intParam($request, 'limit', 20, 1, 40),
+                        $this->intParam($request, 'offset', 0, 0, 10_000),
+                    ),
+                );
+            }
         } catch (CommunityException $exception) {
             return $this->error($exception->status, $exception->errorCode, $exception->getMessage(), $exception->fields);
         } catch (Throwable) {

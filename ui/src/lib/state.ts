@@ -6,6 +6,7 @@ import { reactive } from 'vue';
 import type {
 	Account,
 	Attachment,
+	Draft,
 	InstanceInfo,
 	SessionUser,
 	ThemeName,
@@ -17,7 +18,7 @@ import type {
 const THEME_KEY = 'aloha.theme';
 const HOME_TAB_KEY = 'aloha.home-tab';
 
-type HomeTab = 'home' | 'public' | 'tags';
+type HomeTab = 'home' | 'for-you' | 'public' | 'tags';
 
 function initialTheme(): ThemeName {
 	try {
@@ -37,7 +38,7 @@ function initialTheme(): ThemeName {
 function initialHomeTab(): HomeTab {
 	try {
 		const stored = localStorage.getItem(HOME_TAB_KEY);
-		if (stored === 'home' || stored === 'public' || stored === 'tags') {
+		if (stored === 'home' || stored === 'for-you' || stored === 'public' || stored === 'tags') {
 			return stored;
 		}
 	} catch {
@@ -63,6 +64,7 @@ export const appState = reactive({
 		quoteTo: null as TimelineItem | null,
 		editPost: null as TimelineItem | null,
 		directTo: null as Account | null,
+		draft: null as Draft | null,
 	},
 	lightbox: {
 		open: false,
@@ -116,6 +118,19 @@ export function openComposer(
 	appState.composer.quoteTo = quoteTo;
 	appState.composer.directTo = directTo;
 	appState.composer.editPost = null;
+	appState.composer.draft = null;
+	appState.composer.open = true;
+}
+
+/**
+ * Opens the composer with a saved draft restored.
+ */
+export function openDraft(draft: Draft): void {
+	appState.composer.replyTo = null;
+	appState.composer.quoteTo = null;
+	appState.composer.directTo = null;
+	appState.composer.editPost = null;
+	appState.composer.draft = draft;
 	appState.composer.open = true;
 }
 
@@ -141,6 +156,7 @@ export function openEditor(post: TimelineItem): void {
 	appState.composer.quoteTo = null;
 	appState.composer.directTo = null;
 	appState.composer.editPost = post;
+	appState.composer.draft = null;
 	appState.composer.open = true;
 }
 
@@ -150,6 +166,7 @@ export function closeComposer(): void {
 	appState.composer.quoteTo = null;
 	appState.composer.directTo = null;
 	appState.composer.editPost = null;
+	appState.composer.draft = null;
 }
 
 export function openLightbox(attachments: Attachment[], index: number): void {

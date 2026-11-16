@@ -63,6 +63,7 @@ const posts = ref<TimelineItem[]>([]);
 const postsLoading = ref(false);
 const postsError = ref('');
 const featuredTags = ref<FeaturedTag[]>([]);
+const archivedIds = ref<Set<string>>(new Set());
 const editTags = ref('');
 const editing = ref(false);
 const editName = ref('');
@@ -318,6 +319,9 @@ async function loadProfile(): Promise<void> {
 		}
 		account.value = loaded;
 		setAccount(loaded);
+		if (loaded.handle === appState.session.user?.handle) {
+			void loadArchivedIds();
+		}
 	} catch (caught) {
 		if (current === generation) {
 			error.value = caught instanceof Error ? caught.message : 'Das Profil konnte nicht geladen werden.';
@@ -331,6 +335,14 @@ async function loadProfile(): Promise<void> {
 	if (current === generation && error.value === '') {
 		await loadPosts(true);
 		void loadFeaturedTags();
+	}
+}
+
+async function loadArchivedIds(): Promise<void> {
+	try {
+		archivedIds.value = new Set((await getApi().archivedPosts()).map((row) => row.post_id));
+	} catch {
+		archivedIds.value = new Set();
 	}
 }
 
@@ -471,7 +483,10 @@ async function loadPosts(reset: boolean): Promise<void> {
 			}
 		}
 
-		posts.value = await hydrateTimelineBoosts(collected.sort((left, right) => (
+		const visible = isSelf.value
+			? collected.filter((post) => !archivedIds.value.has(post.id))
+			: collected;
+		posts.value = await hydrateTimelineBoosts(visible.sort((left, right) => (
 			new Date(right.published_at).getTime() - new Date(left.published_at).getTime()
 		)));
 		loadedOnce.value = true;

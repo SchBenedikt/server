@@ -7,7 +7,7 @@ import { ApiError, getApi, hydrateTimelineBoosts } from './api';
 import { onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import type { TimelineItem } from './types';
 
-export type FeedKind = 'home' | 'public' | 'tag' | 'followed';
+export type FeedKind = 'home' | 'for-you' | 'public' | 'tag' | 'followed';
 
 export interface TimelineSource {
 	kind: FeedKind;
@@ -46,6 +46,7 @@ export function useTimeline(source: () => TimelineSource) {
 	const loaded = ref(false);
 
 	let cursor: string | null = null;
+	let offset = 0;
 	let generation = 0;
 
 	const key = computed(() => sourceKey(source()));
@@ -83,6 +84,13 @@ export function useTimeline(source: () => TimelineSource) {
 		switch (current.kind) {
 			case 'home':
 				return api.homeTimeline(PAGE_SIZE, before);
+			case 'for-you':
+				return api.forYou(PAGE_SIZE, offset).then(async (data) => {
+					const loaded = await api.posts(data.posts);
+					return data.posts
+						.map((id) => loaded[id])
+						.filter((post): post is TimelineItem => post !== undefined);
+				});
 			case 'tag':
 				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, before);
 			case 'followed':
@@ -96,7 +104,9 @@ export function useTimeline(source: () => TimelineSource) {
 		const currentGeneration = ++generation;
 		const before = reset ? null : cursor;
 
+		const isForYou = current.kind === 'for-you';
 		if (reset) {
+			offset = 0;
 			loading.value = true;
 		} else {
 			loadingMore.value = true;
@@ -110,8 +120,13 @@ export function useTimeline(source: () => TimelineSource) {
 			}
 
 			posts.value = reset ? merge([], batch) : merge(posts.value, batch);
-			cursor = batch.length > 0 ? batch[batch.length - 1].id : cursor;
-			hasMore.value = batch.length >= PAGE_SIZE;
+			if (isForYou) {
+				offset = (reset ? 0 : offset) + batch.length;
+				hasMore.value = batch.length >= PAGE_SIZE;
+			} else {
+				cursor = batch.length > 0 ? batch[batch.length - 1].id : cursor;
+				hasMore.value = batch.length >= PAGE_SIZE;
+			}
 			loaded.value = true;
 		} catch (caught) {
 			if (currentGeneration === generation) {
@@ -170,6 +185,7 @@ export function useTimeline(source: () => TimelineSource) {
 	watch(key, () => {
 		posts.value = [];
 		cursor = null;
+		offset = 0;
 		hasMore.value = true;
 		loaded.value = false;
 		void load(true);

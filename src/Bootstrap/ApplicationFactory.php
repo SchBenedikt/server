@@ -31,8 +31,11 @@ use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Community\Announcements;
+use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
+use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
@@ -176,6 +179,9 @@ final class ApplicationFactory
             memories: new Memories($database, $clock),
             stories: new Stories($database, $clock),
             collections: new Collections($database, $clock, $app->posts),
+            drafts: new Drafts($database, $clock),
+            archives: new Archives($database, $clock, $app->posts),
+            forYou: new ForYouFeed($database, $clock),
             postRevisions: new PdoPostRevisionRepository($database),
         );
     }

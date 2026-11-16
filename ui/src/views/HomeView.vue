@@ -37,7 +37,8 @@ const tabs = computed(() => {
 	}
 
 	return [
-		{ id: 'home' as const, label: 'Für dich' },
+		{ id: 'for-you' as const, label: 'Für dich' },
+		{ id: 'home' as const, label: 'Folge ich' },
 		{ id: 'public' as const, label: 'Öffentlich' },
 		{ id: 'tags' as const, label: 'Meine Tags' },
 	];
@@ -49,6 +50,8 @@ const subtitle = computed(() => {
 	}
 
 	switch (currentTab.value) {
+		case 'for-you':
+			return 'Empfohlen aus dieser Instanz – nach Interesse, Beteiligung und Aktualität.';
 		case 'home':
 			return 'Beiträge der Menschen, denen du folgst.';
 		case 'followed':
@@ -62,6 +65,9 @@ const emptyTitle = computed(() => {
 	if (currentTab.value === 'followed') {
 		return 'Deine Tag-Timeline ist noch leer';
 	}
+	if (currentTab.value === 'for-you') {
+		return 'Noch keine Empfehlungen';
+	}
 	if (currentTab.value === 'home') {
 		return 'Deine Timeline ist noch ruhig';
 	}
@@ -73,6 +79,9 @@ const emptyText = computed(() => {
 	if (currentTab.value === 'followed') {
 		return 'Folge Hashtags, die dich interessieren, und ihre Beiträge landen hier.';
 	}
+	if (currentTab.value === 'for-you') {
+		return 'Sobald es öffentliche Beiträge gibt, findest du hier eine Auswahl nach Interesse und Beteiligung.';
+	}
 	if (currentTab.value === 'home') {
 		return 'Folge Menschen, die spannende Dinge teilen – oder schreib selbst den ersten Beitrag.';
 	}
@@ -80,7 +89,7 @@ const emptyText = computed(() => {
 	return 'Diese Instanz ist neu. Sei die erste Stimme, die hier zu hören ist.';
 });
 
-function switchTab(tab: 'home' | 'public' | 'tags'): void {
+function switchTab(tab: 'home' | 'for-you' | 'public' | 'tags'): void {
 	setHomeTab(tab);
 }
 

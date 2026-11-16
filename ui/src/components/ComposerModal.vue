@@ -11,7 +11,7 @@ import { getApi } from '../lib/api';
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { announcePostCreated, announcePostUpdated } from '../lib/events';
 import { appState, closeComposer, showToast } from '../lib/state';
-import type { Attachment, TimelineItem } from '../lib/types';
+import type { Attachment, Draft, TimelineItem } from '../lib/types';
 
 const MAX_LENGTH = 5000;
 const MAX_WARNING = 200;
@@ -45,6 +45,8 @@ const pollOptions = ref<string[]>(['', '']);
 const pollMultiple = ref(false);
 const pollHideTotals = ref(false);
 const pollExpiresIn = ref('86400');
+const restoredAttachmentIds = ref<string[]>([]);
+const savingDraft = ref(false);
 let imageSequence = 0;
 let draftTimer: number | null = null;
 
@@ -54,6 +56,7 @@ const replyTo = computed(() => appState.composer.replyTo);
 const isReply = computed(() => replyTo.value !== null);
 const quoteTo = computed(() => appState.composer.quoteTo);
 const isQuote = computed(() => quoteTo.value !== null);
+const preloadedDraft = computed<Draft | null>(() => appState.composer.draft);
 const directTo = computed(() => appState.composer.directTo);
 const isDirect = computed(() => directTo.value !== null);
 const directHandle = computed(() => directTo.value === null ? '' : directTo.value.handle);
@@ -114,7 +117,7 @@ const scheduleReady = computed(() => (
 ));
 const canSubmit = computed(() => (
 	appState.session.user !== null
-	&& content.value.trim() !== ''
+	&& (content.value.trim() !== '' || restoredAttachmentIds.value.length > 0 || (showPoll.value && pollReady.value))
 	&& !overLimit.value
 	&& !warningOverLimit.value
 	&& !submitting.value
@@ -139,6 +142,38 @@ function displayAuthor(post: TimelineItem): string {
 
 function draftKey(): string {
 	return `aloha.draft.v1.${currentHandle.value}`;
+}
+
+function draftContext(): string {
+	if (replyId.value !== null) {
+		return `reply:${replyId.value}`;
+	}
+	if (quoteTargetId.value !== null) {
+		return `quote:${quoteTargetId.value}`;
+	}
+
+	return '';
+}
+
+function populateDraft(draft: Draft): void {
+	resetImages();
+	resetExtras();
+	existing.value = [];
+	restoredAttachmentIds.value = [...draft.attachment_ids];
+	content.value = draft.content;
+	contentWarning.value = draft.content_warning ?? '';
+	showWarning.value = (draft.content_warning ?? '') !== '';
+	visibility.value = draft.visibility === 'unlisted' || draft.visibility === 'followers'
+		? draft.visibility
+		: 'public';
+
+	if (draft.poll !== null) {
+		showPoll.value = true;
+		pollOptions.value = draft.poll.options.length >= 2 ? [...draft.poll.options] : ['', ''];
+		pollMultiple.value = draft.poll.multiple;
+		pollHideTotals.value = draft.poll.hide_totals;
+		pollExpiresIn.value = String(draft.poll.expires_in);
+	}
 }
 
 function saveDraft(): void {
@@ -170,6 +205,9 @@ function saveDraft(): void {
 
 function restoreDraft(): void {
 	resetExtras();
+
+	restoredAttachmentIds.value = [];
+	existing.value = [];
 
 	if (isReply.value || isEdit.value || isQuote.value || isDirect.value) {
 		content.value = '';
@@ -225,6 +263,7 @@ function populateEditor(post: TimelineItem): void {
 }
 
 function resetExtras(): void {
+	restoredAttachmentIds.value = [];
 	scheduledAt.value = '';
 	scheduleOpen.value = false;
 	showPoll.value = false;
@@ -278,6 +317,8 @@ watch(() => appState.composer.open, async (open) => {
 		error.value = '';
 		if (editPost.value !== null) {
 			populateEditor(editPost.value);
+		} else if (preloadedDraft.value !== null) {
+			populateDraft(preloadedDraft.value);
 		} else {
 			existing.value = [];
 			restoreDraft();
@@ -355,6 +396,72 @@ function resetImages(): void {
 	images.value = [];
 }
 
+async function saveAsDraft(): Promise<void> {
+	if (savingDraft.value || appState.session.user === null) {
+		return;
+	}
+
+	const pending = images.value.length;
+	if (
+		content.value.trim() === ''
+		&& pending === 0
+		&& restoredAttachmentIds.value.length === 0
+		&& !showPoll.value
+	) {
+		showToast('Der Entwurf ist leer.', 'error');
+		return;
+	}
+
+	savingDraft.value = true;
+	try {
+		const uploaded: string[] = [];
+		for (const image of images.value) {
+			uploaded.push((await getApi().uploadMedia(image.file, image.alt.trim())).id);
+		}
+
+		const options = pollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
+		const draft = await getApi().saveDraft({
+			context: draftContext(),
+			content: content.value,
+			content_warning: showWarning.value && contentWarning.value.trim() !== '' ? contentWarning.value : null,
+			visibility: visibility.value,
+			attachment_ids: [...restoredAttachmentIds.value, ...uploaded],
+			in_reply_to_id: replyId.value,
+			quoted_post_id: isQuote.value ? quoteTargetId.value : null,
+			poll: showPoll.value && options.length >= 2
+				? {
+					options,
+					multiple: pollMultiple.value,
+					hide_totals: pollHideTotals.value,
+					expires_in: Number(pollExpiresIn.value),
+				}
+				: null,
+		});
+
+		appState.composer.draft = draft;
+		clearDraft();
+		resetImages();
+		showToast('Entwurf gespeichert. Du findest ihn unter „Entwürfe“.', 'success');
+		closeComposer();
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Der Entwurf konnte nicht gespeichert werden.', 'error');
+	} finally {
+		savingDraft.value = false;
+	}
+}
+
+function discardSavedDraft(): void {
+	const draft = appState.composer.draft;
+	if (draft === null) {
+		return;
+	}
+
+	appState.composer.draft = null;
+	void getApi().deleteDraft(draft.id).catch(() => {
+		// The post is already published; a leftover draft is harmless.
+	});
+}
+
 async function submit(): Promise<void> {
 	error.value = '';
 
@@ -395,7 +502,7 @@ async function submit(): Promise<void> {
 		}
 
 		const replying = isReply.value;
-		const attachmentIds = attachments.map((attachment) => attachment.id);
+		const attachmentIds = [...restoredAttachmentIds.value, ...attachments.map((attachment) => attachment.id)];
 
 		if (scheduledAt.value !== '') {
 			if (scheduleDate.value === null) {
@@ -412,6 +519,7 @@ async function submit(): Promise<void> {
 			});
 
 			clearDraft();
+			discardSavedDraft();
 			resetImages();
 			existing.value = [];
 			content.value = '';
@@ -448,6 +556,7 @@ async function submit(): Promise<void> {
 
 			announcePostCreated(post);
 			clearDraft();
+			discardSavedDraft();
 			resetImages();
 			existing.value = [];
 			content.value = '';
@@ -472,6 +581,7 @@ async function submit(): Promise<void> {
 
 		announcePostCreated(post);
 		clearDraft();
+		discardSavedDraft();
 		resetImages();
 		existing.value = [];
 		content.value = '';
@@ -635,6 +745,9 @@ async function submit(): Promise<void> {
 					</div>
 				</div>
 
+				<p v-if="restoredAttachmentIds.length > 0" class="a-composer__hint">
+					{{ restoredAttachmentIds.length }} gespeicherte {{ restoredAttachmentIds.length === 1 ? 'Anlage' : 'Anlagen' }} aus dem Entwurf werden mitgesendet.
+				</p>
 				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
 					<figure v-for="attachment in existing" :key="attachment.id" class="a-composer__image">
 						<img
@@ -740,6 +853,16 @@ async function submit(): Promise<void> {
 					<span class="a-composer__count" :class="{ 'a-count--over': overLimit }">
 						{{ length }} / {{ MAX_LENGTH }}
 					</span>
+					<button
+						v-if="!isEdit && !isDirect"
+						type="button"
+						class="a-btn a-btn--ghost a-btn--small"
+						:disabled="savingDraft || submitting"
+						@click="saveAsDraft"
+					>
+						<AppIcon name="pen" :size="15" />
+						{{ savingDraft ? 'Speichert…' : 'Entwurf' }}
+					</button>
 					<button type="submit" class="a-btn a-btn--primary" :disabled="!canSubmit">
 						<AppIcon v-if="submitting" name="refresh" :size="16" class="a-spin" />
 						{{ submitLabel }}

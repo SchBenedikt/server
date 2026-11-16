@@ -22,8 +22,11 @@ use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Community\Announcements;
+use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
+use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
@@ -66,6 +69,9 @@ final readonly class Runtime
         public Memories $memories,
         public Stories $stories,
         public Collections $collections,
+        public Drafts $drafts,
+        public Archives $archives,
+        public ForYouFeed $forYou,
         public PostRevisionRepository $postRevisions,
     ) {
     }
