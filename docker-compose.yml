@@ -1,0 +1,56 @@
+# Aloha Social — single-command installation.
+#
+#   cp .env.example .env    # optional but recommended
+#   docker compose up -d --build
+#
+# The default is SQLite inside the `aloha-var` volume, so the stack starts with
+# no external database. Set the ALOHASOCIAL_* values in `.env` to change the
+# public URL, mail or discovery instance. For PostgreSQL use:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#
+# The first admin account is created automatically when
+# ALOHASOCIAL_ADMIN_HANDLE and ALOHASOCIAL_ADMIN_PASSWORD are set in `.env`.
+
+name: aloha-social
+
+x-app-environment: &app-environment
+  ALOHASOCIAL_INSTANCE_URL: ${ALOHASOCIAL_INSTANCE_URL:-http://localhost:3000}
+  ALOHASOCIAL_DB_DSN: ${ALOHASOCIAL_DB_DSN:-sqlite:var/server.sqlite}
+
+x-app-service: &app-service
+  image: alohasocial/server:${ALOHASOCIAL_IMAGE_TAG:-local}
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    <<: *app-environment
+  volumes:
+    - aloha-var:/var/www/html/var
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app-service
+    build:
+      context: .
+    ports:
+      - "${ALOHASOCIAL_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/healthz') === false ? 1 : 0);"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  worker:
+    <<: *app-service
+    command: ["php", "bin/worker.php"]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+volumes:
+  aloha-var:

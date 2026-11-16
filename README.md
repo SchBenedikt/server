@@ -14,7 +14,8 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 
 | Guide | Contents |
 | --- | --- |
-| [Installation and setup](docs/installation.md) | Local SQLite setup, production PostgreSQL/Nginx/PHP-FPM, accounts, worker and verification |
+| [Docker installation](docs/docker.md) | One-command image and Compose stack, PostgreSQL overlay, reverse proxy, backups and updates |
+| [Installation and setup](docs/installation.md) | Installer script, local SQLite setup, production PostgreSQL/Nginx/PHP-FPM, accounts, worker and verification |
 | [Configuration](docs/configuration.md) | Every environment variable, config-file key, secrets and upload/mail settings |
 | [Operations](docs/operations.md) | Backups, restore, upgrades, monitoring, security and troubleshooting |
 | [Frontend hosting](docs/frontend.md) | Where the Vue app lives, how it is built and the HostBridge boundary |
@@ -37,7 +38,9 @@ accepts ActivityPub, resets passwords by email and serves the shared Vue app.
 
 Not implemented yet (later blueprint phases): AT Protocol account linking
 (Bluesky profiles and posts are readable, but posting and following need
-ATProto OAuth), installer/container, and the Nextcloud host. The federation
+ATProto OAuth) and the Nextcloud host. Installation is available as a
+[Docker image](docs/docker.md), a [Compose stack](docker-compose.yml) and an
+[installer script](scripts/install.sh). The federation
 smoke also shows a core-level gap: an inbound `Accept` is not in the core's
 supported activity list, so the `Accept` a core instance queues for an inbound
 `Follow` is retried by the worker. The follower edge and the `Create` delivery
@@ -56,8 +59,35 @@ are unaffected; the fix belongs in the core package, not in this host.
 
 ## Quick start
 
-For the complete local and production procedure use
-[Installation and setup](docs/installation.md). The short path is:
+The fastest path is Docker, with no PHP, Composer or database installed on the
+host:
+
+```shell
+git clone https://github.com/SchBenedikt/server.git aloha
+cd aloha
+cp .env.example .env          # optional; defaults use SQLite
+docker compose up -d --build
+```
+
+Open `http://localhost:3000/login`. Set `ALOHASOCIAL_ADMIN_HANDLE`,
+`ALOHASOCIAL_ADMIN_EMAIL` and `ALOHASOCIAL_ADMIN_PASSWORD` in `.env` to create
+the first admin on boot, or run
+`docker compose exec app php bin/create-account.php … --admin` afterwards. The
+PostgreSQL overlay and reverse-proxy examples are in
+[Docker installation](docs/docker.md).
+
+Without Docker, the installer script checks the PHP runtime and does the rest:
+
+```shell
+git clone https://github.com/SchBenedikt/server.git aloha
+cd aloha
+scripts/install.sh --url=http://localhost:3000 \
+  --handle=alice --email=alice@example.com
+php -S localhost:3000 -t public public/index.php
+```
+
+For every local and production procedure use
+[Installation and setup](docs/installation.md). The manual path is:
 
 ```shell
 composer install

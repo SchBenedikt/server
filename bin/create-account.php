@@ -21,10 +21,18 @@ $email = null;
 $password = null;
 $displayName = null;
 $admin = false;
+$ifNotExists = false;
+$passwordStdin = false;
 
 foreach ($options as $option) {
     if ($option === '--admin') {
         $admin = true;
+    } elseif ($option === '--if-not-exists') {
+        // Container entrypoints run on every restart; an existing account is
+        // the expected state there, not an error.
+        $ifNotExists = true;
+    } elseif ($option === '--password-stdin') {
+        $passwordStdin = true;
     } elseif (str_starts_with($option, '--password=')) {
         $password = substr($option, 11);
     } elseif (str_starts_with($option, '--display-name=')) {
@@ -40,7 +48,7 @@ foreach ($options as $option) {
 }
 
 if ($handle === null || $email === null) {
-    fwrite(STDERR, "Usage: php bin/create-account.php <handle> <email> [--admin] [--password=secret] [--display-name=Name]\n");
+    fwrite(STDERR, "Usage: php bin/create-account.php <handle> <email> [--admin] [--password=secret] [--password-stdin] [--display-name=Name] [--if-not-exists]\n");
     exit(2);
 }
 
@@ -57,7 +65,13 @@ if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
     exit(2);
 }
 
-if ($password === null) {
+if ($passwordStdin) {
+    $password = trim((string) fgets(STDIN));
+    if ($password === '') {
+        fwrite(STDERR, "A password is required on standard input.\n");
+        exit(2);
+    }
+} elseif ($password === null) {
     fwrite(STDERR, 'Password for ' . $handle . ': ');
     $password = trim((string) fgets(STDIN));
 
@@ -79,6 +93,11 @@ try {
     $runtime = (new ApplicationFactory($config, $root))->boot();
 
     if ($runtime->accounts->exists($handle, $email)) {
+        if ($ifNotExists) {
+            fwrite(STDOUT, 'Account @' . $handle . " already exists; nothing to do.\n");
+            exit(0);
+        }
+
         fwrite(STDERR, "An account with this handle or email already exists.\n");
         exit(1);
     }

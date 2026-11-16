@@ -8,6 +8,45 @@ For the short version see the [README](../README.md#quick-start). For every
 setting see [Configuration](configuration.md). For backups, upgrades and
 troubleshooting see [Operations](operations.md).
 
+## Fast path: Docker
+
+The image contains PHP, Apache, both PDO drivers and the worker; the host only
+needs Docker:
+
+```shell
+git clone https://github.com/SchBenedikt/server.git aloha
+cd aloha
+cp .env.example .env
+docker compose up -d --build
+```
+
+Migrations run on start, and setting `ALOHASOCIAL_ADMIN_HANDLE`,
+`ALOHASOCIAL_ADMIN_EMAIL` and `ALOHASOCIAL_ADMIN_PASSWORD` in `.env` creates
+the first admin account. Use the
+[PostgreSQL overlay](docker.md#postgresql) for a database container instead of
+SQLite, and read [Docker installation](docker.md) for reverse proxies,
+backups, updates and troubleshooting.
+
+## Fast path: installer script
+
+On a host with PHP 8.3+ and Composer, the script performs the manual steps
+below and is safe to run again:
+
+```shell
+git clone https://github.com/SchBenedikt/server.git aloha
+cd aloha
+scripts/install.sh \
+  --url=https://social.example \
+  --db-dsn='pgsql:host=127.0.0.1;port=5432;dbname=alohasocial' \
+  --db-user=alohasocial --db-password='…' \
+  --handle=admin --email=admin@example.com
+```
+
+`scripts/install.sh --help` lists every option, including
+`--write-service-files` for a matching systemd unit and Nginx server block.
+Without `--handle` it leaves account creation to you. The script does not
+start PHP-FPM, Nginx or the worker; the sections below cover those services.
+
 ## What you are installing
 
 | Part | Where | Required to run |
