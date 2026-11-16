@@ -43,7 +43,7 @@ async function load(): Promise<void> {
 	try {
 		posts.value = await getApi().scheduledPosts();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die geplanten Beiträge konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Scheduled posts could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -76,7 +76,7 @@ async function saveEdit(post: ScheduledPost): Promise<void> {
 
 	const date = new Date(editingAt.value);
 	if (Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 60_000) {
-		showToast('Der neue Zeitpunkt muss mindestens eine Minute in der Zukunft liegen.', 'error');
+		showToast('The new time must be at least one minute in the future.', 'error');
 		return;
 	}
 
@@ -86,9 +86,9 @@ async function saveEdit(post: ScheduledPost): Promise<void> {
 		posts.value = posts.value.map((entry) => entry.id === updated.id ? updated : entry);
 		editingId.value = '';
 		editingAt.value = '';
-		showToast('Zeitpunkt aktualisiert.', 'success');
+		showToast('Time updated.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Zeitpunkt konnte nicht geändert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The time could not be changed.', 'error');
 	} finally {
 		savingId.value = '';
 	}
@@ -116,9 +116,9 @@ async function cancel(post: ScheduledPost): Promise<void> {
 			entry.id === post.id ? { ...entry, state: 'cancelled' as const } : entry
 		));
 		confirmCancel.value = '';
-		showToast('Geplanter Beitrag verworfen.', 'success');
+		showToast('Scheduled post discarded.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Beitrag konnte nicht verworfen werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The post could not be discarded.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -127,13 +127,13 @@ async function cancel(post: ScheduledPost): Promise<void> {
 function stateLabel(state: ScheduledPost['state']): string {
 	switch (state) {
 		case 'published':
-			return 'Veröffentlicht';
+			return 'Published';
 		case 'failed':
-			return 'Fehlgeschlagen';
+			return 'Failed';
 		case 'cancelled':
-			return 'Verworfen';
+			return 'Dismissed';
 		default:
-			return 'Geplant';
+			return 'Scheduled';
 	}
 }
 
@@ -153,22 +153,22 @@ function stateClass(state: ScheduledPost['state']): string {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Geplante Beiträge" subtitle="Beiträge, die zu einem späteren Zeitpunkt veröffentlicht werden.">
+		<PageHeader title="Scheduled posts" subtitle="Posts that will be published at a later time.">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Neu laden" title="Neu laden" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="openComposer">
-					<AppIcon name="calendar" :size="15" /> Planen
+					<AppIcon name="calendar" :size="15" /> Schedule
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="calendar" :size="26" /></span>
-			<h2>Beiträge planen</h2>
-			<p>Melde dich an, um Beiträge vorzubereiten und zu einem späteren Zeitpunkt zu veröffentlichen.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>Schedule posts</h2>
+			<p>Sign in to prepare posts and publish them later.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<div v-else-if="loading && posts.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -177,17 +177,17 @@ function stateClass(state: ScheduledPost['state']): string {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Geplante Beiträge nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<div><strong>Scheduled posts unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</div>
 
 		<EmptyState
 			v-else-if="posts.length === 0"
 			icon="calendar"
-			title="Keine geplanten Beiträge"
-			text="Im Beitragsfenster kannst du einen Zeitpunkt wählen, statt sofort zu veröffentlichen."
+			title="No scheduled posts"
+			text="In the composer you can choose a time instead of publishing right away."
 		>
-			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openComposer">Beitrag planen</button>
+			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openComposer">Schedule post</button>
 		</EmptyState>
 
 		<ul v-else class="a-management-list">
@@ -203,8 +203,8 @@ function stateClass(state: ScheduledPost['state']): string {
 							v-if="post.state === 'scheduled'"
 							type="button"
 							class="a-icon-btn"
-							aria-label="Zeitpunkt ändern"
-							title="Zeitpunkt ändern"
+							aria-label="Change time"
+							title="Change time"
 							@click="startEdit(post)"
 						>
 							<AppIcon name="clock" :size="16" />
@@ -214,8 +214,8 @@ function stateClass(state: ScheduledPost['state']): string {
 							type="button"
 							class="a-icon-btn"
 							:class="{ 'a-icon-btn--danger': confirmCancel === post.id }"
-							aria-label="Beitrag verwerfen"
-							:title="confirmCancel === post.id ? 'Wirklich verwerfen?' : 'Verwerfen'"
+							aria-label="Discard post"
+							:title="confirmCancel === post.id ? 'Really discard?' : 'Discard'"
 							:disabled="busy === post.id"
 							@click="cancel(post)"
 						>
@@ -224,14 +224,14 @@ function stateClass(state: ScheduledPost['state']): string {
 					</div>
 				</div>
 
-				<p v-if="post.content_warning" class="a-management-cw">Inhaltswarnung: {{ post.content_warning }}</p>
+				<p v-if="post.content_warning" class="a-management-cw">Content warning: {{ post.content_warning }}</p>
 				<p class="a-management-content">{{ post.content }}</p>
 
 				<p class="a-management-meta">
 					<AppIcon name="globe" :size="13" />
 					{{ visibilityLabel(post.visibility) }}
-					<span v-if="post.attachment_ids.length > 0">· {{ post.attachment_ids.length }} Anhang/Anhänge</span>
-					<span v-if="post.in_reply_to_id">· Antwort</span>
+					<span v-if="post.attachment_ids.length > 0">· {{ post.attachment_ids.length }} attachment/Attachments</span>
+					<span v-if="post.in_reply_to_id">· Reply</span>
 				</p>
 
 				<p v-if="post.state === 'failed' && post.failure_reason" class="a-form-error" role="alert">
@@ -239,14 +239,14 @@ function stateClass(state: ScheduledPost['state']): string {
 				</p>
 
 				<form v-if="editingId === post.id" class="a-management-inline-form" @submit.prevent="saveEdit(post)">
-					<label class="a-profile-edit__label" for="a-scheduled-time">Neuer Zeitpunkt</label>
+					<label class="a-profile-edit__label" for="a-scheduled-time">New time</label>
 					<input id="a-scheduled-time" v-model="editingAt" type="datetime-local">
 					<div class="a-profile-edit__actions">
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="savingId === post.id" @click="cancelEdit">
-							Abbrechen
+							Cancel
 						</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="savingId === post.id">
-							{{ savingId === post.id ? 'Wird gespeichert…' : 'Speichern' }}
+							{{ savingId === post.id ? 'Saving…' : 'Save' }}
 						</button>
 					</div>
 				</form>

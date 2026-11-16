@@ -56,14 +56,14 @@ async function toggle(): Promise<void> {
 		emit('changed', relationship.following);
 		showToast(
 			relationship.following
-				? `Du folgst jetzt @${account.id}.`
+				? `You now follow @${account.id}.`
 				: relationship.requested === true
-					? `Folgenanfrage an @${account.id} gesendet.`
-					: `Du folgst @${account.id} nicht mehr.`,
+					? `Follow request sent to @${account.id}.`
+					: `You no longer follow @${account.id}.`,
 			'success',
 		);
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Die Aktion ist fehlgeschlagen.', 'error');
+		showToast(error instanceof Error ? error.message : 'The action failed.', 'error');
 	} finally {
 		busy.value = false;
 	}
@@ -85,13 +85,13 @@ async function toggle(): Promise<void> {
 		@click.stop="toggle"
 	>
 		<AppIcon :name="following ? 'check' : (requested ? 'clock' : 'plus')" :size="compact ? 14 : 16" />
-		<span>{{ following ? 'Gefolgt' : (requested ? 'Angefragt' : 'Folgen') }}</span>
+		<span>{{ following ? 'Following' : (requested ? 'Requested' : 'Follow') }}</span>
 	</button>
 	<a
 		v-else-if="appState.session.user === null && account !== null && !isSelf"
 		class="a-follow a-follow--compact"
 		href="/login"
 	>
-		Folgen
+		Follow
 	</a>
 </template>

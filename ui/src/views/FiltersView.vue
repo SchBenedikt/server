@@ -18,10 +18,10 @@ interface KeywordDraft {
 }
 
 const CONTEXTS: { value: FilterContext; label: string }[] = [
-	{ value: 'home', label: 'Startseite' },
-	{ value: 'public', label: 'Öffentlich' },
-	{ value: 'notifications', label: 'Benachrichtigungen' },
-	{ value: 'thread', label: 'Unterhaltungen' },
+	{ value: 'home', label: 'Home' },
+	{ value: 'public', label: 'Public' },
+	{ value: 'notifications', label: 'Notifications' },
+	{ value: 'thread', label: 'Conversations' },
 	{ value: 'account', label: 'Profile' },
 ];
 
@@ -62,7 +62,7 @@ async function load(): Promise<void> {
 	try {
 		rules.value = await getApi().filters();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Filter konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Filters could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -139,15 +139,15 @@ async function save(): Promise<void> {
 		.filter((keyword) => keyword.text !== '');
 
 	if (title === '') {
-		dialogError.value = 'Bitte gib dem Filter einen Namen.';
+		dialogError.value = 'Please give the filter a name.';
 		return;
 	}
 	if (contexts.value.length === 0) {
-		dialogError.value = 'Wähle mindestens einen Bereich.';
+		dialogError.value = 'Select at least one area.';
 		return;
 	}
 	if (cleaned.length === 0) {
-		dialogError.value = 'Füge mindestens ein Stichwort hinzu.';
+		dialogError.value = 'Add at least one keyword.';
 		return;
 	}
 
@@ -165,16 +165,16 @@ async function save(): Promise<void> {
 		if (editing.value === null) {
 			const created = await getApi().createFilter(payload);
 			rules.value = [created, ...rules.value];
-			showToast('Filter erstellt.', 'success');
+			showToast('Filter created.', 'success');
 		} else {
 			const updated = await getApi().updateFilter(editing.value.id, payload);
 			rules.value = rules.value.map((rule) => rule.id === updated.id ? updated : rule);
-			showToast('Filter aktualisiert.', 'success');
+			showToast('Filter updated.', 'success');
 		}
 		dialogOpen.value = false;
 		editing.value = null;
 	} catch (caught) {
-		dialogError.value = caught instanceof Error ? caught.message : 'Der Filter konnte nicht gespeichert werden.';
+		dialogError.value = caught instanceof Error ? caught.message : 'The filter could not be saved.';
 	} finally {
 		saving.value = false;
 	}
@@ -200,9 +200,9 @@ async function remove(rule: FilterRule): Promise<void> {
 		await getApi().deleteFilter(rule.id);
 		rules.value = rules.value.filter((entry) => entry.id !== rule.id);
 		confirmDelete.value = '';
-		showToast('Filter gelöscht.', 'success');
+		showToast('filter deleted.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Filter konnte nicht gelöscht werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The filter could not be deleted.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -215,19 +215,19 @@ function contextLabel(value: FilterContext): string {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Filter" subtitle="Blende Beiträge mit bestimmten Wörtern aus oder warne dich davor.">
+		<PageHeader title="filter" subtitle="Hide or warn about posts containing certain words.">
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">
-					<AppIcon name="plus" :size="15" /> Neuer Filter
+					<AppIcon name="plus" :size="15" /> New filter
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="filter" :size="26" /></span>
-			<h2>Deine Filter</h2>
-			<p>Filter sind privat und gelten nur für dich. Melde dich an, um Stichwörter auszublenden.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>Your filters</h2>
+			<p>Filters are private and apply only to you. Sign in to hide keywords.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<div v-else-if="loading && rules.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -236,17 +236,17 @@ function contextLabel(value: FilterContext): string {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Filter nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<div><strong>Filters unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</div>
 
 		<EmptyState
 			v-else-if="rules.length === 0"
 			icon="filter"
-			title="Noch keine Filter"
-			text="Ein Filter versteckt oder markiert Beiträge mit bestimmten Wörtern auf deinen Zeitleisten."
+			title="No filters yet"
+			text="A filter hides or flags posts containing certain words in your timelines."
 		>
-			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">Filter anlegen</button>
+			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">Create filter</button>
 		</EmptyState>
 
 		<ul v-else class="a-management-list">
@@ -254,20 +254,20 @@ function contextLabel(value: FilterContext): string {
 				<div class="a-management-card__head">
 					<div class="a-management-card__title">
 						<span class="a-badge" :class="rule.action === 'hide' ? 'a-badge--rose' : 'a-badge--amber'">
-							{{ rule.action === 'hide' ? 'Ausblenden' : 'Warnen' }}
+							{{ rule.action === 'hide' ? 'Hide' : 'Warn' }}
 						</span>
 						<strong>{{ rule.name }}</strong>
 					</div>
 					<div class="a-management-item__actions">
-						<button type="button" class="a-icon-btn" aria-label="Filter bearbeiten" title="Bearbeiten" @click="openEdit(rule)">
+						<button type="button" class="a-icon-btn" aria-label="Edit filter" title="Edit" @click="openEdit(rule)">
 							<AppIcon name="pen" :size="16" />
 						</button>
 						<button
 							type="button"
 							class="a-icon-btn"
 							:class="{ 'a-icon-btn--danger': confirmDelete === rule.id }"
-							aria-label="Filter löschen"
-							:title="confirmDelete === rule.id ? 'Wirklich löschen?' : 'Löschen'"
+							aria-label="Delete filter"
+							:title="confirmDelete === rule.id ? 'Really delete?' : 'Delete'"
 							:disabled="busy === rule.id"
 							@click="remove(rule)"
 						>
@@ -284,12 +284,12 @@ function contextLabel(value: FilterContext): string {
 
 				<p class="a-management-keywords">
 					<span v-for="keyword in rule.keywords" :key="keyword.text" class="a-keyword">
-						{{ keyword.text }}<small v-if="keyword.whole_word">ganzes Wort</small>
+						{{ keyword.text }}<small v-if="keyword.whole_word">whole word</small>
 					</span>
 				</p>
 
 				<p v-if="rule.expires_at !== null" class="a-management-footnote">
-					Läuft ab am {{ absoluteTime(rule.expires_at) }}
+					Expires on {{ absoluteTime(rule.expires_at) }}
 				</p>
 			</li>
 		</ul>
@@ -305,10 +305,10 @@ function contextLabel(value: FilterContext): string {
 				<form class="a-management-dialog a-management-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="a-filter-dialog-title" @submit.prevent="save">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Privater Filter</p>
-							<h2 id="a-filter-dialog-title">{{ editing === null ? 'Neuer Filter' : 'Filter bearbeiten' }}</h2>
+							<p class="a-profile-edit__eyebrow">Privater filter</p>
+							<h2 id="a-filter-dialog-title">{{ editing === null ? 'New filter' : 'Edit filter' }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Dialog schließen" @click="closeDialog">
+						<button type="button" class="a-icon-btn" aria-label="Close dialog" @click="closeDialog">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
@@ -316,13 +316,13 @@ function contextLabel(value: FilterContext): string {
 					<label class="a-profile-edit__label" for="a-filter-name">Name</label>
 					<input id="a-filter-name" v-model="name" type="text" maxlength="100" required autocomplete="off">
 
-					<label class="a-profile-edit__label" for="a-filter-action">Aktion</label>
+					<label class="a-profile-edit__label" for="a-filter-action">Action</label>
 					<select id="a-filter-action" v-model="action" class="a-management-select">
-						<option value="warn">Warnen und einklappen</option>
-						<option value="hide">Beitrag ausblenden</option>
+						<option value="warn">Warn and collapse</option>
+						<option value="hide">Hide post</option>
 					</select>
 
-					<p class="a-profile-edit__label">Bereiche</p>
+					<p class="a-profile-edit__label">Areas</p>
 					<div class="a-management-checks">
 						<label v-for="context in CONTEXTS" :key="context.value" class="a-management-check">
 							<input
@@ -334,34 +334,34 @@ function contextLabel(value: FilterContext): string {
 						</label>
 					</div>
 
-					<p class="a-profile-edit__label">Stichwörter</p>
+					<p class="a-profile-edit__label">Keywords</p>
 					<div class="a-management-keyword-editor">
 						<div v-for="(keyword, index) in keywords" :key="index" class="a-management-keyword-row">
-							<input v-model="keyword.text" type="text" maxlength="100" :placeholder="`Stichwort ${index + 1}`">
+							<input v-model="keyword.text" type="text" maxlength="100" :placeholder="`Keyword ${index + 1}`">
 							<label class="a-management-check a-management-check--inline">
 								<input v-model="keyword.whole_word" type="checkbox">
-								<span>Ganzes Wort</span>
+								<span>Whole word</span>
 							</label>
-							<button type="button" class="a-icon-btn" aria-label="Stichwort entfernen" @click="removeKeyword(index)">
+							<button type="button" class="a-icon-btn" aria-label="Remove keyword" @click="removeKeyword(index)">
 								<AppIcon name="x" :size="15" />
 							</button>
 						</div>
 					</div>
 					<button v-if="keywords.length < 20" type="button" class="a-btn a-btn--ghost a-btn--small" @click="addKeyword">
-						<AppIcon name="plus" :size="14" /> Stichwort hinzufügen
+						<AppIcon name="plus" :size="14" /> Add keyword
 					</button>
 
-					<label class="a-profile-edit__label" for="a-filter-expiry">Ablauf (optional)</label>
+					<label class="a-profile-edit__label" for="a-filter-expiry">Expiry (optional)</label>
 					<input id="a-filter-expiry" v-model="expiresAt" type="datetime-local">
 
-					<p class="a-profile-edit__hint">Filter wirken nur auf deine Ansicht. Sie ändern nichts an den Beiträgen selbst.</p>
+					<p class="a-profile-edit__hint">Filters only affect your view. They do not change the posts themselves.</p>
 					<p v-if="dialogError !== ''" class="a-form-error" role="alert">{{ dialogError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="closeDialog">Abbrechen</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="closeDialog">Cancel</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
 							<AppIcon v-if="saving" name="refresh" :size="15" class="a-spin" />
-							{{ saving ? 'Wird gespeichert…' : 'Speichern' }}
+							{{ saving ? 'Saving…' : 'Save' }}
 						</button>
 					</footer>
 				</form>

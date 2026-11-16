@@ -11,11 +11,11 @@ import EmptyState from '../components/EmptyState.vue';
 	<div class="a-page">
 		<EmptyState
 			icon="compass"
-			title="Hier führt kein Weg hin"
-			text="Die Seite existiert nicht oder wurde verschoben. Zurück zur Startseite findest du wieder Anschluss."
+			title="Dead end"
+			text="This page does not exist or has moved. Head back home to get back on track."
 		>
 			<a class="a-btn a-btn--primary a-btn--small" href="#/">
-				<AppIcon name="home" :size="15" /> Zur Startseite
+				<AppIcon name="home" :size="15" /> Back to home
 			</a>
 		</EmptyState>
 	</div>

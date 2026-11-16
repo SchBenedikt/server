@@ -187,7 +187,7 @@ final class PreferencesTest extends TestCase
         self::assertContains($more, $body['posts']);
         self::assertContains($neutral, $body['posts']);
         self::assertSame($more, $body['posts'][0]);
-        self::assertSame('Weil du mehr davon sehen möchtest', $body['reasons'][$more]);
+        self::assertSame('Because you want to see more of this', $body['reasons'][$more]);
 
         // Replacing the marker with "less" removes the post again.
         $this->server->json('POST', '/api/v1/host/for-you/feedback', [

@@ -189,54 +189,54 @@ export function isActiveRoute(current: Route, name: Route['name']): boolean {
 export function routeTitle(current: Route): string {
 	switch (current.name) {
 		case 'home':
-			return 'Startseite';
+			return 'Home';
 		case 'explore':
-			return 'Entdecken';
+			return 'Explore';
 		case 'notifications':
-			return 'Benachrichtigungen';
+			return 'Notifications';
 		case 'about':
-			return 'Über diese Instanz';
+			return 'About this instance';
 		case 'profile':
 			return `@${current.handle}`;
 		case 'post':
-			return 'Beitrag';
+			return 'Post';
 		case 'tag':
 			return `#${current.tag}`;
 		case 'bookmarks':
-			return 'Lesezeichen';
+			return 'bookmarks';
 		case 'search':
-			return 'Suchen';
+			return 'Search';
 		case 'lists':
-			return 'Listen';
+			return 'lists';
 		case 'list':
-			return 'Liste';
+			return 'list';
 		case 'muted':
-			return 'Stummgeschaltet';
+			return 'Muted';
 		case 'blocked':
-			return 'Blockiert';
+			return 'Blocked';
 		case 'filters':
-			return 'Filter';
+			return 'filter';
 		case 'scheduled':
-			return 'Geplante Beiträge';
+			return 'Scheduled posts';
 		case 'memories':
-			return 'Erinnerungen';
+			return 'memories';
 		case 'collections':
-			return 'Sammlungen';
+			return 'collections';
 		case 'collection':
-			return 'Sammlung';
+			return 'collection';
 		case 'drafts':
-			return 'Entwürfe';
+			return 'Drafts';
 		case 'archived':
-			return 'Archiv';
+			return 'Archive';
 		case 'settings':
-			return 'Einstellungen';
+			return 'Settings';
 		case 'follow-requests':
-			return 'Folgenanfragen';
+			return 'Follow requests';
 		case 'admin':
 			return current.section === 'overview'
-				? 'Administration'
-				: `Administration · ${adminSectionDefinition(current.section).label}`;
+				? 'administration'
+				: `administration · ${adminSectionDefinition(current.section).label}`;
 		default:
-			return 'Nicht gefunden';
+			return 'Not found';
 	}
 }

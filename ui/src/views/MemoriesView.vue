@@ -22,15 +22,15 @@ const signedIn = appState.session.user !== null;
 
 function dateLabel(): string {
 	if (data.value === null || data.value.date === '') {
-		return 'Heute';
+		return 'Today';
 	}
 
 	const [month, day] = data.value.date.split('-');
 	const names = [
-		'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-		'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+		'January', 'February', 'March', 'April', 'May', 'June',
+		'July', 'August', 'September', 'October', 'November', 'December',
 	];
-	return `${Number(day)}. ${names[Number(month) - 1] ?? ''}`;
+	return `${names[Number(month) - 1] ?? ''} ${Number(day)}`;
 }
 
 async function load(): Promise<void> {
@@ -45,7 +45,7 @@ async function load(): Promise<void> {
 		const ids = data.value.years.flatMap((year) => year.posts.map((post) => post.id));
 		posts.value = ids.length === 0 ? [] : Object.values(await getApi().posts(ids));
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Erinnerungen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Memories could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -57,13 +57,13 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Erinnerungen"
-			:subtitle="`Was du an diesem Tag in früheren Jahren geteilt hast – ${dateLabel()}.`"
+			title="memories"
+			:subtitle="`What you shared on this day in earlier years — ${dateLabel()}.`"
 			back-href="#/"
-			back-label="Zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Erinnerungen neu laden" title="Aktualisieren" @click="load">
+				<button type="button" class="a-icon-btn" aria-label="Reload memories" title="Refresh" @click="load">
 					<AppIcon name="refresh" :size="19" />
 				</button>
 			</template>
@@ -72,33 +72,33 @@ onMounted(load);
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Anmeldung erforderlich</strong>
-				<p>Erinnerungen sind privat und nur für dich sichtbar.</p>
+				<strong>Sign-in required</strong>
+				<p>Memories are private and visible only to you.</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
 		<p v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</p>
 
-		<div v-else-if="loading && data === null" class="a-muted">Erinnerungen werden geladen …</div>
+		<div v-else-if="loading && data === null" class="a-muted">Loading memories…</div>
 
 		<template v-else-if="data !== null">
 			<section v-if="data.total === 0" class="a-explore-section">
 				<EmptyState
 					icon="clock"
-					title="Noch keine Erinnerungen"
-					text="Sobald du an einem Tag in einem früheren Jahr geschrieben hast, taucht der Beitrag hier wieder auf."
+					title="No memories yet"
+					text="Once you have posted on a day in an earlier year, the post reappears here."
 				/>
 			</section>
 
 			<section v-for="year in data.years" v-else :key="year.year" class="a-memories-year">
 				<header class="a-section-head">
 					<h2>{{ year.year }}</h2>
-					<span>{{ year.posts.length }} {{ year.posts.length === 1 ? 'Beitrag' : 'Beiträge' }}</span>
+					<span>{{ year.posts.length }} {{ year.posts.length === 1 ? 'Post' : 'Posts' }}</span>
 				</header>
 				<ol class="a-feed__list">
 					<li v-for="post in posts.filter((item) => year.posts.some((entry) => entry.id === item.id))" :key="post.id">
@@ -109,7 +109,7 @@ onMounted(load);
 
 			<div class="a-feed__more">
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="navigate(`/u/${encodeURIComponent(appState.session.user?.handle ?? '')}`)">
-					Alle deine Beiträge ansehen
+					View all your posts
 				</button>
 			</div>
 		</template>

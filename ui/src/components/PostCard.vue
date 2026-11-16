@@ -82,7 +82,7 @@ const profileTarget = computed(() => {
 });
 const profileHref = computed(() => `#/u/${encodeURIComponent(profileTarget.value)}`);
 const time = computed(() => relativeTime(props.post.published_at));
-const absolute = computed(() => new Date(props.post.published_at).toLocaleString('de-DE'));
+const absolute = computed(() => new Date(props.post.published_at).toLocaleString('en-US'));
 const isMine = computed(() => !isRemoteAuthor.value && appState.session.user?.handle === authorId.value);
 const canEdit = computed(() => (
 	isMine.value
@@ -91,7 +91,7 @@ const canEdit = computed(() => (
 	&& postRouteId(props.post) !== null
 ));
 const editedAbsolute = computed(() => (
-	props.post.edited_at ? new Date(props.post.edited_at).toLocaleString('de-DE') : ''
+	props.post.edited_at ? new Date(props.post.edited_at).toLocaleString('en-US') : ''
 ));
 const localId = computed(() => postRouteId(props.post));
 const remoteTarget = computed(() => {
@@ -115,11 +115,11 @@ const quoteLoading = ref(false);
 const quoteStateLabel = computed(() => {
 	switch (props.post.quote_state) {
 		case 'pending':
-			return 'Freigabe des Zitats steht noch aus';
+			return 'Quote approval is still pending';
 		case 'rejected':
-			return 'Zitat wurde abgelehnt';
+			return 'Quote was rejected';
 		case 'revoked':
-			return 'Zitatfreigabe wurde entzogen';
+			return 'Quote approval was revoked';
 		default:
 			return '';
 	}
@@ -395,7 +395,7 @@ async function submitVote(): Promise<void> {
 	try {
 		const pollId = poll.id ?? (localId.value === null ? '' : `poll-${localId.value}`);
 		if (pollId === '') {
-			throw new Error('Diese Umfrage kann hier nicht abgestimmt werden.');
+			throw new Error('This poll cannot be voted on here.');
 		}
 
 		const saved = await getApi().votePoll(pollId, selectedChoices.value);
@@ -407,9 +407,9 @@ async function submitVote(): Promise<void> {
 		} else {
 			pollState.value = { ...poll, voted: true, own_votes: [...selectedChoices.value] };
 		}
-		showToast('Stimme gespeichert.', 'success');
+		showToast('Vote saved.', 'success');
 	} catch (error) {
-		pollError.value = error instanceof Error ? error.message : 'Die Stimme konnte nicht gespeichert werden.';
+		pollError.value = error instanceof Error ? error.message : 'The vote could not be saved.';
 	} finally {
 		voting.value = false;
 	}
@@ -442,7 +442,7 @@ async function toggleBoost(): Promise<void> {
 				reblogged: false,
 				reblogs_count: Math.max(0, boostCount.value - 1),
 			});
-			showToast('Boost entfernt.', 'success');
+			showToast('Boost removed.', 'success');
 		} else {
 			await getApi().boostPost(localId.value);
 			boosted.value = true;
@@ -450,7 +450,7 @@ async function toggleBoost(): Promise<void> {
 				reblogged: true,
 				reblogs_count: boostCount.value + 1,
 			});
-			showToast('Beitrag geboostet.', 'success');
+			showToast('Post boosted.', 'success');
 		}
 		try {
 			sessionStorage.setItem(storageKey(), boosted.value ? '1' : '0');
@@ -458,7 +458,7 @@ async function toggleBoost(): Promise<void> {
 			// The in-memory state is enough when storage is unavailable.
 		}
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht geboostet werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The post could not be boosted.', 'error');
 	} finally {
 		boosting.value = false;
 	}
@@ -494,10 +494,10 @@ async function toggleLike(): Promise<void> {
 			? await getApi().likePost(id)
 			: await getApi().unlikePost(id);
 		rememberInteraction(id, saved);
-		showToast(saved.favourited ? 'Beitrag gefällt dir.' : 'Like entfernt.', 'success');
+		showToast(saved.favourited ? 'Post liked.' : 'Like removed.', 'success');
 	} catch (error) {
 		rememberInteraction(id, before);
-		showToast(error instanceof Error ? error.message : 'Der Like konnte nicht gespeichert werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The like could not be saved.', 'error');
 	} finally {
 		liking.value = false;
 	}
@@ -518,15 +518,15 @@ async function toggleBookmark(): Promise<void> {
 		if (bookmarked.value) {
 			await getApi().unbookmarkPost(localId.value);
 			bookmarked.value = false;
-			showToast('Lesezeichen entfernt.', 'success');
+			showToast('Bookmark removed.', 'success');
 		} else {
 			await getApi().bookmarkPost(localId.value);
 			bookmarked.value = true;
-			showToast('Beitrag als Lesezeichen gespeichert.', 'success');
+			showToast('Post bookmarked.', 'success');
 		}
 		emit('bookmark', bookmarked.value);
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Das Lesezeichen konnte nicht geändert werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The bookmark could not be changed.', 'error');
 	} finally {
 		bookmarking.value = false;
 	}
@@ -544,15 +544,15 @@ async function togglePin(): Promise<void> {
 			await getApi().unpinPost(localId.value);
 			isPinned.value = false;
 			emit('pinned', false);
-			showToast('Beitrag ist nicht mehr angepinnt.', 'success');
+			showToast('Post unpinned.', 'success');
 		} else {
 			await getApi().pinPost(localId.value);
 			isPinned.value = true;
 			emit('pinned', true);
-			showToast('Beitrag ist jetzt oben im Profil angepinnt.', 'success');
+			showToast('Post pinned to the top of your profile.', 'success');
 		}
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht angepinnt werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The post could not be pinned.', 'error');
 	} finally {
 		pinning.value = false;
 	}
@@ -567,9 +567,9 @@ async function archive(): Promise<void> {
 	menuOpen.value = false;
 	try {
 		await getApi().archivePost(localId.value);
-		showToast('Beitrag archiviert. Du findest ihn unter „Archiv“.', 'success');
+		showToast('Post archived. You can find it under “Archive”.', 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht archiviert werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The post could not be archived.', 'error');
 	} finally {
 		archiving.value = false;
 	}
@@ -584,12 +584,12 @@ async function share(): Promise<void> {
 	try {
 		if (navigator.clipboard?.writeText !== undefined) {
 			await navigator.clipboard.writeText(shareUrl.value);
-			showToast('Link in die Zwischenablage kopiert.', 'success');
+			showToast('Link copied to clipboard.', 'success');
 		} else {
-			window.prompt('Link zum Beitrag', shareUrl.value);
+			window.prompt('Link to post', shareUrl.value);
 		}
 	} catch {
-		window.prompt('Link zum Beitrag', shareUrl.value);
+		window.prompt('Link to post', shareUrl.value);
 	} finally {
 		sharing.value = false;
 		menuOpen.value = false;
@@ -605,11 +605,11 @@ async function sendFeedback(kind: 'less' | 'more'): Promise<void> {
 	try {
 		await getApi().forYouFeedback(localId.value, kind);
 		showToast(
-			kind === 'less' ? 'Du siehst weniger davon.' : 'Du siehst mehr davon.',
+			kind === 'less' ? 'You will see less of this.' : 'You will see more of this.',
 			'success',
 		);
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Die Rückmeldung konnte nicht gespeichert werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The feedback could not be saved.', 'error');
 	}
 }
 
@@ -622,9 +622,9 @@ async function publishToBluesky(): Promise<void> {
 	menuOpen.value = false;
 	try {
 		await getApi().publishToBluesky(localId.value);
-		showToast('Beitrag wurde auf Bluesky veröffentlicht.', 'success');
+		showToast('Post published to Bluesky.', 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht auf Bluesky veröffentlicht werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The post could not be published to Bluesky.', 'error');
 	} finally {
 		publishingBluesky.value = false;
 	}
@@ -654,9 +654,9 @@ async function remove(): Promise<void> {
 	try {
 		await getApi().deletePost(localId.value);
 		announcePostDeleted(localId.value);
-		showToast('Beitrag gelöscht.', 'success');
+		showToast('Post deleted.', 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht gelöscht werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The post could not be deleted.', 'error');
 	} finally {
 		deleting.value = false;
 		confirmingDelete.value = false;
@@ -691,15 +691,15 @@ onUnmounted(() => {
 	<article
 		class="a-post"
 		:class="{ 'a-post--detail': detail, 'a-post--boost': post.kind === 'boost' }"
-		:aria-label="`Beitrag von ${handle}`"
+		:aria-label="`Post by ${handle}`"
 	>
 		<p v-if="post.kind === 'boost' && post.boosted_by" class="a-post__boosted-by">
 			<AppIcon name="repeat" :size="15" />
-			<span><a :href="`#/u/${encodeURIComponent(post.boosted_by)}`">{{ handleLabel(post.boosted_by) }}</a> hat geboostet</span>
+			<span><a :href="`#/u/${encodeURIComponent(post.boosted_by)}`">{{ handleLabel(post.boosted_by) }}</a> boosted</span>
 		</p>
 
 		<header class="a-post__header">
-			<a :href="profileHref" class="a-post__avatar-link" :aria-label="`Profil von ${displayName}`">
+			<a :href="profileHref" class="a-post__avatar-link" :aria-label="`Profile of ${displayName}`">
 				<Avatar :id="authorId" :name="displayName" :src="post.author_avatar" :size="detail ? 52 : 44" />
 			</a>
 
@@ -720,7 +720,7 @@ onUnmounted(() => {
 						:title="absolute"
 					>{{ time }}</a>
 					<time v-else class="a-post__time" :datetime="post.published_at" :title="absolute">{{ time }}</time>
-					<span v-if="post.edited_at" class="a-post__edited" :title="`Bearbeitet: ${editedAbsolute}`">· bearbeitet</span>
+					<span v-if="post.edited_at" class="a-post__edited" :title="`Edited: ${editedAbsolute}`">· edited</span>
 					<span v-if="detail" class="a-post__visibility">
 						<AppIcon :name="post.visibility === 'public' ? 'globe' : post.visibility === 'followers' ? 'users' : 'lock'" :size="13" />
 						{{ visibilityLabel(post.visibility) }}
@@ -732,7 +732,7 @@ onUnmounted(() => {
 				<button
 					type="button"
 					class="a-icon-btn a-post__menu-button"
-					aria-label="Weitere Aktionen"
+					aria-label="More actions"
 					:aria-expanded="menuOpen"
 					@click.stop="menuOpen = !menuOpen"
 				>
@@ -742,13 +742,13 @@ onUnmounted(() => {
 				<div v-if="menuOpen" class="a-post__menu" role="menu">
 					<button v-if="localId" type="button" role="menuitem" :disabled="bookmarking" @click.stop="toggleBookmark">
 						<AppIcon name="bookmark" :size="15" />
-						{{ bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern' }}
+						{{ bookmarked ? 'Remove bookmark' : 'Bookmark post' }}
 					</button>
 					<button type="button" role="menuitem" @click.stop="share">
-						<AppIcon name="share" :size="15" /> Link kopieren
+						<AppIcon name="share" :size="15" /> Copy link
 					</button>
 					<button v-if="canQuote" type="button" role="menuitem" @click.stop="quote(); menuOpen = false">
-						<AppIcon name="quote" :size="15" /> Beitrag zitieren
+						<AppIcon name="quote" :size="15" /> Quote post
 					</button>
 					<button
 						v-if="localId"
@@ -756,7 +756,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="collectionOpen = true; menuOpen = false"
 					>
-						<AppIcon name="list" :size="15" /> Zu Sammlung hinzufügen
+						<AppIcon name="list" :size="15" /> Add to collection
 					</button>
 					<button
 						v-if="localId && post.revision !== undefined && post.revision > 1"
@@ -764,7 +764,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="historyOpen = true; menuOpen = false"
 					>
-						<AppIcon name="clock" :size="15" /> Bearbeitungshistorie
+						<AppIcon name="clock" :size="15" /> Edit history
 					</button>
 					<button
 						v-if="isMine && localId"
@@ -774,7 +774,7 @@ onUnmounted(() => {
 						@click.stop="togglePin"
 					>
 						<AppIcon :name="isPinned ? 'x' : 'pin'" :size="15" />
-						{{ isPinned ? 'Nicht mehr anpinnen' : 'Im Profil anpinnen' }}
+						{{ isPinned ? 'Unpin' : 'Pin to profile' }}
 					</button>
 					<button
 						v-if="isMine && localId"
@@ -783,7 +783,7 @@ onUnmounted(() => {
 						:disabled="archiving"
 						@click.stop="archive"
 					>
-						<AppIcon name="archive" :size="15" /> Archivieren
+						<AppIcon name="archive" :size="15" /> Archive
 					</button>
 					<button
 						v-if="forYou && localId"
@@ -791,7 +791,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="sendFeedback('less')"
 					>
-						<AppIcon name="bellOff" :size="15" /> Weniger davon anzeigen
+						<AppIcon name="bellOff" :size="15" /> Show less of this
 					</button>
 					<button
 						v-if="forYou && localId"
@@ -799,7 +799,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="sendFeedback('more')"
 					>
-						<AppIcon name="sparkles" :size="15" /> Mehr davon anzeigen
+						<AppIcon name="sparkles" :size="15" /> Show more of this
 					</button>
 					<button
 						v-if="isMine && localId"
@@ -809,10 +809,10 @@ onUnmounted(() => {
 						@click.stop="publishToBluesky"
 					>
 						<AppIcon :name="publishingBluesky ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': publishingBluesky }" />
-						Auf Bluesky veröffentlichen
+						Publish to Bluesky
 					</button>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
-						<AppIcon name="flag" :size="15" /> Beitrag melden
+						<AppIcon name="flag" :size="15" /> Report post
 					</button>
 					<a
 						v-if="external"
@@ -822,7 +822,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click="menuOpen = false"
 					>
-						<AppIcon name="external" :size="15" /> Original öffnen
+						<AppIcon name="external" :size="15" /> Open original
 					</a>
 					<button
 						v-if="canEdit"
@@ -830,7 +830,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="edit"
 					>
-						<AppIcon name="pen" :size="15" /> Beitrag bearbeiten
+						<AppIcon name="pen" :size="15" /> Edit post
 					</button>
 					<button
 						v-if="isMine"
@@ -839,7 +839,7 @@ onUnmounted(() => {
 						class="a-post__menu-danger"
 						@click.stop="confirmingDelete = true; menuOpen = false"
 					>
-						<AppIcon name="trash" :size="15" /> Beitrag löschen
+						<AppIcon name="trash" :size="15" /> Delete post
 					</button>
 				</div>
 			</div>
@@ -847,23 +847,23 @@ onUnmounted(() => {
 
 		<p v-if="replyContext" class="a-post__reply-context">
 			<AppIcon name="reply" :size="14" />
-			<a :href="replyContext">{{ isRemotePost ? 'Antwort auf einen externen Beitrag' : 'Antwort auf einen Beitrag' }}</a>
+			<a :href="replyContext">{{ isRemotePost ? 'Reply to an external post' : 'Reply to a post' }}</a>
 		</p>
 
 		<div v-if="confirmingDelete" class="a-post__confirm" role="alert">
-			<span>Diesen Beitrag wirklich löschen?</span>
+			<span>Delete this post?</span>
 			<div>
 				<button type="button" class="a-btn a-btn--danger a-btn--small" :disabled="deleting" @click="remove">
-					{{ deleting ? 'Löschen…' : 'Löschen' }}
+					{{ deleting ? 'Deleting…' : 'Delete' }}
 				</button>
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="confirmingDelete = false">Abbrechen</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="confirmingDelete = false">Cancel</button>
 			</div>
 		</div>
 
 		<details v-if="post.content_warning" class="a-post__cw">
 			<summary>
 				<AppIcon name="info" :size="14" />
-				Inhaltswarnung: <strong>{{ post.content_warning }}</strong>
+				Content warning: <strong>{{ post.content_warning }}</strong>
 			</summary>
 			<RichText :text="post.content" />
 		</details>
@@ -914,7 +914,7 @@ onUnmounted(() => {
 						class="a-quote-embed__media a-quote-embed__media--audio"
 					>
 						<AppIcon name="music" :size="16" />
-						{{ quoteMedia(quotedPost)!.alt_text || 'Audio-Anhang' }}
+						{{ quoteMedia(quotedPost)!.alt_text || 'Audio-attachment' }}
 					</span>
 					<img
 						v-else
@@ -925,9 +925,9 @@ onUnmounted(() => {
 					/>
 				</template>
 			</a>
-			<p v-else-if="quoteLoading" class="a-quote-embed__missing">Zitierter Beitrag wird geladen …</p>
+			<p v-else-if="quoteLoading" class="a-quote-embed__missing">Loading quoted post…</p>
 			<p v-else class="a-quote-embed__missing">
-				Der zitierte Beitrag ist nicht mehr öffentlich abrufbar.
+				The quoted post is no longer publicly available.
 			</p>
 		</article>
 
@@ -940,8 +940,8 @@ onUnmounted(() => {
 		<div v-if="pollState" class="a-post__poll">
 			<p class="a-post__poll-head">
 				<AppIcon name="hash" :size="15" />
-				{{ pollState.multiple ? 'Umfrage · Mehrfachauswahl' : 'Umfrage' }}
-				<span>{{ pollTotal }} {{ pollTotal === 1 ? 'Stimme' : 'Stimmen' }}</span>
+				{{ pollState.multiple ? 'poll · Multiple choice' : 'poll' }}
+				<span>{{ pollTotal }} {{ pollTotal === 1 ? 'vote' : 'Votes' }}</span>
 			</p>
 			<ul>
 				<li v-for="(option, index) in pollState.options" :key="index">
@@ -966,9 +966,9 @@ onUnmounted(() => {
 				</li>
 			</ul>
 			<div class="a-post__poll-foot">
-				<span v-if="pollState.voted">Du hast abgestimmt.</span>
-				<span v-else-if="pollState.expired || !pollOpen">Umfrage beendet.</span>
-				<span v-else>{{ pollState.voters_count }} Teilnehmende · endet {{ relativeTime(pollState.expires_at) }}</span>
+				<span v-if="pollState.voted">You voted.</span>
+				<span v-else-if="pollState.expired || !pollOpen">Poll ended.</span>
+				<span v-else>{{ pollState.voters_count }} voters · ends {{ relativeTime(pollState.expires_at) }}</span>
 				<button
 					v-if="canVote"
 					type="button"
@@ -976,14 +976,14 @@ onUnmounted(() => {
 					:disabled="selectedChoices.length === 0 || voting"
 					@click="submitVote"
 				>
-					{{ voting ? 'Wird gespeichert…' : 'Abstimmen' }}
+					{{ voting ? 'Saving…' : 'Vote' }}
 				</button>
 			</div>
 			<p v-if="pollError" class="a-form-error" role="alert">{{ pollError }}</p>
 		</div>
 
 		<ul v-if="emojiReactions.length > 0" class="a-post__reactions">
-			<li v-for="reaction in emojiReactions" :key="reaction.emoji" :title="`${reaction.count} Reaktion(en)`">
+			<li v-for="reaction in emojiReactions" :key="reaction.emoji" :title="`${reaction.count} reaction(s)`">
 				<span>{{ reaction.emoji }}</span>
 				<strong>{{ reaction.count }}</strong>
 			</li>
@@ -994,8 +994,8 @@ onUnmounted(() => {
 				v-if="!isRemotePost"
 				type="button"
 				class="a-post__action"
-				:aria-label="`Antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
-				:title="`Antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:aria-label="`Replies${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:title="`Replies${replyCount > 0 ? ` (${replyCount})` : ''}`"
 				@click="reply"
 			>
 				<AppIcon name="reply" :size="18" />
@@ -1007,13 +1007,13 @@ onUnmounted(() => {
 				target="_blank"
 				rel="noopener noreferrer"
 				class="a-post__action"
-				:aria-label="`Auf dem Ursprungs-Server antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
-				:title="`Auf dem Ursprungs-Server antworten${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:aria-label="`Reply on the original server${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:title="`Reply on the original server${replyCount > 0 ? ` (${replyCount})` : ''}`"
 			>
 				<AppIcon name="reply" :size="18" />
 				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</a>
-			<span v-else class="a-post__action a-post__action--static" :title="`${replyCount} Antworten`">
+			<span v-else class="a-post__action a-post__action--static" :title="`${replyCount} Replies`">
 				<AppIcon name="reply" :size="18" />
 				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</span>
@@ -1023,8 +1023,8 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action"
 				:class="{ 'a-post__action--active': boosted }"
-				:aria-label="boosted ? 'Boost entfernen' : 'Beitrag boosten'"
-				:title="boosted ? 'Boost entfernen' : 'Beitrag boosten'"
+				:aria-label="boosted ? 'Remove boost' : 'Boost post'"
+				:title="boosted ? 'Remove boost' : 'Boost post'"
 				:disabled="boosting"
 				@click="toggleBoost"
 			>
@@ -1034,7 +1034,7 @@ onUnmounted(() => {
 			<span
 				v-else
 				class="a-post__action a-post__action--static"
-				:title="`${boostCount} Boosts auf ${handle}`"
+				:title="`${boostCount} boosts on ${handle}`"
 			>
 				<AppIcon name="repeat" :size="18" />
 				<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
@@ -1044,8 +1044,8 @@ onUnmounted(() => {
 				v-if="canQuote"
 				type="button"
 				class="a-post__action"
-				aria-label="Beitrag zitieren"
-				title="Beitrag zitieren"
+				aria-label="Quote post"
+				title="Quote post"
 				@click="quote"
 			>
 				<AppIcon name="quote" :size="18" />
@@ -1056,9 +1056,9 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action a-post__action--like"
 				:class="{ 'a-post__action--liked': liked }"
-				:aria-label="liked ? 'Like entfernen' : 'Beitrag liken'"
+				:aria-label="liked ? 'Remove like' : 'Like post'"
 				:aria-pressed="liked"
-				:title="liked ? 'Like entfernen' : 'Beitrag liken'"
+				:title="liked ? 'Remove like' : 'Like post'"
 				:disabled="liking"
 				@click="toggleLike"
 			>
@@ -1068,7 +1068,7 @@ onUnmounted(() => {
 			<span
 				v-else
 				class="a-post__action a-post__action--static"
-				:title="`${likeCount} Likes auf ${handle}`"
+				:title="`${likeCount} likes on ${handle}`"
 			>
 				<AppIcon name="heart" :size="18" />
 				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
@@ -1079,9 +1079,9 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action"
 				:class="{ 'a-post__action--active': bookmarked }"
-				:aria-label="bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'"
+				:aria-label="bookmarked ? 'Remove bookmark' : 'Bookmark post'"
 				:aria-pressed="bookmarked"
-				:title="bookmarked ? 'Lesezeichen entfernen' : 'Als Lesezeichen speichern'"
+				:title="bookmarked ? 'Remove bookmark' : 'Bookmark post'"
 				:disabled="bookmarking"
 				@click="toggleBookmark"
 			>
@@ -1092,14 +1092,14 @@ onUnmounted(() => {
 				v-if="canReport"
 				type="button"
 				class="a-post__action"
-				aria-label="Beitrag melden"
-				title="Beitrag melden"
+				aria-label="Report post"
+				title="Report post"
 				@click="openReport"
 			>
 				<AppIcon name="flag" :size="18" />
 			</button>
 
-			<button type="button" class="a-post__action" aria-label="Link teilen" title="Link teilen" @click="share">
+			<button type="button" class="a-post__action" aria-label="Share link" title="Share link" @click="share">
 				<AppIcon name="share" :size="18" />
 			</button>
 
@@ -1107,8 +1107,8 @@ onUnmounted(() => {
 				v-if="detailHref && !detail"
 				:href="detailHref"
 				class="a-post__action a-post__action--link"
-				aria-label="Beitrag öffnen"
-				title="Beitrag öffnen"
+				aria-label="Open post"
+				title="Open post"
 			>
 				<AppIcon name="external" :size="17" />
 			</a>

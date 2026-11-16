@@ -4,14 +4,14 @@
  */
 import type { Account, TimelineItem } from './types';
 
-const relative = new Intl.RelativeTimeFormat('de', { numeric: 'auto' });
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
-const absoluteDate = new Intl.DateTimeFormat('de-DE', {
+const absoluteDate = new Intl.DateTimeFormat('en-US', {
 	dateStyle: 'medium',
 	timeStyle: 'short',
 });
 
-const compactNumber = new Intl.NumberFormat('de-DE', {
+const compactNumber = new Intl.NumberFormat('en-US', {
 	notation: 'compact',
 	maximumFractionDigits: 1,
 });
@@ -27,7 +27,7 @@ export function relativeTime(value: string): string {
 	const absolute = Math.abs(seconds);
 
 	if (absolute < 45) {
-		return 'gerade eben';
+		return 'just now';
 	}
 	if (absolute < 3600) {
 		return relative.format(Math.round(seconds / 60), 'minute');
@@ -84,7 +84,7 @@ export function mediaUrl(value: string): string {
 
 export function handleLabel(id: string): string {
 	if (id === '') {
-		return '@unbekannt';
+		return '@unknown';
 	}
 
 	if (isRemoteId(id)) {
@@ -189,13 +189,13 @@ export function extractTags(content: string): string[] {
 export function visibilityLabel(visibility: string | null | undefined): string {
 	switch (visibility) {
 		case 'unlisted':
-			return 'Nicht gelistet';
+			return 'Unlisted';
 		case 'followers':
-			return 'Nur Follower';
+			return 'Followers only';
 		case 'direct':
-			return 'Direktnachricht';
+			return 'Direct message';
 		default:
-			return 'Öffentlich';
+			return 'Public';
 	}
 }
 

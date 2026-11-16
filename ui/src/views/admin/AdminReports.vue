@@ -36,17 +36,17 @@ const confirmKind = ref<'post' | 'account'>('post');
 const confirmTarget = ref<AdminReport | null>(null);
 
 const filters: { id: FilterState; label: string }[] = [
-	{ id: 'open', label: 'Offen' },
-	{ id: 'resolved', label: 'Gelöst' },
-	{ id: 'dismissed', label: 'Verworfen' },
-	{ id: 'all', label: 'Alle' },
+	{ id: 'open', label: 'Open' },
+	{ id: 'resolved', label: 'Resolved' },
+	{ id: 'dismissed', label: 'Dismissed' },
+	{ id: 'all', label: 'All' },
 ];
 
 const reports = computed(() => data.value?.reports ?? []);
 const counts = computed(() => data.value?.counts ?? { open: 0, resolved: 0, dismissed: 0 });
 
 const resolveTitle = computed(() => (
-	resolveState.value === 'resolved' ? 'Meldung lösen' : 'Meldung verwerfen'
+	resolveState.value === 'resolved' ? 'Resolve report' : 'Dismiss report'
 ));
 
 const confirmCopy = computed(() => {
@@ -57,16 +57,16 @@ const confirmCopy = computed(() => {
 
 	if (confirmKind.value === 'post') {
 		return {
-			title: 'Gemeldeten Beitrag löschen',
-			message: 'Der Beitrag wird entfernt und – bei einem lokalen Beitrag – als föderierte Löschung in die Warteschlange gestellt. Das lässt sich nicht rückgängig machen.',
-			label: 'Beitrag löschen',
+			title: 'Delete reported post',
+			message: 'The post is removed and — for a local post — a federated delete is queued. This cannot be undone.',
+			label: 'Delete post',
 		};
 	}
 
 	return {
-		title: 'Gemeldetes Konto deaktivieren',
-		message: `Das lokale Konto @${report.target.id} kann sich danach nicht mehr anmelden. Beiträge bleiben erhalten und die Deaktivierung kann rückgängig gemacht werden.`,
-		label: 'Konto deaktivieren',
+		title: 'Deactivate reported account',
+		message: `The local account @${report.target.id} will no longer be able to sign in. Posts are kept and the deactivation can be reversed.`,
+		label: 'account deactivate',
 	};
 });
 
@@ -76,7 +76,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().reports(state.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Meldungen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Reports could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -121,7 +121,7 @@ async function saveResolve(): Promise<void> {
 		return;
 	}
 	if (resolveNote.value.length > 500) {
-		resolveError.value = 'Die Notiz darf höchstens 500 Zeichen lang sein.';
+		resolveError.value = 'The note may be at most 500 characters long.';
 		return;
 	}
 
@@ -131,12 +131,12 @@ async function saveResolve(): Promise<void> {
 		await getAdminApi().resolveReport(target.id, resolveState.value, resolveNote.value.trim());
 		resolveOpen.value = false;
 		showToast(
-			resolveState.value === 'resolved' ? 'Meldung als gelöst markiert.' : 'Meldung verworfen.',
+			resolveState.value === 'resolved' ? 'Report marked as resolved.' : 'Report dismissed.',
 			'success',
 		);
 		await load();
 	} catch (caught) {
-		resolveError.value = caught instanceof Error ? caught.message : 'Die Meldung konnte nicht bearbeitet werden.';
+		resolveError.value = caught instanceof Error ? caught.message : 'The report could not be updated.';
 	} finally {
 		resolveSaving.value = false;
 	}
@@ -164,15 +164,15 @@ async function confirmAction(): Promise<void> {
 	try {
 		if (confirmKind.value === 'post') {
 			await getAdminApi().deletePost(report.target.id);
-			showToast('Beitrag gelöscht.', 'success');
+			showToast('Post deleted.', 'success');
 		} else {
 			await getAdminApi().setUserDisabled(report.target.id, true);
-			showToast('Konto deaktiviert.', 'success');
+			showToast('account deactivated.', 'success');
 		}
 		confirmOpen.value = false;
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Aktion konnte nicht ausgeführt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The action could not be completed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -188,19 +188,19 @@ onMounted(() => {
 		<div class="a-admin-section__head">
 			<div>
 				<p class="a-admin-eyebrow">Moderation</p>
-				<h2>Gemeldete Inhalte</h2>
+				<h2>Reported Content</h2>
 				<p class="a-admin-lead">
-					Jede Meldung zeigt das Ziel, den Grund und den Kontext. Löse oder verwerfe sie mit
-					einer internen Notiz; bei Bedarf entfernst du den Beitrag oder deaktivierst das Konto.
+					Each report shows the target, reason and context. Resolve or dismiss it with
+					an internal note; if needed, remove the post or deactivate the account.
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Aktualisieren
+				Refresh
 			</button>
 		</div>
 
-		<div class="a-admin-filterbar" role="tablist" aria-label="Meldungsstatus">
+		<div class="a-admin-filterbar" role="tablist" aria-label="Report status">
 			<button
 				v-for="filter in filters"
 				:key="filter.id"
@@ -225,11 +225,11 @@ onMounted(() => {
 		<div v-else-if="reports.length === 0" class="a-admin-empty-panel">
 			<AppIcon name="flag" :size="24" />
 			<div>
-				<strong>{{ state === 'open' ? 'Keine offenen Meldungen' : 'Keine Meldungen in dieser Ansicht' }}</strong>
+				<strong>{{ state === 'open' ? 'No open reports' : 'No reports in this view' }}</strong>
 				<p>
 					{{ state === 'open'
-						? 'Sobald jemand einen Beitrag oder ein Profil meldet, erscheint der Fall hier.'
-						: 'Wechsle den Filter, um andere Meldungen zu sehen.' }}
+						? 'As soon as someone reports a post or profile, the case appears here.'
+						: 'Change the filter to see other reports.' }}
 				</p>
 			</div>
 		</div>
@@ -248,25 +248,25 @@ onMounted(() => {
 						{{ reportStateLabel(report.state) }}
 					</span>
 					<span class="a-admin-report__meta">
-						Von @{{ report.reporter_handle }} · {{ relativeTime(report.created_at) }}
+						By @{{ report.reporter_handle }} · {{ relativeTime(report.created_at) }}
 					</span>
 				</header>
 
 				<div class="a-admin-report__target">
 					<span class="a-admin-report__type">
 						<AppIcon :name="report.target_type === 'post' ? 'message' : 'user'" :size="15" />
-						{{ report.target_type === 'post' ? 'Beitrag' : 'Konto' }}
+						{{ report.target_type === 'post' ? 'Post' : 'account' }}
 					</span>
 					<div class="a-admin-report__target-body">
 						<strong>{{ report.target.author_name ?? report.target.id }}</strong>
 						<p v-if="report.target.content">{{ report.target.content }}</p>
 						<p v-else-if="report.target_type === 'post'" class="a-admin-muted">
-							Der Beitrag liegt nicht mehr im lokalen oder zwischengespeicherten Bestand.
+							The post is no longer in the local or cached store.
 						</p>
 						<small>
-							<span v-if="report.target.scope === 'local'">lokal</span>
-							<span v-else-if="report.target.scope === 'remote'">entfernt</span>
-							<span v-else>unbekannter Ursprung</span>
+							<span v-if="report.target.scope === 'local'">local</span>
+							<span v-else-if="report.target.scope === 'remote'">Remote</span>
+							<span v-else>unknown origin</span>
 							<template v-if="report.target.published_at"> · {{ absoluteTime(report.target.published_at) }}</template>
 						</small>
 					</div>
@@ -276,7 +276,7 @@ onMounted(() => {
 						:href="report.target.href"
 						target="_blank"
 						rel="noopener noreferrer"
-					>Öffnen <AppIcon name="external" :size="13" /></a>
+					>Open <AppIcon name="external" :size="13" /></a>
 				</div>
 
 				<p v-if="report.comment" class="a-admin-report__comment">
@@ -285,17 +285,17 @@ onMounted(() => {
 				</p>
 
 				<p v-if="report.resolution_note" class="a-admin-report__resolution">
-					<strong>Interne Notiz:</strong> {{ report.resolution_note }}
+					<strong>Internal note:</strong> {{ report.resolution_note }}
 					<span v-if="report.resolved_at"> · {{ relativeTime(report.resolved_at) }}</span>
 				</p>
 
 				<footer class="a-admin-report__actions">
 					<template v-if="report.state === 'open'">
 						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openResolve(report, 'resolved')">
-							<AppIcon name="check" :size="15" /> Lösen
+							<AppIcon name="check" :size="15" /> Resolve
 						</button>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="openResolve(report, 'dismissed')">
-							<AppIcon name="x" :size="15" /> Verwerfen
+							<AppIcon name="x" :size="15" /> Dismiss
 						</button>
 					</template>
 					<button
@@ -304,7 +304,7 @@ onMounted(() => {
 						class="a-btn a-btn--danger a-btn--small"
 						@click="askPost(report)"
 					>
-						<AppIcon name="trash" :size="15" /> Beitrag löschen
+						<AppIcon name="trash" :size="15" /> Delete post
 					</button>
 					<button
 						v-if="report.target_type === 'account' && report.target.scope === 'local' && !report.target.disabled"
@@ -312,14 +312,14 @@ onMounted(() => {
 						class="a-btn a-btn--danger a-btn--small"
 						@click="askAccount(report)"
 					>
-						<AppIcon name="ban" :size="15" /> Konto deaktivieren
+						<AppIcon name="ban" :size="15" /> account deactivate
 					</button>
 					<a
 						v-if="report.target_type === 'account' && report.target.scope === 'local'"
 						class="a-btn a-btn--ghost a-btn--small"
 						:href="`#/u/${encodeURIComponent(report.target.id)}`"
 					>
-						<AppIcon name="user" :size="15" /> Profil
+						<AppIcon name="user" :size="15" /> profiles
 					</a>
 					<span class="a-admin-report__id">Fall {{ report.id.slice(0, 8) }}</span>
 				</footer>
@@ -331,41 +331,41 @@ onMounted(() => {
 				<form class="a-management-dialog" role="dialog" aria-modal="true" aria-labelledby="a-resolve-title" @submit.prevent="saveResolve">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Fallbearbeitung</p>
+							<p class="a-profile-edit__eyebrow">Case handling</p>
 							<h2 id="a-resolve-title">{{ resolveTitle }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Dialog schließen" :disabled="resolveSaving" @click="closeResolve">
+						<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="resolveSaving" @click="closeResolve">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 
 					<p class="a-admin-muted">
 						{{ resolveState === 'resolved'
-							? 'Die Meldung gilt als bearbeitet. Die Notiz ist nur für die Administration sichtbar.'
-							: 'Die Meldung wird ohne weitere Maßnahme geschlossen. Die Notiz ist nur für die Administration sichtbar.' }}
+							? 'The report is considered handled. The note is visible only to the administration.'
+							: 'The report is closed without further action. The note is visible only to the administration.' }}
 					</p>
 
-					<label class="a-profile-edit__label" for="a-resolve-note">Interne Notiz <span class="a-admin-muted">(optional)</span></label>
+					<label class="a-profile-edit__label" for="a-resolve-note">Internal note <span class="a-admin-muted">(optional)</span></label>
 					<textarea
 						id="a-resolve-note"
 						v-model="resolveNote"
 						class="a-admin-textarea"
 						rows="4"
 						maxlength="500"
-						placeholder="Was wurde geprüft und entschieden?"
+						placeholder="What was reviewed and decided?"
 					/>
-					<p class="a-profile-edit__hint">{{ resolveNote.length }} / 500 Zeichen</p>
+					<p class="a-profile-edit__hint">{{ resolveNote.length }} / 500 characters</p>
 					<p v-if="resolveError !== ''" class="a-form-error" role="alert">{{ resolveError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="resolveSaving" @click="closeResolve">Abbrechen</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="resolveSaving" @click="closeResolve">Cancel</button>
 						<button
 							type="submit"
 							class="a-btn a-btn--small"
 							:class="resolveState === 'resolved' ? 'a-btn--primary' : 'a-btn--danger'"
 							:disabled="resolveSaving"
 						>
-							{{ resolveSaving ? 'Wird gespeichert…' : resolveTitle }}
+							{{ resolveSaving ? 'Saving…' : resolveTitle }}
 						</button>
 					</footer>
 				</form>

@@ -32,7 +32,7 @@ const items = ref<TimelineItem[]>([]);
 const person = ref<Account | null>(null);
 let generation = 0;
 
-const title = computed(() => person.value?.display_name || (counterpart.value !== '' ? handleLabel(counterpart.value) : 'Unterhaltung'));
+const title = computed(() => person.value?.display_name || (counterpart.value !== '' ? handleLabel(counterpart.value) : 'Conversation'));
 
 onMounted(() => {
 	void load();
@@ -97,7 +97,7 @@ async function load(): Promise<void> {
 			.sort((left, right) => timeOf(left) - timeOf(right));
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'Die Unterhaltung konnte nicht geladen werden.';
+			error.value = caught instanceof Error ? caught.message : 'The conversation could not be loaded.';
 		}
 	} finally {
 		if (current === generation) {
@@ -165,19 +165,19 @@ void stopDeleted;
 	<div class="a-page">
 		<PageHeader
 			:title="title"
-			:subtitle="counterpart !== '' ? handleLabel(counterpart) : 'Private Unterhaltung'"
+			:subtitle="counterpart !== '' ? handleLabel(counterpart) : 'Private Conversation'"
 			back-href="#/messages"
-			back-label="Alle Nachrichten"
+			back-label="All messages"
 		>
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
 					<AppIcon name="pen" :size="15" />
-					Schreiben
+					Write
 				</button>
 			</template>
 		</PageHeader>
 
-		<p v-if="!signedIn" class="a-muted">Melde dich an, um diese Unterhaltung zu sehen.</p>
+		<p v-if="!signedIn" class="a-muted">Sign in to see this conversation.</p>
 
 		<template v-else>
 			<div v-if="person" class="a-dm-person">
@@ -187,7 +187,7 @@ void stopDeleted;
 					<span>{{ person.handle }}</span>
 				</div>
 				<a :href="`#/u/${encodeURIComponent(person.handle || person.id)}`" class="a-btn a-btn--ghost a-btn--small">
-					Profil
+					profiles
 				</a>
 			</div>
 
@@ -208,15 +208,15 @@ void stopDeleted;
 			<EmptyState
 				v-else-if="!loading"
 				icon="message"
-				title="Noch keine Nachricht"
-				text="Schreibe die erste private Nachricht. Nur du und dieses Konto sehen sie."
+				title="No messages yet"
+				text="Write the first private message. Only you and this account can see it."
 			>
-				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Nachricht schreiben</button>
+				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Write message</button>
 			</EmptyState>
 
 			<button v-if="items.length > 0" type="button" class="a-inline-reply" @click="compose">
 				<AppIcon name="pen" :size="18" />
-				<span>Nachricht an {{ title }} schreiben …</span>
+				<span>Write a message to {{ title }}…</span>
 			</button>
 		</template>
 	</div>

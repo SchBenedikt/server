@@ -142,7 +142,7 @@ final class AdminTest extends TestCase
 
         $demote = $server->json('PATCH', '/api/v1/host/admin/users/alice', ['role' => 'user'], $cookies, $csrf);
         self::assertSame(409, $demote->status);
-        self::assertStringContainsString('letzte aktive Administration', $demote->body);
+        self::assertStringContainsString('last active administrator', $demote->body);
     }
 
     public function testReportLifecycleIsAudited(): void
@@ -246,7 +246,7 @@ final class AdminTest extends TestCase
         $home = $server->send('GET', '/', ['cookies' => $cookies]);
         self::assertSame(200, $home->status);
         self::assertStringContainsString('/admin', $home->body);
-        self::assertStringContainsString('Admin-Oberfläche', $home->body);
+        self::assertStringContainsString('Open admin interface', $home->body);
 
         $app = $server->send('GET', '/app', ['cookies' => $cookies]);
         self::assertSame(200, $app->status);

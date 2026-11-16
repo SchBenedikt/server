@@ -38,7 +38,7 @@ async function load(): Promise<void> {
 	try {
 		accounts.value = await getApi().mutes();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Stummschaltungen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Mutes could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -53,9 +53,9 @@ async function unmute(account: Account): Promise<void> {
 	try {
 		await getApi().unmuteAccount(account.id);
 		accounts.value = accounts.value.filter((entry) => entry.id !== account.id);
-		showToast('Stummschaltung aufgehoben.', 'success');
+		showToast('Mute removed.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Stummschaltung konnte nicht aufgehoben werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The mute could not be removed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -64,9 +64,9 @@ async function unmute(account: Account): Promise<void> {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Stummgeschaltet" subtitle="Konten, deren Beiträge du nicht mehr sehen möchtest.">
+		<PageHeader title="Muted" subtitle="Accounts whose posts you no longer want to see.">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Neu laden" title="Neu laden" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -74,9 +74,9 @@ async function unmute(account: Account): Promise<void> {
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="bellOff" :size="26" /></span>
-			<h2>Stummschaltungen</h2>
-			<p>Melde dich an, um zu sehen und zu verwalten, welche Konten du stummgeschaltet hast.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>mutes</h2>
+			<p>Sign in to see and manage the accounts you have muted.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<div v-else-if="loading && accounts.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -85,15 +85,15 @@ async function unmute(account: Account): Promise<void> {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Stummschaltungen nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<div><strong>Mutes unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</div>
 
 		<EmptyState
 			v-else-if="accounts.length === 0"
 			icon="bellOff"
-			title="Niemand stummgeschaltet"
-			text="Stummschaltungen verbergen die Beiträge eines Kontos, ohne die Follow-Beziehung zu beenden."
+			title="Nobody muted"
+			text="Mutes hide an account's posts without ending the follow relationship."
 		/>
 
 		<ul v-else class="a-management-people">
@@ -107,7 +107,7 @@ async function unmute(account: Account): Promise<void> {
 							@click="unmute(account)"
 						>
 							<AppIcon name="bellOff" :size="14" />
-							{{ busy === account.id ? 'Wird aufgehoben…' : 'Stummschaltung aufheben' }}
+							{{ busy === account.id ? 'Removing…' : 'Unmute account' }}
 						</button>
 					</template>
 				</AccountRow>

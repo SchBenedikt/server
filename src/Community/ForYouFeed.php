@@ -87,24 +87,24 @@ final class ForYouFeed
                 + (int) $candidate['replies'] * 1.5;
             $score = log(1 + $engagement) * 3.2;
             $score += max(0, 6.0 * (1 - $ageHours / 168));
-            $reason = 'Aus der Instanz und deinem Umfeld';
+            $reason = 'From the instance and your circles';
 
             if (isset($followedAuthors[$authorId])) {
                 $score += 5.0;
-                $reason = 'Weil du diesem Konto folgst';
+                $reason = 'Because you follow this account';
             }
             $tags = $this->postTags($postId);
             $matching = array_values(array_intersect($tags, $followedTags));
             if ($matching !== []) {
                 $score += min(3.0, count($matching) * 1.5);
-                $reason = 'Weil du #' . $matching[0] . ' folgst';
+                $reason = 'Because you follow #' . $matching[0];
             }
             if ((int) $candidate['boosts'] > 0) {
                 $score += 2.0;
             }
             if (($feedback[$postId] ?? '') === 'more') {
                 $score += 4.0;
-                $reason = 'Weil du mehr davon sehen möchtest';
+                $reason = 'Because you want to see more of this';
             }
 
             $scored[] = [
@@ -247,12 +247,12 @@ final class ForYouFeed
     {
         $postId = trim($postId);
         if ($postId === '') {
-            throw CommunityException::invalid('Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+            throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
         if (!in_array($kind, ['less', 'more'], true)) {
             throw CommunityException::invalid(
-                'Diese Rückmeldung ist ungültig.',
-                ['kind' => 'Erlaubt sind "less" und "more".'],
+                'This feedback is invalid.',
+                ['kind' => 'Allowed values are "less" and "more".'],
             );
         }
 

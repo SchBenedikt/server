@@ -85,7 +85,7 @@ final class Collections
             ],
         );
 
-        return $this->find($id, $accountId) ?? throw CommunityException::notFound('Die Sammlung wurde nicht gespeichert.');
+        return $this->find($id, $accountId) ?? throw CommunityException::notFound('The collection was not saved.');
     }
 
     /**
@@ -100,7 +100,7 @@ final class Collections
     ): array {
         $current = $this->find($id, $accountId);
         if ($current === null) {
-            throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+            throw CommunityException::notFound('This collection no longer exists.');
         }
         $this->assertOwner($current, $accountId);
 
@@ -116,14 +116,14 @@ final class Collections
             ],
         );
 
-        return $this->find($id, $accountId) ?? throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+        return $this->find($id, $accountId) ?? throw CommunityException::notFound('This collection no longer exists.');
     }
 
     public function delete(string $id, string $accountId): void
     {
         $collection = $this->find($id, $accountId);
         if ($collection === null) {
-            throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+            throw CommunityException::notFound('This collection no longer exists.');
         }
         $this->assertOwner($collection, $accountId);
 
@@ -140,18 +140,18 @@ final class Collections
     {
         $collection = $this->find($id, $accountId);
         if ($collection === null) {
-            throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+            throw CommunityException::notFound('This collection no longer exists.');
         }
         $this->assertOwner($collection, $accountId);
 
         try {
             $post = $this->posts->getVisible($postId, $accountId);
         } catch (PostNotFoundException) {
-            throw CommunityException::notFound('Dieser Beitrag ist nicht verfügbar.');
+            throw CommunityException::notFound('This post is not available.');
         }
 
         if ((string) $post->visibility->value === 'direct') {
-            throw CommunityException::invalid('Direktnachrichten können nicht in eine Sammlung gelegt werden.');
+            throw CommunityException::invalid('Direct messages cannot be added to a collection.');
         }
 
         $existing = $this->db->fetchOne(
@@ -176,7 +176,7 @@ final class Collections
             $this->touch($id);
         }
 
-        return $this->find($id, $accountId) ?? throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+        return $this->find($id, $accountId) ?? throw CommunityException::notFound('This collection no longer exists.');
     }
 
     /**
@@ -186,7 +186,7 @@ final class Collections
     {
         $collection = $this->find($id, $accountId);
         if ($collection === null) {
-            throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+            throw CommunityException::notFound('This collection no longer exists.');
         }
         $this->assertOwner($collection, $accountId);
 
@@ -196,7 +196,7 @@ final class Collections
         );
         $this->touch($id);
 
-        return $this->find($id, $accountId) ?? throw CommunityException::notFound('Diese Sammlung gibt es nicht mehr.');
+        return $this->find($id, $accountId) ?? throw CommunityException::notFound('This collection no longer exists.');
     }
 
     /**
@@ -243,7 +243,7 @@ final class Collections
     private function assertOwner(array $collection, string $accountId): void
     {
         if ((string) $collection['account_id'] !== $accountId) {
-            throw CommunityException::forbidden('Du kannst nur deine eigenen Sammlungen ändern.');
+            throw CommunityException::forbidden('You can only change your own collections.');
         }
     }
 
@@ -251,10 +251,10 @@ final class Collections
     {
         $title = is_string($value) ? trim($value) : '';
         if ($title === '') {
-            throw CommunityException::invalid('Eine Sammlung braucht einen Namen.', ['title' => 'Bitte gib einen Namen ein.']);
+            throw CommunityException::invalid('A collection needs a name.', ['title' => 'Please enter a name.']);
         }
         if (mb_strlen($title) > 100) {
-            throw CommunityException::invalid('Der Name ist zu lang.', ['title' => 'Höchstens 100 Zeichen.']);
+            throw CommunityException::invalid('The name is too long.', ['title' => 'At most 100 characters.']);
         }
 
         return $title;
@@ -264,7 +264,7 @@ final class Collections
     {
         $text = is_string($value) ? trim($value) : '';
         if (mb_strlen($text) > 500) {
-            throw CommunityException::invalid('Die Beschreibung ist zu lang.', ['description' => 'Höchstens 500 Zeichen.']);
+            throw CommunityException::invalid('The description is too long.', ['description' => 'At most 500 characters.']);
         }
 
         return $text;

@@ -36,7 +36,7 @@ async function load(): Promise<void> {
 		const ids = rows.value.map((row) => row.post_id);
 		posts.value = ids.length === 0 ? {} : await getApi().posts(ids);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Das Archiv konnte nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'The archive could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -51,9 +51,9 @@ async function restore(row: ArchivedPost): Promise<void> {
 	try {
 		await getApi().unarchivePost(row.post_id);
 		rows.value = rows.value.filter((entry) => entry.post_id !== row.post_id);
-		showToast('Beitrag wieder im Profil sichtbar.', 'success');
+		showToast('Post visible on your profile again.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Beitrag konnte nicht wiederhergestellt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The post could not be restored.', 'error');
 	} finally {
 		restoring.value = '';
 	}
@@ -73,13 +73,13 @@ watch(signedIn, (value) => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Archiv"
-			subtitle="Beiträge, die du aus deinem Profil genommen hast – ohne sie zu löschen."
+			title="Archive"
+			subtitle="Posts you removed from your profile without deleting them."
 			back-href="#/"
-			back-label="Zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Archiv neu laden" title="Aktualisieren" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" aria-label="Reload archive" title="Refresh" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -88,16 +88,16 @@ watch(signedIn, (value) => {
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Anmeldung erforderlich</strong>
-				<p>Das Archiv ist privat und gehört zu deinem Konto.</p>
+				<strong>Sign-in required</strong>
+				<p>The archive is private and belongs to your account.</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
 		<p v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</p>
 
 		<div v-else-if="loading && rows.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -107,15 +107,15 @@ watch(signedIn, (value) => {
 		<EmptyState
 			v-else-if="ordered.length === 0"
 			icon="archive"
-			title="Nichts archiviert"
-			text="Über das Menü eines eigenen Beitrags kannst du ihn archivieren. Er verschwindet dann aus deinem Profil, bleibt aber lesbar und lässt sich jederzeit zurückholen."
+			title="Nothing archived"
+			text="You can archive a post from its menu. It disappears from your profile but stays readable and can be restored at any time."
 		/>
 
 		<ol v-else class="a-feed__list">
 			<li v-for="entry in ordered" :key="entry.row.post_id" class="a-archived-post">
 				<PostCard :post="entry.post" />
 				<footer class="a-archived-post__footer">
-					<small>Archiviert {{ relativeTime(entry.row.archived_at) }}</small>
+					<small>Archived {{ relativeTime(entry.row.archived_at) }}</small>
 					<button
 						type="button"
 						class="a-btn a-btn--ghost a-btn--small"
@@ -123,7 +123,7 @@ watch(signedIn, (value) => {
 						@click="restore(entry.row)"
 					>
 						<AppIcon name="refresh" :size="14" />
-						{{ restoring === entry.row.post_id ? 'Wird zurückgeholt…' : 'Wiederherstellen' }}
+						{{ restoring === entry.row.post_id ? 'Restoring…' : 'Restore' }}
 					</button>
 				</footer>
 			</li>

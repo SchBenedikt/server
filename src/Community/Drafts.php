@@ -124,7 +124,7 @@ final class Drafts
         }
 
         return $this->find($id, $accountId)
-            ?? throw CommunityException::notFound('Der Entwurf wurde nicht gespeichert.');
+            ?? throw CommunityException::notFound('The draft was not saved.');
     }
 
     /**
@@ -134,7 +134,7 @@ final class Drafts
     {
         $draft = $this->find($id, $accountId);
         if ($draft === null) {
-            throw CommunityException::notFound('Dieser Entwurf existiert nicht mehr.');
+            throw CommunityException::notFound('This draft no longer exists.');
         }
 
         $this->db->execute(
@@ -161,19 +161,19 @@ final class Drafts
         $poll = $this->poll($payload['poll'] ?? null);
 
         if (mb_strlen($content) > self::MAX_CONTENT) {
-            throw CommunityException::invalid('Der Entwurf ist zu lang.', ['content' => 'Höchstens ' . self::MAX_CONTENT . ' Zeichen.']);
+            throw CommunityException::invalid('The draft is too long.', ['content' => 'At most ' . self::MAX_CONTENT . ' characters.']);
         }
         if (mb_strlen($warning) > self::MAX_WARNING) {
-            throw CommunityException::invalid('Die Inhaltswarnung ist zu lang.', ['content_warning' => 'Höchstens ' . self::MAX_WARNING . ' Zeichen.']);
+            throw CommunityException::invalid('The content warning is too long.', ['content_warning' => 'At most ' . self::MAX_WARNING . ' characters.']);
         }
         if ($context !== '' && mb_strlen($context) > 200) {
-            throw CommunityException::invalid('Der Kontext ist zu lang.', ['context' => 'Höchstens 200 Zeichen.']);
+            throw CommunityException::invalid('The context is too long.', ['context' => 'At most 200 characters.']);
         }
         if (!in_array($visibility, ['public', 'unlisted', 'followers'], true)) {
-            throw CommunityException::invalid('Diese Sichtbarkeit ist ungültig.', ['visibility' => 'Bitte wähle öffentlich, nicht gelistet oder follower.']);
+            throw CommunityException::invalid('This visibility is invalid.', ['visibility' => 'Please choose public, unlisted or followers.']);
         }
         if ($content === '' && $attachmentIds === [] && $poll === null) {
-            throw CommunityException::invalid('Der Entwurf ist leer.', ['content' => 'Schreibe etwas oder hänge ein Bild an.']);
+            throw CommunityException::invalid('The draft is empty.', ['content' => 'Write something or attach an image.']);
         }
 
         return [
@@ -197,22 +197,22 @@ final class Drafts
             return null;
         }
         if (!is_array($value)) {
-            throw CommunityException::invalid('Die Umfrage ist ungültig.', ['poll' => 'Die Umfrage muss ein Objekt sein.']);
+            throw CommunityException::invalid('The poll is invalid.', ['poll' => 'The poll must be an object.']);
         }
 
         $options = $this->stringList($value['options'] ?? [], self::MAX_POLL_OPTIONS);
         if (count($options) < 2) {
-            throw CommunityException::invalid('Eine Umfrage braucht mindestens zwei Antworten.', ['poll' => 'Mindestens zwei Antworten.']);
+            throw CommunityException::invalid('A poll needs at least two options.', ['poll' => 'At least two options.']);
         }
         foreach ($options as $option) {
             if (mb_strlen($option) > 100) {
-                throw CommunityException::invalid('Eine Antwort ist zu lang.', ['poll' => 'Höchstens 100 Zeichen je Antwort.']);
+                throw CommunityException::invalid('An option is too long.', ['poll' => 'At most 100 characters per option.']);
             }
         }
 
         $expiresIn = is_numeric($value['expires_in'] ?? null) ? (int) $value['expires_in'] : 86_400;
         if ($expiresIn < 300 || $expiresIn > 604_800) {
-            throw CommunityException::invalid('Die Laufzeit der Umfrage ist ungültig.', ['poll' => 'Zwischen 5 Minuten und 7 Tagen.']);
+            throw CommunityException::invalid('The poll duration is invalid.', ['poll' => 'Between 5 minutes and 7 days.']);
         }
 
         return [

@@ -52,7 +52,7 @@ final class UiMountTest extends TestCase
 
         $script = (string) file_get_contents($root . '/public/ui/app.js');
         self::assertStringContainsString('a-shell', $script);
-        self::assertStringContainsString('Für dich', $script);
+        self::assertStringContainsString('For you', $script);
         self::assertStringContainsString('/api/v1/timelines/home', $script);
         self::assertStringContainsString('/api/v1/timelines/public', $script);
         self::assertStringContainsString('/api/v1/media', $script);

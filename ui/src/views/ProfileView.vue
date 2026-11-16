@@ -18,7 +18,7 @@ import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { accountName, absoluteTime, avatarStyle, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
 import { appState, openComposer, showToast } from '../lib/state';
-import type { Account, FeaturedTag, RemoteProfileData, TimelineItem } from '../lib/types';
+import type { Account, FeaturedTag, RemoteFollowingEntry, RemoteProfileData, TimelineItem } from '../lib/types';
 
 const PAGE_SIZE = 40;
 
@@ -55,6 +55,7 @@ const signedIn = computed(() => appState.session.user !== null);
 const account = ref<Account | null>(null);
 const remoteKind = ref<'activitypub' | 'bluesky' | null>(null);
 const remoteFollowState = ref<'idle' | 'sending' | 'sent'>('idle');
+const remoteFollowingList = ref<RemoteFollowingEntry[]>([]);
 const loading = ref(false);
 const error = ref('');
 const tab = ref<'posts' | 'media'>('posts');
@@ -82,17 +83,17 @@ const connectionError = ref('');
 const connectionNetwork = ref<'activitypub' | 'bluesky'>('activitypub');
 const connectionLocal = ref(false);
 const connectionGeneration = ref(0);
-const connectionTitle = computed(() => connectionType.value === 'followers' ? 'Follower' : 'Gefolgt');
+const connectionTitle = computed(() => connectionType.value === 'followers' ? 'Followers' : 'Following');
 const connectionEmptyText = computed(() => {
 	if (connectionLocal.value) {
 		return connectionType.value === 'followers'
-			? 'Noch niemand auf dieser Instanz folgt diesem Profil.'
-			: 'Dieses Profil folgt noch niemandem auf dieser Instanz.';
+			? 'Nobody on this instance follows this profile yet.'
+			: 'This profile does not follow anyone on this instance yet.';
 	}
 
 	return connectionType.value === 'followers'
-		? 'Dieses Profil hat keine öffentlich sichtbaren Follower.'
-		: 'Dieses Profil folgt niemandem öffentlich.';
+		? 'This profile has no publicly visible followers.'
+		: 'This profile does not publicly follow anyone.';
 });
 const joinedLabel = computed(() => {
 	const value = account.value?.published_at ?? '';
@@ -195,14 +196,14 @@ async function toggleMute(): Promise<void> {
 		if (isMuted.value) {
 			await getApi().unmuteAccount(target.id);
 			setRelationshipFlag('muting', false);
-			showToast(`@${target.handle} wird nicht mehr stummgeschaltet.`, 'success');
+			showToast(`@${target.handle} is no longer muted.`, 'success');
 		} else {
 			await getApi().muteAccount(target.id);
 			setRelationshipFlag('muting', true);
-			showToast(`@${target.handle} ist jetzt stummgeschaltet.`, 'success');
+			showToast(`@${target.handle} is now muted.`, 'success');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Stummschaltung konnte nicht geändert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The mute could not be changed.', 'error');
 	} finally {
 		moderationBusy.value = '';
 	}
@@ -226,20 +227,20 @@ async function toggleBlock(): Promise<void> {
 				sameActor(candidate.actor, target.id) || sameActor(candidate.actor, target.url)
 			));
 			if (entry === undefined) {
-				throw new Error('Die Blockierung wurde nicht gefunden.');
+				throw new Error('The block was not found.');
 			}
 
 			await getApi().unblockActor(entry.id);
 			setRelationshipFlag('blocking', false);
-			showToast(`Blockierung von @${target.handle} aufgehoben.`, 'success');
+			showToast(`Block on @${target.handle} removed.`, 'success');
 		} else {
 			const actor = target.id.startsWith('http') ? target.id : target.url;
 			await getApi().blockActor(actor);
 			setRelationshipFlag('blocking', true);
-			showToast(`@${target.handle} ist jetzt blockiert.`, 'success');
+			showToast(`@${target.handle} is now blocked.`, 'success');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Blockierung konnte nicht geändert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The block could not be changed.', 'error');
 	} finally {
 		moderationBusy.value = '';
 	}
@@ -248,26 +249,38 @@ async function toggleBlock(): Promise<void> {
 const visiblePosts = computed(() => tab.value === 'media'
 	? posts.value.filter((post) => (post.attachments?.length ?? 0) > 0)
 	: posts.value);
+const remoteRelationship = computed<RemoteFollowingEntry | null>(() => (
+	remoteFollowingList.value.find((entry) => entry.actor === (account.value?.id ?? '')) ?? null
+));
 const canRemoteFollow = computed(() => (
 	isRemoteProfile.value
 	&& signedIn.value
+	&& remoteRelationship.value === null
 	&& account.value?.can_follow === true
 	&& typeof account.value?.inbox === 'string'
 	&& account.value.inbox !== ''
 ));
+const remoteFollowLabel = computed(() => {
+	const relationship = remoteRelationship.value;
+	if (relationship !== null) {
+		return relationship.state === 'accepted' ? 'Following' : 'Requested';
+	}
+
+	return remoteFollowState.value === 'sending' ? 'Sending…' : 'Follow';
+});
 const emptyText = computed(() => {
 	if (tab.value === 'media') {
 		return isRemoteProfile.value
-			? 'Dieses Profil hat in den zuletzt geladenen Beiträgen keine Bilder oder Videos.'
-			: 'Diese Person hat in den zuletzt geladenen Beiträgen keine Bilder oder Videos.';
+			? 'This profile has no images or videos in the most recently loaded posts.'
+			: 'This person has no images or videos in the most recently loaded posts.';
 	}
 	if (isSelf.value) {
-		return 'Schreib den ersten Beitrag – er erscheint dann hier.';
+		return 'Write the first post — it will appear here.';
 	}
 
 	return isRemoteProfile.value
-		? 'Dieses Profil hat in den zuletzt geladenen öffentlichen Beiträgen noch nichts geschrieben.'
-		: 'Diese Person hat in den zuletzt geladenen öffentlichen Beiträgen noch nichts geschrieben.';
+		? 'This profile has not posted in the recently loaded public posts yet.'
+		: 'This person has not posted in the recently loaded public posts yet.';
 });
 const externalProfileUrl = computed(() => {
 	const url = account.value?.url ?? '';
@@ -295,6 +308,7 @@ let generation = 0;
 
 watch(handle, () => {
 	remoteFollowState.value = 'idle';
+	remoteFollowingList.value = [];
 	void loadProfile();
 }, { immediate: true });
 
@@ -317,6 +331,7 @@ async function loadProfile(): Promise<void> {
 
 	if (isRemoteProfile.value) {
 		await loadRemote(true);
+		void loadRemoteFollowing();
 		return;
 	}
 
@@ -333,7 +348,7 @@ async function loadProfile(): Promise<void> {
 		}
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'Das Profil konnte nicht geladen werden.';
+			error.value = caught instanceof Error ? caught.message : 'The profile could not be loaded.';
 		}
 	} finally {
 		if (current === generation) {
@@ -454,7 +469,7 @@ async function loadRemote(reset: boolean): Promise<void> {
 		hasMore.value = data.cursor !== null && data.posts.length > 0;
 		loadedOnce.value = true;
 	} catch (caught) {
-		const message = caught instanceof Error ? caught.message : 'Das entfernte Profil konnte nicht geladen werden.';
+		const message = caught instanceof Error ? caught.message : 'The remote profile could not be loaded.';
 		if (current === generation) {
 			if (reset) {
 				error.value = message;
@@ -562,7 +577,7 @@ async function loadPosts(reset: boolean): Promise<void> {
 		)));
 		loadedOnce.value = true;
 	} catch (caught) {
-		postsError.value = caught instanceof Error ? caught.message : 'Die Beiträge konnten nicht geladen werden.';
+		postsError.value = caught instanceof Error ? caught.message : 'Posts could not be loaded.';
 	} finally {
 		postsLoading.value = false;
 	}
@@ -632,7 +647,7 @@ async function loadConnections(reset: boolean, expected = connectionGeneration.v
 		if (expected === connectionGeneration.value) {
 			connectionError.value = caught instanceof Error
 				? caught.message
-				: 'Die Verbindungen konnten nicht geladen werden.';
+				: 'Connections could not be loaded.';
 		}
 	} finally {
 		if (expected === connectionGeneration.value) {
@@ -654,29 +669,63 @@ function connectionProfileHref(profile: Account): string {
 	return `#/u/${encodeURIComponent(profile.handle)}`;
 }
 
+async function loadRemoteFollowing(): Promise<void> {
+	if (!signedIn.value || !isRemoteProfile.value) {
+		return;
+	}
+
+	try {
+		remoteFollowingList.value = await getApi().remoteFollowing();
+	} catch {
+		// The public profile stays readable even when the follow list is unavailable.
+	}
+}
+
 async function followRemote(): Promise<void> {
 	const profile = account.value;
-	if (profile === null || !canRemoteFollow.value || remoteFollowState.value !== 'idle') {
+	if (profile === null || !canRemoteFollow.value || remoteFollowState.value === 'sending') {
 		return;
 	}
 
 	remoteFollowState.value = 'sending';
 	try {
-		await getApi().followRemote(profile.id, profile.inbox as string);
+		const entry = await getApi().followRemote(profile.id, profile.inbox as string);
+		remoteFollowingList.value = [
+			...remoteFollowingList.value.filter((item) => item.actor !== entry.actor),
+			entry,
+		];
 		remoteFollowState.value = 'sent';
-		showToast(`Follow-Anfrage an ${profile.handle} gesendet.`, 'success');
+		showToast(`Follow request sent to ${profile.handle}.`, 'success');
 	} catch (caught) {
 		remoteFollowState.value = 'idle';
-		showToast(caught instanceof Error ? caught.message : 'Die Follow-Anfrage ist fehlgeschlagen.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The follow request failed.', 'error');
+	}
+}
+
+async function unfollowRemote(): Promise<void> {
+	const relationship = remoteRelationship.value;
+	if (relationship === null || remoteFollowState.value === 'sending') {
+		return;
+	}
+
+	remoteFollowState.value = 'sending';
+	try {
+		await getApi().unfollowRemote(relationship.id);
+		remoteFollowingList.value = remoteFollowingList.value.filter((item) => item.id !== relationship.id);
+		remoteFollowState.value = 'idle';
+		showToast(`You no longer follow ${account.value?.handle ?? 'this account'}.`, 'success');
+	} catch (caught) {
+		remoteFollowState.value = 'idle';
+		showToast(caught instanceof Error ? caught.message : 'The unfollow request failed.', 'error');
 	}
 }
 
 async function share(): Promise<void> {
 	try {
 		await navigator.clipboard.writeText(profileUrl.value);
-		showToast('Profil-Link kopiert.', 'success');
+		showToast('Profile link copied.', 'success');
 	} catch {
-		window.prompt('Profil-Link', profileUrl.value);
+		window.prompt('Profile link', profileUrl.value);
 	}
 }
 
@@ -712,11 +761,11 @@ function closeEdit(): void {
 async function saveProfile(): Promise<void> {
 	const name = editName.value.trim();
 	if (name === '') {
-		editError.value = 'Bitte gib einen Anzeigenamen ein.';
+		editError.value = 'Please enter a display name.';
 		return;
 	}
 	if (Array.from(name).length > 80) {
-		editError.value = 'Der Anzeigename darf höchstens 80 Zeichen lang sein.';
+		editError.value = 'The display name may be at most 80 characters long.';
 		return;
 	}
 
@@ -740,9 +789,9 @@ async function saveProfile(): Promise<void> {
 		}
 		void refreshAccount(handle.value);
 		editing.value = false;
-		showToast('Profil aktualisiert.', 'success');
+		showToast('Profile updated.', 'success');
 	} catch (caught) {
-		editError.value = caught instanceof Error ? caught.message : 'Das Profil konnte nicht gespeichert werden.';
+		editError.value = caught instanceof Error ? caught.message : 'The profile could not be saved.';
 	} finally {
 		editSaving.value = false;
 	}
@@ -793,13 +842,13 @@ onUnmounted(() => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Profil"
+			title="profiles"
 			:subtitle="handleText"
 			back-href="#/"
-			back-label="Zurück zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Profil-Link teilen" title="Profil teilen" @click="share">
+				<button type="button" class="a-icon-btn" aria-label="Share profile link" title="Share profile" @click="share">
 					<AppIcon name="share" :size="19" />
 				</button>
 			</template>
@@ -810,11 +859,11 @@ onUnmounted(() => {
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
 			<div>
-				<strong>{{ isRemoteProfile ? 'Entferntes Profil nicht erreichbar' : 'Profil nicht gefunden' }}</strong>
+				<strong>{{ isRemoteProfile ? 'Remote profile unavailable' : 'Profile not found' }}</strong>
 				<p>{{ error }}</p>
 			</div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadProfile">Erneut versuchen</button>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/explore">Zurück zu Entdecken</a>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadProfile">Try again</button>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/explore">Back to Explore</a>
 		</div>
 
 		<template v-else-if="account">
@@ -835,28 +884,27 @@ onUnmounted(() => {
 						<div class="a-profile__actions">
 							<template v-if="isSelf">
 								<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="openEdit">
-									<AppIcon name="settings" :size="15" /> Profil bearbeiten
+									<AppIcon name="settings" :size="15" /> Edit profile
 								</button>
 								<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-									<AppIcon name="pen" :size="15" /> Beitrag schreiben
+									<AppIcon name="pen" :size="15" /> Write post
 								</button>
 							</template>
 
 							<template v-else-if="isRemoteProfile">
 								<button
-									v-if="canRemoteFollow"
+									v-if="canRemoteFollow || remoteRelationship !== null"
 									type="button"
 									class="a-btn a-btn--primary a-btn--small"
-									:disabled="remoteFollowState === 'sending' || remoteFollowState === 'sent'"
-									@click="followRemote"
+									:class="{ 'a-btn--ghost': remoteRelationship?.state === 'accepted' }"
+									:disabled="remoteFollowState === 'sending'"
+									@click="remoteRelationship !== null ? unfollowRemote() : followRemote()"
 								>
 									<AppIcon
-										:name="remoteFollowState === 'sent' ? 'check' : 'plus'"
+										:name="remoteRelationship?.state === 'accepted' ? 'check' : remoteRelationship !== null ? 'clock' : 'plus'"
 										:size="15"
 									/>
-									{{ remoteFollowState === 'sent'
-										? 'Anfrage gesendet'
-										: remoteFollowState === 'sending' ? 'Wird gesendet…' : 'Folgen' }}
+									{{ remoteFollowLabel }}
 								</button>
 								<a
 									v-if="externalProfileUrl !== ''"
@@ -866,7 +914,7 @@ onUnmounted(() => {
 									rel="noopener noreferrer"
 								>
 									<AppIcon name="external" :size="15" />
-									{{ remoteKind === 'bluesky' ? 'Auf Bluesky öffnen' : 'Original öffnen' }}
+									{{ remoteKind === 'bluesky' ? 'Open on Bluesky' : 'Open original' }}
 								</a>
 							</template>
 
@@ -877,8 +925,8 @@ onUnmounted(() => {
 								type="button"
 								class="a-icon-btn"
 								:class="{ 'a-icon-btn--danger': isMuted }"
-								:aria-label="isMuted ? 'Stummschaltung aufheben' : 'Konto stummschalten'"
-								:title="isMuted ? 'Stummschaltung aufheben' : 'Stummschalten'"
+								:aria-label="isMuted ? 'Unmute account' : 'Mute account'"
+								:title="isMuted ? 'Unmute account' : 'Mute'"
 								:disabled="moderationBusy !== ''"
 								@click="toggleMute"
 							>
@@ -889,8 +937,8 @@ onUnmounted(() => {
 								type="button"
 								class="a-icon-btn"
 								:class="{ 'a-icon-btn--danger': isBlocked }"
-								:aria-label="isBlocked ? 'Blockierung aufheben' : 'Konto blockieren'"
-								:title="isBlocked ? 'Blockierung aufheben' : 'Blockieren'"
+								:aria-label="isBlocked ? 'Unblock account' : 'Block account'"
+								:title="isBlocked ? 'Unblock account' : 'Block'"
 								:disabled="moderationBusy !== ''"
 								@click="toggleBlock"
 							>
@@ -900,8 +948,8 @@ onUnmounted(() => {
 								v-if="canReport"
 								type="button"
 								class="a-icon-btn"
-								aria-label="Profil melden"
-								title="Profil melden"
+								aria-label="Report profile"
+								title="Report profile"
 								@click="openReport"
 							>
 								<AppIcon name="flag" :size="17" />
@@ -919,7 +967,7 @@ onUnmounted(() => {
 							<span v-else-if="remoteKind === 'bluesky'">· AT Protocol</span>
 						</p>
 						<p v-else-if="relationship?.followed_by" class="a-profile__follows-you">
-							<AppIcon name="users" :size="14" /> Folgt dir
+							<AppIcon name="users" :size="14" /> Follows you
 						</p>
 					</div>
 
@@ -939,10 +987,10 @@ onUnmounted(() => {
 					<p class="a-profile__note">
 						<AppIcon name="globe" :size="15" />
 						<template v-if="isRemoteProfile">
-							Profil auf {{ networkLabel }}
+							Profile on {{ networkLabel }}
 						</template>
 						<template v-else>
-							Öffentliches Profil auf {{ appState.instance?.name ?? 'Aloha Social' }}
+							Public profile on {{ appState.instance?.name ?? 'Aloha Social' }}
 						</template>
 					</p>
 
@@ -952,53 +1000,53 @@ onUnmounted(() => {
 							class="a-profile__stat--button"
 							role="button"
 							tabindex="0"
-							:aria-label="`Gefolgte Profile von ${displayName} anzeigen`"
+							:aria-label="`Show followed profiles of ${displayName}`"
 							@click="openConnections('following')"
 							@keydown.enter.prevent="openConnections('following')"
 							@keydown.space.prevent="openConnections('following')"
 						>
 							<dt>{{ formatCount(account.following_count) }}</dt>
-							<dd>folgt</dd>
+							<dd>following</dd>
 						</div>
 						<div v-else>
 							<dt>{{ formatCount(account.following_count) }}</dt>
-							<dd>folgt</dd>
+							<dd>following</dd>
 						</div>
 						<div
 							v-if="isRemoteProfile"
 							class="a-profile__stat--button"
 							role="button"
 							tabindex="0"
-							:aria-label="`Follower von ${displayName} anzeigen`"
+							:aria-label="`Show followers of ${displayName}`"
 							@click="openConnections('followers')"
 							@keydown.enter.prevent="openConnections('followers')"
 							@keydown.space.prevent="openConnections('followers')"
 						>
 							<dt>{{ formatCount(account.followers_count) }}</dt>
-							<dd>Follower</dd>
+							<dd>followers</dd>
 						</div>
 						<div v-else>
 							<dt>{{ formatCount(account.followers_count) }}</dt>
-							<dd>Follower</dd>
+							<dd>followers</dd>
 						</div>
 						<div v-if="isRemoteProfile && account.posts_count !== null && account.posts_count !== undefined">
 							<dt>{{ formatCount(account.posts_count) }}</dt>
-							<dd>Beiträge</dd>
+							<dd>Posts</dd>
 						</div>
 						<div v-else>
 							<dt>{{ posts.length }}{{ hasMore ? '+' : '' }}</dt>
-							<dd>Beiträge geladen</dd>
+							<dd>Posts loaded</dd>
 						</div>
 					</dl>
 
 					<p v-if="isRemoteProfile && joinedLabel !== ''" class="a-profile__joined">
 						<AppIcon name="calendar" :size="14" />
-						Beigetreten am {{ joinedLabel }}
+						Joined am {{ joinedLabel }}
 					</p>
 				</div>
 			</section>
 
-			<div class="a-tabs a-profile__tabs" role="tablist" aria-label="Profilansicht">
+			<div class="a-tabs a-profile__tabs" role="tablist" aria-label="Profile view">
 				<button
 					type="button"
 					class="a-tabs__item"
@@ -1007,7 +1055,7 @@ onUnmounted(() => {
 					:aria-selected="tab === 'posts'"
 					@click="tab = 'posts'"
 				>
-					Beiträge
+					Posts
 				</button>
 				<button
 					type="button"
@@ -1017,7 +1065,7 @@ onUnmounted(() => {
 					:aria-selected="tab === 'media'"
 					@click="tab = 'media'"
 				>
-					Medien
+					media
 				</button>
 			</div>
 
@@ -1025,18 +1073,18 @@ onUnmounted(() => {
 
 			<div v-else-if="postsError !== '' && posts.length === 0" class="a-error-panel">
 				<AppIcon name="info" :size="22" />
-				<div><strong>Beiträge nicht erreichbar</strong><p>{{ postsError }}</p></div>
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadPosts(true)">Erneut versuchen</button>
+				<div><strong>Posts unavailable</strong><p>{{ postsError }}</p></div>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadPosts(true)">Try again</button>
 			</div>
 
 			<EmptyState
 				v-else-if="loadedOnce && displayPosts.length === 0"
 				:icon="tab === 'media' ? 'image' : 'pen'"
-				:title="tab === 'media' ? 'Noch keine Bilder' : 'Noch keine öffentlichen Beiträge'"
+				:title="tab === 'media' ? 'No images yet' : 'No public posts yet'"
 				:text="emptyText"
 			>
 				<button v-if="isSelf" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-					Beitrag schreiben
+					Write post
 				</button>
 			</EmptyState>
 
@@ -1057,7 +1105,7 @@ onUnmounted(() => {
 				:disabled="postsLoading"
 				@click="loadPosts(false)"
 			>
-				{{ postsLoading ? 'Wird geladen…' : 'Weitere Beiträge laden' }}
+				{{ postsLoading ? 'Loading…' : 'Load more posts' }}
 			</button>
 
 			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error">{{ postsError }}</p>
@@ -1089,15 +1137,15 @@ onUnmounted(() => {
 			>
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Dein Profil</p>
-						<h2 id="a-profile-edit-title">Profil bearbeiten</h2>
+						<p class="a-profile-edit__eyebrow">Your profile</p>
+						<h2 id="a-profile-edit-title">Edit profile</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Bearbeiten schließen" @click="closeEdit">
+					<button type="button" class="a-icon-btn" aria-label="Close editor" @click="closeEdit">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
-				<label class="a-profile-edit__label" for="a-profile-display-name">Anzeigename</label>
+				<label class="a-profile-edit__label" for="a-profile-display-name">display name</label>
 				<input
 					id="a-profile-display-name"
 					v-model="editName"
@@ -1106,25 +1154,25 @@ onUnmounted(() => {
 					autocomplete="name"
 					required
 				/>
-				<p class="a-profile-edit__hint">So erscheinst du in Beiträgen und Benachrichtigungen. Dein Handle @{{ handleText }} bleibt unverändert.</p>
+				<p class="a-profile-edit__hint">This is how you appear in posts and notifications. Your handle @{{ handleText }} stays unchanged.</p>
 
-				<label class="a-profile-edit__label" for="a-profile-featured-tags">Profil-Hashtags</label>
+				<label class="a-profile-edit__label" for="a-profile-featured-tags">Profile hashtags</label>
 				<input
 					id="a-profile-featured-tags"
 					v-model="editTags"
 					type="text"
 					maxlength="600"
-					placeholder="z. B. fediverse, fotografie, linux"
+					placeholder="e.g. fediverse, photography, linux"
 				/>
-				<p class="a-profile-edit__hint">Bis zu 10 Hashtags, durch Kommas getrennt. Sie erscheinen als Schnellzugriff auf deinem Profil.</p>
+				<p class="a-profile-edit__hint">Up to 10 hashtags, separated by commas. They appear as quick links on your profile.</p>
 
 				<p v-if="editError" class="a-form-error" role="alert">{{ editError }}</p>
 
 				<footer class="a-profile-edit__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="editSaving" @click="closeEdit">Abbrechen</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="editSaving" @click="closeEdit">Cancel</button>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="editSaving">
 						<AppIcon v-if="editSaving" name="refresh" :size="15" class="a-spin" />
-						{{ editSaving ? 'Wird gespeichert…' : 'Speichern' }}
+						{{ editSaving ? 'Saving…' : 'Save' }}
 					</button>
 				</footer>
 			</form>
@@ -1150,7 +1198,7 @@ onUnmounted(() => {
 						<p class="a-profile-edit__eyebrow">{{ account?.handle ?? handleText }}</p>
 						<h2 id="a-connections-title">{{ connectionTitle }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Liste schließen" @click="closeConnections">
+					<button type="button" class="a-icon-btn" aria-label="Close list" @click="closeConnections">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
@@ -1158,9 +1206,9 @@ onUnmounted(() => {
 				<p class="a-connections__meta">
 					<AppIcon :name="connectionNetwork === 'bluesky' && !connectionLocal ? 'sparkles' : 'globe'" :size="14" />
 					{{ connectionLocal
-						? 'Diese Instanz · lokal'
-						: connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'Fediverse · ActivityPub' }}
-					<span>· {{ connectionProfiles.length }} geladen</span>
+						? 'This instance · local'
+						: connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'fediverse · ActivityPub' }}
+					<span>· {{ connectionProfiles.length }} loaded</span>
 				</p>
 
 				<p v-if="connectionError !== ''" class="a-form-error" role="alert">{{ connectionError }}</p>
@@ -1181,10 +1229,10 @@ onUnmounted(() => {
 								</span>
 								<span v-if="profile.bio" class="a-connections__bio">{{ truncate(profile.bio, 170) }}</span>
 								<span class="a-connections__stats">
-									<span>{{ formatCount(profile.followers_count) }} Follower</span>
-									<span>{{ formatCount(profile.following_count) }} folgt</span>
+									<span>{{ formatCount(profile.followers_count) }} followers</span>
+									<span>{{ formatCount(profile.following_count) }} following</span>
 									<span v-if="profile.posts_count !== null && profile.posts_count !== undefined">
-										{{ formatCount(profile.posts_count) }} Beiträge
+										{{ formatCount(profile.posts_count) }} Posts
 									</span>
 								</span>
 							</span>
@@ -1196,7 +1244,7 @@ onUnmounted(() => {
 				<EmptyState
 					v-else-if="!connectionLoading && connectionError === ''"
 					icon="users"
-					title="Keine Profile"
+					title="No profiles"
 					:text="connectionEmptyText"
 				/>
 
@@ -1209,13 +1257,13 @@ onUnmounted(() => {
 						@click="loadConnections(false)"
 					>
 						<AppIcon v-if="connectionLoading" name="refresh" :size="15" class="a-spin" />
-						{{ connectionLoading ? 'Wird geladen…' : 'Weitere laden' }}
+						{{ connectionLoading ? 'Loading…' : 'Load more' }}
 					</button>
 					<span v-else-if="connectionProfiles.length > 0" class="a-connections__end">
-						Ende der öffentlich sichtbaren Liste
+						End of the publicly visible list
 					</span>
 					<span v-if="connectionLoading && connectionProfiles.length === 0" class="a-connections__end">
-						Wird geladen…
+						Loading…
 					</span>
 				</div>
 			</section>

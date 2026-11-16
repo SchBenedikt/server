@@ -29,16 +29,16 @@ declare(strict_types=1);
 >
     <div class="aloha-boot" aria-hidden="true">
         <span class="aloha-boot__mark"><img src="/ui/brand/aloha-mark.svg" alt=""></span>
-        <span class="aloha-boot__text"><?= $escape($instance) ?> wird geöffnet …</span>
+        <span class="aloha-boot__text">Opening <?= $escape($instance) ?>…</span>
     </div>
     <noscript>
         <section class="card">
             <h1><?= $escape($instance) ?></h1>
             <p class="muted">
-                Die Aloha-Oberfläche braucht JavaScript. Die klassischen Seiten und die API
-                funktionieren auch ohne.
+                The Aloha interface requires JavaScript. The classic pages and the API
+                still work without it.
             </p>
-            <p><a href="/">Zum Dashboard</a></p>
+            <p><a href="/">Go to dashboard</a></p>
         </section>
     </noscript>
 </div>

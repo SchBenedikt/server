@@ -80,7 +80,7 @@ async function load(): Promise<void> {
 		list.value = found;
 		await Promise.all([loadPosts(true), loadMembers()]);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Liste konnte nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'The list could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -114,7 +114,7 @@ async function loadPosts(reset: boolean): Promise<void> {
 		cursor.value = page.length > 0 ? page[page.length - 1].id : cursor.value;
 		hasMore.value = page.length === 20;
 	} catch (caught) {
-		postsError.value = caught instanceof Error ? caught.message : 'Die Zeitleiste konnte nicht geladen werden.';
+		postsError.value = caught instanceof Error ? caught.message : 'The timeline could not be loaded.';
 	} finally {
 		postsLoading.value = false;
 	}
@@ -126,7 +126,7 @@ async function loadMembers(): Promise<void> {
 	try {
 		members.value = await getApi().listAccounts(listId.value);
 	} catch (caught) {
-		membersError.value = caught instanceof Error ? caught.message : 'Die Mitglieder konnten nicht geladen werden.';
+		membersError.value = caught instanceof Error ? caught.message : 'Members could not be loaded.';
 	} finally {
 		membersLoading.value = false;
 	}
@@ -144,7 +144,7 @@ async function searchMembers(): Promise<void> {
 		const results = await getApi().search(query, 20);
 		memberResults.value = results.accounts.filter((account) => account.is_remote !== true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Suche ist fehlgeschlagen.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The search failed.', 'error');
 	} finally {
 		memberSearching.value = false;
 	}
@@ -160,10 +160,10 @@ async function addMember(account: Account): Promise<void> {
 		await getApi().addListAccounts(listId.value, [account.id]);
 		members.value = [...members.value, account];
 		memberResults.value = memberResults.value.filter((entry) => entry.id !== account.id);
-		showToast('Konto zur Liste hinzugefügt.', 'success');
+		showToast('Account added to the list.', 'success');
 		void loadPosts(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Das Konto konnte nicht hinzugefügt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The account could not be added.', 'error');
 	} finally {
 		memberBusy.value = '';
 	}
@@ -178,10 +178,10 @@ async function removeMember(account: Account): Promise<void> {
 	try {
 		await getApi().removeListAccounts(listId.value, [account.id]);
 		members.value = members.value.filter((entry) => entry.id !== account.id);
-		showToast('Konto aus der Liste entfernt.', 'success');
+		showToast('Account removed from the list.', 'success');
 		void loadPosts(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Das Konto konnte nicht entfernt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The account could not be removed.', 'error');
 	} finally {
 		memberBusy.value = '';
 	}
@@ -191,10 +191,10 @@ async function removeMember(account: Account): Promise<void> {
 <template>
 	<div class="a-page">
 		<PageHeader
-			:title="list?.title ?? 'Liste'"
-			:subtitle="list ? 'Private Zeitleiste dieser Liste.' : 'Liste wird geladen …'"
+			:title="list?.title ?? 'list'"
+			:subtitle="list ? 'Private timeline for this list.' : 'Loading list…'"
 			back-href="#/lists"
-			back-label="Zurück zu den Listen"
+			back-label="Back to lists"
 		>
 			<template #actions>
 				<button
@@ -204,30 +204,30 @@ async function removeMember(account: Account): Promise<void> {
 					@click="showMembers = !showMembers"
 				>
 					<AppIcon name="users" :size="15" />
-					{{ showMembers ? 'Zeitleiste' : `Mitglieder (${members.length})` }}
+					{{ showMembers ? 'timeline' : `Members (${members.length})` }}
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="lock" :size="26" /></span>
-			<h2>Private Liste</h2>
-			<p>Melde dich an, um diese Liste und ihre Zeitleiste zu sehen.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>Private list</h2>
+			<p>Sign in to see this list and its timeline.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<TimelineSkeleton v-else-if="loading && list === null && !notFound" :count="3" />
 
 		<div v-else-if="notFound" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Liste nicht gefunden</strong><p>Diese Liste gehört nicht zu deinem Konto oder wurde gelöscht.</p></div>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/lists">Zu den Listen</a>
+			<div><strong>List not found</strong><p>This list does not belong to your account or has been deleted.</p></div>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/lists">Zu den lists</a>
 		</div>
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Liste nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<div><strong>List unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</div>
 
 		<template v-else-if="list">
@@ -237,17 +237,17 @@ async function removeMember(account: Account): Promise<void> {
 					<input
 						v-model="memberQuery"
 						type="search"
-						placeholder="Lokales Konto suchen und hinzufügen …"
-						aria-label="Konto suchen"
+						placeholder="Search for and add a local account…"
+						aria-label="Search accounts"
 						autocomplete="off"
 					>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="memberSearching || memberQuery.trim() === ''">
-						{{ memberSearching ? 'Suche…' : 'Suchen' }}
+						{{ memberSearching ? 'Searching…' : 'Search' }}
 					</button>
 				</form>
 
 				<div v-if="addable.length > 0" class="a-management-results">
-					<p class="a-management-label">Gefundene Konten</p>
+					<p class="a-management-label">Found accounts</p>
 					<AccountRow v-for="account in addable" :key="account.id" :account="account" compact>
 						<template #actions>
 							<button
@@ -256,7 +256,7 @@ async function removeMember(account: Account): Promise<void> {
 								:disabled="memberBusy === account.id"
 								@click="addMember(account)"
 							>
-								<AppIcon name="plus" :size="14" /> Hinzufügen
+								<AppIcon name="plus" :size="14" /> Add
 							</button>
 						</template>
 					</AccountRow>
@@ -264,15 +264,15 @@ async function removeMember(account: Account): Promise<void> {
 
 				<p v-if="membersError !== ''" class="a-form-error" role="alert">{{ membersError }}</p>
 
-				<p class="a-management-label">Mitglieder</p>
+				<p class="a-management-label">Members</p>
 				<div v-if="membersLoading && members.length === 0" class="a-management-skeleton" aria-hidden="true">
 					<div v-for="index in 2" :key="index" class="a-skeleton a-management-skeleton__row" />
 				</div>
 				<EmptyState
 					v-else-if="members.length === 0"
 					icon="users"
-					title="Noch keine Mitglieder"
-					text="Suche oben nach einem lokalen Konto und füge es dieser Liste hinzu."
+					title="No members yet"
+					text="Search for a local account above and add it to this list."
 				/>
 				<ul v-else class="a-management-people">
 					<li v-for="account in members" :key="account.id">
@@ -284,7 +284,7 @@ async function removeMember(account: Account): Promise<void> {
 									:disabled="memberBusy === account.id"
 									@click="removeMember(account)"
 								>
-									<AppIcon name="x" :size="14" /> Entfernen
+									<AppIcon name="x" :size="14" /> Remove
 								</button>
 							</template>
 						</AccountRow>
@@ -297,18 +297,18 @@ async function removeMember(account: Account): Promise<void> {
 
 				<div v-else-if="postsError !== '' && posts.length === 0" class="a-error-panel">
 					<AppIcon name="info" :size="22" />
-					<div><strong>Zeitleiste nicht erreichbar</strong><p>{{ postsError }}</p></div>
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadPosts(true)">Erneut versuchen</button>
+					<div><strong>Timeline unavailable</strong><p>{{ postsError }}</p></div>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadPosts(true)">Try again</button>
 				</div>
 
 				<EmptyState
 					v-else-if="posts.length === 0"
 					icon="list"
-					title="Noch keine Beiträge"
-					text="Sobald Mitglieder dieser Liste etwas veröffentlichen, erscheint es hier."
+					title="No posts yet"
+					text="As soon as members of this list publish something, it appears here."
 				>
 					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="showMembers = true">
-						Mitglieder verwalten
+						Manage members
 					</button>
 				</EmptyState>
 
@@ -325,7 +325,7 @@ async function removeMember(account: Account): Promise<void> {
 						@click="loadPosts(false)"
 					>
 						<AppIcon v-if="postsLoading" name="refresh" :size="15" class="a-spin" />
-						{{ postsLoading ? 'Wird geladen…' : 'Weitere Beiträge' }}
+						{{ postsLoading ? 'Loading…' : 'More posts' }}
 					</button>
 				</div>
 			</section>

@@ -225,13 +225,13 @@ watch(() => appState.instance?.name, (name) => {
 </script>
 
 <template>
-	<a class="a-skip-link" href="#a-main">Zum Inhalt springen</a>
+	<a class="a-skip-link" href="#a-main">Skip to content</a>
 
 	<div v-if="!appState.session.ready" class="a-boot" role="status" aria-live="polite">
 		<div class="a-boot__mark" aria-hidden="true">
 			<img :src="'/ui/brand/aloha-mark.svg'" alt="" />
 		</div>
-		<p>Aloha wird geöffnet …</p>
+		<p>Opening Aloha…</p>
 		<span class="a-boot__spinner" />
 	</div>
 
@@ -246,7 +246,7 @@ watch(() => appState.instance?.name, (name) => {
 				<span class="a-brand__mark" aria-hidden="true"><img :src="'/ui/brand/aloha-mark.svg'" alt="" /></span>
 				<span class="a-brand__copy">
 					<strong>{{ appState.instance?.name ?? 'Aloha Social' }}</strong>
-					<small>offen &amp; föderiert</small>
+					<small>open &amp; federated</small>
 				</span>
 			</a>
 			<div class="a-mobile-head__actions">
@@ -254,17 +254,17 @@ watch(() => appState.instance?.name, (name) => {
 					v-if="appState.session.user !== null"
 					type="button"
 					class="a-icon-btn"
-					aria-label="Abmelden"
-					title="Abmelden"
+					aria-label="Sign out"
+					title="Sign out"
 					:disabled="loggingOut"
 					@click="logout"
 				>
 					<AppIcon name="logout" :size="19" />
 				</button>
-				<button type="button" class="a-icon-btn" aria-label="Farbschema wechseln" @click="toggleTheme">
+				<button type="button" class="a-icon-btn" aria-label="Toggle theme" @click="toggleTheme">
 					<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="19" />
 				</button>
-				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 			</div>
 		</header>
 

@@ -48,10 +48,10 @@ const sectionView = computed(() => {
 <template>
 	<div class="a-page a-admin">
 		<PageHeader
-			:title="section === 'overview' ? 'Administration' : current.label"
+			:title="section === 'overview' ? 'administration' : current.label"
 			:subtitle="current.hint"
 			back-href="#/"
-			back-label="Zurück zur Startseite"
+			back-label="Back to home"
 		>
 			<template #actions>
 				<span v-if="isAdmin" class="a-admin-role">
@@ -64,23 +64,23 @@ const sectionView = computed(() => {
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Anmeldung erforderlich</strong>
-				<p>Die Administration ist nur für angemeldete Konten erreichbar.</p>
+				<strong>Sign-in required</strong>
+				<p>The administration is only available to signed-in accounts.</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
 		<div v-else-if="!isAdmin" class="a-error-panel">
 			<AppIcon name="shield" :size="22" />
 			<div>
-				<strong>Kein Zugriff</strong>
-				<p>Diese Oberfläche ist der Administration dieser Instanz vorbehalten.</p>
+				<strong>No access</strong>
+				<p>This interface is reserved for the administration of this instance.</p>
 			</div>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/">Zur Startseite</a>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/">Back to home</a>
 		</div>
 
 		<template v-else>
-			<nav class="a-admin-tabs" aria-label="Administrationsbereiche">
+			<nav class="a-admin-tabs" aria-label="Admin areas">
 				<a
 					v-for="entry in ADMIN_SECTIONS"
 					:key="entry.id"

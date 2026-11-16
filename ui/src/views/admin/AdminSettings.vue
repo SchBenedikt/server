@@ -26,39 +26,39 @@ const limits = computed(() => Object.entries(data.value?.limits ?? {}));
 const paths = computed(() => Object.entries(data.value?.paths ?? {}));
 
 const FEATURE_LABELS: Record<string, string> = {
-	federation: 'ActivityPub-Föderation',
-	remote_media: 'Entfernte Medien laden',
-	mastodon_api: 'Mastodon-kompatible API',
-	mastodon_prefix: 'API-Präfix',
+	federation: 'ActivityPub federation',
+	remote_media: 'Load remote media',
+	mastodon_api: 'Mastodon-compatible API',
+	mastodon_prefix: 'API prefix',
 	mail_transport: 'Mail-Transport',
-	secure_cookies: 'Sichere Cookies',
+	secure_cookies: 'Secure Cookies',
 	atproto: 'AT Protocol (Bluesky)',
 };
 
 const LIMIT_LABELS: Record<string, string> = {
-	session_lifetime_seconds: 'Sitzungsdauer',
-	max_post_characters: 'Zeichen pro Beitrag',
-	max_attachments: 'Anhänge pro Beitrag',
-	max_attachment_bytes: 'Größe pro Anhang',
+	session_lifetime_seconds: 'Session duration',
+	max_post_characters: 'Characters per post',
+	max_attachments: 'Attachments per post',
+	max_attachment_bytes: 'Size per attachment',
 };
 
 const PATH_LABELS: Record<string, string> = {
-	var: 'Laufzeitverzeichnis',
-	blobs: 'Medienspeicher',
-	mail: 'Mail-Ablage',
-	secret_key: 'Schlüsseldatei',
+	var: 'Runtime directory',
+	blobs: 'Media storage',
+	mail: 'Mail-Storage',
+	secret_key: 'Key file',
 };
 
 function checkLabel(id: string): string {
 	switch (id) {
 		case 'database':
-			return 'Datenbank erreichbar';
+			return 'Database reachable';
 		case 'blob_directory':
-			return 'Medienspeicher schreibbar';
+			return 'Media storage writable';
 		case 'secret_key':
-			return 'Verschlüsselungsschlüssel';
+			return 'Encryption key';
 		case 'worker':
-			return 'Worker meldet sich';
+			return 'Worker is responsive';
 		default:
 			return id;
 	}
@@ -66,13 +66,13 @@ function checkLabel(id: string): string {
 
 function valueLabel(key: string, value: string | number | boolean): string {
 	if (typeof value === 'boolean') {
-		return value ? 'Aktiv' : 'Inaktiv';
+		return value ? 'Active' : 'Inactive';
 	}
 	if (key === 'max_attachment_bytes') {
 		return bytesLabel(Number(value));
 	}
 	if (key === 'session_lifetime_seconds') {
-		return `${Math.round(Number(value) / 86400)} Tage`;
+		return `${Math.round(Number(value) / 86400)} days`;
 	}
 
 	return String(value);
@@ -104,7 +104,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().instance();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Instanzdaten konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Instance data could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -119,16 +119,16 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Laufzeit</p>
-				<h2>Instanz und Grenzen</h2>
+				<p class="a-admin-eyebrow">Runtime</p>
+				<h2>Instance and limits</h2>
 				<p class="a-admin-lead">
-					Die Konfiguration wird beim Start aus Umgebungsvariablen und
-					<code>config/server.php</code> gelesen. Diese Ansicht prüft, was tatsächlich aktiv ist.
+					Configuration is read at startup from environment variables and
+					<code>config/server.php</code>. This view checks what is actually active.
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Erneut prüfen
+				Check again
 			</button>
 		</div>
 
@@ -142,7 +142,7 @@ onMounted(() => {
 			<div v-if="data.warnings.length > 0" class="a-admin-warning-panel">
 				<AppIcon name="alert" :size="20" />
 				<div>
-					<strong>Konfigurationshinweise</strong>
+					<strong>Configuration notes</strong>
 					<ul>
 						<li v-for="warning in data.warnings" :key="warning">{{ warning }}</li>
 					</ul>
@@ -154,7 +154,7 @@ onMounted(() => {
 					<span class="a-admin-dot" :class="check.ok ? 'a-admin-dot--ok' : 'a-admin-dot--error'" aria-hidden="true" />
 					<div>
 						<strong>{{ check.label }}</strong>
-						<small>{{ check.ok ? 'Bestanden' : 'Prüfen' }}</small>
+						<small>{{ check.ok ? 'Passed' : 'Check' }}</small>
 					</div>
 				</article>
 			</div>
@@ -163,8 +163,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Identität</h3>
-							<p>Wie die Instanz nach außen auftritt.</p>
+							<h3>Identity</h3>
+							<p>How the instance presents itself to the outside world.</p>
 						</div>
 					</header>
 					<dl class="a-admin-facts">
@@ -173,7 +173,7 @@ onMounted(() => {
 							<dd>{{ data.instance.name }}</dd>
 						</div>
 						<div>
-							<dt>Öffentliche URL</dt>
+							<dt>Public URL</dt>
 							<dd><a :href="data.instance.url" target="_blank" rel="noopener noreferrer">{{ data.instance.url }}</a></dd>
 						</div>
 						<div>
@@ -181,12 +181,12 @@ onMounted(() => {
 							<dd>{{ data.instance.actor_domain }}</dd>
 						</div>
 						<div>
-							<dt>Kontakt</dt>
-							<dd>{{ data.instance.contact !== '' ? data.instance.contact : 'Nicht hinterlegt' }}</dd>
+							<dt>Contact</dt>
+							<dd>{{ data.instance.contact !== '' ? data.instance.contact : 'Not provided' }}</dd>
 						</div>
 						<div>
-							<dt>Beschreibung</dt>
-							<dd>{{ data.instance.description !== '' ? data.instance.description : 'Leer' }}</dd>
+							<dt>Description</dt>
+							<dd>{{ data.instance.description !== '' ? data.instance.description : 'Empty' }}</dd>
 						</div>
 					</dl>
 				</section>
@@ -194,13 +194,13 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Versionen</h3>
-							<p>Anwendung, Laufzeit und Datenbank.</p>
+							<h3>Versions</h3>
+							<p>Application, runtime and database.</p>
 						</div>
 					</header>
 					<dl class="a-admin-facts">
 						<div>
-							<dt>Anwendung</dt>
+							<dt>Application</dt>
 							<dd>{{ data.versions.application }}</dd>
 						</div>
 						<div>
@@ -208,17 +208,17 @@ onMounted(() => {
 							<dd>{{ data.versions.php }}</dd>
 						</div>
 						<div>
-							<dt>Datenbank</dt>
+							<dt>Database</dt>
 							<dd>{{ data.versions.database }}</dd>
 						</div>
 						<div>
-							<dt>Umgebung</dt>
+							<dt>Environment</dt>
 							<dd>{{ data.versions.environment }}</dd>
 						</div>
 						<div>
 							<dt>Worker</dt>
 							<dd>
-								{{ data.worker.online ? 'Online' : 'Kein Signal' }}
+								{{ data.worker.online ? 'Online' : 'No signal' }}
 								<small v-if="data.worker.updated_at" class="a-admin-muted">
 									· {{ absoluteTime(data.worker.updated_at) }}
 								</small>
@@ -232,8 +232,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Funktionen</h3>
-							<p>Was diese Instanz nach außen anbietet.</p>
+							<h3>Features</h3>
+							<p>What this instance offers to the outside world.</p>
 						</div>
 					</header>
 					<ul class="a-admin-flag-list">
@@ -249,8 +249,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Grenzen</h3>
-							<p>Die Werte, die Beiträge und Sitzungen begrenzen.</p>
+							<h3>Limits</h3>
+							<p>The values that limit posts and sessions.</p>
 						</div>
 					</header>
 					<ul class="a-admin-flag-list">
@@ -265,8 +265,8 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Pfade</h3>
-						<p>Absolute Pfade, die der Prozess verwendet. Änderungen erfordern einen Neustart.</p>
+						<h3>Paths</h3>
+						<p>Absolute paths used by the process. Changes require a restart.</p>
 					</div>
 				</header>
 				<ul class="a-admin-flag-list">
@@ -280,28 +280,28 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Betriebshinweise</h3>
-						<p>Was für einen zuverlässigen Betrieb noch fehlt.</p>
+						<h3>Operations notes</h3>
+						<p>What is still missing for reliable operation.</p>
 					</div>
 				</header>
 				<ul class="a-admin-tips">
 					<li>
 						<AppIcon name="shield" :size="15" />
-						<code>ALOHASOCIAL_SECRET_KEY</code> außerhalb des Projektverzeichnisses aufbewahren
-						und in kein Repository aufnehmen.
+						<code>ALOHASOCIAL_SECRET_KEY</code> keep outside the project directory
+						and never commit to a repository.
 					</li>
 					<li>
 						<AppIcon name="clock" :size="15" />
-						Den Worker dauerhaft über systemd oder einen Cron-Eintrag für <code>--once</code>
-						betreiben.
+						Run the worker permanently via systemd or a cron entry for <code>--once</code>
+						in production.
 					</li>
 					<li>
 						<AppIcon name="mail" :size="15" />
-						Für Passwort-Zurücksetzungen SMTP statt des Log-Transports konfigurieren.
+						Configure SMTP instead of the log transport for password resets.
 					</li>
 					<li>
 						<AppIcon name="globe" :size="15" />
-						Eine öffentliche Instanz braucht HTTPS; die Prüfung oben meldet HTTP als Hinweis.
+						A public instance needs HTTPS; the check above flags HTTP as a warning.
 					</li>
 				</ul>
 			</section>

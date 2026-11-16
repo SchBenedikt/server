@@ -17,7 +17,7 @@ $appShell = $appShell ?? false;
 
 ?>
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -268,11 +268,11 @@ $appShell = $appShell ?? false;
 <body<?= $appShell ? ' class="app-shell"' : '' ?>>
     <?php if (!$appShell): ?>
         <header>
-            <a class="brand" href="/" aria-label="<?= $escape($instance) ?> — Startseite">
+            <a class="brand" href="/" aria-label="<?= $escape($instance) ?> — Home">
                 <img src="/ui/brand/aloha-mark.svg" alt="">
                 <span class="brand-copy">
                     <strong><?= $escape($instance) ?></strong>
-                    <small>Offen &amp; föderiert</small>
+                    <small>Open &amp; federated</small>
                 </span>
             </a>
         </header>
@@ -281,7 +281,7 @@ $appShell = $appShell ?? false;
     <?php if (!$appShell): ?>
         <footer>
             <span>Aloha Social · Core <?= $escape(\AlohaSocial\Server\Support\CoreVersion::current()) ?></span>
-            <span><a href="/app">App öffnen</a> · <a href="/api/v1/instance">API</a></span>
+            <span><a href="/app">Open app</a> · <a href="/api/v1/instance">API</a></span>
         </footer>
     <?php endif; ?>
 </body>

@@ -15,8 +15,8 @@ declare(strict_types=1);
 
 ?>
 <section class="card">
-    <h1>Anmelden</h1>
-    <p class="muted">Melde dich mit deinem Handle oder deiner E-Mail-Adresse an.</p>
+    <h1>Sign in</h1>
+    <p class="muted">Sign in with your handle or email address.</p>
 
     <?php if ($notice !== null): ?>
         <p class="notice"><?= $escape($notice) ?></p>
@@ -29,14 +29,14 @@ declare(strict_types=1);
     <form method="post" action="/login">
         <input type="hidden" name="_csrf" value="<?= $escape($csrf) ?>">
 
-        <label for="handle">Handle oder E-Mail</label>
+        <label for="handle">Handle or email</label>
         <input id="handle" name="handle" autocomplete="username" required autofocus value="<?= $escape($handle) ?>">
 
-        <label for="password">Passwort</label>
+        <label for="password">Password</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required>
 
-        <button type="submit">Anmelden</button>
+        <button type="submit">Sign in</button>
     </form>
 
-    <p class="muted"><a href="/forgot-password">Passwort vergessen?</a></p>
+    <p class="muted"><a href="/forgot-password">Forgot password?</a></p>
 </section>

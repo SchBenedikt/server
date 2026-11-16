@@ -22,6 +22,7 @@ import type {
 	Relationship,
 	AccountConnectionsData,
 	RemoteConnectionsData,
+	RemoteFollowingEntry,
 	RemoteEngagementData,
 	RemotePostData,
 	RemoteProfileData,
@@ -84,7 +85,9 @@ export interface Api {
 	accountConnections(account: string, type: 'followers' | 'following', maxId?: string | null): Promise<AccountConnectionsData>;
 	remoteEngagement(id: string, type: 'likes' | 'reposts', cursor?: string | null): Promise<RemoteEngagementData>;
 	remoteSearch(query: string, type?: RemoteSearchType, network?: RemoteSearchNetwork, cursor?: string | null): Promise<RemoteSearchData>;
-	followRemote(actor: string, inbox: string): Promise<void>;
+	followRemote(actor: string, inbox: string): Promise<RemoteFollowingEntry>;
+	unfollowRemote(id: string): Promise<void>;
+	remoteFollowing(): Promise<RemoteFollowingEntry[]>;
 	hostProfiles(): Promise<Record<string, string>>;
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
@@ -183,7 +186,7 @@ function errorMessage(body: string, status: number): { code: string; message: st
 			const code = typeof parsed.error.code === 'string' ? parsed.error.code : 'http_error';
 			const message = typeof parsed.error.message === 'string' && parsed.error.message !== ''
 				? parsed.error.message
-				: `Die Anfrage ist fehlgeschlagen (${status}).`;
+				: `The request failed (${status}).`;
 			const fields: Record<string, string> = {};
 			if (isRecord(parsed.error.fields)) {
 				for (const [key, value] of Object.entries(parsed.error.fields)) {
@@ -202,8 +205,8 @@ function errorMessage(body: string, status: number): { code: string; message: st
 	return {
 		code: 'http_error',
 		message: status === 401
-			? 'Du bist nicht angemeldet.'
-			: `Die Anfrage ist fehlgeschlagen (${status}).`,
+			? 'You are not signed in.'
+			: `The request failed (${status}).`,
 		fields: {},
 	};
 }
@@ -355,6 +358,20 @@ function normalizeAccount(value: unknown): Account | null {
 		is_remote: value.is_remote === true,
 		relationship,
 		published_at: typeof value.published_at === 'string' ? value.published_at : null,
+	};
+}
+
+function normalizeRemoteFollowing(value: unknown): RemoteFollowingEntry | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.actor !== 'string') {
+		return null;
+	}
+
+	return {
+		id: value.id,
+		actor: value.actor,
+		inbox: typeof value.inbox === 'string' ? value.inbox : '',
+		state: typeof value.state === 'string' ? value.state : 'pending',
+		followed_at: typeof value.followed_at === 'string' ? value.followed_at : '',
 	};
 }
 
@@ -756,7 +773,7 @@ function normalizeBlueskyAccount(value: unknown): BlueskyAccountStatus {
 
 function normalizePreferences(value: unknown): AccountPreferences {
 	if (!isRecord(value)) {
-		throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Einstellungen.');
+		throw new ApiError(502, 'invalid_response', 'The response does not contain settings.');
 	}
 
 	return {
@@ -871,7 +888,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		async instance(): Promise<InstanceInfo> {
 			const data = await request<{ instance?: unknown }>('GET', '/api/v1/instance');
 			if (!isRecord(data?.instance) || typeof data.instance.name !== 'string') {
-				throw new ApiError(502, 'invalid_response', 'Die Instanzbeschreibung ist unvollständig.');
+				throw new ApiError(502, 'invalid_response', 'The instance description is incomplete.');
 			}
 
 			return data.instance as unknown as InstanceInfo;
@@ -926,7 +943,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<{ post?: unknown }>('GET', `/api/v1/posts/${encodeURIComponent(id)}`);
 			const post = normalizeTimelineItem(data?.post);
 			if (post === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a post.');
 			}
 
 			return post;
@@ -987,7 +1004,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const account = normalizeAccount(data?.account);
 			if (account === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält kein Profil.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a profile.');
 			}
 
 			return account;
@@ -1008,7 +1025,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 			const profile = normalizeAccount(data?.profile);
 			if (profile === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält kein entferntes Profil.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a remote profile.');
 			}
 
 			profile.relationship = { following: false, followed_by: false, blocking: false, muting: false };
@@ -1021,8 +1038,35 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			};
 		},
 
-		async followRemote(actor: string, inbox: string): Promise<void> {
-			await request<unknown>('POST', '/api/v1/following', undefined, { actor, inbox });
+		async followRemote(actor: string, inbox: string): Promise<RemoteFollowingEntry> {
+			const data = await request<{ following?: unknown }>(
+				'POST',
+				'/api/v1/following',
+				undefined,
+				{ actor, inbox },
+			);
+			const entry = normalizeRemoteFollowing(data?.following);
+			if (entry === null) {
+				throw new ApiError(502, 'invalid_response', 'The follow response is incomplete.');
+			}
+
+			return entry;
+		},
+
+		async unfollowRemote(id: string): Promise<void> {
+			if (id === '') {
+				return;
+			}
+			await request<unknown>('DELETE', `/api/v1/following/${encodeURIComponent(id)}`);
+		},
+
+		async remoteFollowing(): Promise<RemoteFollowingEntry[]> {
+			const data = await request<{ following?: unknown }>('GET', '/api/v1/host/following');
+			return Array.isArray(data?.following)
+				? data.following
+					.map(normalizeRemoteFollowing)
+					.filter((entry): entry is RemoteFollowingEntry => entry !== null)
+				: [];
 		},
 
 		async remotePost(id: string): Promise<RemotePostData> {
@@ -1036,7 +1080,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 			const post = normalizeTimelineItem(data?.post);
 			if (post === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a post.');
 			}
 
 			return {
@@ -1393,7 +1437,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<{ post?: unknown }>('POST', '/api/v1/posts', undefined, body);
 			const post = normalizeTimelineItem(data?.post);
 			if (post === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a post.');
 			}
 
 			return post;
@@ -1424,7 +1468,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<unknown>('POST', '/api/mastodon/v1/statuses', undefined, body);
 			const post = normalizeMastodonStatus(data);
 			if (post === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a post.');
 			}
 
 			return post;
@@ -1491,7 +1535,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<unknown>('POST', '/api/mastodon/v1/lists', undefined, { title });
 			const list = normalizeAccountList(data);
 			if (list === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Liste.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a list.');
 			}
 
 			return list;
@@ -1506,7 +1550,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const list = normalizeAccountList(data);
 			if (list === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Liste.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a list.');
 			}
 
 			return list;
@@ -1604,7 +1648,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<{ filter?: unknown }>('POST', '/api/v1/filters', undefined, payload);
 			const filter = normalizeFilter(data?.filter);
 			if (filter === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Filter.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a filter.');
 			}
 
 			return filter;
@@ -1619,7 +1663,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const filter = normalizeFilter(data?.filter);
 			if (filter === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Filter.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a filter.');
 			}
 
 			return filter;
@@ -1651,7 +1695,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const scheduled = normalizeScheduledPost(data?.scheduled_post);
 			if (scheduled === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen geplanten Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a scheduled post.');
 			}
 
 			return scheduled;
@@ -1666,7 +1710,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const scheduled = normalizeScheduledPost(data?.scheduled_post);
 			if (scheduled === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen geplanten Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a scheduled post.');
 			}
 
 			return scheduled;
@@ -1713,7 +1757,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const post = normalizeTimelineItem(data?.post);
 			if (post === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Beitrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a post.');
 			}
 
 			return post;
@@ -1759,7 +1803,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<{ interaction?: unknown }>('POST', `/api/v1/posts/${encodeURIComponent(id)}/like`);
 			const interaction = normalizeInteraction(data?.interaction);
 			if (interaction === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Like-Status.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a like status.');
 			}
 
 			return interaction;
@@ -1769,7 +1813,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const data = await request<{ interaction?: unknown }>('DELETE', `/api/v1/posts/${encodeURIComponent(id)}/like`);
 			const interaction = normalizeInteraction(data?.interaction);
 			if (interaction === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Like-Status.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a like status.');
 			}
 
 			return interaction;
@@ -1783,7 +1827,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				{ display_name: displayName },
 			);
 			if (!isRecord(data?.account) || typeof data.account.display_name !== 'string') {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält kein aktualisiertes Profil.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain an updated profile.');
 			}
 
 			return data.account.display_name;
@@ -1819,7 +1863,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const row = isRecord(data?.announcement) ? data.announcement : null;
 			if (row === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Ankündigung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain an announcement.');
 			}
 
 			return {
@@ -1846,7 +1890,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const row = isRecord(data?.announcement) ? data.announcement : null;
 			if (row === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Ankündigung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain an announcement.');
 			}
 
 			return {
@@ -1979,7 +2023,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const row = isRecord(data?.story) ? data.story : null;
 			if (row === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Story.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a story.');
 			}
 
 			return {
@@ -2016,7 +2060,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const collection = normalizeCollection(data?.collection);
 			if (collection === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a collection.');
 			}
 
 			return collection;
@@ -2031,7 +2075,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const collection = normalizeCollection(data?.collection);
 			if (collection === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a collection.');
 			}
 
 			return collection;
@@ -2049,7 +2093,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const collection = normalizeCollection(data?.collection);
 			if (collection === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a collection.');
 			}
 
 			return collection;
@@ -2068,7 +2112,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const collection = normalizeCollection(data?.collection);
 			if (collection === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a collection.');
 			}
 
 			return collection;
@@ -2081,7 +2125,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const collection = normalizeCollection(data?.collection);
 			if (collection === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a collection.');
 			}
 
 			return collection;
@@ -2149,7 +2193,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const draft = normalizeDraft(data?.draft);
 			if (draft === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Entwurf.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a draft.');
 			}
 
 			return draft;
@@ -2179,7 +2223,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 			const row = isRecord(data?.archived) ? data.archived : null;
 			if (row === null) {
-				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Archiv-Eintrag.');
+				throw new ApiError(502, 'invalid_response', 'The response does not contain an archive entry.');
 			}
 
 			return {
@@ -2254,7 +2298,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				headers: { Accept: 'application/json' },
 			});
 			if (!response.ok) {
-				throw new ApiError(response.status, 'export_failed', 'Der Export konnte nicht erstellt werden.');
+				throw new ApiError(response.status, 'export_failed', 'The export could not be created.');
 			}
 
 			return response.blob();

@@ -697,7 +697,7 @@ final class RemoteDirectoryTest extends TestCase
         self::assertSame([], $result['accounts']);
         self::assertSame([], $result['posts']);
         self::assertCount(1, $result['notes']);
-        self::assertStringContainsString('Discovery-Instanz', $result['notes'][0]);
+        self::assertStringContainsString('discovery instance', $result['notes'][0]);
     }
 
     public function testMastodonEngagementListsLikesAndBoosts(): void

@@ -94,13 +94,13 @@ final class PasswordResetService
 
         $this->mailer->send(
             $account->email,
-            'Passwort für ' . $this->instanceUrl . ' zurücksetzen',
-            "Hallo " . $name . ",\n\n"
-            . "für dein Konto @" . $account->handle . " wurde ein neues Passwort angefordert.\n"
-            . "Öffne diesen Link, um es zu setzen:\n\n"
+            'Password for ' . $this->instanceUrl . ' reset',
+            "Hello " . $name . ",\n\n"
+            . "for your account @" . $account->handle . " a new password was requested.\n"
+            . "Open this link to set it:\n\n"
             . $link . "\n\n"
-            . "Der Link ist eine Stunde gültig und kann nur einmal verwendet werden.\n"
-            . "Wenn du das nicht angefordert hast, ignoriere diese E-Mail; dein Passwort bleibt unverändert.\n",
+            . "The link is valid for one hour and can only be used once.\n"
+            . "If you did not request this, ignore this email; your password stays unchanged.\n",
         );
 
         return true;
@@ -124,32 +124,32 @@ final class PasswordResetService
         if ($length < self::MIN_PASSWORD_LENGTH) {
             throw new PasswordResetException(
                 'weak_password',
-                'Das Passwort muss mindestens ' . self::MIN_PASSWORD_LENGTH . ' Zeichen haben.',
+                'The password must be at least ' . self::MIN_PASSWORD_LENGTH . ' characters.',
             );
         }
 
         if ($length > self::MAX_PASSWORD_LENGTH) {
-            throw new PasswordResetException('weak_password', 'Das Passwort ist zu lang.');
+            throw new PasswordResetException('weak_password', 'The password is too long.');
         }
 
         $row = $this->find($token);
         if ($row === null || $row['used_at'] !== null) {
             throw new PasswordResetException(
                 'invalid_token',
-                'Der Link ist ungültig oder wurde bereits verwendet.',
+                'The link is invalid or has already been used.',
             );
         }
 
         if (Time::parse((string) $row['expires_at'])->getTimestamp() <= $this->clock->now()->getTimestamp()) {
             throw new PasswordResetException(
                 'expired_token',
-                'Der Link ist abgelaufen. Bitte fordere einen neuen an.',
+                'The link has expired. Please request a new one.',
             );
         }
 
         $account = $this->accounts->find((string) $row['account_id']);
         if ($account === null || $account->isDisabled()) {
-            throw new PasswordResetException('invalid_token', 'Der Link ist ungültig oder wurde bereits verwendet.');
+            throw new PasswordResetException('invalid_token', 'The link is invalid or has already been used.');
         }
 
         $hash = $this->hasher->hash($password);

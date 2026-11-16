@@ -44,35 +44,35 @@ function compose(): void {
 </script>
 
 <template>
-	<aside class="a-rail" aria-label="Entdecken">
+	<aside class="a-rail" aria-label="Explore">
 		<section v-if="self" class="a-rail__card a-rail__me">
 			<Avatar :id="self.handle" :name="selfName" :size="46" />
 			<div>
 				<strong>{{ selfName }}</strong>
 				<span v-if="selfName !== handleLabel(self.handle)">{{ handleLabel(self.handle) }}</span>
 			</div>
-			<button type="button" class="a-icon-btn" aria-label="Neuen Beitrag schreiben" @click="compose">
+			<button type="button" class="a-icon-btn" aria-label="Write a new post" @click="compose">
 				<AppIcon name="pen" :size="18" />
 			</button>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
-				<h2>Diese Instanz</h2>
-				<a href="#/about" class="a-rail__more" aria-label="Mehr über diese Instanz">Mehr</a>
+				<h2>This instance</h2>
+				<a href="#/about" class="a-rail__more" aria-label="More about this instance">More</a>
 			</header>
 			<template v-if="instance">
 				<p class="a-rail__instance-name">{{ instance.name }}</p>
 				<p class="a-rail__instance-description">
-					{{ instance.description || 'Eine kleine, offene Instanz im Fediverse.' }}
+					{{ instance.description || 'A small, open instance in the fediverse.' }}
 				</p>
 				<dl class="a-stats">
 					<div>
-						<dt>Menschen</dt>
+						<dt>People</dt>
 						<dd>{{ formatCount(instance.stats.user_count) }}</dd>
 					</div>
 					<div>
-						<dt>Beiträge</dt>
+						<dt>Posts</dt>
 						<dd>{{ formatCount(instance.stats.status_count) }}</dd>
 					</div>
 					<div>
@@ -86,14 +86,14 @@ function compose(): void {
 				<span class="a-skeleton a-skeleton--line a-skeleton--short" />
 			</div>
 			<a v-if="!signedIn" href="/login" class="a-btn a-btn--primary a-rail__login">
-				<AppIcon name="globe" :size="16" /> Anmelden
+				<AppIcon name="globe" :size="16" /> Sign in
 			</a>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
-				<h2>Beliebte Tags</h2>
-				<a href="#/explore" class="a-rail__more">Alle</a>
+				<h2>Popular Tags</h2>
+				<a href="#/explore" class="a-rail__more">All</a>
 			</header>
 			<div v-if="discover.loading && visibleTags.length === 0" class="a-rail__skeleton">
 				<span class="a-skeleton a-skeleton--line" />
@@ -105,19 +105,19 @@ function compose(): void {
 						<span class="a-tag-row__hash">#</span>
 						<span class="a-tag-row__copy">
 							<strong>{{ tag.tag }}</strong>
-							<small>{{ tag.count }} {{ tag.count === 1 ? 'Beitrag' : 'Beiträge' }}</small>
+							<small>{{ tag.count }} {{ tag.count === 1 ? 'Post' : 'Posts' }}</small>
 						</span>
 						<AppIcon name="chevronDown" :size="15" class="a-tag-row__arrow" />
 					</a>
 				</li>
 			</ul>
-			<p v-else class="a-rail__muted">Sobald Beiträge Hashtags tragen, erscheinen sie hier.</p>
+			<p v-else class="a-rail__muted">As soon as posts include hashtags, they appear here.</p>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
-				<h2>Wen du kennen solltest</h2>
-				<a href="#/explore" class="a-rail__more">Mehr</a>
+				<h2>People you should know</h2>
+				<a href="#/explore" class="a-rail__more">More</a>
 			</header>
 			<ul v-if="visiblePeople.length > 0" class="a-people">
 				<li v-for="person in visiblePeople" :key="person.id" class="a-person">
@@ -132,17 +132,17 @@ function compose(): void {
 				</li>
 			</ul>
 			<p v-else class="a-rail__muted">
-				Noch keine anderen Stimmen geladen.
+				No other voices loaded yet.
 			</p>
 		</section>
 
 		<footer class="a-rail__footer">
-			<a href="#/about">Über uns</a>
+			<a href="#/about">About</a>
 			<span>·</span>
-			<a href="https://github.com/SchBenedikt/core" target="_blank" rel="noopener noreferrer">Quellcode</a>
+			<a href="https://github.com/SchBenedikt/core" target="_blank" rel="noopener noreferrer">Source code</a>
 			<span>·</span>
 			<a href="/api/v1/instance" target="_blank" rel="noopener noreferrer">API</a>
-			<p>Aloha Social · offen, föderiert, ohne Werbung.</p>
+			<p>Aloha Social · open, federated, ad-free.</p>
 		</footer>
 	</aside>
 </template>

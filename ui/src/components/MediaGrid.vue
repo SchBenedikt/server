@@ -56,7 +56,7 @@ function open(index: number): void {
 					preload="metadata"
 					:aria-label="attachment.alt_text !== null && attachment.alt_text !== ''
 						? `Video: ${attachment.alt_text}`
-						: `Video ${index + 1} von ${attachments.length}`"
+						: `Video ${index + 1} of ${attachments.length}`"
 				/>
 				<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
 			</div>
@@ -69,7 +69,7 @@ function open(index: number): void {
 					<AppIcon name="music" :size="16" />
 					{{ attachment.alt_text !== null && attachment.alt_text !== ''
 						? attachment.alt_text
-						: `Audio ${index + 1} von ${attachments.length}` }}
+						: `Audio ${index + 1} of ${attachments.length}` }}
 				</span>
 				<audio :src="mediaUrl(attachment.url)" controls preload="metadata" />
 			</div>
@@ -79,21 +79,21 @@ function open(index: number): void {
 				type="button"
 				class="a-media__item"
 				:aria-label="attachment.alt_text !== null && attachment.alt_text !== ''
-					? `Bild öffnen: ${attachment.alt_text}`
-					: `Bild ${index + 1} von ${attachments.length} öffnen`"
+					? `Open image: ${attachment.alt_text}`
+					: `Open image ${index + 1} of ${attachments.length}`"
 				@click="open(index)"
 			>
 				<img
 					v-if="!broken.has(attachment.id)"
 					:src="mediaUrl(attachment.thumbnail_url ?? attachment.url)"
-					:alt="attachment.alt_text ?? `Anhang von ${authorHandle}`"
+					:alt="attachment.alt_text ?? `attachment by ${authorHandle}`"
 					loading="lazy"
 					decoding="async"
 					@error="markBroken(attachment.id)"
 				/>
 				<span v-else class="a-media__fallback">
 					<AppIcon name="image" :size="28" />
-					<span>Bild nicht verfügbar</span>
+					<span>Image unavailable</span>
 				</span>
 				<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
 			</button>

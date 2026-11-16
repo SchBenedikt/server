@@ -64,7 +64,7 @@ final class FrontController
                 $userAgent,
                 $ip,
                 $request->queryParam('reset') === '1'
-                    ? 'Dein Passwort wurde geändert. Bitte melde dich neu an.'
+                    ? 'Your password was changed. Please sign in again.'
                     : null,
             );
         }
@@ -104,8 +104,8 @@ final class FrontController
         if ($request->method === 'GET' && $request->path === '/admin') {
             if ($session?->account?->isAdmin() !== true) {
                 return $session === null ? $this->redirect('/login') : $this->page('error', [
-                    'message' => 'Diese Seite ist der Administration vorbehalten.',
-                ], 'Kein Zugriff', 403);
+                    'message' => 'This page is reserved for the administration.',
+                ], 'No access', 403);
             }
 
             return $this->redirect('/app#/admin');
@@ -129,7 +129,7 @@ final class FrontController
                     [
                         'error' => [
                             'code' => 'rate_limited',
-                            'message' => 'Zu viele Profil-Abrufe. Bitte warte kurz.',
+                            'message' => 'Too many profile lookups. Please wait a moment.',
                         ],
                     ],
                     429,
@@ -146,7 +146,7 @@ final class FrontController
             } catch (RemoteDirectoryException $exception) {
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {
-                return $this->apiError(502, 'remote_lookup_failed', 'Das entfernte Profil konnte nicht geladen werden.');
+                return $this->apiError(502, 'remote_lookup_failed', 'The remote profile could not be loaded.');
             }
         }
 
@@ -158,7 +158,7 @@ final class FrontController
                     [
                         'error' => [
                             'code' => 'rate_limited',
-                            'message' => 'Zu viele Beitrags-Abrufe. Bitte warte kurz.',
+                            'message' => 'Too many post lookups. Please wait a moment.',
                         ],
                     ],
                     429,
@@ -168,7 +168,7 @@ final class FrontController
 
             $id = trim((string) ($request->queryParam('id') ?? ''));
             if ($id === '') {
-                return $this->apiError(422, 'remote_post_missing', 'Bitte gib einen Beitrag an.');
+                return $this->apiError(422, 'remote_post_missing', 'Please provide a post.');
             }
 
             try {
@@ -176,7 +176,7 @@ final class FrontController
             } catch (RemoteDirectoryException $exception) {
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {
-                return $this->apiError(502, 'remote_post_failed', 'Der entfernte Beitrag konnte nicht geladen werden.');
+                return $this->apiError(502, 'remote_post_failed', 'The remote post could not be loaded.');
             }
         }
 
@@ -188,7 +188,7 @@ final class FrontController
                     [
                         'error' => [
                             'code' => 'rate_limited',
-                            'message' => 'Zu viele Verbindungs-Abrufe. Bitte warte kurz.',
+                            'message' => 'Too many connection lookups. Please wait a moment.',
                         ],
                     ],
                     429,
@@ -206,7 +206,7 @@ final class FrontController
             } catch (RemoteDirectoryException $exception) {
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {
-                return $this->apiError(502, 'remote_connections_failed', 'Die Verbindungen konnten nicht geladen werden.');
+                return $this->apiError(502, 'remote_connections_failed', 'Connections could not be loaded.');
             }
         }
 
@@ -221,7 +221,7 @@ final class FrontController
                     [
                         'error' => [
                             'code' => 'rate_limited',
-                            'message' => 'Zu viele Suchanfragen. Bitte warte kurz.',
+                            'message' => 'Too many searches. Please wait a moment.',
                         ],
                     ],
                     429,
@@ -240,7 +240,7 @@ final class FrontController
             } catch (RemoteDirectoryException $exception) {
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {
-                return $this->apiError(502, 'remote_search_failed', 'Die Suche konnte nicht ausgeführt werden.');
+                return $this->apiError(502, 'remote_search_failed', 'The search could not be completed.');
             }
         }
 
@@ -252,7 +252,7 @@ final class FrontController
                     [
                         'error' => [
                             'code' => 'rate_limited',
-                            'message' => 'Zu viele Reaktions-Abrufe. Bitte warte kurz.',
+                            'message' => 'Too many reaction lookups. Please wait a moment.',
                         ],
                     ],
                     429,
@@ -270,7 +270,7 @@ final class FrontController
             } catch (RemoteDirectoryException $exception) {
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {
-                return $this->apiError(502, 'remote_engagement_failed', 'Die Reaktionen konnten nicht geladen werden.');
+                return $this->apiError(502, 'remote_engagement_failed', 'Reactions could not be loaded.');
             }
         }
 
@@ -316,7 +316,7 @@ final class FrontController
                     [
                         'error' => [
                             'code' => 'rate_limited',
-                            'message' => 'Zu viele Zitat-Abrufe. Bitte warte kurz.',
+                            'message' => 'Too many quote lookups. Please wait a moment.',
                         ],
                     ],
                     429,
@@ -400,7 +400,7 @@ final class FrontController
             && in_array($request->method, ['POST', 'DELETE'], true)
         ) {
             if ($userId === null) {
-                return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
             }
 
             $targetId = rawurldecode($matches[1]);
@@ -433,17 +433,17 @@ final class FrontController
 
         if ($request->method === 'PATCH' && $request->path === '/api/v1/host/profile') {
             if ($userId === null) {
-                return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
             }
 
             $body = json_decode($request->body, true);
             if (!is_array($body) || !array_key_exists('display_name', $body) || !is_string($body['display_name'])) {
-                return $this->apiError(422, 'invalid_profile', 'Der Anzeigename fehlt.', ['display_name' => 'Bitte gib einen Anzeigenamen ein.']);
+                return $this->apiError(422, 'invalid_profile', 'The display name is missing.', ['display_name' => 'Please enter a display name.']);
             }
 
             $displayName = trim($body['display_name']);
             if (mb_strlen($displayName) > 80) {
-                return $this->apiError(422, 'invalid_profile', 'Der Anzeigename ist zu lang.', ['display_name' => 'Höchstens 80 Zeichen.']);
+                return $this->apiError(422, 'invalid_profile', 'The display name is too long.', ['display_name' => 'At most 80 characters.']);
             }
 
             $this->runtime->accounts->updateDisplayName($userId, $displayName === '' ? null : $displayName);
@@ -461,7 +461,7 @@ final class FrontController
             && in_array($request->method, ['POST', 'DELETE'], true)
         ) {
             if ($userId === null) {
-                return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
             }
 
             $postId = rawurldecode($matches[1]);
@@ -470,7 +470,7 @@ final class FrontController
                     ? $this->runtime->interactions->like($userId, $postId)
                     : $this->runtime->interactions->unlike($userId, $postId);
             } catch (PostNotFoundException) {
-                return $this->apiError(404, 'post_not_found', 'Dieser Beitrag ist nicht verfügbar.');
+                return $this->apiError(404, 'post_not_found', 'This post is not available.');
             }
 
             return Response::json(['interaction' => $interaction]);
@@ -571,15 +571,15 @@ final class FrontController
                 $session = new AuthenticatedSession($issue->session, null);
             }
 
-            return $this->loginResponse($session, 'Die Sitzung ist abgelaufen. Bitte erneut versuchen.', 403, $issue);
+            return $this->loginResponse($session, 'Your session has expired. Please try again.', 403, $issue);
         }
 
         if ($handle === '' || $password === '') {
-            return $this->loginResponse($session, 'Handle und Passwort sind erforderlich.', 422);
+            return $this->loginResponse($session, 'Handle and password are required.', 422);
         }
 
         if ($this->runtime->throttle->isLimited($handle, $ip)) {
-            return $this->loginResponse($session, 'Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.', 429);
+            return $this->loginResponse($session, 'Too many failed attempts. Please try again in 15 minutes.', 429);
         }
 
         $account = $this->runtime->accounts->findByHandle($handle)
@@ -592,7 +592,7 @@ final class FrontController
         if (!$valid) {
             $this->runtime->throttle->recordFailure($handle, $ip);
 
-            return $this->loginResponse($session, 'Handle oder Passwort ist falsch.', 401);
+            return $this->loginResponse($session, 'Handle or password is incorrect.', 401);
         }
 
         if ($this->runtime->passwordHasher->needsRehash($account->passwordHash)) {
@@ -610,7 +610,7 @@ final class FrontController
     private function logout(Request $request, ?AuthenticatedSession $session, ?string $rawCookie): Response
     {
         if (!$this->runtime->sessions->csrfMatches($session, $this->csrfToken($request))) {
-            return $this->page('error', ['message' => 'Das CSRF-Token ist ungültig.'], 'Abmelden', 403);
+            return $this->page('error', ['message' => 'The CSRF token is invalid.'], 'Sign out', 403);
         }
 
         $this->runtime->sessions->logout($rawCookie);
@@ -635,7 +635,7 @@ final class FrontController
             'actorUrl' => $this->runtime->config->instanceUrl . '/@' . rawurlencode($account->id),
             'csrf' => $session->session->csrfToken,
             'version' => \AlohaSocial\Server\Support\CoreVersion::current(),
-        ], 'Übersicht');
+        ], 'Overview');
     }
 
     /**
@@ -673,7 +673,7 @@ final class FrontController
             'sent' => false,
             'error' => null,
             'value' => '',
-        ], 'Passwort zurücksetzen', 200, $issue);
+        ], 'Reset password', 200, $issue);
     }
 
     private function forgotPassword(
@@ -692,9 +692,9 @@ final class FrontController
                 'instance' => $this->runtime->config->instanceName,
                 'csrf' => $session->session->csrfToken,
                 'sent' => false,
-                'error' => 'Die Sitzung ist abgelaufen. Bitte erneut versuchen.',
+                'error' => 'Your session has expired. Please try again.',
                 'value' => $value,
-            ], 'Passwort zurücksetzen', 403, $issue);
+            ], 'Reset password', 403, $issue);
         }
 
         $retryAfter = $this->runtime->rateLimiter->attempt(
@@ -709,16 +709,16 @@ final class FrontController
                 'instance' => $this->runtime->config->instanceName,
                 'csrf' => $session->session->csrfToken,
                 'sent' => false,
-                'error' => 'Zu viele Anfragen. Bitte in ' . $retryAfter . ' Sekunden erneut versuchen.',
+                'error' => 'Too many requests. Please try again in ' . $retryAfter . ' seconds.',
                 'value' => $value,
-            ], 'Passwort zurücksetzen', 429, $issue);
+            ], 'Reset password', 429, $issue);
         }
 
         $error = null;
         try {
             $this->runtime->passwordReset->request($value);
         } catch (MailException) {
-            $error = 'Die E-Mail konnte nicht versendet werden. Bitte später erneut versuchen.';
+            $error = 'The email could not be sent. Please try again later.';
         }
 
         return $this->page('forgot-password', [
@@ -727,7 +727,7 @@ final class FrontController
             'sent' => $error === null,
             'error' => $error,
             'value' => $value,
-        ], 'Passwort zurücksetzen', $error === null ? 200 : 503, $issue);
+        ], 'Reset password', $error === null ? 200 : 503, $issue);
     }
 
     private function resetPasswordForm(
@@ -746,8 +746,8 @@ final class FrontController
             'csrf' => $session->session->csrfToken,
             'token' => $token,
             'valid' => $valid,
-            'error' => $valid ? null : 'Der Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.',
-        ], 'Neues Passwort', $valid ? 200 : 400, $issue);
+            'error' => $valid ? null : 'The link is invalid or expired. Please request a new one.',
+        ], 'New password', $valid ? 200 : 400, $issue);
     }
 
     private function resetPassword(
@@ -770,15 +770,15 @@ final class FrontController
                 'token' => $token,
                 'valid' => false,
                 'error' => $error,
-            ], 'Neues Passwort', $status, $issue);
+            ], 'New password', $status, $issue);
         };
 
         if (!$this->runtime->sessions->csrfMatches($session, $this->csrfToken($request))) {
-            return $render('Die Sitzung ist abgelaufen. Bitte erneut versuchen.', 403);
+            return $render('Your session has expired. Please try again.', 403);
         }
 
         if ($password !== $confirm) {
-            return $render('Die Passwörter stimmen nicht überein.', 422);
+            return $render('The passwords do not match.', 422);
         }
 
         try {
@@ -819,7 +819,7 @@ final class FrontController
             'error' => $error,
             'notice' => $notice,
             'handle' => '',
-        ], 'Anmelden', $status, $issue);
+        ], 'Sign in', $status, $issue);
     }
 
     /**

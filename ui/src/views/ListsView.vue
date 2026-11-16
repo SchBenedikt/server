@@ -44,7 +44,7 @@ async function load(): Promise<void> {
 	try {
 		lists.value = await getApi().lists();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Listen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Lists could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -77,11 +77,11 @@ function closeDialog(): void {
 async function save(): Promise<void> {
 	const title = dialogTitle.value.trim();
 	if (title === '') {
-		dialogError.value = 'Bitte gib einen Namen für die Liste ein.';
+		dialogError.value = 'Please enter a name for the list.';
 		return;
 	}
 	if (Array.from(title).length > 80) {
-		dialogError.value = 'Der Name darf höchstens 80 Zeichen lang sein.';
+		dialogError.value = 'The name may be at most 80 characters long.';
 		return;
 	}
 
@@ -92,15 +92,15 @@ async function save(): Promise<void> {
 			const list = await getApi().createList(title);
 			lists.value = [list, ...lists.value];
 			creating.value = false;
-			showToast('Liste erstellt.', 'success');
+			showToast('List created.', 'success');
 		} else if (editing.value !== null) {
 			const updated = await getApi().updateList(editing.value.id, title);
 			lists.value = lists.value.map((entry) => entry.id === updated.id ? updated : entry);
 			editing.value = null;
-			showToast('Liste umbenannt.', 'success');
+			showToast('List renamed.', 'success');
 		}
 	} catch (caught) {
-		dialogError.value = caught instanceof Error ? caught.message : 'Die Liste konnte nicht gespeichert werden.';
+		dialogError.value = caught instanceof Error ? caught.message : 'The list could not be saved.';
 	} finally {
 		saving.value = false;
 	}
@@ -126,9 +126,9 @@ async function remove(list: AccountList): Promise<void> {
 		await getApi().deleteList(list.id);
 		lists.value = lists.value.filter((entry) => entry.id !== list.id);
 		confirmDelete.value = '';
-		showToast('Liste gelöscht.', 'success');
+		showToast('List deleted.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Liste konnte nicht gelöscht werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The list could not be deleted.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -137,7 +137,7 @@ async function remove(list: AccountList): Promise<void> {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Listen" subtitle="Private Zusammenstellungen von Konten mit eigener Zeitleiste.">
+		<PageHeader title="Lists" subtitle="Private collections of accounts with their own timeline.">
 			<template #actions>
 				<button
 					v-if="signedIn"
@@ -145,16 +145,16 @@ async function remove(list: AccountList): Promise<void> {
 					class="a-btn a-btn--primary a-btn--small"
 					@click="openCreate"
 				>
-					<AppIcon name="plus" :size="15" /> Neue Liste
+					<AppIcon name="plus" :size="15" /> New list
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="list" :size="26" /></span>
-			<h2>Listen für deine Kreise</h2>
-			<p>Melde dich an, um Konten in private Listen zu sortieren und nur deren Beiträge zu lesen.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>Lists for your circles</h2>
+			<p>Sign in to sort accounts into private lists and read only their posts.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<div v-else-if="loading && lists.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -163,18 +163,18 @@ async function remove(list: AccountList): Promise<void> {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Listen nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Erneut versuchen</button>
+			<div><strong>Lists unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
 		</div>
 
 		<EmptyState
 			v-else-if="lists.length === 0"
 			icon="list"
-			title="Noch keine Listen"
-			text="Eine Liste bündelt ausgewählte Konten. Lege eine Liste an und füge danach Konten hinzu."
+			title="No lists yet"
+			text="A list groups selected accounts. Create a list and then add accounts to it."
 		>
 			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">
-				Erste Liste erstellen
+				Create your first list
 			</button>
 		</EmptyState>
 
@@ -184,15 +184,15 @@ async function remove(list: AccountList): Promise<void> {
 					<span class="a-management-item__icon"><AppIcon name="list" :size="19" /></span>
 					<span class="a-management-item__copy">
 						<strong>{{ list.title }}</strong>
-						<small>{{ list.exclusive ? 'Exklusive Liste' : 'Auch in der Startseite enthalten' }}</small>
+						<small>{{ list.exclusive ? 'Exclusive list' : 'Also included on Home' }}</small>
 					</span>
 				</a>
 				<div class="a-management-item__actions">
 					<button
 						type="button"
 						class="a-icon-btn"
-						aria-label="Liste umbenennen"
-						title="Umbenennen"
+						aria-label="Rename list"
+						title="Rename"
 						@click="openEdit(list)"
 					>
 						<AppIcon name="pen" :size="16" />
@@ -201,8 +201,8 @@ async function remove(list: AccountList): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--danger': confirmDelete === list.id }"
-						aria-label="Liste löschen"
-						:title="confirmDelete === list.id ? 'Wirklich löschen?' : 'Löschen'"
+						aria-label="Delete list"
+						:title="confirmDelete === list.id ? 'Really delete?' : 'Delete'"
 						:disabled="busy === list.id"
 						@click="remove(list)"
 					>
@@ -223,24 +223,24 @@ async function remove(list: AccountList): Promise<void> {
 				<form class="a-management-dialog" role="dialog" aria-modal="true" aria-labelledby="a-list-dialog-title" @submit.prevent="save">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Private Liste</p>
-							<h2 id="a-list-dialog-title">{{ creating ? 'Neue Liste' : 'Liste umbenennen' }}</h2>
+							<p class="a-profile-edit__eyebrow">Private list</p>
+							<h2 id="a-list-dialog-title">{{ creating ? 'New list' : 'Rename list' }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Dialog schließen" @click="closeDialog">
+						<button type="button" class="a-icon-btn" aria-label="Close dialog" @click="closeDialog">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 
 					<label class="a-profile-edit__label" for="a-list-title">Name</label>
 					<input id="a-list-title" v-model="dialogTitle" type="text" maxlength="80" required autocomplete="off">
-					<p class="a-profile-edit__hint">Nur du siehst diese Liste und ihre Zeitleiste.</p>
+					<p class="a-profile-edit__hint">Only you can see this list and its timeline.</p>
 					<p v-if="dialogError !== ''" class="a-form-error" role="alert">{{ dialogError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="closeDialog">Abbrechen</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="closeDialog">Cancel</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
 							<AppIcon v-if="saving" name="refresh" :size="15" class="a-spin" />
-							{{ saving ? 'Wird gespeichert…' : creating ? 'Erstellen' : 'Speichern' }}
+							{{ saving ? 'Saving…' : creating ? 'Create' : 'Save' }}
 						</button>
 					</footer>
 				</form>

@@ -23,10 +23,10 @@ const confirmOpen = ref(false);
 const confirmKind = ref<'purge' | 'retryAll'>('retryAll');
 
 const filters: { id: FilterState; label: string }[] = [
-	{ id: 'all', label: 'Alle' },
-	{ id: 'pending', label: 'Wartend' },
-	{ id: 'running', label: 'Laufend' },
-	{ id: 'dead', label: 'Fehlgeschlagen' },
+	{ id: 'all', label: 'All' },
+	{ id: 'pending', label: 'Pending' },
+	{ id: 'running', label: 'Running' },
+	{ id: 'dead', label: 'Failed' },
 ];
 
 const jobs = computed(() => data.value?.jobs ?? []);
@@ -35,14 +35,14 @@ const counts = computed(() => data.value?.counts ?? { pending: 0, running: 0, de
 const confirmCopy = computed(() => (
 	confirmKind.value === 'purge'
 		? {
-			title: 'Fehlgeschlagene Jobs aufräumen',
-			message: 'Alle endgültig fehlgeschlagenen Jobs, die älter als sieben Tage sind, werden gelöscht. Neuere Fehlversuche bleiben zur Untersuchung erhalten.',
-			label: 'Alte Jobs löschen',
+			title: 'Clean up failed jobs',
+			message: 'All permanently failed jobs older than seven days are deleted. More recent failures are kept for investigation.',
+			label: 'Delete old jobs',
 		}
 		: {
-			title: 'Alle fehlgeschlagenen Jobs wiederholen',
-			message: 'Jeder tote Job wird zurückgesetzt und sofort erneut versucht. Fehlerhafte Zustellungen können dadurch erneut an Gegenstellen gehen.',
-			label: 'Alle wiederholen',
+			title: 'Retry all failed jobs',
+			message: 'Every dead job is reset and retried immediately. Failed deliveries may therefore be sent to peers again.',
+			label: 'Retry all',
 		}
 ));
 
@@ -54,7 +54,7 @@ async function load(quiet = false): Promise<void> {
 	try {
 		data.value = await getAdminApi().jobs(state.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Warteschlange konnte nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'The queue could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -81,9 +81,9 @@ function stateTone(value: string): string {
 function stateLabel(value: string): string {
 	switch (value) {
 		case 'pending':
-			return 'Wartend';
+			return 'Pending';
 		case 'running':
-			return 'Laufend';
+			return 'Running';
 		case 'dead':
 			return 'Tot';
 		default:
@@ -99,10 +99,10 @@ async function retry(job: AdminJob): Promise<void> {
 	busy.value = `retry:${job.id}`;
 	try {
 		await getAdminApi().retryJob(job.id);
-		showToast('Job wiederholt.', 'success');
+		showToast('Job retried.', 'success');
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Job konnte nicht wiederholt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The job could not be retried.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -116,10 +116,10 @@ async function remove(job: AdminJob): Promise<void> {
 	busy.value = `delete:${job.id}`;
 	try {
 		await getAdminApi().deleteJob(job.id);
-		showToast('Job gelöscht.', 'success');
+		showToast('job deleted.', 'success');
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Job konnte nicht gelöscht werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The job could not be deleted.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -133,10 +133,10 @@ async function runQueue(): Promise<void> {
 	busy.value = 'run';
 	try {
 		const handled = await getAdminApi().runQueue();
-		showToast(handled === 0 ? 'Keine fälligen Jobs.' : `${handled} Job${handled === 1 ? '' : 's'} ausgeführt.`, 'success');
+		showToast(handled === 0 ? 'No due jobs.' : `${handled} job${handled === 1 ? '' : 's'} processed.`, 'success');
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Worker-Lauf ist fehlgeschlagen.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The worker run failed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -156,15 +156,15 @@ async function confirmAction(): Promise<void> {
 	try {
 		if (confirmKind.value === 'purge') {
 			const purged = await getAdminApi().purgeDeadJobs();
-			showToast(`${purged} alte Job${purged === 1 ? '' : 's'} gelöscht.`, 'success');
+			showToast(`${purged} old job${purged === 1 ? '' : 's'} deleted.`, 'success');
 		} else {
 			const retried = await getAdminApi().retryDeadJobs();
-			showToast(`${retried} Job${retried === 1 ? '' : 's'} zurückgesetzt.`, 'success');
+			showToast(`${retried} job${retried === 1 ? '' : 's'} reset.`, 'success');
 		}
 		confirmOpen.value = false;
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Aktion konnte nicht ausgeführt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The action could not be completed.', 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -184,21 +184,21 @@ onBeforeUnmount(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Betrieb</p>
-				<h2>Jobs und Zustellungen</h2>
+				<p class="a-admin-eyebrow">Operations</p>
+				<h2>jobs and deliveries</h2>
 				<p class="a-admin-lead">
-					Der Worker verarbeitet föderierte Zustellungen, Aufräumläufe und geplante Beiträge.
-					Hier siehst du hängende, laufende und endgültig fehlgeschlagene Jobs.
+					The worker handles federated deliveries, cleanup runs and scheduled posts.
+					Here you can see stuck, running and permanently failed jobs.
 				</p>
 			</div>
 			<div class="a-admin-actions">
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-					Aktualisieren
+					Refresh
 				</button>
 				<button type="button" class="a-btn a-btn--primary a-btn--small" :disabled="busy !== ''" @click="runQueue">
 					<AppIcon name="activity" :size="15" />
-					Worker-Lauf starten
+					Start worker run
 				</button>
 			</div>
 		</div>
@@ -207,41 +207,41 @@ onBeforeUnmount(() => {
 			<article class="a-admin-stat">
 				<span class="a-admin-stat__icon"><AppIcon name="clock" :size="19" /></span>
 				<div>
-					<p class="a-admin-stat__label">Wartend</p>
+					<p class="a-admin-stat__label">Pending</p>
 					<strong class="a-admin-stat__value">{{ counts.pending }}</strong>
 					<p class="a-admin-stat__meta">
-						{{ counts.oldest_pending ? `Ältester: ${relativeTime(counts.oldest_pending)}` : 'Nichts geplant' }}
+						{{ counts.oldest_pending ? `Oldest: ${relativeTime(counts.oldest_pending)}` : 'Nothing scheduled' }}
 					</p>
 				</div>
 			</article>
 			<article class="a-admin-stat">
 				<span class="a-admin-stat__icon"><AppIcon name="activity" :size="19" /></span>
 				<div>
-					<p class="a-admin-stat__label">Laufend</p>
+					<p class="a-admin-stat__label">Running</p>
 					<strong class="a-admin-stat__value">{{ counts.running }}</strong>
-					<p class="a-admin-stat__meta">Reserviert durch einen Worker</p>
+					<p class="a-admin-stat__meta">Reserved by a worker</p>
 				</div>
 			</article>
 			<article class="a-admin-stat">
 				<span class="a-admin-stat__icon"><AppIcon name="alert" :size="19" /></span>
 				<div>
-					<p class="a-admin-stat__label">Fehlgeschlagen</p>
+					<p class="a-admin-stat__label">Failed</p>
 					<strong class="a-admin-stat__value">{{ counts.dead }}</strong>
-					<p class="a-admin-stat__meta">Endgültig nach allen Versuchen</p>
+					<p class="a-admin-stat__meta">Permanent after all attempts</p>
 				</div>
 			</article>
 			<article class="a-admin-stat">
 				<span class="a-admin-stat__icon"><AppIcon name="server" :size="19" /></span>
 				<div>
-					<p class="a-admin-stat__label">Gesamt</p>
+					<p class="a-admin-stat__label">Total</p>
 					<strong class="a-admin-stat__value">{{ counts.total }}</strong>
-					<p class="a-admin-stat__meta">Alle Einträge der Warteschlange</p>
+					<p class="a-admin-stat__meta">All queue entries</p>
 				</div>
 			</article>
 		</div>
 
 		<div class="a-admin-toolbar a-admin-toolbar--wrap">
-			<div class="a-admin-filterbar" role="tablist" aria-label="Job-Status">
+			<div class="a-admin-filterbar" role="tablist" aria-label="job status">
 				<button
 					v-for="filter in filters"
 					:key="filter.id"
@@ -257,10 +257,10 @@ onBeforeUnmount(() => {
 			</div>
 			<div class="a-admin-actions">
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="busy !== '' || counts.dead === 0" @click="ask('retryAll')">
-					<AppIcon name="refresh" :size="15" /> Tote Jobs wiederholen
+					<AppIcon name="refresh" :size="15" /> Retry dead jobs
 				</button>
 				<button type="button" class="a-btn a-btn--danger a-btn--small" :disabled="busy !== '' || counts.dead === 0" @click="ask('purge')">
-					<AppIcon name="trash" :size="15" /> Alte Jobs löschen
+					<AppIcon name="trash" :size="15" /> Delete old jobs
 				</button>
 			</div>
 		</div>
@@ -277,10 +277,10 @@ onBeforeUnmount(() => {
 					<tr>
 						<th scope="col">Typ</th>
 						<th scope="col">Status</th>
-						<th scope="col">Versuche</th>
-						<th scope="col">Fällig</th>
+						<th scope="col">Attempts</th>
+						<th scope="col">Due</th>
 						<th scope="col">Details</th>
-						<th scope="col"><span class="a-admin-sr">Aktionen</span></th>
+						<th scope="col"><span class="a-admin-sr">actions</span></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -295,7 +295,7 @@ onBeforeUnmount(() => {
 						<td class="a-admin-num">{{ job.attempts }}</td>
 						<td class="a-admin-nowrap" :title="absoluteTime(job.available_at)">
 							{{ relativeTime(job.available_at) }}
-							<small v-if="job.dead_at" class="a-admin-muted">tot seit {{ relativeTime(job.dead_at) }}</small>
+							<small v-if="job.dead_at" class="a-admin-muted">dead since {{ relativeTime(job.dead_at) }}</small>
 						</td>
 						<td>
 							<details class="a-admin-details">
@@ -305,10 +305,10 @@ onBeforeUnmount(() => {
 						</td>
 						<td>
 							<div class="a-admin-row-actions">
-								<button type="button" class="a-icon-btn" title="Job wiederholen" aria-label="Job wiederholen" :disabled="busy !== ''" @click="retry(job)">
+								<button type="button" class="a-icon-btn" title="Retry job" aria-label="Retry job" :disabled="busy !== ''" @click="retry(job)">
 									<AppIcon name="refresh" :size="16" />
 								</button>
-								<button type="button" class="a-icon-btn a-icon-btn--danger" title="Job löschen" aria-label="Job löschen" :disabled="busy !== ''" @click="remove(job)">
+								<button type="button" class="a-icon-btn a-icon-btn--danger" title="Delete job" aria-label="Delete job" :disabled="busy !== ''" @click="remove(job)">
 									<AppIcon name="trash" :size="16" />
 								</button>
 							</div>
@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
 					</tr>
 					<tr v-if="jobs.length === 0">
 						<td colspan="6" class="a-admin-empty">
-							{{ state === 'all' ? 'Die Warteschlange ist leer.' : 'Keine Jobs in diesem Status.' }}
+							{{ state === 'all' ? 'The queue is empty.' : 'No jobs in this status.' }}
 						</td>
 					</tr>
 				</tbody>

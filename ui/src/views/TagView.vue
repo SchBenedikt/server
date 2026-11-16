@@ -52,14 +52,14 @@ async function toggleFollow(): Promise<void> {
 		if (following.value) {
 			await getApi().unfollowTag(tag.value);
 			following.value = false;
-			showToast(`#${tag.value} wird nicht mehr verfolgt.`, 'success');
+			showToast(`#${tag.value} is no longer followed.`, 'success');
 		} else {
 			await getApi().followTag(tag.value);
 			following.value = true;
-			showToast(`Du folgst jetzt #${tag.value}.`, 'success');
+			showToast(`You now follow #${tag.value}.`, 'success');
 		}
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Der Hashtag konnte nicht geändert werden.', 'error');
+		showToast(error instanceof Error ? error.message : 'The hashtag could not be changed.', 'error');
 	} finally {
 		busy.value = false;
 	}
@@ -70,9 +70,9 @@ async function toggleFollow(): Promise<void> {
 	<div class="a-page">
 		<PageHeader
 			:title="`#${tag}`"
-			subtitle="Öffentliche Beiträge mit diesem Hashtag, neueste zuerst."
+			subtitle="Public posts with this hashtag, newest first."
 			back-href="#/explore"
-			back-label="Zurück zu Entdecken"
+			back-label="Back to Explore"
 		>
 			<template #actions>
 				<button
@@ -85,9 +85,9 @@ async function toggleFollow(): Promise<void> {
 					@click="toggleFollow"
 				>
 					<AppIcon :name="following ? 'check' : 'plus'" :size="15" />
-					{{ following ? 'Verfolgt' : 'Hashtag folgen' }}
+					{{ following ? 'Following' : 'Follow hashtag' }}
 				</button>
-				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Anmelden zum Folgen</a>
+				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Sign in to follow</a>
 			</template>
 		</PageHeader>
 
@@ -95,8 +95,8 @@ async function toggleFollow(): Promise<void> {
 			kind="tag"
 			:tag="tag"
 			empty-icon="hash"
-			:empty-title="`Noch nichts unter #${tag}`"
-			:empty-text="tag !== '' ? `Sei die erste Person, die #${tag} benutzt.` : 'Dieser Hashtag ist leer.'"
+			:empty-title="`Nothing under #${tag} yet`"
+			:empty-text="tag !== '' ? `Be the first person to use #${tag}.` : 'This hashtag is empty.'"
 		/>
 	</div>
 </template>

@@ -71,17 +71,17 @@ final class Archives
     {
         $postId = trim($postId);
         if ($postId === '') {
-            throw CommunityException::invalid('Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+            throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
 
         try {
             $post = $this->posts->get($postId);
         } catch (PostNotFoundException) {
-            throw CommunityException::notFound('Diesen Beitrag gibt es nicht mehr.');
+            throw CommunityException::notFound('This post no longer exists.');
         }
 
         if ($post->authorId !== $accountId) {
-            throw CommunityException::forbidden('Nur eigene Beiträge können archiviert werden.');
+            throw CommunityException::forbidden('Only your own posts can be archived.');
         }
 
         $existing = $this->db->fetchOne(
@@ -111,7 +111,7 @@ final class Archives
     {
         $postId = trim($postId);
         if ($postId === '') {
-            throw CommunityException::invalid('Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+            throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
 
         $removed = $this->db->execute(

@@ -217,26 +217,26 @@ final class AdminService
 
         $fields = [];
         if (preg_match('/^[a-z0-9][a-z0-9_-]{1,29}$/', $handle) !== 1) {
-            $fields['handle'] = '2–30 Zeichen: Kleinbuchstaben, Ziffern, "_" oder "-".';
+            $fields['handle'] = '2–30 characters: lowercase letters, digits, "_" or "-".';
         }
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            $fields['email'] = 'Bitte gib eine gültige E-Mail-Adresse ein.';
+            $fields['email'] = 'Please enter a valid email address.';
         }
         if (mb_strlen($password) < 8) {
-            $fields['password'] = 'Das Passwort braucht mindestens 8 Zeichen.';
+            $fields['password'] = 'The password needs at least 8 characters.';
         }
         if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
-            $fields['role'] = 'Unbekannte Rolle.';
+            $fields['role'] = 'Unknown role.';
         }
         if ($displayName !== null && mb_strlen($displayName) > 80) {
-            $fields['display_name'] = 'Höchstens 80 Zeichen.';
+            $fields['display_name'] = 'At most 80 characters.';
         }
         if ($fields !== []) {
-            throw AdminException::invalid('Bitte prüfe die Kontodaten.', $fields);
+            throw AdminException::invalid('Please check the account details.', $fields);
         }
 
         if ($this->accounts->exists($handle, $email)) {
-            throw AdminException::conflict('Handle oder E-Mail-Adresse werden bereits verwendet.');
+            throw AdminException::conflict('Handle or email address is already in use.');
         }
 
         $account = $this->accounts->create(
@@ -268,14 +268,14 @@ final class AdminService
         if ($role !== null) {
             $role = strtolower(trim($role));
             if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
-                throw AdminException::invalid('Unbekannte Rolle.', ['role' => 'admin oder user.']);
+                throw AdminException::invalid('Unknown role.', ['role' => 'admin or user.']);
             }
 
             if ($target->role === Account::ROLE_ADMIN
                 && $role === Account::ROLE_USER
                 && $this->activeAdminCount() <= 1
             ) {
-                throw AdminException::conflict('Die letzte aktive Administration kann nicht herabgestuft werden.');
+                throw AdminException::conflict('The last active administrator cannot be demoted.');
             }
 
             if ($role !== $target->role) {
@@ -290,7 +290,7 @@ final class AdminService
         if ($displayName !== null) {
             $displayName = trim($displayName);
             if (mb_strlen($displayName) > 80) {
-                throw AdminException::invalid('Der Anzeigename ist zu lang.', ['display_name' => 'Höchstens 80 Zeichen.']);
+                throw AdminException::invalid('The display name is too long.', ['display_name' => 'At most 80 characters.']);
             }
 
             $this->accounts->updateDisplayName($id, $displayName === '' ? null : $displayName);
@@ -307,13 +307,13 @@ final class AdminService
     {
         $target = $this->requireUser($id);
         if ($id === $adminId) {
-            throw AdminException::conflict('Du kannst dein eigenes Konto nicht deaktivieren.');
+            throw AdminException::conflict('You cannot deactivate your own account.');
         }
         if ($target->isDisabled()) {
             return $this->user($id);
         }
         if ($target->role === Account::ROLE_ADMIN && $this->activeAdminCount() <= 1) {
-            throw AdminException::conflict('Die letzte aktive Administration kann nicht deaktiviert werden.');
+            throw AdminException::conflict('The last active administrator cannot be deactivated.');
         }
 
         $this->accounts->disable($id);
@@ -339,8 +339,8 @@ final class AdminService
     {
         $this->requireUser($id);
         if (mb_strlen($password) < 8) {
-            throw AdminException::invalid('Das Passwort braucht mindestens 8 Zeichen.', [
-                'password' => 'Mindestens 8 Zeichen.',
+            throw AdminException::invalid('The password needs at least 8 characters.', [
+                'password' => 'At least 8 characters.',
             ]);
         }
 
@@ -415,22 +415,22 @@ final class AdminService
         $comment = $comment === null ? null : trim($comment);
 
         if (!in_array($targetType, ['post', 'account'], true)) {
-            throw AdminException::invalid('Unbekanntes Ziel.', ['target_type' => 'post oder account.']);
+            throw AdminException::invalid('Unknown target.', ['target_type' => 'post or account.']);
         }
         if ($targetId === '' || mb_strlen($targetId) > 512) {
-            throw AdminException::invalid('Das Ziel fehlt.', ['target_id' => 'Bitte gib ein Ziel an.']);
+            throw AdminException::invalid('The target is missing.', ['target_id' => 'Please provide a target.']);
         }
         if (!in_array($category, self::REPORT_CATEGORIES, true)) {
-            throw AdminException::invalid('Unbekannter Meldegrund.', ['category' => 'Bitte wähle einen Grund.']);
+            throw AdminException::invalid('Unknown report reason.', ['category' => 'Please choose a reason.']);
         }
         if ($comment !== null && mb_strlen($comment) > 1000) {
-            throw AdminException::invalid('Der Kommentar ist zu lang.', ['comment' => 'Höchstens 1000 Zeichen.']);
+            throw AdminException::invalid('The comment is too long.', ['comment' => 'At most 1000 characters.']);
         }
         if ($targetType === 'post' && !$this->postExists($targetId) && !$this->isRemoteReference($targetId)) {
-            throw AdminException::notFound('Dieser Beitrag ist nicht verfügbar.');
+            throw AdminException::notFound('This post is not available.');
         }
         if ($targetType === 'account' && !$this->accountTargetExists($targetId) && !$this->isRemoteReference($targetId)) {
-            throw AdminException::notFound('Dieses Konto ist nicht verfügbar.');
+            throw AdminException::notFound('This account is not available.');
         }
 
         $existing = $this->db->fetchValue(
@@ -439,7 +439,7 @@ final class AdminService
             ['reporter' => $reporterId, 'type' => $targetType, 'target' => $targetId],
         );
         if ((int) ($existing ?? 0) > 0) {
-            throw AdminException::conflict('Du hast dieses Ziel bereits gemeldet. Die Meldung ist noch offen.');
+            throw AdminException::conflict('You have already reported this target. The report is still open.');
         }
 
         $now = Time::format($this->clock->now());
@@ -474,17 +474,17 @@ final class AdminService
     {
         $state = strtolower(trim($state));
         if (!in_array($state, ['resolved', 'dismissed'], true)) {
-            throw AdminException::invalid('Unbekannter Status.', ['state' => 'resolved oder dismissed.']);
+            throw AdminException::invalid('Unknown status.', ['state' => 'resolved or dismissed.']);
         }
 
         $note = $note === null ? null : trim($note);
         if ($note !== null && mb_strlen($note) > 500) {
-            throw AdminException::invalid('Die Notiz ist zu lang.', ['note' => 'Höchstens 500 Zeichen.']);
+            throw AdminException::invalid('The note is too long.', ['note' => 'At most 500 characters.']);
         }
 
         $row = $this->db->fetchOne('SELECT * FROM moderation_report WHERE id = :id', ['id' => $id]);
         if ($row === null) {
-            throw AdminException::notFound('Diese Meldung existiert nicht.');
+            throw AdminException::notFound('This report does not exist.');
         }
 
         $now = Time::format($this->clock->now());
@@ -530,7 +530,7 @@ final class AdminService
             ['id' => $postId],
         );
         if ($remote === null) {
-            throw AdminException::notFound('Dieser Beitrag ist nicht verfügbar.');
+            throw AdminException::notFound('This post is not available.');
         }
 
         $now = Time::format($this->clock->now());
@@ -576,7 +576,7 @@ final class AdminService
     {
         $row = $this->db->fetchOne('SELECT * FROM social_job WHERE id = :id', ['id' => $id]);
         if ($row === null) {
-            throw AdminException::notFound('Dieser Job existiert nicht.');
+            throw AdminException::notFound('This job does not exist.');
         }
 
         $now = Time::format($this->clock->now());
@@ -593,7 +593,7 @@ final class AdminService
     {
         $row = $this->db->fetchOne('SELECT type FROM social_job WHERE id = :id', ['id' => $id]);
         if ($row === null) {
-            throw AdminException::notFound('Dieser Job existiert nicht.');
+            throw AdminException::notFound('This job does not exist.');
         }
 
         $this->db->execute('DELETE FROM social_job WHERE id = :id', ['id' => $id]);
@@ -766,7 +766,7 @@ final class AdminService
             ['id' => $id],
         );
         if ($row === null) {
-            throw AdminException::notFound('Dieses Konto existiert nicht.');
+            throw AdminException::notFound('This account does not exist.');
         }
 
         return $this->userRow($row);
@@ -797,7 +797,7 @@ final class AdminService
     {
         $account = $this->accounts->find($id);
         if ($account === null) {
-            throw AdminException::notFound('Dieses Konto existiert nicht.');
+            throw AdminException::notFound('This account does not exist.');
         }
 
         return $account;
@@ -847,7 +847,7 @@ final class AdminService
             ['id' => $id],
         );
         if ($row === null) {
-            throw AdminException::notFound('Diese Meldung existiert nicht.');
+            throw AdminException::notFound('This report does not exist.');
         }
 
         return $this->reportRow($row);
@@ -1010,7 +1010,7 @@ final class AdminService
     {
         $row = $this->db->fetchOne('SELECT * FROM social_job WHERE id = :id', ['id' => $id]);
         if ($row === null) {
-            throw AdminException::notFound('Dieser Job existiert nicht.');
+            throw AdminException::notFound('This job does not exist.');
         }
 
         return $this->jobRow($row);
@@ -1064,7 +1064,7 @@ final class AdminService
         return [
             [
                 'id' => 'database',
-                'label' => 'Datenbank',
+                'label' => 'Database',
                 'status' => $this->dbReachable() ? 'ok' : 'error',
                 'detail' => $this->databaseDriver(),
             ],
@@ -1073,46 +1073,46 @@ final class AdminService
                 'label' => 'Worker',
                 'status' => $worker['online'] ? 'ok' : 'warn',
                 'detail' => $worker['online']
-                    ? 'Letzter Herzschlag ' . $worker['last_beat']
-                    : 'Kein aktueller Herzschlag',
+                    ? 'Last heartbeat ' . $worker['last_beat']
+                    : 'No recent heartbeat',
             ],
             [
                 'id' => 'queue',
-                'label' => 'Job-Warteschlange',
+                'label' => 'Job queue',
                 'status' => $dead > 0 ? 'warn' : 'ok',
-                'detail' => $dead > 0 ? $dead . ' fehlgeschlagene Jobs' : 'Keine fehlgeschlagenen Jobs',
+                'detail' => $dead > 0 ? $dead . ' failed jobs' : 'No failed jobs',
             ],
             [
                 'id' => 'storage',
-                'label' => 'Medienspeicher',
+                'label' => 'Media storage',
                 'status' => $storageWritable ? ($freeRatio !== null && $freeRatio < 0.1 ? 'warn' : 'ok') : 'error',
                 'detail' => $storageWritable
-                    ? ($freeRatio === null ? 'Schreibbar' : sprintf('Schreibbar · %.0f %% frei', $freeRatio * 100))
-                    : 'Nicht schreibbar',
+                    ? ($freeRatio === null ? 'Writable' : sprintf('Writable · %.0f%% free', $freeRatio * 100))
+                    : 'Not writable',
             ],
             [
                 'id' => 'mail',
                 'label' => 'E-Mail',
                 'status' => $this->config->mailTransport === 'smtp' ? 'ok' : 'warn',
                 'detail' => $this->config->mailTransport === 'smtp'
-                    ? 'SMTP konfiguriert'
-                    : 'Log-Transport: Mails werden nur geschrieben',
+                    ? 'SMTP configured'
+                    : 'Log transport: emails are only written to files',
             ],
             [
                 'id' => 'https',
                 'label' => 'TLS',
                 'status' => $this->httpsStatus(),
                 'detail' => str_starts_with($this->config->instanceUrl, 'https://')
-                    ? 'HTTPS aktiv'
+                    ? 'HTTPS active'
                     : (in_array(parse_url($this->config->instanceUrl, PHP_URL_HOST), ['localhost', '127.0.0.1', '::1'], true)
-                        ? 'Lokale Entwicklung über HTTP'
-                        : 'Öffentliche Instanz ohne HTTPS'),
+                        ? 'Local development over HTTP'
+                        : 'Public instance without HTTPS'),
             ],
             [
                 'id' => 'debug',
-                'label' => 'Debug-Modus',
+                'label' => 'Debug mode',
                 'status' => $this->config->debug ? 'warn' : 'ok',
-                'detail' => $this->config->debug ? 'Fehlerdetails werden ausgeliefert' : 'Deaktiviert',
+                'detail' => $this->config->debug ? 'Error details are exposed' : 'Disabled',
             ],
         ];
     }
@@ -1373,21 +1373,21 @@ final class AdminService
     {
         $warnings = [];
         if ($this->config->debug) {
-            $warnings[] = 'Der Debug-Modus ist aktiv und liefert interne Fehlerdetails aus.';
+            $warnings[] = 'Debug mode is active and exposes internal error details.';
         }
         if (!str_starts_with($this->config->instanceUrl, 'https://')
             && !in_array(parse_url($this->config->instanceUrl, PHP_URL_HOST), ['localhost', '127.0.0.1', '::1'], true)
         ) {
-            $warnings[] = 'Die Instanz läuft über HTTP. Föderation und Anmeldung sollten HTTPS verwenden.';
+            $warnings[] = 'The instance runs over HTTP. Federation and sign-in should use HTTPS.';
         }
         if ($this->config->mailTransport !== 'smtp') {
-            $warnings[] = 'E-Mails werden über den Log-Transport nur in Dateien geschrieben.';
+            $warnings[] = 'With the log transport, emails are only written to files.';
         }
         if ($this->config->contactEmail === '') {
-            $warnings[] = 'Es ist keine Kontaktadresse für die Instanz hinterlegt.';
+            $warnings[] = 'No contact address is configured for the instance.';
         }
         if ($this->config->instanceDescription === '') {
-            $warnings[] = 'Die Instanzbeschreibung ist leer.';
+            $warnings[] = 'The instance description is empty.';
         }
 
         return $warnings;
@@ -1396,15 +1396,15 @@ final class AdminService
     private function relativeSeconds(int $age): string
     {
         if ($age < 5) {
-            return 'gerade eben';
+            return 'just now';
         }
         if ($age < 60) {
-            return 'vor ' . $age . ' Sekunden';
+            return $age . ' seconds ago';
         }
         if ($age < 3600) {
-            return 'vor ' . (int) floor($age / 60) . ' Minuten';
+            return (int) floor($age / 60) . ' minutes ago';
         }
 
-        return 'vor ' . (int) floor($age / 3600) . ' Stunden';
+        return (int) floor($age / 3600) . ' hours ago';
     }
 }

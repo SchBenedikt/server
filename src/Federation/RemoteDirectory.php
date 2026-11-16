@@ -91,7 +91,7 @@ final class RemoteDirectory
     {
         $query = trim($query);
         if ($query === '') {
-            throw new RemoteDirectoryException('remote_handle_missing', 'Bitte gib ein Fediverse- oder Bluesky-Profil an.', 422);
+            throw new RemoteDirectoryException('remote_handle_missing', 'Please provide a fediverse or Bluesky profile.', 422);
         }
 
         if ($this->isBlueskyQuery($query)) {
@@ -118,7 +118,7 @@ final class RemoteDirectory
     {
         $id = trim($id);
         if ($id === '') {
-            throw new RemoteDirectoryException('remote_post_missing', 'Bitte gib einen Beitrag an.', 422);
+            throw new RemoteDirectoryException('remote_post_missing', 'Please provide a post.', 422);
         }
 
         if (str_starts_with($id, 'at://')) {
@@ -126,7 +126,7 @@ final class RemoteDirectory
         }
 
         if (!preg_match('#^https?://#i', $id) || filter_var($id, FILTER_VALIDATE_URL) === false) {
-            throw new RemoteDirectoryException('remote_post_invalid', 'Die Beitrags-Adresse ist ungültig.', 422);
+            throw new RemoteDirectoryException('remote_post_invalid', 'The post address is invalid.', 422);
         }
 
         return $this->activityPubThread($id);
@@ -141,7 +141,7 @@ final class RemoteDirectory
     {
         $type = strtolower(trim($type));
         if (!in_array($type, ['followers', 'following'], true)) {
-            throw new RemoteDirectoryException('remote_connection_type_invalid', 'Unbekannte Verbindungsart.', 422);
+            throw new RemoteDirectoryException('remote_connection_type_invalid', 'Unknown connection type.', 422);
         }
 
         if ($this->isBlueskyQuery($query)) {
@@ -173,10 +173,10 @@ final class RemoteDirectory
     {
         $query = trim($query);
         if ($query === '') {
-            throw new RemoteDirectoryException('remote_search_missing', 'Bitte gib einen Suchbegriff an.', 422);
+            throw new RemoteDirectoryException('remote_search_missing', 'Please enter a search term.', 422);
         }
         if (mb_strlen($query) > 200) {
-            throw new RemoteDirectoryException('remote_search_too_long', 'Der Suchbegriff ist zu lang.', 422);
+            throw new RemoteDirectoryException('remote_search_too_long', 'The search term is too long.', 422);
         }
 
         $type = in_array($type, ['accounts', 'posts'], true) ? $type : 'all';
@@ -235,10 +235,10 @@ final class RemoteDirectory
         $id = trim($id);
         $type = strtolower(trim($type));
         if (!in_array($type, ['likes', 'reposts'], true)) {
-            throw new RemoteDirectoryException('remote_engagement_type_invalid', 'Unbekannte Reaktionsart.', 422);
+            throw new RemoteDirectoryException('remote_engagement_type_invalid', 'Unknown reaction type.', 422);
         }
         if ($id === '') {
-            throw new RemoteDirectoryException('remote_post_missing', 'Bitte gib einen Beitrag an.', 422);
+            throw new RemoteDirectoryException('remote_post_missing', 'Please provide a post.', 422);
         }
 
         if (str_starts_with($id, 'at://')) {
@@ -250,7 +250,7 @@ final class RemoteDirectory
         if (!is_string($host) || $host === '' || $statusId === null) {
             throw new RemoteDirectoryException(
                 'remote_engagement_unsupported',
-                'Dieser Server veröffentlicht keine öffentliche Liste der Reaktionen.',
+                'This server does not publish a public list of reactions.',
                 404,
             );
         }
@@ -263,7 +263,7 @@ final class RemoteDirectory
 
         $list = $this->fetchJson($url, self::JSON_ACCEPT);
         if (!array_is_list($list)) {
-            throw new RemoteDirectoryException('remote_invalid_response', 'Der entfernte Server hat eine unerwartete Antwort geliefert.');
+            throw new RemoteDirectoryException('remote_invalid_response', 'The remote server returned an unexpected response.');
         }
 
         $profiles = [];
@@ -374,7 +374,7 @@ final class RemoteDirectory
 
         $host = $this->discoveryHost();
         if ($host === null) {
-            $notes[] = 'Für die Stichwortsuche im Fediverse ist keine Discovery-Instanz konfiguriert.';
+            $notes[] = 'No discovery instance is configured for keyword search in the fediverse.';
 
             return ['accounts' => [], 'posts' => [], 'cursor' => null, 'notes' => $notes];
         }
@@ -673,7 +673,7 @@ final class RemoteDirectory
         if ($post === null) {
             throw new RemoteDirectoryException(
                 'remote_post_unavailable',
-                'Dieser Beitrag ist nicht öffentlich abrufbar.',
+                'This post is not publicly available.',
                 404,
             );
         }
@@ -731,7 +731,7 @@ final class RemoteDirectory
         if ($post === null) {
             throw new RemoteDirectoryException(
                 'remote_post_unavailable',
-                'Dieser Beitrag ist nicht öffentlich abrufbar.',
+                'This post is not publicly available.',
                 404,
             );
         }
@@ -967,7 +967,7 @@ final class RemoteDirectory
 
         $url = $cursor ?? $collectionUrl;
         if ($cursor !== null && !$this->sameOrigin($cursor, $collectionUrl)) {
-            throw new RemoteDirectoryException('remote_cursor_invalid', 'Die nächste Seite gehört nicht zu diesem Profil.');
+            throw new RemoteDirectoryException('remote_cursor_invalid', 'The next page does not belong to this profile.');
         }
 
         $collection = $this->fetchJson($url, self::ACTIVITY_ACCEPT);
@@ -1077,7 +1077,7 @@ final class RemoteDirectory
         if ($post === null) {
             throw new RemoteDirectoryException(
                 'remote_post_unavailable',
-                'Dieser Bluesky-Beitrag ist nicht öffentlich abrufbar.',
+                'This Bluesky post is not publicly available.',
                 404,
             );
         }
@@ -1420,7 +1420,7 @@ final class RemoteDirectory
 
         $url = $cursor ?? $outbox;
         if ($cursor !== null && !$this->sameOrigin($cursor, $outbox)) {
-            throw new RemoteDirectoryException('remote_cursor_invalid', 'Die nächste Seite gehört nicht zu diesem Profil.');
+            throw new RemoteDirectoryException('remote_cursor_invalid', 'The next page does not belong to this profile.');
         }
 
         $collection = $this->fetchJson($url, self::ACTIVITY_ACCEPT);
@@ -1793,7 +1793,7 @@ final class RemoteDirectory
 
         $query = ltrim($query, '@');
         if ($query === '') {
-            throw new RemoteDirectoryException('remote_handle_missing', 'Bitte gib ein Bluesky-Profil an.', 422);
+            throw new RemoteDirectoryException('remote_handle_missing', 'Please provide a Bluesky profile.', 422);
         }
 
         if (str_starts_with($query, 'did:')) {
@@ -1806,7 +1806,7 @@ final class RemoteDirectory
         );
         $did = $this->string($data['did'] ?? null);
         if ($did === null) {
-            throw new RemoteDirectoryException('bluesky_handle_unknown', 'Dieses Bluesky-Profil wurde nicht gefunden.');
+            throw new RemoteDirectoryException('bluesky_handle_unknown', 'This Bluesky profile was not found.');
         }
 
         return $did;
@@ -1825,7 +1825,7 @@ final class RemoteDirectory
         if ($at === false) {
             throw new RemoteDirectoryException(
                 'remote_handle_invalid',
-                'Bitte gib ein Profil wie @name@server.tld oder eine Profil-URL an.',
+                'Please provide a profile like @name@server.tld or a profile URL.',
                 422,
             );
         }
@@ -1833,7 +1833,7 @@ final class RemoteDirectory
         $user = substr($address, 0, $at);
         $host = substr($address, $at + 1);
         if ($user === '' || $host === '' || str_contains($user, '@')) {
-            throw new RemoteDirectoryException('remote_handle_invalid', 'Dieses Profil-Handle ist ungültig.', 422);
+            throw new RemoteDirectoryException('remote_handle_invalid', 'This profile handle is invalid.', 422);
         }
 
         $resource = 'acct:' . $user . '@' . $host;
@@ -1857,7 +1857,7 @@ final class RemoteDirectory
 
         throw new RemoteDirectoryException(
             'webfinger_not_found',
-            'Der Server hat kein ActivityPub-Profil für dieses Handle veröffentlicht.',
+            'The server did not publish an ActivityPub profile for this handle.',
             404,
         );
     }
@@ -1872,11 +1872,11 @@ final class RemoteDirectory
         try {
             $data = json_decode($response->body, true, 64, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
-            throw new RemoteDirectoryException('remote_invalid_response', 'Der entfernte Server hat keine gültige JSON-Antwort geliefert.');
+            throw new RemoteDirectoryException('remote_invalid_response', 'The remote server did not return a valid JSON response.');
         }
 
         if (!is_array($data)) {
-            throw new RemoteDirectoryException('remote_invalid_response', 'Der entfernte Server hat eine unerwartete Antwort geliefert.');
+            throw new RemoteDirectoryException('remote_invalid_response', 'The remote server returned an unexpected response.');
         }
 
         return $data;
@@ -1903,15 +1903,15 @@ final class RemoteDirectory
                     $addresses,
                 );
             } catch (ResponseLimitExceededException) {
-                throw new RemoteDirectoryException('remote_response_too_large', 'Die Antwort des entfernten Servers ist zu groß.');
+                throw new RemoteDirectoryException('remote_response_too_large', 'The remote server\'s response is too large.');
             } catch (HttpClientException) {
-                throw new RemoteDirectoryException('remote_unreachable', 'Der entfernte Server ist nicht erreichbar.');
+                throw new RemoteDirectoryException('remote_unreachable', 'The remote server is unreachable.');
             }
 
             if (in_array($response->status, [301, 302, 303, 307, 308], true)) {
                 $location = $response->header('location');
                 if ($location === null || $location === '') {
-                    throw new RemoteDirectoryException('remote_redirect_invalid', 'Der entfernte Server hat eine ungültige Weiterleitung geliefert.');
+                    throw new RemoteDirectoryException('remote_redirect_invalid', 'The remote server returned an invalid redirect.');
                 }
 
                 $current = $this->resolveUrl($current, $location);
@@ -1921,7 +1921,7 @@ final class RemoteDirectory
             if (!$response->isSuccessful()) {
                 throw new RemoteDirectoryException(
                     'remote_http_error',
-                    'Der entfernte Server hat mit HTTP ' . $response->status . ' geantwortet.',
+                    'The remote server responded with HTTP ' . $response->status . '.',
                     in_array($response->status, [401, 403, 404], true) ? $response->status : 502,
                 );
             }
@@ -1929,7 +1929,7 @@ final class RemoteDirectory
             return $response;
         }
 
-        throw new RemoteDirectoryException('remote_redirect_loop', 'Der entfernte Server leitet zu oft weiter.');
+        throw new RemoteDirectoryException('remote_redirect_loop', 'The remote server redirects too often.');
     }
 
     private function resolveUrl(string $base, string $reference): string
@@ -1940,7 +1940,7 @@ final class RemoteDirectory
 
         $parts = parse_url($base);
         if (!is_array($parts)) {
-            throw new RemoteDirectoryException('remote_redirect_invalid', 'Die Weiterleitung konnte nicht aufgelöst werden.');
+            throw new RemoteDirectoryException('remote_redirect_invalid', 'The redirect could not be resolved.');
         }
 
         $scheme = $parts['scheme'] ?? 'https';
@@ -2136,10 +2136,10 @@ final class RemoteDirectory
     private function fetchMessage(string $reason): string
     {
         return match ($reason) {
-            'ssrf_blocked' => 'Diese Adresse ist aus Sicherheitsgründen nicht erlaubt.',
-            'invalid_url' => 'Die Profil-Adresse ist ungültig.',
-            'dns_failed' => 'Der Server des Profils konnte nicht gefunden werden.',
-            default => 'Das Profil konnte nicht abgerufen werden.',
+            'ssrf_blocked' => 'This address is not allowed for security reasons.',
+            'invalid_url' => 'The profile address is invalid.',
+            'dns_failed' => 'The profile\'s server could not be found.',
+            default => 'The profile could not be fetched.',
         };
     }
 }

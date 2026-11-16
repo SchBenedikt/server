@@ -256,8 +256,8 @@ final class EngagementTest extends TestCase
         self::assertNotContains($own, $body['posts']);
         self::assertSame($engaged, $body['posts'][0]);
         self::assertSame($other, $body['posts'][1]);
-        self::assertSame('Weil du #aloha folgst', $body['reasons'][$engaged]);
-        self::assertSame('Weil du diesem Konto folgst', $body['reasons'][$other]);
+        self::assertSame('Because you follow #aloha', $body['reasons'][$engaged]);
+        self::assertSame('Because you follow this account', $body['reasons'][$other]);
         self::assertSame(3, $body['total']);
 
         $firstPage = $this->server->send('GET', '/api/v1/host/for-you', [

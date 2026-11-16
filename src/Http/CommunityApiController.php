@@ -61,7 +61,7 @@ final class CommunityApiController
             if ($method === 'GET' && $path === '/api/v1/host/announcements') {
                 if ($request->queryParam('all') === '1') {
                     if (!$isAdmin) {
-                        return $this->error(403, 'admin_required', 'Diese Liste ist der Administration vorbehalten.');
+                        return $this->error(403, 'admin_required', 'This list is reserved for the administration.');
                     }
 
                     return Response::json(['announcements' => $this->runtime->announcements->all()]);
@@ -72,7 +72,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/announcements') {
                 if (!$isAdmin) {
-                    return $this->error(403, 'admin_required', 'Nur die Administration kann Ankündigungen schreiben.');
+                    return $this->error(403, 'admin_required', 'Only the administration can write announcements.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -90,7 +90,7 @@ final class CommunityApiController
                 && in_array($method, ['PATCH', 'DELETE'], true)
             ) {
                 if (!$isAdmin) {
-                    return $this->error(403, 'admin_required', 'Nur die Administration kann Ankündigungen ändern.');
+                    return $this->error(403, 'admin_required', 'Only the administration can change announcements.');
                 }
 
                 $id = rawurldecode($matches[1]);
@@ -115,7 +115,7 @@ final class CommunityApiController
             if ($method === 'GET' && $path === '/api/v1/host/featured-tags') {
                 $account = $this->account($request, $session, 'account');
                 if ($account === null) {
-                    return $this->error(404, 'account_not_found', 'Dieses Profil gibt es nicht.');
+                    return $this->error(404, 'account_not_found', 'This profile does not exist.');
                 }
 
                 return Response::json(['tags' => $this->runtime->featuredTags->forAccount($account->id)]);
@@ -123,13 +123,13 @@ final class CommunityApiController
 
             if ($method === 'PUT' && $path === '/api/v1/host/featured-tags') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
                 $tags = $body['tags'] ?? [];
                 if (!is_array($tags)) {
-                    return $this->error(422, 'validation_failed', 'Die Hashtags müssen eine Liste sein.');
+                    return $this->error(422, 'validation_failed', 'Hashtags must be a list.');
                 }
 
                 return Response::json([
@@ -148,10 +148,35 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/memories') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Erinnerungen zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your memories.');
                 }
 
                 return Response::json($this->runtime->memories->forAccount($userId));
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/following') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to see the accounts you follow.');
+                }
+
+                $rows = $this->runtime->database->fetchAll(
+                    'SELECT id, actor_id, inbox_url, followed_at, state FROM social_following'
+                    . ' WHERE local_user_id = :local_user_id ORDER BY followed_at DESC, id DESC',
+                    ['local_user_id' => $userId],
+                );
+
+                return Response::json([
+                    'following' => array_map(
+                        static fn (array $row): array => [
+                            'id' => (string) $row['id'],
+                            'actor' => (string) $row['actor_id'],
+                            'inbox' => (string) $row['inbox_url'],
+                            'followed_at' => (string) $row['followed_at'],
+                            'state' => (string) $row['state'],
+                        ],
+                        $rows,
+                    ),
+                ]);
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/stories') {
@@ -162,7 +187,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/stories') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -178,7 +203,7 @@ final class CommunityApiController
 
             if (preg_match('#^/api/v1/host/stories/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $this->runtime->stories->delete(rawurldecode($matches[1]), $userId);
@@ -189,7 +214,7 @@ final class CommunityApiController
             if ($method === 'GET' && $path === '/api/v1/host/collections') {
                 $account = $this->account($request, $session, 'account');
                 if ($account === null) {
-                    return $this->error(404, 'account_not_found', 'Dieses Profil gibt es nicht.');
+                    return $this->error(404, 'account_not_found', 'This profile does not exist.');
                 }
 
                 $owner = $account->id === $userId;
@@ -202,12 +227,12 @@ final class CommunityApiController
             if ($method === 'GET' && $path === '/api/v1/host/collection') {
                 $id = trim((string) ($request->queryParam('id') ?? ''));
                 if ($id === '') {
-                    return $this->error(422, 'validation_failed', 'Die Sammlungs-ID fehlt.');
+                    return $this->error(422, 'validation_failed', 'The collection ID is missing.');
                 }
 
                 $collection = $this->runtime->collections->find($id, $userId);
                 if ($collection === null) {
-                    return $this->error(404, 'not_found', 'Diese Sammlung gibt es nicht.');
+                    return $this->error(404, 'not_found', 'This collection does not exist.');
                 }
 
                 return Response::json(['collection' => $collection]);
@@ -215,7 +240,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/collections') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -234,7 +259,7 @@ final class CommunityApiController
                 && in_array($method, ['PATCH', 'DELETE'], true)
             ) {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $id = rawurldecode($matches[1]);
@@ -259,13 +284,13 @@ final class CommunityApiController
 
             if (preg_match('#^/api/v1/host/collections/([^/]+)/items$#', $path, $matches) === 1 && $method === 'POST') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
                 $postId = is_string($body['post_id'] ?? null) ? trim($body['post_id']) : '';
                 if ($postId === '') {
-                    return $this->error(422, 'validation_failed', 'Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+                    return $this->error(422, 'validation_failed', 'The post is missing.', ['post_id' => 'Please choose a post.']);
                 }
 
                 return Response::json([
@@ -277,7 +302,7 @@ final class CommunityApiController
                 && $method === 'DELETE'
             ) {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -292,13 +317,13 @@ final class CommunityApiController
             if ($method === 'GET' && $path === '/api/v1/host/post-revisions') {
                 $postId = trim((string) ($request->queryParam('id') ?? ''));
                 if ($postId === '') {
-                    return $this->error(422, 'validation_failed', 'Die Beitrags-ID fehlt.');
+                    return $this->error(422, 'validation_failed', 'The post ID is missing.');
                 }
 
                 try {
                     $post = $this->runtime->app->posts->getVisible($postId, $userId);
                 } catch (PostNotFoundException) {
-                    return $this->error(404, 'post_not_found', 'Dieser Beitrag ist nicht verfügbar.');
+                    return $this->error(404, 'post_not_found', 'This post is not available.');
                 }
 
                 return Response::json([
@@ -319,7 +344,7 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/drafts') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Entwürfe zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your drafts.');
                 }
 
                 return Response::json(['drafts' => $this->runtime->drafts->forAccount($userId)]);
@@ -327,7 +352,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/drafts') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -337,7 +362,7 @@ final class CommunityApiController
 
             if (preg_match('#^/api/v1/host/drafts/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -347,7 +372,7 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/archived') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um dein Archiv zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your archive.');
                 }
 
                 return Response::json(['archived' => $this->runtime->archives->forAccount($userId)]);
@@ -355,7 +380,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/archived') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -368,7 +393,7 @@ final class CommunityApiController
 
             if (preg_match('#^/api/v1/host/archived/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -378,7 +403,7 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/follow-requests') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um Folgenanfragen zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see follow requests.');
                 }
 
                 return Response::json([
@@ -391,7 +416,7 @@ final class CommunityApiController
                 && $method === 'POST'
             ) {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $requestId = rawurldecode($matches[1]);
@@ -405,7 +430,7 @@ final class CommunityApiController
             if ($method === 'GET' && $path === '/api/v1/host/pinned') {
                 $account = $this->account($request, $session, 'account');
                 if ($account === null) {
-                    return $this->error(404, 'not_found', 'Dieses Konto gibt es nicht.');
+                    return $this->error(404, 'not_found', 'This account does not exist.');
                 }
 
                 return Response::json([
@@ -416,7 +441,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/pinned') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -431,7 +456,7 @@ final class CommunityApiController
 
             if (preg_match('#^/api/v1/host/pinned/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -441,7 +466,7 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/bluesky') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Bluesky-Verbindung zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your Bluesky connection.');
                 }
 
                 return Response::json([
@@ -452,7 +477,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/bluesky/connect') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -468,7 +493,7 @@ final class CommunityApiController
 
             if ($method === 'DELETE' && $path === '/api/v1/host/bluesky') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -478,12 +503,12 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/bluesky/publish') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $service = $this->runtime->app->atproto;
                 if ($service === null) {
-                    return $this->error(503, 'atproto_not_configured', 'Bluesky ist auf dieser Instanz nicht eingerichtet.');
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky is not configured on this instance.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -494,13 +519,13 @@ final class CommunityApiController
                         'publication' => $service->publish($userId, $postId)->toArray(),
                     ], 201);
                 } catch (PostNotFoundException) {
-                    return $this->error(404, 'not_found', 'Dieser Beitrag existiert nicht.');
+                    return $this->error(404, 'not_found', 'This post does not exist.');
                 } catch (AtprotoPublishDisabledException) {
-                    return $this->error(503, 'atproto_publish_disabled', 'Das Spiegeln nach Bluesky ist deaktiviert.');
+                    return $this->error(503, 'atproto_publish_disabled', 'Mirroring to Bluesky is disabled.');
                 } catch (AtprotoNotConfiguredException) {
-                    return $this->error(503, 'atproto_not_configured', 'Bluesky ist auf dieser Instanz nicht eingerichtet.');
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky is not configured on this instance.');
                 } catch (AtprotoAccountNotConnectedException) {
-                    return $this->error(409, 'atproto_account_not_connected', 'Verbinde zuerst dein Bluesky-Konto in den Einstellungen.');
+                    return $this->error(409, 'atproto_account_not_connected', 'Connect your Bluesky account in settings first.');
                 } catch (AtprotoPostRejectedException $exception) {
                     return $this->error(
                         422,
@@ -509,13 +534,13 @@ final class CommunityApiController
                         ['reason' => $exception->reason],
                     );
                 } catch (AtprotoPublishFailedException) {
-                    return $this->error(502, 'atproto_publish_failed', 'Bluesky hat den Beitrag nicht angenommen.');
+                    return $this->error(502, 'atproto_publish_failed', 'Bluesky did not accept the post.');
                 }
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/preferences') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Einstellungen zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your settings.');
                 }
 
                 return Response::json(['preferences' => $this->runtime->preferences->forAccount($userId)]);
@@ -523,7 +548,7 @@ final class CommunityApiController
 
             if (in_array($method, ['PATCH', 'PUT'], true) && $path === '/api/v1/host/preferences') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 return Response::json([
@@ -533,12 +558,12 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/export') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Daten zu exportieren.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to export your data.');
                 }
 
                 $account = $this->runtime->accounts->find($userId);
                 if ($account === null) {
-                    return $this->error(404, 'not_found', 'Dieses Konto gibt es nicht mehr.');
+                    return $this->error(404, 'not_found', 'This account no longer exists.');
                 }
 
                 $stamp = $this->runtime->clock->now()->format('Ymd-His');
@@ -556,7 +581,7 @@ final class CommunityApiController
 
             if ($method === 'POST' && $path === '/api/v1/host/for-you/feedback') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
                 $body = $this->jsonBody($request);
@@ -572,7 +597,7 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/for-you') {
                 if ($userId === null) {
-                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine persönliche Zeitleiste zu sehen.');
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your personal timeline.');
                 }
 
                 return Response::json(
@@ -588,7 +613,7 @@ final class CommunityApiController
         } catch (BlueskyException $exception) {
             return $this->error($exception->status, $exception->errorCode, $exception->getMessage());
         } catch (Throwable) {
-            return $this->error(500, 'community_failed', 'Die Anfrage konnte nicht verarbeitet werden.');
+            return $this->error(500, 'community_failed', 'The request could not be processed.');
         }
 
         return null;

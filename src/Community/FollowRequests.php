@@ -95,10 +95,10 @@ final class FollowRequests
         $targetAccountId = trim($targetAccountId);
         $followerId = trim($followerId);
         if ($targetAccountId === '' || $followerId === '') {
-            throw CommunityException::invalid('Die Anfrage ist unvollständig.');
+            throw CommunityException::invalid('The request is incomplete.');
         }
         if ($targetAccountId === $followerId) {
-            throw CommunityException::invalid('Du kannst dir nicht selbst folgen.');
+            throw CommunityException::invalid('You cannot follow yourself.');
         }
 
         $actorId = $this->activities->actorId($followerId);
@@ -125,7 +125,7 @@ final class FollowRequests
         );
 
         return $this->find($id, $targetAccountId)
-            ?? throw CommunityException::notFound('Die Anfrage wurde nicht gespeichert.');
+            ?? throw CommunityException::notFound('The request was not saved.');
     }
 
     /**
@@ -137,10 +137,10 @@ final class FollowRequests
     {
         $request = $this->find($id, $targetAccountId);
         if ($request === null) {
-            throw CommunityException::notFound('Diese Folgenanfrage gibt es nicht mehr.');
+            throw CommunityException::notFound('This follow request no longer exists.');
         }
         if ($request['is_local'] !== true) {
-            throw CommunityException::invalid('Diese Anfrage kann hier nicht bestätigt werden.');
+            throw CommunityException::invalid('This request cannot be approved here.');
         }
 
         $followerId = (string) $request['actor_handle'];
@@ -169,7 +169,7 @@ final class FollowRequests
     {
         $request = $this->find($id, $targetAccountId);
         if ($request === null) {
-            throw CommunityException::notFound('Diese Folgenanfrage gibt es nicht mehr.');
+            throw CommunityException::notFound('This follow request no longer exists.');
         }
 
         $this->db->execute(

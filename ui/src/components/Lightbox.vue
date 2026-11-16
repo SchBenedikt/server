@@ -79,13 +79,13 @@ watch(() => appState.lightbox.open, async (open) => {
 	<dialog
 		ref="dialog"
 		class="a-lightbox"
-		aria-label="Bildansicht"
+		aria-label="Image view"
 		@close="closeLightbox"
 		@click="onBackdrop"
 		@keydown="onKeydown"
 	>
 		<div v-if="current" class="a-lightbox__inner">
-			<button type="button" class="a-icon-btn a-lightbox__close" aria-label="Schließen" @click="close">
+			<button type="button" class="a-icon-btn a-lightbox__close" aria-label="Close" @click="close">
 				<AppIcon name="x" :size="22" />
 			</button>
 
@@ -93,7 +93,7 @@ watch(() => appState.lightbox.open, async (open) => {
 				v-if="multiple"
 				type="button"
 				class="a-icon-btn a-lightbox__nav a-lightbox__nav--prev"
-				aria-label="Vorheriges Bild"
+				aria-label="Previous Image"
 				@click.stop="previous"
 			>
 				<AppIcon name="arrowLeft" :size="24" />
@@ -109,7 +109,7 @@ watch(() => appState.lightbox.open, async (open) => {
 					playsinline
 				/>
 				<audio v-else-if="currentIsAudio" :src="mediaUrl(current.url)" controls />
-				<img v-else :src="mediaUrl(current.url)" :alt="current.alt_text ?? 'Anhang'" />
+				<img v-else :src="mediaUrl(current.url)" :alt="current.alt_text ?? 'attachment'" />
 				<figcaption v-if="current.alt_text" class="a-lightbox__caption">
 					{{ current.alt_text }}
 				</figcaption>
@@ -119,7 +119,7 @@ watch(() => appState.lightbox.open, async (open) => {
 				v-if="multiple"
 				type="button"
 				class="a-icon-btn a-lightbox__nav a-lightbox__nav--next"
-				aria-label="Nächstes Bild"
+				aria-label="Next image"
 				@click.stop="next"
 			>
 				<AppIcon name="arrowLeft" :size="24" />

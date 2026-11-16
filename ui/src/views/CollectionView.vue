@@ -59,7 +59,7 @@ async function load(): Promise<void> {
 		const ids = value.post_ids ?? [];
 		posts.value = ids.length === 0 ? [] : Object.values(await getApi().posts(ids));
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Die Sammlung konnte nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'The collection could not be loaded.';
 	} finally {
 		loading.value = false;
 	}
@@ -79,9 +79,9 @@ async function save(): Promise<void> {
 		});
 		collection.value = updated;
 		editing.value = false;
-		showToast('Sammlung aktualisiert.', 'success');
+		showToast('Collection updated.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Sammlung konnte nicht gespeichert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The collection could not be saved.', 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -96,9 +96,9 @@ async function removePost(postId: string): Promise<void> {
 		const updated = await getApi().removeCollectionItem(collection.value.id, postId);
 		collection.value = updated;
 		posts.value = posts.value.filter((post) => post.id !== postId);
-		showToast('Beitrag entfernt.', 'success');
+		showToast('Post removed.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Der Beitrag konnte nicht entfernt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The post could not be removed.', 'error');
 	}
 }
 
@@ -109,15 +109,16 @@ watch(id, load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			:title="collection?.title ?? 'Sammlung'"
-			:subtitle="collection?.description || 'Eine kuratierte Liste von Beiträgen.'"
+			:title="collection?.title ?? 'collection'"
+			:subtitle="collection?.description || 'A curated list of posts.'"
 			back-href="#/collections"
-			back-label="Alle Sammlungen"
+			back-label="All collections"
 		>
 			<template #actions>
 				<button v-if="isOwner" type="button" class="a-btn a-btn--ghost a-btn--small" @click="editing = !editing">
 					<AppIcon name="pen" :size="15" />
-					Bearbeiten
+							Edit
+
 				</button>
 			</template>
 		</PageHeader>
@@ -125,13 +126,13 @@ watch(id, load);
 		<p v-if="collection !== null" class="a-collection-meta">
 			<span>
 				<AppIcon :name="collection.is_public ? 'globe' : 'lock'" :size="14" />
-				{{ collection.is_public ? 'Öffentlich' : 'Privat' }}
+				{{ collection.is_public ? 'Public' : 'Private' }}
 			</span>
 			<span>
 				<AppIcon name="clock" :size="14" />
-				Aktualisiert {{ relativeTime(collection.updated_at) }}
+				Updated {{ relativeTime(collection.updated_at) }}
 			</span>
-			<span>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Beitrag' : 'Beiträge' }}</span>
+			<span>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Post' : 'Posts' }}</span>
 		</p>
 
 		<form v-if="editing && isOwner" class="a-panel a-collection-form" @submit.prevent="save">
@@ -140,17 +141,17 @@ watch(id, load);
 				<input v-model="title" maxlength="100" required />
 			</label>
 			<label>
-				<span>Beschreibung</span>
+				<span>Description</span>
 				<textarea v-model="description" maxlength="500" rows="2" />
 			</label>
 			<label class="a-check">
 				<input v-model="isPublic" type="checkbox" />
-				<span>Öffentlich sichtbar</span>
+				<span>Publicly visible</span>
 			</label>
 			<div class="a-collection-form__actions">
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="editing = false">Abbrechen</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="editing = false">Cancel</button>
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
-					{{ saving ? 'Speichert …' : 'Speichern' }}
+					{{ saving ? 'Saving…' : 'Save' }}
 				</button>
 			</div>
 		</form>
@@ -160,13 +161,13 @@ watch(id, load);
 			<span>{{ error }}</span>
 		</p>
 
-		<p v-else-if="loading && collection === null" class="a-muted">Sammlung wird geladen …</p>
+		<p v-else-if="loading && collection === null" class="a-muted">Loading collection…</p>
 
 		<EmptyState
 			v-else-if="collection !== null && orderedPosts.length === 0"
 			icon="list"
-			title="Diese Sammlung ist noch leer"
-			:text="isOwner ? 'Öffne einen Beitrag und wähle im Menü „Zu Sammlung hinzufügen“.' : 'Der Besitzer hat noch keine Beiträge hinzugefügt.'"
+			title="This collection is still empty"
+			:text="isOwner ? 'Open a post and choose “Add to collection” from its menu.' : 'The owner has not added any posts yet.'"
 		/>
 
 		<ol v-else-if="orderedPosts.length > 0" class="a-feed__list">
@@ -176,8 +177,8 @@ watch(id, load);
 					v-if="isOwner"
 					type="button"
 					class="a-collection-post__remove"
-					:aria-label="'Aus der Sammlung entfernen'"
-					title="Aus der Sammlung entfernen"
+					:aria-label="'Remove from collection'"
+					title="Remove from collection"
 					@click="removePost(post.id)"
 				>
 					<AppIcon name="x" :size="14" />

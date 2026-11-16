@@ -156,7 +156,7 @@ are environment-specific.
 ```dotenv
 ALOHASOCIAL_INSTANCE_URL=https://social.example
 ALOHASOCIAL_INSTANCE_NAME="Aloha Social"
-ALOHASOCIAL_INSTANCE_DESCRIPTION="Eine kleine, offene Instanz im Fediverse."
+ALOHASOCIAL_INSTANCE_DESCRIPTION="A small, open instance in the fediverse."
 ALOHASOCIAL_CONTACT_EMAIL=admin@social.example
 
 ALOHASOCIAL_DB_DSN=pgsql:host=127.0.0.1;port=5432;dbname=alohasocial

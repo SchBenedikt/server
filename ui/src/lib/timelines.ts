@@ -23,10 +23,10 @@ function sourceKey(source: TimelineSource): string {
 function messageFor(error: unknown): string {
 	if (error instanceof ApiError) {
 		if (error.status === 401) {
-			return 'Melde dich an, um diesen Feed zu sehen.';
+			return 'Sign in to see this feed.';
 		}
 		if (error.status === 404) {
-			return 'Dieser Feed ist nicht verfügbar.';
+			return 'This feed is unavailable.';
 		}
 
 		return error.message;
@@ -34,7 +34,7 @@ function messageFor(error: unknown): string {
 
 	return error instanceof Error
 		? error.message
-		: 'Der Feed konnte nicht geladen werden.';
+		: 'The feed could not be loaded.';
 }
 
 export function useTimeline(source: () => TimelineSource) {

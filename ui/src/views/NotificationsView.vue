@@ -25,13 +25,13 @@ const mutating = ref('');
 const confirmClear = ref(false);
 
 const typeMeta: Record<string, { icon: string; label: string; tone: string }> = {
-	favourite: { icon: 'heart', label: 'hat deinen Beitrag favorisiert', tone: 'rose' },
-	follow: { icon: 'user', label: 'folgt dir jetzt', tone: 'mint' },
-	mention: { icon: 'message', label: 'hat dich erwähnt', tone: 'violet' },
-	reblog: { icon: 'repeat', label: 'hat deinen Beitrag geboostet', tone: 'amber' },
-	poll: { icon: 'hash', label: 'hat an deiner Umfrage teilgenommen', tone: 'amber' },
-	update: { icon: 'pen', label: 'hat einen Beitrag bearbeitet', tone: 'violet' },
-	'follow_request': { icon: 'user', label: 'möchte dir folgen', tone: 'mint' },
+	favourite: { icon: 'heart', label: 'liked your post', tone: 'rose' },
+	follow: { icon: 'user', label: 'now follows you', tone: 'mint' },
+	mention: { icon: 'message', label: 'mentioned you', tone: 'violet' },
+	reblog: { icon: 'repeat', label: 'boosted your post', tone: 'amber' },
+	poll: { icon: 'hash', label: 'voted in your poll', tone: 'amber' },
+	update: { icon: 'pen', label: 'edited a post', tone: 'violet' },
+	'follow_request': { icon: 'user', label: 'wants to follow you', tone: 'mint' },
 };
 
 onMounted(() => {
@@ -72,7 +72,7 @@ async function load(reset: boolean): Promise<void> {
 			// The Mastodon surface has no unread counter; the core one is optional.
 		}
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Benachrichtigungen konnten nicht geladen werden.';
+		error.value = caught instanceof Error ? caught.message : 'Notifications could not be loaded.';
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -90,7 +90,7 @@ async function dismiss(item: NotificationItem): Promise<void> {
 		items.value = items.value.filter((entry) => entry.id !== item.id);
 		appState.unread = Math.max(0, appState.unread - 1);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Die Benachrichtigung konnte nicht entfernt werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The notification could not be removed.', 'error');
 	} finally {
 		mutating.value = '';
 	}
@@ -112,9 +112,9 @@ async function clearAll(): Promise<void> {
 		hasMore.value = false;
 		setUnread(0);
 		confirmClear.value = false;
-		showToast(`${cleared} ${cleared === 1 ? 'Benachrichtigung' : 'Benachrichtigungen'} als gelesen markiert.`, 'success');
+		showToast(`${cleared} ${cleared === 1 ? 'notification' : 'Notifications'} marked as read.`, 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Benachrichtigungen konnten nicht geleert werden.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'Notifications could not be cleared.', 'error');
 	} finally {
 		mutating.value = '';
 	}
@@ -161,8 +161,8 @@ function statusPreview(item: NotificationItem): string {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Benachrichtigungen"
-			:subtitle="appState.unread > 0 ? `${appState.unread} ungelesen` : 'Alles gelesen.'"
+			title="Notifications"
+			:subtitle="appState.unread > 0 ? `${appState.unread} unread` : 'All read.'"
 		>
 			<template #actions>
 				<button
@@ -174,33 +174,33 @@ function statusPreview(item: NotificationItem): string {
 					@click="clearAll"
 				>
 					<AppIcon name="check" :size="15" />
-					{{ mutating === 'clear' ? 'Wird geleert…' : confirmClear ? 'Wirklich alle?' : 'Alle als gelesen' }}
+					{{ mutating === 'clear' ? 'Clearing…' : confirmClear ? 'Really all?' : 'Mark all as read' }}
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="bell" :size="26" /></span>
-			<h2>Verpasse nichts</h2>
-			<p>Melde dich an, um zu sehen, wer dir folgt, deine Beiträge teilt oder dich erwähnt.</p>
-			<a class="a-btn a-btn--primary" href="/login">Anmelden</a>
+			<h2>Don't miss a thing</h2>
+			<p>Sign in to see who follows you, shares your posts or mentions you.</p>
+			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
 		</div>
 
 		<TimelineSkeleton v-else-if="loading && items.length === 0" :count="3" />
 
 		<div v-else-if="error !== '' && items.length === 0" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Benachrichtigungen nicht erreichbar</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load(true)">Erneut versuchen</button>
+			<div><strong>Notifications unavailable</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load(true)">Try again</button>
 		</div>
 
 		<EmptyState
 			v-else-if="items.length === 0"
 			icon="bell"
-			title="Noch keine Benachrichtigungen"
-			text="Sobald jemand auf dich reagiert, erscheint es hier."
+			title="No notifications yet"
+			text="As soon as someone interacts with you, it appears here."
 		>
-			<a class="a-btn a-btn--primary a-btn--small" href="#/explore">Menschen entdecken</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="#/explore">Discover people</a>
 		</EmptyState>
 
 		<ol v-else class="a-notifications">
@@ -241,13 +241,13 @@ function statusPreview(item: NotificationItem): string {
 						:href="statusHref(item) ?? '#'"
 						class="a-notification__post-link"
 					>
-						Beitrag ansehen <AppIcon name="arrowLeft" :size="13" />
+						View post <AppIcon name="arrowLeft" :size="13" />
 					</a>
 				</div>
 				<button
 					type="button"
 					class="a-icon-btn a-notification__dismiss"
-					aria-label="Benachrichtigung ausblenden"
+					aria-label="Dismiss notification"
 					:disabled="mutating === item.id"
 					@click="dismiss(item)"
 				>
@@ -263,7 +263,7 @@ function statusPreview(item: NotificationItem): string {
 			:disabled="loadingMore"
 			@click="load(false)"
 		>
-			{{ loadingMore ? 'Wird geladen…' : 'Ältere Benachrichtigungen' }}
+			{{ loadingMore ? 'Loading…' : 'Older notifications' }}
 		</button>
 	</div>
 </template>

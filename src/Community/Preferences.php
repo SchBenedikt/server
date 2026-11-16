@@ -111,7 +111,7 @@ final class Preferences
                 $payload['default_visibility'],
                 self::VISIBILITIES,
                 'default_visibility',
-                'Bitte wähle öffentlich, nicht gelistet oder follower.',
+                'Please choose public, unlisted or followers.',
             );
         }
         if (isset($payload['default_quote_policy'])) {
@@ -119,7 +119,7 @@ final class Preferences
                 $payload['default_quote_policy'],
                 self::QUOTE_POLICIES,
                 'default_quote_policy',
-                'Bitte wähle öffentlich, follower oder niemand.',
+                'Please choose public, followers or nobody.',
             );
         }
         if (isset($payload['dm_policy'])) {
@@ -127,7 +127,7 @@ final class Preferences
                 $payload['dm_policy'],
                 self::DM_POLICIES,
                 'dm_policy',
-                'Bitte wähle alle, follower oder niemand.',
+                'Please choose everyone, followers or nobody.',
             );
         }
 
@@ -135,8 +135,8 @@ final class Preferences
             if (array_key_exists($flag, $payload)) {
                 if (!is_bool($payload[$flag])) {
                     throw CommunityException::invalid(
-                        'Diese Einstellung ist ungültig.',
-                        [$flag => 'Bitte wähle an oder aus.'],
+                        'This setting is invalid.',
+                        [$flag => 'Please choose on or off.'],
                     );
                 }
                 $next[$flag] = $payload[$flag];
@@ -209,7 +209,7 @@ final class Preferences
         $candidate = is_string($value) ? trim($value) : '';
 
         if (!in_array($candidate, $allowed, true)) {
-            throw CommunityException::invalid('Diese Einstellung ist ungültig.', [$field => $message]);
+            throw CommunityException::invalid('This setting is invalid.', [$field => $message]);
         }
 
         return $candidate;
