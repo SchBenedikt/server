@@ -42,6 +42,8 @@ const items = computed(() => {
 	if (signedIn.value) {
 		base.push(
 			{ name: 'messages' as const, label: 'Nachrichten', icon: 'message', href: '#/messages' },
+			{ name: 'memories' as const, label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
+			{ name: 'collections' as const, label: 'Sammlungen', icon: 'list', href: '#/collections' },
 			{ name: 'bookmarks' as const, label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
 			{ name: 'lists' as const, label: 'Listen', icon: 'list', href: '#/lists' },
 			{ name: 'scheduled' as const, label: 'Geplante Beiträge', icon: 'calendar', href: '#/scheduled' },
@@ -63,6 +65,9 @@ function isActive(name: string): boolean {
 	}
 	if (name === 'lists') {
 		return route.value.name === 'lists' || route.value.name === 'list';
+	}
+	if (name === 'collections') {
+		return route.value.name === 'collections' || route.value.name === 'collection';
 	}
 
 	return route.value.name === name;

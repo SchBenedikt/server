@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Bootstrap;
 
 use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Post\PostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\PdoConnection;
@@ -20,6 +21,12 @@ use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
+use AlohaSocial\Server\Community\Announcements;
+use AlohaSocial\Server\Community\Collections;
+use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\Memories;
+use AlohaSocial\Server\Community\Stories;
+use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Http\RateLimiter;
@@ -53,6 +60,13 @@ final readonly class Runtime
         public PostInteractions $interactions,
         public RemoteDirectory $remoteDirectory,
         public AdminService $admin,
+        public Announcements $announcements,
+        public FeaturedTags $featuredTags,
+        public Trends $trends,
+        public Memories $memories,
+        public Stories $stories,
+        public Collections $collections,
+        public PostRevisionRepository $postRevisions,
     ) {
     }
 }

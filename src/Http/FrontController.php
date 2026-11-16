@@ -37,10 +37,13 @@ final class FrontController
 
     private readonly AdminApiController $adminApi;
 
+    private readonly CommunityApiController $communityApi;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
         $this->adminApi = new AdminApiController($runtime);
+        $this->communityApi = new CommunityApiController($runtime);
     }
 
     /**
@@ -386,6 +389,11 @@ final class FrontController
         $adminResponse = $this->adminApi->handle($request, $session);
         if ($adminResponse !== null) {
             return $adminResponse;
+        }
+
+        $communityResponse = $this->communityApi->handle($request, $session, $ip);
+        if ($communityResponse !== null) {
+            return $communityResponse;
         }
 
         if ($request->method === 'PATCH' && $request->path === '/api/v1/host/profile') {

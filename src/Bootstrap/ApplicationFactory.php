@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Bootstrap;
 use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
 use AlohaSocial\Core\Domain\Notification\PdoNotificationRepository;
+use AlohaSocial\Core\Domain\Post\PdoPostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Jobs\PdoJobQueue;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
@@ -29,6 +30,12 @@ use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
+use AlohaSocial\Server\Community\Announcements;
+use AlohaSocial\Server\Community\Collections;
+use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\Memories;
+use AlohaSocial\Server\Community\Stories;
+use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
@@ -163,6 +170,13 @@ final class ApplicationFactory
                 $app,
                 $this->config,
             ),
+            announcements: new Announcements($database, $clock),
+            featuredTags: new FeaturedTags($database, $clock),
+            trends: new Trends($database, $clock),
+            memories: new Memories($database, $clock),
+            stories: new Stories($database, $clock),
+            collections: new Collections($database, $clock, $app->posts),
+            postRevisions: new PdoPostRevisionRepository($database),
         );
     }
 

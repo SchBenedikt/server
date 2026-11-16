@@ -317,4 +317,106 @@ export interface CreateStatusPayload {
 	poll?: PollInput | null;
 }
 
+export interface Announcement {
+	id: string;
+	author_id: string;
+	content: string;
+	active: boolean;
+	created_at: string;
+	updated_at: string;
+	expires_at: string | null;
+	expired: boolean;
+}
+
+export interface FeaturedTag {
+	tag: string;
+	position: number;
+}
+
+export interface TrendTag {
+	tag: string;
+	posts: number;
+	accounts: number;
+}
+
+export interface TrendLink {
+	url: string;
+	host: string;
+	posts: number;
+}
+
+export interface TrendsData {
+	tags: TrendTag[];
+	links: TrendLink[];
+}
+
+export interface MemoryPost {
+	id: string;
+	published_at: string;
+}
+
+export interface MemoryYear {
+	year: number;
+	posts: MemoryPost[];
+}
+
+export interface MemoriesData {
+	date: string;
+	total: number;
+	years: MemoryYear[];
+}
+
+export interface Story {
+	id: string;
+	account_id: string;
+	content: string;
+	background: string;
+	created_at: string;
+	expires_at: string;
+}
+
+export interface StoryGroup {
+	account_id: string;
+	stories: Story[];
+}
+
+export interface StoriesData {
+	stories: Story[];
+	groups: StoryGroup[];
+}
+
+export interface Collection {
+	id: string;
+	account_id: string;
+	title: string;
+	description: string;
+	is_public: boolean;
+	item_count: number;
+	created_at: string;
+	updated_at: string;
+	post_ids?: string[];
+}
+
+export interface PostRevision {
+	post_id: string;
+	revision: number;
+	content: string;
+	content_warning: string | null;
+	visibility: string;
+	attachment_ids: string[];
+	edited_at: string;
+}
+
+export interface PostRevisionData {
+	post_id: string;
+	current_revision: number;
+	current: {
+		content: string;
+		content_warning: string | null;
+		visibility: string;
+		edited_at: string | null;
+	};
+	revisions: PostRevision[];
+}
+
 export type ThemeName = 'dark' | 'light';

@@ -24,6 +24,9 @@ export type Route =
 	| { name: 'scheduled' }
 	| { name: 'messages' }
 	| { name: 'conversation'; id: string }
+	| { name: 'memories' }
+	| { name: 'collections' }
+	| { name: 'collection'; id: string }
 	| { name: 'admin'; section: AdminSection }
 	| { name: 'notfound' };
 
@@ -93,6 +96,18 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'messages' && parts[1] !== undefined) {
 		return { name: 'conversation', id: decode(parts[1]) };
+	}
+
+	if (parts[0] === 'memories' && parts.length === 1) {
+		return { name: 'memories' };
+	}
+
+	if (parts[0] === 'collections' && parts.length === 1) {
+		return { name: 'collections' };
+	}
+
+	if (parts[0] === 'c' && parts[1] !== undefined) {
+		return { name: 'collection', id: decode(parts[1]) };
 	}
 
 	if (parts[0] === 'admin') {
@@ -183,6 +198,12 @@ export function routeTitle(current: Route): string {
 			return 'Filter';
 		case 'scheduled':
 			return 'Geplante Beiträge';
+		case 'memories':
+			return 'Erinnerungen';
+		case 'collections':
+			return 'Sammlungen';
+		case 'collection':
+			return 'Sammlung';
 		case 'admin':
 			return current.section === 'overview'
 				? 'Administration'

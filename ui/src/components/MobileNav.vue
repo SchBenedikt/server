@@ -17,6 +17,8 @@ const items = computed(() => {
 		{ name: 'explore', label: 'Entdecken', icon: 'compass', href: '#/explore' },
 		{ name: 'search', label: 'Suchen', icon: 'search', href: '#/search' },
 		{ name: 'messages', label: 'Nachrichten', icon: 'message', href: '#/messages' },
+		{ name: 'memories', label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
+		{ name: 'collections', label: 'Sammlungen', icon: 'list', href: '#/collections' },
 		{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
 		{
 			name: 'profile',
@@ -39,6 +41,9 @@ function isActive(name: string): boolean {
 	}
 	if (name === 'search') {
 		return route.value.name === 'search' || route.value.name === 'tag';
+	}
+	if (name === 'collections') {
+		return route.value.name === 'collections' || route.value.name === 'collection';
 	}
 
 	return route.value.name === name;

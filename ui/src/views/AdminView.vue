@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader.vue';
 import { ADMIN_SECTIONS, adminSectionDefinition } from '../lib/admin';
 import { route } from '../lib/router';
 import { appState } from '../lib/state';
+import AdminAnnouncements from './admin/AdminAnnouncements.vue';
 import AdminAudit from './admin/AdminAudit.vue';
 import AdminFederation from './admin/AdminFederation.vue';
 import AdminOverview from './admin/AdminOverview.vue';
@@ -34,6 +35,8 @@ const sectionView = computed(() => {
 			return AdminQueue;
 		case 'settings':
 			return AdminSettings;
+		case 'announcements':
+			return AdminAnnouncements;
 		case 'audit':
 			return AdminAudit;
 		default:

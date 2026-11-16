@@ -23,9 +23,11 @@ import type {
 	RemoteSearchData,
 	RemoteSearchNetwork,
 	RemoteSearchType,
+	TrendsData,
 } from '../lib/types';
 
 const query = ref('');
+const trends = ref<TrendsData>({ tags: [], links: [] });
 const followedTags = ref<FollowedTag[]>([]);
 const followedLoading = ref(false);
 const tagBusy = ref('');
@@ -87,10 +89,19 @@ watch(discoveryPeople, (people) => {
 
 onMounted(async () => {
 	void loadDiscover();
+	void loadTrends();
 	if (signedIn.value) {
 		await loadFollowedTags();
 	}
 });
+
+async function loadTrends(): Promise<void> {
+	try {
+		trends.value = await getApi().trends(7, 12);
+	} catch {
+		trends.value = { tags: [], links: [] };
+	}
+}
 
 watch(signedIn, async (value) => {
 	if (value) {
@@ -419,6 +430,41 @@ function isFollowingTag(tag: string): boolean {
 		</template>
 
 		<template v-else>
+			<section v-if="trends.tags.length > 0 || trends.links.length > 0" class="a-explore-section">
+				<header class="a-section-head">
+					<h2>
+						<AppIcon name="chart" :size="16" />
+						Trends dieser Woche
+					</h2>
+					<span>aus öffentlichen Beiträgen dieser Instanz</span>
+				</header>
+
+				<div v-if="trends.tags.length > 0" class="a-tag-cloud">
+					<button
+						v-for="(trend, index) in trends.tags"
+						:key="trend.tag"
+						type="button"
+						class="a-tag-chip"
+						:class="`a-tag-chip--${(index % 4) + 1}`"
+						@click="openTag(trend.tag)"
+					>
+						<span class="a-tag-chip__hash">#</span>
+						<span>{{ trend.tag }}</span>
+						<small>{{ trend.posts }}</small>
+					</button>
+				</div>
+
+				<ul v-if="trends.links.length > 0" class="a-trend-links">
+					<li v-for="link in trends.links.slice(0, 6)" :key="link.url">
+						<a :href="link.url" target="_blank" rel="noopener noreferrer nofollow">
+							<AppIcon name="external" :size="14" />
+							<span>{{ link.url }}</span>
+							<small>{{ link.host }} · {{ link.posts }}×</small>
+						</a>
+					</li>
+				</ul>
+			</section>
+
 			<section class="a-explore-section">
 				<header class="a-section-head">
 					<h2>In aller Munde</h2>

@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, ref } from 'vue';
+import AnnouncementBanner from '../components/AnnouncementBanner.vue';
 import AppIcon from '../components/AppIcon.vue';
 import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
+import StoryBar from '../components/StoryBar.vue';
 import TimelineFeed from '../components/TimelineFeed.vue';
 import { formatCount, handleLabel } from '../lib/format';
 import { appState, openComposer, setHomeTab } from '../lib/state';
@@ -105,6 +107,10 @@ function refresh(): void {
 				</button>
 			</template>
 		</PageHeader>
+
+		<AnnouncementBanner />
+
+		<StoryBar v-if="signedIn" />
 
 		<section v-if="!signedIn" class="a-welcome">
 			<div class="a-welcome__glow" aria-hidden="true" />
