@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Interactions;
 
+use AlohaSocial\Core\Domain\Interaction\ReactionSchema;
 use AlohaSocial\Core\Domain\Post\Favourite;
 use AlohaSocial\Core\Domain\Post\PdoBoostRepository;
 use AlohaSocial\Core\Domain\Post\PdoFavouriteRepository;
@@ -61,6 +62,7 @@ final class PostInteractions
         $favourited = $viewerId === null ? [] : $favourites->existsForPosts($viewerId, $postIds);
         $reblogged = $viewerId === null ? [] : $boosts->existsForPosts($viewerId, $postIds);
         $replyCounts = $this->replyCounts($postIds);
+        $emoji = $this->emojiReactions($postIds);
 
         $result = [];
         foreach ($postIds as $postId) {
@@ -70,7 +72,53 @@ final class PostInteractions
                 'reblogs_count' => $boostCounts[$postId] ?? 0,
                 'reblogged' => $reblogged[$postId] ?? false,
                 'replies_count' => $replyCounts[$postId] ?? 0,
+                'emoji_reactions' => $emoji[$postId] ?? [],
             ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Inbound emoji reactions per post, as `[{emoji, count}]`.
+     *
+     * The table is the core's canonical reaction store. Reading it here keeps
+     * the projection in one place instead of making the UI call another route
+     * for every card.
+     *
+     * @param list<string> $postIds
+     *
+     * @return array<string, list<array{emoji: string, count: int}>>
+     */
+    private function emojiReactions(array $postIds): array
+    {
+        $placeholders = [];
+        $parameters = [];
+        foreach ($postIds as $index => $postId) {
+            $key = 'emoji_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT local_post_id, emoji, COUNT(*) AS total FROM ' . ReactionSchema::TABLE
+                . " WHERE kind = 'emoji' AND direction = 'in' AND local_post_id IN (" . implode(', ', $placeholders) . ')'
+                . ' GROUP BY local_post_id, emoji ORDER BY total DESC, emoji ASC',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $postId = is_string($row['local_post_id'] ?? null) ? $row['local_post_id'] : '';
+            $value = is_string($row['emoji'] ?? null) ? $row['emoji'] : '';
+            if ($postId === '' || $value === '') {
+                continue;
+            }
+            $result[$postId][] = ['emoji' => $value, 'count' => (int) ($row['total'] ?? 0)];
         }
 
         return $result;

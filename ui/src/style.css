@@ -4582,3 +4582,31 @@ dialog.a-modal::backdrop {
 	color: var(--a-muted);
 	font-size: 12px;
 }
+
+/* --------------------------------------------------------- emoji reactions */
+
+.a-post__reactions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.a-post__reactions li {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border: 1px solid var(--a-border-strong);
+	border-radius: 999px;
+	background: var(--a-bg-soft);
+	font-size: 13px;
+}
+
+.a-post__reactions strong {
+	color: var(--a-muted);
+	font-size: 11.5px;
+	font-weight: 700;
+}

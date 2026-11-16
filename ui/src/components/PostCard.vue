@@ -236,6 +236,7 @@ const liked = computed(() => interaction.value?.favourited === true);
 const likeCount = computed(() => interaction.value?.favourites_count ?? props.post.likes_count ?? 0);
 const boostCount = computed(() => interaction.value?.reblogs_count ?? props.post.boosts_count ?? 0);
 const replyCount = computed(() => interaction.value?.replies_count ?? props.post.replies_count ?? 0);
+const emojiReactions = computed(() => interaction.value?.emoji_reactions ?? []);
 
 const boosted = ref(false);
 const boosting = ref(false);
@@ -794,6 +795,13 @@ onUnmounted(() => {
 			</div>
 			<p v-if="pollError" class="a-form-error" role="alert">{{ pollError }}</p>
 		</div>
+
+		<ul v-if="emojiReactions.length > 0" class="a-post__reactions">
+			<li v-for="reaction in emojiReactions" :key="reaction.emoji" :title="`${reaction.count} Reaktion(en)`">
+				<span>{{ reaction.emoji }}</span>
+				<strong>{{ reaction.count }}</strong>
+			</li>
+		</ul>
 
 		<footer class="a-post__actions">
 			<button

@@ -21,12 +21,18 @@ export interface PollOption {
 	votes_count: number;
 }
 
+export interface EmojiReaction {
+	emoji: string;
+	count: number;
+}
+
 export interface PostInteraction {
 	favourites_count: number;
 	favourited: boolean;
 	reblogs_count: number;
 	reblogged: boolean;
 	replies_count: number;
+	emoji_reactions?: EmojiReaction[];
 }
 
 export interface Poll {
