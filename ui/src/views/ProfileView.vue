@@ -64,6 +64,7 @@ const postsLoading = ref(false);
 const postsError = ref('');
 const featuredTags = ref<FeaturedTag[]>([]);
 const archivedIds = ref<Set<string>>(new Set());
+const pinnedIds = ref<string[]>([]);
 const editTags = ref('');
 const editing = ref(false);
 const editName = ref('');
@@ -334,6 +335,7 @@ async function loadProfile(): Promise<void> {
 	}
 
 	if (current === generation && error.value === '') {
+		await loadPinnedIds();
 		await loadPosts(true);
 		void loadFeaturedTags();
 	}
@@ -346,6 +348,49 @@ async function loadArchivedIds(): Promise<void> {
 		archivedIds.value = new Set();
 	}
 }
+
+async function loadPinnedIds(): Promise<void> {
+	try {
+		pinnedIds.value = await getApi().pinnedPosts(handle.value);
+	} catch {
+		pinnedIds.value = [];
+	}
+}
+
+function onPinned(post: TimelineItem, pinned: boolean): void {
+	if (pinned) {
+		if (!pinnedIds.value.includes(post.id)) {
+			pinnedIds.value = [...pinnedIds.value, post.id];
+		}
+	} else {
+		pinnedIds.value = pinnedIds.value.filter((id) => id !== post.id);
+	}
+}
+
+const displayPosts = computed(() => {
+	const list = visiblePosts.value;
+	if (pinnedIds.value.length === 0) {
+		return list;
+	}
+
+	const order = new Map(pinnedIds.value.map((id, index) => [id, index]));
+
+	return [...list].sort((left, right) => {
+		const leftPin = order.get(left.id);
+		const rightPin = order.get(right.id);
+		if (leftPin !== undefined || rightPin !== undefined) {
+			if (leftPin === undefined) {
+				return 1;
+			}
+			if (rightPin === undefined) {
+				return -1;
+			}
+			return leftPin - rightPin;
+		}
+
+		return new Date(right.published_at).getTime() - new Date(left.published_at).getTime();
+	});
+});
 
 async function loadFeaturedTags(): Promise<void> {
 	if (handle.value === '' || isRemoteProfile.value) {
@@ -481,6 +526,24 @@ async function loadPosts(reset: boolean): Promise<void> {
 				}
 			} catch {
 				// The public scan above already provides the profile's public posts.
+			}
+		}
+
+		if (reset) {
+			const missingPins = pinnedIds.value.filter((id) => !seen.has(id));
+			if (missingPins.length > 0) {
+				try {
+					const extra = await getApi().posts(missingPins);
+					for (const id of missingPins) {
+						const post = extra[id];
+						if (post !== undefined && !seen.has(post.id)) {
+							seen.add(post.id);
+							collected.push(post);
+						}
+					}
+				} catch {
+					// A pinned post that no longer resolves simply stays hidden.
+				}
 			}
 		}
 
@@ -951,7 +1014,7 @@ onUnmounted(() => {
 			</div>
 
 			<EmptyState
-				v-else-if="loadedOnce && visiblePosts.length === 0"
+				v-else-if="loadedOnce && displayPosts.length === 0"
 				:icon="tab === 'media' ? 'image' : 'pen'"
 				:title="tab === 'media' ? 'Noch keine Bilder' : 'Noch keine öffentlichen Beiträge'"
 				:text="emptyText"
@@ -961,14 +1024,18 @@ onUnmounted(() => {
 				</button>
 			</EmptyState>
 
-			<ol v-else-if="visiblePosts.length > 0" class="a-feed__list">
-				<li v-for="post in visiblePosts" :key="post.id">
-					<PostCard :post="post" />
+			<ol v-else-if="displayPosts.length > 0" class="a-feed__list">
+				<li v-for="post in displayPosts" :key="post.id">
+					<PostCard
+						:post="post"
+						:pinned="pinnedIds.includes(post.id)"
+						@pinned="onPinned(post, $event)"
+					/>
 				</li>
 			</ol>
 
 			<button
-				v-if="hasMore && visiblePosts.length > 0"
+				v-if="hasMore && displayPosts.length > 0"
 				type="button"
 				class="a-btn a-btn--ghost a-feed__more"
 				:disabled="postsLoading"

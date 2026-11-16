@@ -24,12 +24,14 @@ const props = withDefaults(defineProps<{
 	post: TimelineItem;
 	detail?: boolean;
 	forYou?: boolean;
+	pinned?: boolean;
 }>(), {
 	detail: false,
 	forYou: false,
+	pinned: false,
 });
 
-const emit = defineEmits<{ bookmark: [bookmarked: boolean] }>();
+const emit = defineEmits<{ bookmark: [bookmarked: boolean]; pinned: [pinned: boolean] }>();
 
 const authorId = computed(() => props.post.object_author_id ?? props.post.author_id);
 const author = computed(() => {
@@ -253,6 +255,12 @@ const bookmarked = ref(props.post.bookmarked === true);
 const bookmarking = ref(false);
 const archiving = ref(false);
 const publishingBluesky = ref(false);
+const pinning = ref(false);
+const isPinned = ref(props.pinned === true);
+
+watch(() => props.pinned, (value) => {
+	isPinned.value = value === true;
+}, { immediate: true });
 const reportOpen = ref(false);
 const historyOpen = ref(false);
 const collectionOpen = ref(false);
@@ -510,6 +518,32 @@ async function toggleBookmark(): Promise<void> {
 	}
 }
 
+async function togglePin(): Promise<void> {
+	if (localId.value === null || pinning.value) {
+		return;
+	}
+
+	pinning.value = true;
+	menuOpen.value = false;
+	try {
+		if (isPinned.value) {
+			await getApi().unpinPost(localId.value);
+			isPinned.value = false;
+			emit('pinned', false);
+			showToast('Beitrag ist nicht mehr angepinnt.', 'success');
+		} else {
+			await getApi().pinPost(localId.value);
+			isPinned.value = true;
+			emit('pinned', true);
+			showToast('Beitrag ist jetzt oben im Profil angepinnt.', 'success');
+		}
+	} catch (error) {
+		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht angepinnt werden.', 'error');
+	} finally {
+		pinning.value = false;
+	}
+}
+
 async function archive(): Promise<void> {
 	if (localId.value === null || archiving.value) {
 		return;
@@ -717,6 +751,16 @@ onUnmounted(() => {
 						@click.stop="historyOpen = true; menuOpen = false"
 					>
 						<AppIcon name="clock" :size="15" /> Bearbeitungshistorie
+					</button>
+					<button
+						v-if="isMine && localId"
+						type="button"
+						role="menuitem"
+						:disabled="pinning"
+						@click.stop="togglePin"
+					>
+						<AppIcon :name="isPinned ? 'x' : 'pin'" :size="15" />
+						{{ isPinned ? 'Nicht mehr anpinnen' : 'Im Profil anpinnen' }}
 					</button>
 					<button
 						v-if="isMine && localId"

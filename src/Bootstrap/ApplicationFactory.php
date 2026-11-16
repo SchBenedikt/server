@@ -41,6 +41,7 @@ use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
+use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
@@ -200,6 +201,7 @@ final class ApplicationFactory
                 new NotificationService(new PdoNotificationRepository($database), $clock, new ErrorLogLogger()),
             ),
             postRevisions: new PdoPostRevisionRepository($database),
+            pinnedPosts: new PinnedPosts($database, $clock, $app->posts),
             blueskyAccounts: $blueskyAccounts,
         );
     }
