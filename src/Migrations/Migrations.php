@@ -35,6 +35,7 @@ final class Migrations
             new Version202611160004FollowRequestSchema(),
             new Version202611160005AtprotoAccountSchema(),
             new Version202611160006PinnedPostSchema(),
+            new Version202611160007CoreUpdateSchema(),
         ];
     }
 }

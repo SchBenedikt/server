@@ -217,7 +217,7 @@ final class ApplicationFactory
         $runner = new MigrationRunner($database, new SystemClock(), $migrations);
 
         if (!$runner->isInstalled()) {
-            throw new RuntimeException('The database schema is not installed. Run: php bin/migrate.php');
+            throw new RuntimeException('The database schema is not installed. Run: php bin/update.php');
         }
 
         // A new migration that nobody ran would otherwise surface as a 500 on
@@ -232,7 +232,7 @@ final class ApplicationFactory
 
         if ($pending !== []) {
             throw new RuntimeException(
-                'Pending migrations: ' . implode(', ', $pending) . '. Run: php bin/migrate.php',
+                'Pending migrations: ' . implode(', ', $pending) . '. Run: php bin/update.php',
             );
         }
     }

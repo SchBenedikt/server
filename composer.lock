@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "57bfb80a512e45d6bd1a706962f3ceb1",
+    "content-hash": "60f3001d3990f9759010351c6c796a0b",
     "packages": [
         {
             "name": "alohasocial/core",
@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "03fd7492701ef9d45d2bb65b702552a8cf9d5f97"
+                "reference": "fce4ca204af8b5f6ac43846247a122aebe253bd5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/03fd7492701ef9d45d2bb65b702552a8cf9d5f97",
-                "reference": "03fd7492701ef9d45d2bb65b702552a8cf9d5f97",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/fce4ca204af8b5f6ac43846247a122aebe253bd5",
+                "reference": "fce4ca204af8b5f6ac43846247a122aebe253bd5",
                 "shasum": ""
             },
             "require": {
@@ -81,6 +81,9 @@
                 "check:links": [
                     "@php tools/check-links.php"
                 ],
+                "check:release": [
+                    "bash tools/release-check.sh"
+                ],
                 "migration:inventory": [
                     "@php bin/migration-inventory"
                 ],
@@ -108,7 +111,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-14T20:34:54+00:00"
+            "time": "2026-11-16T19:32:41+00:00"
         },
         {
             "name": "psr/log",

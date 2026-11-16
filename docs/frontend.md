@@ -39,15 +39,15 @@ Accounts, sessions and CSRF are host-owned per
   `@alohasocial/server-ui` and depends on
   `"@alohasocial/ui": "file:../vendor/alohasocial/core/ui"`. Vue 3 is a direct
   dependency; the shared package declares Vue as a peer dependency.
-- **Build.** `npm run build` runs `vite build`. `ui/vite.config.ts` writes to
+- **Build.** `npm run build` first runs `ui/scripts/prepare-shared.mjs`, which
+  builds `@alohasocial/ui` from the installed core checkout when its `dist/`
+  is missing, then runs `vite build`. `ui/vite.config.ts` writes to
   `../public/ui` with stable names: `app.js`, `app.css` and `app-[name].js`.
-  `npm run build:shared` builds the shared package in the installed core
-  checkout. The core marks `ui/` as `export-ignore`, so it is absent from the
-  Composer dist archive; a developer rebuilding the shared package checks the
-  matching core source out into `vendor/alohasocial/core/ui` first. The
-  documented full rebuild is that check-out followed by
-  `(cd vendor/alohasocial/core/ui && npm ci && npm run build)` and then
-  `(cd ui && npm ci && npm run build)`.
+  `npm run build:shared` only prepares the shared package. The core marks
+  `ui/` as `export-ignore`, so it is absent from a Composer dist archive; in
+  that case the helper prints the one-line fix
+  (`composer reinstall alohasocial/core --prefer-source`). A normal source
+  checkout only needs `(cd ui && npm ci && npm run build)`.
 - **Committed artifact.** `public/ui/app.js` and `public/ui/app.css` are tracked
   in Git. A deployment serves them from `public/` and does not need Node; Node
   is only required to rebuild the UI.
@@ -148,7 +148,7 @@ Reasons, in order of importance:
    and `composer.lock` pins the installed commit; the installed core reports
    `0.7.0` in `vendor/alohasocial/core/src/Version.php`, and the shared UI is
    versioned with that core line (`@alohasocial/ui` 0.7.0 in the installed
-   package). The server itself is released as `0.8.0` (see the changelog). At
+   package). The server itself is released as `0.9.0` (see the changelog). At
    the time of writing, `@alohasocial/ui` is not published on the public npm
    registry (`npm view @alohasocial/ui version` returns 404), so an external web
    repository could not consume it as a normal semver dependency yet.

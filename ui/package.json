@@ -1,12 +1,12 @@
 {
 	"name": "@alohasocial/server-ui",
 	"private": true,
-	"version": "0.8.0",
+	"version": "0.9.0",
 	"type": "module",
 	"description": "Standalone host page that mounts the shared @alohasocial/ui package through a HostBridge.",
 	"scripts": {
-		"build": "vite build",
-		"build:shared": "npm --prefix ../vendor/alohasocial/core/ui run build"
+		"build": "node scripts/prepare-shared.mjs && vite build",
+		"build:shared": "node scripts/prepare-shared.mjs"
 	},
 	"dependencies": {
 		"@alohasocial/ui": "file:../vendor/alohasocial/core/ui",
