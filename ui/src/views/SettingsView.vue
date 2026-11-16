@@ -8,7 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { appState, showToast } from '../lib/state';
-import type { AccountPreferences } from '../lib/types';
+import type { AccountPreferences, BlueskyAccountStatus } from '../lib/types';
 
 const signedIn = computed(() => appState.session.user !== null);
 const loading = ref(false);
@@ -16,6 +16,12 @@ const saving = ref(false);
 const exporting = ref(false);
 const error = ref('');
 const preferences = ref<AccountPreferences | null>(null);
+
+const bluesky = ref<BlueskyAccountStatus>({ connected: false });
+const blueskyPublishEnabled = ref(true);
+const blueskyHandle = ref('');
+const blueskyPassword = ref('');
+const blueskyBusy = ref(false);
 
 const visibilityOptions = [
 	{ value: 'public', label: 'Öffentlich', hint: 'Alle können den Beitrag sehen.' },
@@ -51,10 +57,51 @@ async function load(): Promise<void> {
 	error.value = '';
 	try {
 		preferences.value = await getApi().preferences();
+		try {
+			const data = await getApi().blueskyAccount();
+			bluesky.value = data.account;
+			blueskyPublishEnabled.value = data.publish_enabled;
+		} catch {
+			bluesky.value = { connected: false };
+		}
 	} catch (caught) {
 		error.value = caught instanceof Error ? caught.message : 'Die Einstellungen konnten nicht geladen werden.';
 	} finally {
 		loading.value = false;
+	}
+}
+
+async function connectBluesky(): Promise<void> {
+	if (blueskyBusy.value) {
+		return;
+	}
+
+	blueskyBusy.value = true;
+	try {
+		bluesky.value = await getApi().connectBluesky(blueskyHandle.value, blueskyPassword.value);
+		blueskyPassword.value = '';
+		showToast('Bluesky-Konto verbunden.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Die Verbindung ist fehlgeschlagen.', 'error');
+	} finally {
+		blueskyBusy.value = false;
+	}
+}
+
+async function disconnectBluesky(): Promise<void> {
+	if (blueskyBusy.value) {
+		return;
+	}
+
+	blueskyBusy.value = true;
+	try {
+		await getApi().disconnectBluesky();
+		bluesky.value = { connected: false };
+		showToast('Bluesky-Verbindung getrennt.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Die Verbindung konnte nicht getrennt werden.', 'error');
+	} finally {
+		blueskyBusy.value = false;
 	}
 }
 
@@ -304,6 +351,61 @@ watch(signedIn, (value) => {
 						@change="toggleFlag(option.key)"
 					>
 				</label>
+			</section>
+
+			<section class="a-settings__section">
+				<h2>Bluesky</h2>
+				<p class="a-settings__hint">
+					Verbinde dein Bluesky-Konto, um öffentliche Beiträge zusätzlich dort zu veröffentlichen.
+					Dafür brauchst du ein App-Passwort aus den Bluesky-Einstellungen – nicht dein normales Passwort.
+				</p>
+
+				<div v-if="bluesky.connected" class="a-settings__bluesky">
+					<div class="a-settings__bluesky-status">
+						<AppIcon name="check" :size="18" />
+						<span>
+							<strong>@{{ bluesky.handle }}</strong>
+							<small>Verbunden mit {{ bluesky.pds_url }}</small>
+						</span>
+					</div>
+					<p v-if="blueskyPublishEnabled" class="a-settings__hint">
+						Neue öffentliche Beiträge werden automatisch gespiegelt. Du kannst einzelne Beiträge
+						zusätzlich über das Beitragsmenü veröffentlichen.
+					</p>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="blueskyBusy" @click="disconnectBluesky">
+						<AppIcon :name="blueskyBusy ? 'refresh' : 'x'" :size="15" :class="{ 'a-spin': blueskyBusy }" />
+						Verbindung trennen
+					</button>
+				</div>
+
+				<form v-else class="a-settings__bluesky" @submit.prevent="connectBluesky">
+					<label class="a-settings__field">
+						<span>Handle</span>
+						<input
+							v-model="blueskyHandle"
+							type="text"
+							inputmode="url"
+							autocomplete="username"
+							placeholder="name.bsky.social"
+							required
+						>
+					</label>
+					<label class="a-settings__field">
+						<span>App-Passwort</span>
+						<input
+							v-model="blueskyPassword"
+							type="password"
+							autocomplete="current-password"
+							placeholder="xxxx-xxxx-xxxx-xxxx"
+							required
+						>
+						<small>Du findest es in Bluesky unter Einstellungen → Datenschutz und Sicherheit → App-Passwörter.</small>
+					</label>
+					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="blueskyBusy">
+						<AppIcon :name="blueskyBusy ? 'refresh' : 'plus'" :size="15" :class="{ 'a-spin': blueskyBusy }" />
+						{{ blueskyBusy ? 'Verbindet…' : 'Bluesky verbinden' }}
+					</button>
+				</form>
 			</section>
 
 			<section class="a-settings__section">

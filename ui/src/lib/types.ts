@@ -106,6 +106,20 @@ export interface FollowRequestData {
 	locked: boolean;
 }
 
+export interface BlueskyAccountStatus {
+	connected: boolean;
+	did?: string;
+	handle?: string;
+	pds_url?: string;
+	connected_at?: string;
+	updated_at?: string;
+}
+
+export interface BlueskyData {
+	account: BlueskyAccountStatus;
+	publish_enabled: boolean;
+}
+
 export interface Account {
 	id: string;
 	handle: string;

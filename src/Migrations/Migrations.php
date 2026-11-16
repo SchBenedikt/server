@@ -33,6 +33,7 @@ final class Migrations
             new Version202611160002EngagementSchema(),
             new Version202611160003PreferencesSchema(),
             new Version202611160004FollowRequestSchema(),
+            new Version202611160005AtprotoAccountSchema(),
         ];
     }
 }

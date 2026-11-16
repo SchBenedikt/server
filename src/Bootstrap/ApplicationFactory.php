@@ -26,6 +26,7 @@ use AlohaSocial\Core\Security\SecretBox;
 use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
+use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
@@ -108,6 +109,8 @@ final class ApplicationFactory
             throw new RuntimeException('Cannot create the blob directory: ' . $blobDirectory);
         }
 
+        $blueskyAccounts = new BlueskyAccounts($database, $httpClient, $this->secretBox(), $clock);
+
         $app = Application::forHost(
             config: $this->config->coreConfig(),
             database: $database,
@@ -122,6 +125,7 @@ final class ApplicationFactory
             debug: $this->config->debug,
             blobStore: new LocalBlobStore($blobDirectory),
             hostResolver: $hostResolver,
+            atprotoAccounts: $blueskyAccounts,
         );
 
         $mailer = $this->config->mailTransport === 'smtp'
@@ -196,6 +200,7 @@ final class ApplicationFactory
                 new NotificationService(new PdoNotificationRepository($database), $clock, new ErrorLogLogger()),
             ),
             postRevisions: new PdoPostRevisionRepository($database),
+            blueskyAccounts: $blueskyAccounts,
         );
     }
 

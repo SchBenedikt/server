@@ -44,6 +44,7 @@ final readonly class HostConfig
         public bool $remoteMedia,
         public bool $mastodonApi,
         public string $mastodonPrefix,
+        public bool $atprotoPublish,
         public string $discoveryInstance,
         public string $mailTransport,
         public string $mailFrom,
@@ -167,6 +168,7 @@ final readonly class HostConfig
             remoteMedia: $bool($pick('remote_media', 'ALOHASOCIAL_REMOTE_MEDIA', true)),
             mastodonApi: $bool($pick('mastodon_api', 'ALOHASOCIAL_MASTODON_API', true)),
             mastodonPrefix: (string) $pick('mastodon_prefix', 'ALOHASOCIAL_MASTODON_PREFIX', '/api/mastodon/v1'),
+            atprotoPublish: $bool($pick('atproto_publish', 'ALOHASOCIAL_ATPROTO_PUBLISH', true)),
             discoveryInstance: self::normalizeDiscoveryHost((string) $pick('discovery_instance', 'ALOHASOCIAL_DISCOVERY_INSTANCE', 'mastodon.social')),
             mailTransport: $mailTransport,
             mailFrom: $mailFrom,
@@ -193,6 +195,7 @@ final readonly class HostConfig
             'media.remote_fetch' => $this->remoteMedia ? 'true' : 'false',
             'mastodon.api' => $this->mastodonApi ? 'true' : 'false',
             'mastodon.prefix' => $this->mastodonPrefix,
+            'atproto.publish' => $this->atprotoPublish ? 'true' : 'false',
         ];
 
         if ($this->instanceDescription !== '') {
