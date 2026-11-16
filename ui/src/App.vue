@@ -21,6 +21,7 @@ import BookmarksView from './views/BookmarksView.vue';
 import ConversationView from './views/ConversationView.vue';
 import ExploreView from './views/ExploreView.vue';
 import FiltersView from './views/FiltersView.vue';
+import FollowRequestsView from './views/FollowRequestsView.vue';
 import HomeView from './views/HomeView.vue';
 import ListView from './views/ListView.vue';
 import ListsView from './views/ListsView.vue';
@@ -101,6 +102,8 @@ const currentView = computed(() => {
 			return ArchivedView;
 		case 'settings':
 			return SettingsView;
+		case 'follow-requests':
+			return FollowRequestsView;
 		case 'admin':
 			return AdminView;
 		case 'home':

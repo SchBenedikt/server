@@ -89,6 +89,21 @@ export interface Relationship {
 	followed_by: boolean;
 	blocking: boolean;
 	muting: boolean;
+	requested?: boolean;
+}
+
+export interface FollowRequest {
+	id: string;
+	target_account_id: string;
+	actor_id: string;
+	actor_handle: string;
+	is_local: boolean;
+	created_at: string;
+}
+
+export interface FollowRequestData {
+	requests: FollowRequest[];
+	locked: boolean;
 }
 
 export interface Account {
@@ -461,6 +476,7 @@ export interface AccountPreferences {
 	dm_policy: string;
 	show_boosts: boolean;
 	discoverable: boolean;
+	locked: boolean;
 	notify_follows: boolean;
 	notify_favourites: boolean;
 	notify_boosts: boolean;

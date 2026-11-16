@@ -396,6 +396,41 @@ final class FrontController
             return $communityResponse;
         }
 
+        if (preg_match('#^/api/v1/accounts/([^/]+)/follow$#', $request->path, $matches) === 1
+            && in_array($request->method, ['POST', 'DELETE'], true)
+        ) {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+            }
+
+            $targetId = rawurldecode($matches[1]);
+            $target = $this->runtime->accounts->find($targetId)
+                ?? $this->runtime->accounts->findByHandle($targetId);
+
+            if ($target !== null) {
+                if ($request->method === 'DELETE') {
+                    // Withdrawing a request must also clear the pending row; the
+                    // core unfollow below handles an already accepted edge.
+                    $this->runtime->followRequests->withdraw($target->id, $userId);
+                } elseif ($this->runtime->preferences->forAccount($target->id)['locked'] === true) {
+                    $request = $this->runtime->followRequests->requestFromLocal($target->id, $userId);
+
+                    return Response::json([
+                        'requested' => true,
+                        'request' => $request,
+                        'relationship' => [
+                            'id' => $target->id,
+                            'following' => false,
+                            'followed_by' => false,
+                            'blocking' => false,
+                            'muting' => false,
+                            'requested' => true,
+                        ],
+                    ]);
+                }
+            }
+        }
+
         if ($request->method === 'PATCH' && $request->path === '/api/v1/host/profile') {
             if ($userId === null) {
                 return $this->apiError(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');

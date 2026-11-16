@@ -169,6 +169,7 @@ function setRelationshipFlag(name: 'muting' | 'blocking', value: boolean): void 
 			followed_by: false,
 			blocking: false,
 			muting: false,
+			requested: false,
 		};
 	}
 
