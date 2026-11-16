@@ -51,7 +51,7 @@ defineExpose({
 			class="a-feed__list"
 		>
 			<li v-for="post in timeline.posts.value" :key="post.id">
-				<PostCard :post="post" />
+				<PostCard :post="post" :for-you="kind === 'for-you'" />
 			</li>
 		</TransitionGroup>
 

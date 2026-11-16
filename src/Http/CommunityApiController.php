@@ -16,6 +16,7 @@ use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Community\CommunityException;
+use AlohaSocial\Server\Community\Exports;
 use Throwable;
 
 use function array_key_exists;
@@ -367,6 +368,63 @@ final class CommunityApiController
                 return Response::json([
                     'archived' => $this->runtime->archives->restore($userId, rawurldecode($matches[1])),
                 ]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/preferences') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Einstellungen zu sehen.');
+                }
+
+                return Response::json(['preferences' => $this->runtime->preferences->forAccount($userId)]);
+            }
+
+            if (in_array($method, ['PATCH', 'PUT'], true) && $path === '/api/v1/host/preferences') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                return Response::json([
+                    'preferences' => $this->runtime->preferences->update($userId, $this->jsonBody($request)),
+                ]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/export') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Daten zu exportieren.');
+                }
+
+                $account = $this->runtime->accounts->find($userId);
+                if ($account === null) {
+                    return $this->error(404, 'not_found', 'Dieses Konto gibt es nicht mehr.');
+                }
+
+                $stamp = $this->runtime->clock->now()->format('Ymd-His');
+                $filename = 'aloha-export-' . preg_replace('/[^a-z0-9_-]+/i', '-', $account->handle) . '-' . $stamp . '.json';
+
+                return Response::text(
+                    Exports::toJson($this->runtime->exports->build($account)),
+                    200,
+                    [
+                        'Content-Type' => 'application/json; charset=utf-8',
+                        'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                    ],
+                );
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/for-you/feedback') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'feedback' => $this->runtime->forYou->setFeedback(
+                        $userId,
+                        is_string($body['post_id'] ?? null) ? $body['post_id'] : '',
+                        is_string($body['kind'] ?? null) ? $body['kind'] : '',
+                    ),
+                ], 201);
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/for-you') {

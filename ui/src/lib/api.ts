@@ -43,6 +43,7 @@ import type {
 	Draft,
 	ArchivedPost,
 	ForYouData,
+	AccountPreferences,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -727,6 +728,26 @@ function normalizeCollection(value: unknown): Collection | null {
 		post_ids: Array.isArray(value.post_ids)
 			? value.post_ids.filter((id): id is string => typeof id === 'string')
 			: undefined,
+	};
+}
+
+function normalizePreferences(value: unknown): AccountPreferences {
+	if (!isRecord(value)) {
+		throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Einstellungen.');
+	}
+
+	return {
+		account_id: typeof value.account_id === 'string' ? value.account_id : '',
+		default_visibility: typeof value.default_visibility === 'string' ? value.default_visibility : 'public',
+		default_quote_policy: typeof value.default_quote_policy === 'string' ? value.default_quote_policy : 'public',
+		dm_policy: typeof value.dm_policy === 'string' ? value.dm_policy : 'everyone',
+		show_boosts: value.show_boosts !== false,
+		discoverable: value.discoverable !== false,
+		notify_follows: value.notify_follows !== false,
+		notify_favourites: value.notify_favourites !== false,
+		notify_boosts: value.notify_boosts !== false,
+		notify_mentions: value.notify_mentions !== false,
+		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }
 
@@ -2052,6 +2073,44 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				next: typeof data?.next === 'number' ? data.next : null,
 				total: typeof data?.total === 'number' ? data.total : 0,
 			};
+		},
+
+		async preferences(): Promise<AccountPreferences> {
+			const data = await request<{ preferences?: unknown }>('GET', '/api/v1/host/preferences');
+
+			return normalizePreferences(data?.preferences);
+		},
+
+		async updatePreferences(payload: Partial<Omit<AccountPreferences, 'account_id' | 'updated_at'>>): Promise<AccountPreferences> {
+			const data = await request<{ preferences?: unknown }>(
+				'PATCH',
+				'/api/v1/host/preferences',
+				undefined,
+				payload,
+			);
+
+			return normalizePreferences(data?.preferences);
+		},
+
+		async forYouFeedback(postId: string, kind: 'less' | 'more'): Promise<void> {
+			await request<unknown>(
+				'POST',
+				'/api/v1/host/for-you/feedback',
+				undefined,
+				{ post_id: postId, kind },
+			);
+		},
+
+		async exportAccount(): Promise<Blob> {
+			const response = await fetch('/api/v1/host/export', {
+				credentials: 'same-origin',
+				headers: { Accept: 'application/json' },
+			});
+			if (!response.ok) {
+				throw new ApiError(response.status, 'export_failed', 'Der Export konnte nicht erstellt werden.');
+			}
+
+			return response.blob();
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {

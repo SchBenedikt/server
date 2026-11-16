@@ -20,6 +20,7 @@ const items = computed(() => {
 		{ name: 'memories', label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
 		{ name: 'drafts', label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
 		{ name: 'archived', label: 'Archiv', icon: 'archive', href: '#/archived' },
+		{ name: 'settings', label: 'Einstellungen', icon: 'settings', href: '#/settings' },
 		{ name: 'collections', label: 'Sammlungen', icon: 'list', href: '#/collections' },
 		{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
 		{

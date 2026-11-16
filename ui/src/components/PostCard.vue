@@ -23,8 +23,10 @@ import type { Poll, TimelineItem } from '../lib/types';
 const props = withDefaults(defineProps<{
 	post: TimelineItem;
 	detail?: boolean;
+	forYou?: boolean;
 }>(), {
 	detail: false,
+	forYou: false,
 });
 
 const emit = defineEmits<{ bookmark: [bookmarked: boolean] }>();
@@ -545,6 +547,23 @@ async function share(): Promise<void> {
 	}
 }
 
+async function sendFeedback(kind: 'less' | 'more'): Promise<void> {
+	if (localId.value === null) {
+		return;
+	}
+
+	menuOpen.value = false;
+	try {
+		await getApi().forYouFeedback(localId.value, kind);
+		showToast(
+			kind === 'less' ? 'Du siehst weniger davon.' : 'Du siehst mehr davon.',
+			'success',
+		);
+	} catch (error) {
+		showToast(error instanceof Error ? error.message : 'Die Rückmeldung konnte nicht gespeichert werden.', 'error');
+	}
+}
+
 function edit(): void {
 	menuOpen.value = false;
 	openEditor(props.post);
@@ -689,6 +708,22 @@ onUnmounted(() => {
 						@click.stop="archive"
 					>
 						<AppIcon name="archive" :size="15" /> Archivieren
+					</button>
+					<button
+						v-if="forYou && localId"
+						type="button"
+						role="menuitem"
+						@click.stop="sendFeedback('less')"
+					>
+						<AppIcon name="bellOff" :size="15" /> Weniger davon anzeigen
+					</button>
+					<button
+						v-if="forYou && localId"
+						type="button"
+						role="menuitem"
+						@click.stop="sendFeedback('more')"
+					>
+						<AppIcon name="sparkles" :size="15" /> Mehr davon anzeigen
 					</button>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
 						<AppIcon name="flag" :size="15" /> Beitrag melden

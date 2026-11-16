@@ -67,12 +67,19 @@ final class ForYouFeed
 
         $followedAuthors = $this->followedAuthors($accountId);
         $followedTags = $this->followedTags($accountId);
+        $feedback = $this->feedback($accountId);
         $now = $this->clock->now()->getTimestamp();
 
         $scored = [];
         foreach ($candidates as $candidate) {
             $postId = (string) $candidate['id'];
             $authorId = (string) $candidate['author_id'];
+
+            // A post the reader asked to see less of never enters the feed.
+            if (($feedback[$postId] ?? '') === 'less') {
+                continue;
+            }
+
             $published = Time::parse((string) $candidate['published_at'])->getTimestamp();
             $ageHours = max(0, ($now - $published) / 3600);
             $engagement = (int) $candidate['favourites'] * 2
@@ -94,6 +101,10 @@ final class ForYouFeed
             }
             if ((int) $candidate['boosts'] > 0) {
                 $score += 2.0;
+            }
+            if (($feedback[$postId] ?? '') === 'more') {
+                $score += 4.0;
+                $reason = 'Weil du mehr davon sehen möchtest';
             }
 
             $scored[] = [
@@ -222,5 +233,64 @@ final class ForYouFeed
             array_map(static fn (array $row): string => strtolower((string) ($row['hashtag'] ?? '')), $rows),
             static fn (string $tag): bool => $tag !== '',
         ));
+    }
+
+    /**
+     * Stores a private "less/more of this" marker for the viewer.
+     *
+     * The marker is scoped to the account and the post, so it never changes
+     * what anyone else sees and cannot be used to target another account.
+     *
+     * @return array{post_id: string, kind: string}
+     */
+    public function setFeedback(string $accountId, string $postId, string $kind): array
+    {
+        $postId = trim($postId);
+        if ($postId === '') {
+            throw CommunityException::invalid('Der Beitrag fehlt.', ['post_id' => 'Bitte wähle einen Beitrag.']);
+        }
+        if (!in_array($kind, ['less', 'more'], true)) {
+            throw CommunityException::invalid(
+                'Diese Rückmeldung ist ungültig.',
+                ['kind' => 'Erlaubt sind "less" und "more".'],
+            );
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'INSERT INTO recommendation_feedback (account_id, post_id, kind, created_at)'
+            . ' VALUES (:account_id, :post_id, :kind, :created_at)'
+            . ' ON CONFLICT (account_id, post_id) DO UPDATE SET kind = excluded.kind, created_at = excluded.created_at',
+            [
+                'account_id' => $accountId,
+                'post_id' => $postId,
+                'kind' => $kind,
+                'created_at' => $now,
+            ],
+        );
+
+        return ['post_id' => $postId, 'kind' => $kind];
+    }
+
+    /**
+     * @return array<string, string> post id to "less" or "more"
+     */
+    private function feedback(string $accountId): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT post_id, kind FROM recommendation_feedback WHERE account_id = :account_id',
+            ['account_id' => $accountId],
+        );
+
+        $result = [];
+        foreach ($rows as $row) {
+            $postId = (string) ($row['post_id'] ?? '');
+            $kind = (string) ($row['kind'] ?? '');
+            if ($postId !== '' && ($kind === 'less' || $kind === 'more')) {
+                $result[$postId] = $kind;
+            }
+        }
+
+        return $result;
     }
 }

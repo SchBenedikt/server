@@ -31,6 +31,7 @@ final class Migrations
             new Version202611150001AdminSchema(),
             new Version202611160001CommunitySchema(),
             new Version202611160002EngagementSchema(),
+            new Version202611160003PreferencesSchema(),
         ];
     }
 }
