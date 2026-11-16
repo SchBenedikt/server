@@ -27,6 +27,7 @@ NAME=""
 DB_DSN=""
 DB_USER=""
 DB_PASSWORD=""
+DATA_DIR=""
 ADMIN_HANDLE=""
 ADMIN_EMAIL=""
 ADMIN_PASSWORD=""
@@ -54,6 +55,8 @@ Options:
   --db-dsn=DSN             sqlite:var/server.sqlite or a pgsql: DSN
   --db-user=USER           PostgreSQL user (ignored for SQLite)
   --db-password=PASSWORD   PostgreSQL password
+  --data-dir=DIR           Keep the database, key and blobs outside the
+                           checkout (recommended for bare-metal updates)
   --handle=HANDLE          Create this admin account
   --email=EMAIL            Admin email address
   --password=PASSWORD      Admin password (at least 8 characters)
@@ -62,7 +65,7 @@ Options:
   -i, --interactive        Ask for URL, name, database and admin account
   --non-interactive        Never prompt; missing admin values are skipped
   --skip-composer          Use the existing vendor/ directory
-  --skip-migrate           Do not run bin/migrate.php
+  --skip-migrate           Do not run bin/update.php
   --with-dev               Install dev dependencies (PHPUnit)
   --write-service-files    Write var/install/aloha-worker.service and
                            var/install/aloha-nginx.conf for this checkout
@@ -83,6 +86,7 @@ for argument in "$@"; do
         --db-dsn=*) DB_DSN="${argument#--db-dsn=}" ;;
         --db-user=*) DB_USER="${argument#--db-user=}" ;;
         --db-password=*) DB_PASSWORD="${argument#--db-password=}" ;;
+        --data-dir=*) DATA_DIR="${argument#--data-dir=}" ;;
         --handle=*) ADMIN_HANDLE="${argument#--handle=}" ;;
         --email=*) ADMIN_EMAIL="${argument#--email=}" ;;
         --password=*) ADMIN_PASSWORD="${argument#--password=}" ;;
@@ -297,11 +301,24 @@ fi
 if [ -n "$DB_PASSWORD" ]; then
     set_env ALOHASOCIAL_DB_PASSWORD "$DB_PASSWORD"
 fi
+if [ -n "$DATA_DIR" ]; then
+    set_env ALOHASOCIAL_VAR_DIRECTORY "$DATA_DIR"
+    # Keep every writable runtime path outside the checkout. Setting only
+    # the var directory would leave media and mail in the release directory,
+    # where a later update could replace them.
+    set_env ALOHASOCIAL_BLOB_DIRECTORY "$DATA_DIR/blobs"
+    set_env ALOHASOCIAL_SECRET_KEY_FILE "$DATA_DIR/secret.key"
+    set_env ALOHASOCIAL_MAIL_LOG_DIR "$DATA_DIR/mail"
+fi
 
 # .env holds the database password and SMTP credentials.
 chmod 0600 .env 2>/dev/null || true
 
 mkdir -p var/blobs var/mail
+if [ -n "$DATA_DIR" ]; then
+    mkdir -p "$DATA_DIR/blobs" "$DATA_DIR/mail"
+    chmod 0770 "$DATA_DIR" "$DATA_DIR/blobs" "$DATA_DIR/mail" 2>/dev/null || true
+fi
 chmod 0770 var var/blobs var/mail 2>/dev/null || true
 
 # Resolve the configured DSN through the application's own config loader, so
@@ -338,8 +355,8 @@ case "$dsn" in
 esac
 
 if [ "$SKIP_MIGRATE" -eq 0 ]; then
-    log "applying database migrations"
-    php bin/migrate.php
+    log "applying database migrations (with backup and account check)"
+    php bin/update.php
 else
     log "skipping migrations (--skip-migrate)"
 fi
@@ -448,6 +465,9 @@ Next steps:
 Open /login to sign in and /app for the social interface. For a production
 deployment see docs/installation.md, or use the Docker image described in
 docs/docker.md.
+
+Data lives in: $(php -r 'require "vendor/autoload.php"; try { echo AlohaSocial\Server\Config\HostConfig::load(getcwd())->varDirectory; } catch (Throwable $e) { echo "var"; }')
+Keep this directory with the database and secret key across updates.
 EOF
 
 if [ "$admin_created" -eq 1 ]; then

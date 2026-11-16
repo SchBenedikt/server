@@ -9,6 +9,52 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.9.0] - 2026-11-16
+
+### Added
+
+- Guarded update command `bin/update.php`: it creates a verified database
+  backup before a pending migration, applies only additive migrations and
+  compares the account count before and after. A missing backup stops the
+  update; a shrinking account count prints the exact restore command.
+- `bin/backup.php` writes a consistent SQLite snapshot (`VACUUM INTO`) or a
+  PostgreSQL custom-format dump, verifies it, records the account count and
+  schema version in a JSON sidecar, and keeps the newest ten by default.
+- `bin/doctor.php` reports the database path, schema state, pending
+  migrations, account count, secret-key presence, writable runtime paths and
+  the newest backup without printing secrets.
+- `scripts/install.sh --data-dir=DIR` keeps the database, key, blobs and mail
+  outside the checkout, so replacing or cleaning a release directory cannot
+  delete a running instance.
+- Adopted the newer core schema: post pins, media collections, account moves,
+  moderation reports and actions, held posts, stories, notification policies
+  and sender requests, conversation mutes, recommendations, discovery index
+  and trends, inbound AT Protocol sync, account-deletion tombstones, the
+  optional native PDS and the new follower, notification and post columns.
+
+### Changed
+
+- The Docker entrypoint now runs `bin/update.php` instead of the low-level
+  migration runner, so SQLite deployments get the backup and account check on
+  every image update.
+- The installer and deployment guides use the guarded update path and explain
+  how to keep accounts across code changes, including the `docker compose
+  down -v` data-loss trap.
+- The core dependency is pinned to `fce4ca2`, which adds account export and
+  durable deletion alongside the schema above.
+
+### Fixed
+
+- The 0.8.0 host did not create the core tables added after its pinned
+  revision, so profile pages, public timelines, collections and pinned-post
+  writes failed with `no such table` after the core update.
+- A bare-metal update could silently point at a new SQLite file when the
+  release directory or data path changed; the data-directory option and the
+  doctor make the active path explicit.
+- Rebuilding the UI against the newer core failed because its Composer dist
+  archive omits `ui/`. The build now prepares the shared package automatically
+  and explains the `--prefer-source` fix when only the archive is installed.
+
 ## [0.8.0] - 2026-11-16
 
 ### Added

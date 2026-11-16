@@ -13,6 +13,9 @@ php bin/cleanup.php                # queue the retention cleanup
 php bin/cleanup.php --now          # run retention cleanup immediately
 php bin/routes.php                 # inspect the served route manifest
 php bin/set-password.php alice     # reset a password and revoke sessions
+php bin/backup.php                 # verified database backup
+php bin/update.php                 # backup, migrate and verify accounts
+php bin/doctor.php                 # diagnose data path, schema and key
 ```
 
 `php bin/worker.php` without `--once` is the supervised long-running worker.
@@ -151,6 +154,20 @@ Back up all state that is not reproducible from Git:
 - `.env` (configuration, including SMTP and database secrets)
 - optionally `var/mail/` if it contains messages you must retain
 
+The update command creates and verifies a database backup automatically:
+
+```shell
+php bin/backup.php                 # var/backups/, 10 newest kept
+php bin/backup.php --keep=30
+php bin/backup.php --json          # machine-readable path and account count
+```
+
+SQLite backups use `VACUUM INTO`, so they are consistent while WAL is active.
+PostgreSQL backups use `pg_dump` in custom format; install the matching client
+on the host. Each backup has a `.json` sidecar with the driver, account count
+and schema version. The backup directory lives inside `var/`, so move it to a
+second disk or copy it off-host as part of your normal backup job.
+
 The key and the database belong together: the instance signing key in the
 database is sealed with the secret key. Restoring one without the other leaves
 the instance unable to use its federation identity.
@@ -191,7 +208,8 @@ on a separate host. A backup that has never been restored is only a hope.
 2. Restore the database.
 3. Restore `var/secret.key`, `var/blobs/` and `.env` with the same ownership
    and permissions.
-4. Run `php bin/migrate.php` to confirm the schema is current.
+4. Run `php bin/doctor.php`; if a migration is pending, run
+   `php bin/update.php`.
 5. Start PHP-FPM and the worker.
 6. Verify `/healthz`, sign in, load `/app`, and open an existing image.
 7. Remove or rotate any credentials that were exposed during the incident.
@@ -200,21 +218,48 @@ on a separate host. A backup that has never been restored is only a hope.
 
 ```shell
 sudo systemctl stop aloha-worker
-# back up database, key and blobs
+# Optional but recommended: an additional off-host copy of var/ and .env.
 cd /srv/aloha
 git pull --ff-only
 composer install --no-dev --classmap-authoritative
-php bin/migrate.php
-# Only when the UI changed:
+php bin/update.php                 # backup, migrate, account check
+# Only when the UI changed (dev checkout; the committed bundle is enough
+# for a normal deployment):
+composer reinstall alohasocial/core --prefer-source
 npm --prefix ui ci
 npm --prefix ui run build
 sudo systemctl restart php8.3-fpm
 sudo systemctl start aloha-worker
+php bin/doctor.php                 # schema current, key present, paths writable
 ```
+
+`bin/update.php` writes a verified backup before applying migrations, then
+compares the account count. If the backup fails it refuses to migrate; if the
+count drops it prints the restore command. `bin/migrate.php` remains the
+low-level migration runner for development and tests, but the update command
+is the supported operator path.
 
 Read the migration output. The server refuses to boot with a pending
 migration rather than failing on the first request that touches a missing
 table. Restart PHP-FPM after code changes so opcache picks them up.
+
+### Keeping accounts across code changes
+
+An account consists of rows in the database plus the instance key. Neither
+lives in Git, but both can be lost by moving or deleting the wrong directory:
+
+- Keep `ALOHASOCIAL_VAR_DIRECTORY` (and the blob, key and mail paths) outside
+  the release directory. `scripts/install.sh --data-dir=/srv/aloha-data` sets
+  all four paths. A new checkout, a `git clean -fdx` or a replaced release
+  directory then cannot touch the running data.
+- In Docker, never run `docker compose down -v` on an instance you want to
+  keep: `-v` deletes the named volumes, including accounts and media. Plain
+  `docker compose down` and `docker compose up -d` keep them.
+- Do not delete `var/secret.key` while the database still contains accounts;
+  the sealed instance key becomes unreadable and federation identity is lost.
+- Run `php bin/doctor.php` after every update. It reports account count,
+  pending migrations, key presence and writable paths without printing
+  secrets.
 
 The core is a pinned Composer dependency. Update it deliberately, review the
 changelog, and run `composer test` before deploying if you have a development
@@ -246,7 +291,9 @@ convenience, not a monitoring signal.
 
 | Symptom | Likely cause | Action |
 | --- | --- | --- |
-| `The database schema is not installed` or `Pending migrations` | Migrations were skipped or a new version was deployed without migrating. | Run `php bin/migrate.php`; inspect output; restart PHP-FPM/worker. |
+| `The database schema is not installed` or `Pending migrations` | Migrations were skipped or a new version was deployed without migrating. | Run `php bin/update.php`; inspect output; restart PHP-FPM/worker. |
+| Accounts seem to be gone after an update | Wrong data directory, a lost Docker volume, or a release directory that was replaced. | Stop services; check `php bin/doctor.php` for the database path; restore the newest `var/backups/*.sqlite` or the PostgreSQL dump with `var/secret.key`; set `--data-dir` for the next install. Never use `docker compose down -v`. |
+| `Migration stopped: the safety backup could not be created` | `var/backups` is not writable, or `pg_dump` is missing/incompatible. | Fix permissions or install the matching PostgreSQL client; run `php bin/backup.php`; only then retry. `--allow-unbacked` is a last resort. |
 | `/healthz` is green but pages return 500 | Database, key or schema problem. | Check the PHP error log; set `ALOHASOCIAL_DEBUG=true` temporarily. |
 | Login succeeds but the next request is signed out | Origin mismatch or secure-cookie policy. | Use the exact `ALOHASOCIAL_INSTANCE_URL` origin; use HTTPS in production; check proxy/forwarding. |
 | `csrf_token_invalid` from the UI | The page has no CSRF token or the session changed. | Reload `/app`; ensure cookies are enabled; check that the app is served from the same origin as the API. |

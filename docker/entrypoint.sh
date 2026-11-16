@@ -4,7 +4,8 @@
 #
 # Responsibilities, in order:
 #   1. create the writable runtime directories,
-#   2. wait for the database and apply pending migrations,
+#   2. wait for the database and apply pending migrations through the
+#      guarded updater (backup plus account-count verification),
 #   3. optionally bootstrap the first admin account on an empty instance,
 #   4. hand over to the command from docker-compose (Apache or the worker).
 #
@@ -30,12 +31,18 @@ log() {
     printf '[aloha] %s\n' "$*" >&2
 }
 
+update_args="--quiet"
+case "${ALOHASOCIAL_DB_DSN:-}" in
+    pgsql:*) update_args="$update_args --allow-unbacked" ;;
+esac
+
 wait_for_database() {
     attempt=1
     max_attempts="${ALOHASOCIAL_DB_WAIT_ATTEMPTS:-60}"
 
     while :; do
-        if php bin/migrate.php; then
+        # shellcheck disable=SC2086
+        if php bin/update.php $update_args; then
             return 0
         fi
 
@@ -52,6 +59,8 @@ wait_for_database() {
 
 # Only the HTTP process owns migrations. The worker waits for the app's
 # healthcheck in docker-compose, so two containers never migrate concurrently.
+# The updater backs up the database before applying a pending migration and
+# refuses to continue when the account count drops.
 if [ "${1:-}" = "apache2-foreground" ]; then
     wait_for_database
 

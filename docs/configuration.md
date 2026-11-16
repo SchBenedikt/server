@@ -66,6 +66,13 @@ user.
 `ALOHASOCIAL_VAR_DIRECTORY` and `ALOHASOCIAL_BLOB_DIRECTORY` are created if
 needed. The PHP user must be able to write them.
 
+On a host that updates the checkout in place, use an absolute data directory
+outside the release, for example `/srv/aloha-data`, and point all four paths
+(`var`, `blobs`, `secret key file`, `mail log`) at it. Otherwise a fresh clone,
+a release swap or `git clean -fdx` can remove the SQLite database, the secret
+key and uploaded media without any warning. `scripts/install.sh --data-dir=DIR`
+writes this configuration.
+
 ## Sessions and cookies
 
 | Variable | Config file key | Default | Meaning |

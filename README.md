@@ -22,9 +22,10 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 | [Documentation index](docs/README.md) | A short route through all guides |
 | [Changelog](CHANGELOG.md) | Release history and versioning rules |
 
-**Status: release 0.8.0** — phases 0–6 of the blueprint plus account mail, the
-shared Vue UI, host-owned community and moderation features, and a federation
-smoke test. The standalone instance signs, delivers and accepts ActivityPub,
+**Status: release 0.9.0** — phases 0–6 of the blueprint plus account mail, the
+shared Vue UI, host-owned community and moderation features, a federation
+smoke test and a guarded update path that keeps accounts, keys and media in
+place. The standalone instance signs, delivers and accepts ActivityPub,
 resets passwords by email and serves the shared Vue app. Release history and
 the versioning rules are in [CHANGELOG.md](CHANGELOG.md).
 
@@ -106,7 +107,7 @@ For every local and production procedure use
 ```shell
 composer install
 cp .env.example .env          # adjust the instance URL and database
-php bin/migrate.php           # creates the core and host schema
+php bin/update.php            # creates the schema; backs up before upgrades
 php bin/create-account.php alice alice@example.com --admin
 php -S localhost:3000 -t public public/index.php
 ```
@@ -119,6 +120,27 @@ Vue interface; without SMTP the password-reset mail is written to
 Registration is disabled by design (`instance.registrations=false`). Create
 each account with `bin/create-account.php`; the command prompts for a password
 unless `--password=…` is supplied.
+
+### Updates without recreating accounts
+
+`php bin/update.php` is the supported update command. When accounts exist, it
+writes a verified backup to `var/backups/`, applies only pending additive
+migrations and compares the account count before and after. If the backup
+cannot be created it stops instead of migrating; if the account count drops it
+prints the exact restore command. `php bin/doctor.php` shows the database path,
+schema state, key, writable directories and newest backup.
+
+For a bare-metal host, keep runtime state outside the release directory so a
+new checkout cannot replace it:
+
+```shell
+scripts/install.sh --data-dir=/srv/aloha-data …
+```
+
+That writes `ALOHASOCIAL_VAR_DIRECTORY`, `ALOHASOCIAL_BLOB_DIRECTORY`,
+`ALOHASOCIAL_SECRET_KEY_FILE` and `ALOHASOCIAL_MAIL_LOG_DIR` into `.env`. The
+Docker stack already keeps `var/` in the named `aloha-social_aloha-var`
+volume.
 
 For a production instance, point the web server at `public/` and run PHP-FPM;
 serve every request through `public/index.php` (the core route manifest lives
@@ -133,6 +155,9 @@ php bin/worker.php --once     # one batch, for cron
 php bin/cleanup.php           # queue the bounded retention job
 php bin/cleanup.php --now     # run it once, without the queue
 php bin/set-password.php bob  # change a password and revoke its sessions
+php bin/backup.php            # verified database backup plus metadata
+php bin/update.php            # backup, migrate and verify accounts
+php bin/doctor.php            # diagnose data path, schema, key and backups
 ```
 
 Cron alternatives:
@@ -407,7 +432,10 @@ rules and production examples.
 
 ```
 public/index.php          one entry point: boot, authenticate, dispatch
-bin/migrate.php           migration runner
+bin/update.php            backup, migrate and verify accounts
+bin/backup.php            verified database backup with metadata
+bin/doctor.php            data-path, schema, key and backup diagnostics
+bin/migrate.php           low-level migration runner
 bin/worker.php            core worker loop (`runOnce`)
 bin/cleanup.php           queue or run the bounded retention job
 bin/create-account.php    account creation (installer step, CLI)
@@ -421,6 +449,7 @@ src/Bootstrap/            boot sequence 1-9: config, PDO, keys, ports, assembly
 src/Config/               host config + the `social/*` config the core reads
 src/Db/                   PDO factory (sqlite/pgsql)
 src/Migrations/           schema_migration runner + core schema adoption
+src/Support/              database backup and operator support
 src/Accounts/             account table, core LocalActorDirectory/Search/Count
 src/Auth/                 sessions, rotation, CSRF, password hashing, reset, throttle
 src/Mail/                 log and SMTP transports

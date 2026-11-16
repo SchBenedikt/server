@@ -35,6 +35,18 @@ final class MigrationTest extends TestCase
             'social_job',
             'social_activity_log',
             'social_atproto_publication',
+            'social_post_pin',
+            'social_media_collection',
+            'social_media_collection_item',
+            'social_account_move',
+            'social_report',
+            'social_moderation_action',
+            'social_held_post',
+            'social_story',
+            'social_search_index',
+            'social_recommendation_preference',
+            'social_account_deletion',
+            'social_pds_identity',
             'account',
             'session',
             'login_attempt',
@@ -53,6 +65,29 @@ final class MigrationTest extends TestCase
 
         self::assertSame([], $runner->migrate());
         self::assertCount(count(Migrations::all()), $runner->applied());
+    }
+
+    public function testCoreUpdateMigrationIsAdditiveAndPreservesAccounts(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('keeper');
+        $database = $server->runtime->database;
+        $before = (int) $database->fetchValue('SELECT COUNT(*) FROM account');
+
+        // Simulate an installation that has not run the newest migration yet.
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611160007'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611160007'], $runner->migrate());
+
+        self::assertSame($before, (int) $database->fetchValue('SELECT COUNT(*) FROM account'));
+        self::assertSame('keeper', (string) $database->fetchValue('SELECT id FROM account'));
+        self::assertSame(
+            1,
+            (int) $database->fetchValue(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'social_post_pin'",
+            ),
+        );
     }
 
     public function testChangedChecksumIsRejected(): void

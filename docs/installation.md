@@ -58,7 +58,8 @@ scripts/install.sh \
 ```
 
 `scripts/install.sh --help` lists every option, including `--interactive` to
-force the wizard, `--non-interactive` to never prompt, and
+force the wizard, `--non-interactive` to never prompt, `--data-dir=DIR` to
+keep the database, key and media outside the checkout, and
 `--write-service-files` for a matching systemd unit and Nginx server block.
 Without `--handle` and without the wizard it leaves account creation to you.
 The script does not start PHP-FPM, Nginx or the worker; the sections below
@@ -149,11 +150,14 @@ Never commit `.env`. It is already excluded by `.gitignore`.
 ### 3. Create the database schema
 
 ```shell
-php bin/migrate.php
+php bin/update.php
 ```
 
-This creates the core and host tables and records the migration versions.
-Running it twice is safe and prints `Nothing to migrate.`
+This creates the core and host tables, records the migration versions and, on
+an existing installation, creates a verified backup before changing anything.
+Running it twice is safe and prints `Nothing to migrate.` `php bin/doctor.php`
+checks the result. `bin/migrate.php` remains available as the low-level runner
+for development; operators should use `bin/update.php`.
 
 On first application boot, `var/secret.key` is generated. It encrypts the
 instance signing key stored in the database. **Back it up with the database.**
@@ -181,6 +185,18 @@ php bin/create-account.php alice alice@example.com \
 The handle is the account ID and is immutable. It must be 2–30 lower-case
 characters (`a-z`, `0-9`, `_`, `-`). `--admin` stores the admin role; account
 roles do not replace the deployment's own access controls.
+
+For a host that will be updated in place, keep runtime state outside the
+release directory before creating accounts:
+
+```shell
+scripts/install.sh --data-dir=/srv/aloha-data …
+```
+
+This sets `ALOHASOCIAL_VAR_DIRECTORY`, `ALOHASOCIAL_BLOB_DIRECTORY`,
+`ALOHASOCIAL_SECRET_KEY_FILE` and `ALOHASOCIAL_MAIL_LOG_DIR`. A later release
+directory, `git clean` or checkout replacement then cannot delete accounts,
+the secret key or uploaded media. Back up that directory with the database.
 
 ### 5. Start the development server
 
@@ -329,7 +345,7 @@ development default. Use `smtp` in production so password resets reach users.
 
 ```shell
 sudo -u aloha -H bash -lc 'cd /srv/aloha && composer install --no-dev --classmap-authoritative'
-sudo -u aloha -H bash -lc 'cd /srv/aloha && php bin/migrate.php'
+sudo -u aloha -H bash -lc 'cd /srv/aloha && php bin/update.php'
 sudo -u aloha -H bash -lc 'cd /srv/aloha && php bin/create-account.php admin admin@example --admin'
 ```
 
@@ -461,7 +477,8 @@ Then verify in a browser over the real HTTPS origin:
 1. Put the instance in maintenance mode or stop the worker.
 2. Back up the database, `var/secret.key` and `var/blobs/`.
 3. Fetch the new code and run `composer install --no-dev`.
-4. Run `php bin/migrate.php` and inspect the applied versions.
+4. Run `php bin/doctor.php`; if a migration is pending, run
+   `php bin/update.php` and inspect the applied versions.
 5. Rebuild the UI only if the frontend changed:
    `npm --prefix ui ci && npm --prefix ui run build`.
 6. Restart PHP-FPM and the worker.

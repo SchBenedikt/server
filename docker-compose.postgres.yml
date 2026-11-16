@@ -44,4 +44,7 @@ services:
       start_period: 10s
 
 volumes:
+  # Match the volume name used by the `aloha-social` Compose project, so a
+  # changed project name cannot silently create a new, empty database cluster.
   aloha-db:
+    name: aloha-social_aloha-db
