@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import AddToCollectionDialog from './AddToCollectionDialog.vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
+import EditHistoryDialog from './EditHistoryDialog.vue';
 import MediaGrid from './MediaGrid.vue';
 import ReportDialog from './ReportDialog.vue';
 import RichText from './RichText.vue';
@@ -248,6 +250,8 @@ const menuOpen = ref(false);
 const bookmarked = ref(props.post.bookmarked === true);
 const bookmarking = ref(false);
 const reportOpen = ref(false);
+const historyOpen = ref(false);
+const collectionOpen = ref(false);
 
 watch(() => props.post.bookmarked, (value) => {
 	if (value !== undefined) {
@@ -643,6 +647,22 @@ onUnmounted(() => {
 					<button v-if="canQuote" type="button" role="menuitem" @click.stop="quote(); menuOpen = false">
 						<AppIcon name="quote" :size="15" /> Beitrag zitieren
 					</button>
+					<button
+						v-if="localId"
+						type="button"
+						role="menuitem"
+						@click.stop="collectionOpen = true; menuOpen = false"
+					>
+						<AppIcon name="list" :size="15" /> Zu Sammlung hinzufügen
+					</button>
+					<button
+						v-if="localId && post.revision !== undefined && post.revision > 1"
+						type="button"
+						role="menuitem"
+						@click.stop="historyOpen = true; menuOpen = false"
+					>
+						<AppIcon name="clock" :size="15" /> Bearbeitungshistorie
+					</button>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
 						<AppIcon name="flag" :size="15" /> Beitrag melden
 					</button>
@@ -936,4 +956,16 @@ onUnmounted(() => {
 			@close="reportOpen = false"
 		/>
 	</article>
+
+	<EditHistoryDialog
+		:open="historyOpen"
+		:post-id="localId ?? ''"
+		@close="historyOpen = false"
+	/>
+
+	<AddToCollectionDialog
+		:open="collectionOpen"
+		:post-id="localId ?? ''"
+		@close="collectionOpen = false"
+	/>
 </template>

@@ -25,7 +25,10 @@ import HomeView from './views/HomeView.vue';
 import ListView from './views/ListView.vue';
 import ListsView from './views/ListsView.vue';
 import MutesView from './views/MutesView.vue';
+import MemoriesView from './views/MemoriesView.vue';
 import MessagesView from './views/MessagesView.vue';
+import CollectionView from './views/CollectionView.vue';
+import CollectionsView from './views/CollectionsView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import NotificationsView from './views/NotificationsView.vue';
 import PostView from './views/PostView.vue';
@@ -83,6 +86,12 @@ const currentView = computed(() => {
 			return MessagesView;
 		case 'conversation':
 			return ConversationView;
+		case 'memories':
+			return MemoriesView;
+		case 'collections':
+			return CollectionsView;
+		case 'collection':
+			return CollectionView;
 		case 'admin':
 			return AdminView;
 		case 'home':
@@ -105,6 +114,8 @@ const viewKey = computed(() => {
 			return `list:${current.id}`;
 		case 'conversation':
 			return `conversation:${current.id}`;
+		case 'collection':
+			return `collection:${current.id}`;
 		case 'admin':
 			return `admin:${current.section}`;
 		default:

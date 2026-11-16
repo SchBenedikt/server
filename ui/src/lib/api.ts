@@ -32,6 +32,14 @@ import type {
 	SearchResults,
 	TimelineItem,
 	UpdatePostPayload,
+	Announcement,
+	FeaturedTag,
+	TrendsData,
+	MemoriesData,
+	StoriesData,
+	Story,
+	Collection,
+	PostRevisionData,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -85,6 +93,25 @@ export interface Api {
 	likePost(id: string): Promise<PostInteraction>;
 	unlikePost(id: string): Promise<PostInteraction>;
 	updateProfile(displayName: string): Promise<string>;
+	announcements(all?: boolean): Promise<Announcement[]>;
+	createAnnouncement(content: string, expiresAt?: string | null): Promise<Announcement>;
+	updateAnnouncement(id: string, payload: { content?: string; active?: boolean; expires_at?: string | null }): Promise<Announcement>;
+	deleteAnnouncement(id: string): Promise<void>;
+	featuredTags(account?: string): Promise<FeaturedTag[]>;
+	setFeaturedTags(tags: string[]): Promise<FeaturedTag[]>;
+	trends(days?: number, limit?: number): Promise<TrendsData>;
+	memories(): Promise<MemoriesData>;
+	stories(): Promise<StoriesData>;
+	createStory(content: string, background?: string): Promise<Story>;
+	deleteStory(id: string): Promise<void>;
+	collections(account?: string): Promise<Collection[]>;
+	collection(id: string): Promise<Collection>;
+	createCollection(title: string, description?: string, isPublic?: boolean): Promise<Collection>;
+	updateCollection(id: string, payload: { title?: string; description?: string; is_public?: boolean }): Promise<Collection>;
+	deleteCollection(id: string): Promise<void>;
+	addCollectionItem(id: string, postId: string): Promise<Collection>;
+	removeCollectionItem(id: string, postId: string): Promise<Collection>;
+	postRevisions(id: string): Promise<PostRevisionData>;
 	followedTags(): Promise<FollowedTag[]>;
 	followTag(tag: string): Promise<void>;
 	unfollowTag(tag: string): Promise<void>;
@@ -661,6 +688,26 @@ function normalizeBlock(value: unknown): BlockEntry | null {
 		id: value.id,
 		actor: value.actor,
 		blocked_at: typeof value.blocked_at === 'string' ? value.blocked_at : '',
+	};
+}
+
+function normalizeCollection(value: unknown): Collection | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.title !== 'string') {
+		return null;
+	}
+
+	return {
+		id: value.id,
+		account_id: typeof value.account_id === 'string' ? value.account_id : '',
+		title: value.title,
+		description: typeof value.description === 'string' ? value.description : '',
+		is_public: value.is_public === true,
+		item_count: typeof value.item_count === 'number' ? value.item_count : 0,
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		updated_at: typeof value.updated_at === 'string' ? value.updated_at : '',
+		post_ids: Array.isArray(value.post_ids)
+			? value.post_ids.filter((id): id is string => typeof id === 'string')
+			: undefined,
 	};
 }
 
@@ -1521,6 +1568,340 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return data.account.display_name;
+		},
+
+		async announcements(all = false): Promise<Announcement[]> {
+			const data = await request<{ announcements?: unknown }>(
+				'GET',
+				'/api/v1/host/announcements',
+				all ? { all: '1' } : undefined,
+			);
+
+			return Array.isArray(data?.announcements)
+				? data.announcements.filter(isRecord).map((row) => ({
+					id: String(row.id ?? ''),
+					author_id: String(row.author_id ?? ''),
+					content: String(row.content ?? ''),
+					active: row.active === true,
+					created_at: String(row.created_at ?? ''),
+					updated_at: String(row.updated_at ?? ''),
+					expires_at: typeof row.expires_at === 'string' ? row.expires_at : null,
+					expired: row.expired === true,
+				})).filter((row) => row.id !== '')
+				: [];
+		},
+
+		async createAnnouncement(content: string, expiresAt: string | null = null): Promise<Announcement> {
+			const data = await request<{ announcement?: unknown }>(
+				'POST',
+				'/api/v1/host/announcements',
+				undefined,
+				{ content, expires_at: expiresAt },
+			);
+			const row = isRecord(data?.announcement) ? data.announcement : null;
+			if (row === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Ankündigung.');
+			}
+
+			return {
+				id: String(row.id ?? ''),
+				author_id: String(row.author_id ?? ''),
+				content: String(row.content ?? ''),
+				active: row.active === true,
+				created_at: String(row.created_at ?? ''),
+				updated_at: String(row.updated_at ?? ''),
+				expires_at: typeof row.expires_at === 'string' ? row.expires_at : null,
+				expired: row.expired === true,
+			};
+		},
+
+		async updateAnnouncement(
+			id: string,
+			payload: { content?: string; active?: boolean; expires_at?: string | null },
+		): Promise<Announcement> {
+			const data = await request<{ announcement?: unknown }>(
+				'PATCH',
+				`/api/v1/host/announcements/${encodeURIComponent(id)}`,
+				undefined,
+				payload,
+			);
+			const row = isRecord(data?.announcement) ? data.announcement : null;
+			if (row === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Ankündigung.');
+			}
+
+			return {
+				id: String(row.id ?? ''),
+				author_id: String(row.author_id ?? ''),
+				content: String(row.content ?? ''),
+				active: row.active === true,
+				created_at: String(row.created_at ?? ''),
+				updated_at: String(row.updated_at ?? ''),
+				expires_at: typeof row.expires_at === 'string' ? row.expires_at : null,
+				expired: row.expired === true,
+			};
+		},
+
+		async deleteAnnouncement(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/announcements/${encodeURIComponent(id)}`);
+		},
+
+		async featuredTags(account?: string): Promise<FeaturedTag[]> {
+			const data = await request<{ tags?: unknown }>(
+				'GET',
+				'/api/v1/host/featured-tags',
+				account === undefined ? undefined : { account },
+			);
+
+			return Array.isArray(data?.tags)
+				? data.tags.filter(isRecord).map((tag) => ({
+					tag: String(tag.tag ?? ''),
+					position: typeof tag.position === 'number' ? tag.position : 0,
+				})).filter((tag) => tag.tag !== '')
+				: [];
+		},
+
+		async setFeaturedTags(tags: string[]): Promise<FeaturedTag[]> {
+			const data = await request<{ tags?: unknown }>(
+				'PUT',
+				'/api/v1/host/featured-tags',
+				undefined,
+				{ tags },
+			);
+
+			return Array.isArray(data?.tags)
+				? data.tags.filter(isRecord).map((tag) => ({
+					tag: String(tag.tag ?? ''),
+					position: typeof tag.position === 'number' ? tag.position : 0,
+				})).filter((tag) => tag.tag !== '')
+				: [];
+		},
+
+		async trends(days = 7, limit = 10): Promise<TrendsData> {
+			const data = await request<{ tags?: unknown; links?: unknown }>(
+				'GET',
+				'/api/v1/host/trends',
+				{ days: String(days), limit: String(limit) },
+			);
+
+			return {
+				tags: Array.isArray(data?.tags)
+					? data.tags.filter(isRecord).map((tag) => ({
+						tag: String(tag.tag ?? ''),
+						posts: typeof tag.posts === 'number' ? tag.posts : 0,
+						accounts: typeof tag.accounts === 'number' ? tag.accounts : 0,
+					})).filter((tag) => tag.tag !== '')
+					: [],
+				links: Array.isArray(data?.links)
+					? data.links.filter(isRecord).map((link) => ({
+						url: String(link.url ?? ''),
+						host: String(link.host ?? ''),
+						posts: typeof link.posts === 'number' ? link.posts : 0,
+					})).filter((link) => link.url !== '')
+					: [],
+			};
+		},
+
+		async memories(): Promise<MemoriesData> {
+			const data = await request<{ date?: unknown; total?: unknown; years?: unknown }>(
+				'GET',
+				'/api/v1/host/memories',
+			);
+
+			return {
+				date: String(data?.date ?? ''),
+				total: typeof data?.total === 'number' ? data.total : 0,
+				years: Array.isArray(data?.years)
+					? data.years.filter(isRecord).map((year) => ({
+						year: typeof year.year === 'number' ? year.year : 0,
+						posts: Array.isArray(year.posts)
+							? year.posts.filter(isRecord).map((post) => ({
+								id: String(post.id ?? ''),
+								published_at: String(post.published_at ?? ''),
+							})).filter((post) => post.id !== '')
+							: [],
+					}))
+					: [],
+			};
+		},
+
+		async stories(): Promise<StoriesData> {
+			const data = await request<{ stories?: unknown; groups?: unknown }>('GET', '/api/v1/host/stories');
+			const story = (row: Record<string, unknown>): Story => ({
+				id: String(row.id ?? ''),
+				account_id: String(row.account_id ?? ''),
+				content: String(row.content ?? ''),
+				background: String(row.background ?? 'ocean'),
+				created_at: String(row.created_at ?? ''),
+				expires_at: String(row.expires_at ?? ''),
+			});
+
+			return {
+				stories: Array.isArray(data?.stories)
+					? data.stories.filter(isRecord).map(story).filter((item) => item.id !== '')
+					: [],
+				groups: Array.isArray(data?.groups)
+					? data.groups.filter(isRecord).map((group) => ({
+						account_id: String(group.account_id ?? ''),
+						stories: Array.isArray(group.stories)
+							? group.stories.filter(isRecord).map(story).filter((item) => item.id !== '')
+							: [],
+					}))
+					: [],
+			};
+		},
+
+		async createStory(content: string, background = 'ocean'): Promise<Story> {
+			const data = await request<{ story?: unknown }>(
+				'POST',
+				'/api/v1/host/stories',
+				undefined,
+				{ content, background },
+			);
+			const row = isRecord(data?.story) ? data.story : null;
+			if (row === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Story.');
+			}
+
+			return {
+				id: String(row.id ?? ''),
+				account_id: String(row.account_id ?? ''),
+				content: String(row.content ?? ''),
+				background: String(row.background ?? 'ocean'),
+				created_at: String(row.created_at ?? ''),
+				expires_at: String(row.expires_at ?? ''),
+			};
+		},
+
+		async deleteStory(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/stories/${encodeURIComponent(id)}`);
+		},
+
+		async collections(account?: string): Promise<Collection[]> {
+			const data = await request<{ collections?: unknown }>(
+				'GET',
+				'/api/v1/host/collections',
+				account === undefined ? undefined : { account },
+			);
+
+			return Array.isArray(data?.collections)
+				? data.collections.map(normalizeCollection).filter((item): item is Collection => item !== null)
+				: [];
+		},
+
+		async collection(id: string): Promise<Collection> {
+			const data = await request<{ collection?: unknown }>(
+				'GET',
+				'/api/v1/host/collection',
+				{ id },
+			);
+			const collection = normalizeCollection(data?.collection);
+			if (collection === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+			}
+
+			return collection;
+		},
+
+		async createCollection(title: string, description = '', isPublic = true): Promise<Collection> {
+			const data = await request<{ collection?: unknown }>(
+				'POST',
+				'/api/v1/host/collections',
+				undefined,
+				{ title, description, is_public: isPublic },
+			);
+			const collection = normalizeCollection(data?.collection);
+			if (collection === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+			}
+
+			return collection;
+		},
+
+		async updateCollection(
+			id: string,
+			payload: { title?: string; description?: string; is_public?: boolean },
+		): Promise<Collection> {
+			const data = await request<{ collection?: unknown }>(
+				'PATCH',
+				`/api/v1/host/collections/${encodeURIComponent(id)}`,
+				undefined,
+				payload,
+			);
+			const collection = normalizeCollection(data?.collection);
+			if (collection === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+			}
+
+			return collection;
+		},
+
+		async deleteCollection(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/collections/${encodeURIComponent(id)}`);
+		},
+
+		async addCollectionItem(id: string, postId: string): Promise<Collection> {
+			const data = await request<{ collection?: unknown }>(
+				'POST',
+				`/api/v1/host/collections/${encodeURIComponent(id)}/items`,
+				undefined,
+				{ post_id: postId },
+			);
+			const collection = normalizeCollection(data?.collection);
+			if (collection === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+			}
+
+			return collection;
+		},
+
+		async removeCollectionItem(id: string, postId: string): Promise<Collection> {
+			const data = await request<{ collection?: unknown }>(
+				'DELETE',
+				`/api/v1/host/collections/${encodeURIComponent(id)}/items/${encodeURIComponent(postId)}`,
+			);
+			const collection = normalizeCollection(data?.collection);
+			if (collection === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keine Sammlung.');
+			}
+
+			return collection;
+		},
+
+		async postRevisions(id: string): Promise<PostRevisionData> {
+			const data = await request<{
+				post_id?: unknown;
+				current_revision?: unknown;
+				current?: unknown;
+				revisions?: unknown;
+			}>('GET', '/api/v1/host/post-revisions', { id });
+
+			const current = isRecord(data?.current) ? data.current : {};
+			const revisions = Array.isArray(data?.revisions)
+				? data.revisions.filter(isRecord).map((revision) => ({
+					post_id: String(revision.post_id ?? id),
+					revision: typeof revision.revision === 'number' ? revision.revision : 0,
+					content: String(revision.content ?? ''),
+					content_warning: typeof revision.content_warning === 'string' ? revision.content_warning : null,
+					visibility: String(revision.visibility ?? 'public'),
+					attachment_ids: Array.isArray(revision.attachment_ids)
+						? revision.attachment_ids.filter((value): value is string => typeof value === 'string')
+						: [],
+					edited_at: String(revision.edited_at ?? ''),
+				}))
+				: [];
+
+			return {
+				post_id: String(data?.post_id ?? id),
+				current_revision: typeof data?.current_revision === 'number' ? data.current_revision : revisions.length + 1,
+				current: {
+					content: String(current.content ?? ''),
+					content_warning: typeof current.content_warning === 'string' ? current.content_warning : null,
+					visibility: String(current.visibility ?? 'public'),
+					edited_at: typeof current.edited_at === 'string' ? current.edited_at : null,
+				},
+				revisions,
+			};
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {

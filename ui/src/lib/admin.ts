@@ -14,6 +14,7 @@ export type AdminSection =
 	| 'federation'
 	| 'queue'
 	| 'settings'
+	| 'announcements'
 	| 'audit';
 
 export interface AdminSectionDefinition {
@@ -30,6 +31,7 @@ export const ADMIN_SECTIONS: AdminSectionDefinition[] = [
 	{ id: 'federation', label: 'Föderation', icon: 'globe', hint: 'Peers, Blockierungen und entfernte Beiträge' },
 	{ id: 'queue', label: 'Warteschlange', icon: 'server', hint: 'Jobs, Wiederholungen und tote Aufgaben' },
 	{ id: 'settings', label: 'Instanz', icon: 'settings', hint: 'Laufzeit, Grenzen und Konfigurationswarnungen' },
+	{ id: 'announcements', label: 'Ankündigungen', icon: 'bell', hint: 'Hinweise als Banner auf der Startseite veröffentlichen' },
 	{ id: 'audit', label: 'Protokoll', icon: 'shield', hint: 'Jede administrative Änderung, nachvollziehbar' },
 ];
 

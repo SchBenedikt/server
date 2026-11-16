@@ -18,7 +18,7 @@ import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { accountName, absoluteTime, avatarStyle, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
 import { appState, openComposer, showToast } from '../lib/state';
-import type { Account, RemoteProfileData, TimelineItem } from '../lib/types';
+import type { Account, FeaturedTag, RemoteProfileData, TimelineItem } from '../lib/types';
 
 const PAGE_SIZE = 40;
 
@@ -62,6 +62,8 @@ const tab = ref<'posts' | 'media'>('posts');
 const posts = ref<TimelineItem[]>([]);
 const postsLoading = ref(false);
 const postsError = ref('');
+const featuredTags = ref<FeaturedTag[]>([]);
+const editTags = ref('');
 const editing = ref(false);
 const editName = ref('');
 const editSaving = ref(false);
@@ -328,6 +330,20 @@ async function loadProfile(): Promise<void> {
 
 	if (current === generation && error.value === '') {
 		await loadPosts(true);
+		void loadFeaturedTags();
+	}
+}
+
+async function loadFeaturedTags(): Promise<void> {
+	if (handle.value === '' || isRemoteProfile.value) {
+		featuredTags.value = [];
+		return;
+	}
+
+	try {
+		featuredTags.value = await getApi().featuredTags(handle.value);
+	} catch {
+		featuredTags.value = [];
 	}
 }
 
@@ -588,6 +604,7 @@ function openEdit(): void {
 		|| account.value?.display_name
 		|| handle.value;
 	editError.value = '';
+	editTags.value = featuredTags.value.map((tag) => tag.tag).join(', ');
 	editing.value = true;
 }
 
@@ -612,6 +629,10 @@ async function saveProfile(): Promise<void> {
 	editError.value = '';
 	try {
 		const saved = await getApi().updateProfile(name);
+		if (isSelf.value) {
+			const tags = editTags.value.split(',').map((tag) => tag.trim()).filter((tag) => tag !== '');
+			featuredTags.value = await getApi().setFeaturedTags(tags);
+		}
 		if (appState.session.user !== null) {
 			appState.session.user.displayName = saved;
 		}
@@ -809,6 +830,17 @@ onUnmounted(() => {
 
 					<p v-if="isRemoteProfile && account.bio" class="a-profile__bio">{{ account.bio }}</p>
 
+					<div v-if="!isRemoteProfile && featuredTags.length > 0" class="a-profile__featured">
+						<a
+							v-for="tag in featuredTags"
+							:key="tag.tag"
+							:href="`#/tag/${encodeURIComponent(tag.tag)}`"
+							class="a-profile__featured-tag"
+						>
+							#{{ tag.tag }}
+						</a>
+					</div>
+
 					<p class="a-profile__note">
 						<AppIcon name="globe" :size="15" />
 						<template v-if="isRemoteProfile">
@@ -976,6 +1008,17 @@ onUnmounted(() => {
 					required
 				/>
 				<p class="a-profile-edit__hint">So erscheinst du in Beiträgen und Benachrichtigungen. Dein Handle @{{ handleText }} bleibt unverändert.</p>
+
+				<label class="a-profile-edit__label" for="a-profile-featured-tags">Profil-Hashtags</label>
+				<input
+					id="a-profile-featured-tags"
+					v-model="editTags"
+					type="text"
+					maxlength="600"
+					placeholder="z. B. fediverse, fotografie, linux"
+				/>
+				<p class="a-profile-edit__hint">Bis zu 10 Hashtags, durch Kommas getrennt. Sie erscheinen als Schnellzugriff auf deinem Profil.</p>
+
 				<p v-if="editError" class="a-form-error" role="alert">{{ editError }}</p>
 
 				<footer class="a-profile-edit__actions">
