@@ -18,6 +18,8 @@ const items = computed(() => {
 		{ name: 'search', label: 'Suchen', icon: 'search', href: '#/search' },
 		{ name: 'messages', label: 'Nachrichten', icon: 'message', href: '#/messages' },
 		{ name: 'memories', label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
+		{ name: 'drafts', label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
+		{ name: 'archived', label: 'Archiv', icon: 'archive', href: '#/archived' },
 		{ name: 'collections', label: 'Sammlungen', icon: 'list', href: '#/collections' },
 		{ name: 'notifications', label: 'Mitteilungen', icon: 'bell', href: '#/notifications' },
 		{

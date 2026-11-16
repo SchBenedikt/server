@@ -249,6 +249,7 @@ const confirmingDelete = ref(false);
 const menuOpen = ref(false);
 const bookmarked = ref(props.post.bookmarked === true);
 const bookmarking = ref(false);
+const archiving = ref(false);
 const reportOpen = ref(false);
 const historyOpen = ref(false);
 const collectionOpen = ref(false);
@@ -506,6 +507,23 @@ async function toggleBookmark(): Promise<void> {
 	}
 }
 
+async function archive(): Promise<void> {
+	if (localId.value === null || archiving.value) {
+		return;
+	}
+
+	archiving.value = true;
+	menuOpen.value = false;
+	try {
+		await getApi().archivePost(localId.value);
+		showToast('Beitrag archiviert. Du findest ihn unter „Archiv“.', 'success');
+	} catch (error) {
+		showToast(error instanceof Error ? error.message : 'Der Beitrag konnte nicht archiviert werden.', 'error');
+	} finally {
+		archiving.value = false;
+	}
+}
+
 async function share(): Promise<void> {
 	if (shareUrl.value === '' || sharing.value) {
 		return;
@@ -662,6 +680,15 @@ onUnmounted(() => {
 						@click.stop="historyOpen = true; menuOpen = false"
 					>
 						<AppIcon name="clock" :size="15" /> Bearbeitungshistorie
+					</button>
+					<button
+						v-if="isMine && localId"
+						type="button"
+						role="menuitem"
+						:disabled="archiving"
+						@click.stop="archive"
+					>
+						<AppIcon name="archive" :size="15" /> Archivieren
 					</button>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
 						<AppIcon name="flag" :size="15" /> Beitrag melden

@@ -43,6 +43,8 @@ const items = computed(() => {
 		base.push(
 			{ name: 'messages' as const, label: 'Nachrichten', icon: 'message', href: '#/messages' },
 			{ name: 'memories' as const, label: 'Erinnerungen', icon: 'clock', href: '#/memories' },
+			{ name: 'drafts' as const, label: 'Entwürfe', icon: 'pen', href: '#/drafts' },
+			{ name: 'archived' as const, label: 'Archiv', icon: 'archive', href: '#/archived' },
 			{ name: 'collections' as const, label: 'Sammlungen', icon: 'list', href: '#/collections' },
 			{ name: 'bookmarks' as const, label: 'Lesezeichen', icon: 'bookmark', href: '#/bookmarks' },
 			{ name: 'lists' as const, label: 'Listen', icon: 'list', href: '#/lists' },

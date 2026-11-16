@@ -419,4 +419,39 @@ export interface PostRevisionData {
 	revisions: PostRevision[];
 }
 
+
+export interface DraftPoll {
+	options: string[];
+	multiple: boolean;
+	hide_totals: boolean;
+	expires_in: number;
+}
+
+export interface Draft {
+	id: string;
+	account_id: string;
+	context: string;
+	content: string;
+	content_warning: string | null;
+	visibility: string;
+	attachment_ids: string[];
+	in_reply_to_id: string | null;
+	quoted_post_id: string | null;
+	poll: DraftPoll | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ArchivedPost {
+	post_id: string;
+	archived_at: string;
+}
+
+export interface ForYouData {
+	posts: string[];
+	reasons: Record<string, string>;
+	next: number | null;
+	total: number;
+}
+
 export type ThemeName = 'dark' | 'light';

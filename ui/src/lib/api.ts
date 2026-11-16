@@ -40,6 +40,9 @@ import type {
 	Story,
 	Collection,
 	PostRevisionData,
+	Draft,
+	ArchivedPost,
+	ForYouData,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -112,6 +115,22 @@ export interface Api {
 	addCollectionItem(id: string, postId: string): Promise<Collection>;
 	removeCollectionItem(id: string, postId: string): Promise<Collection>;
 	postRevisions(id: string): Promise<PostRevisionData>;
+	drafts(): Promise<Draft[]>;
+	saveDraft(payload: {
+		context?: string;
+		content: string;
+		content_warning?: string | null;
+		visibility?: string;
+		attachment_ids?: string[];
+		in_reply_to_id?: string | null;
+		quoted_post_id?: string | null;
+		poll?: { options: string[]; multiple?: boolean; hide_totals?: boolean; expires_in?: number } | null;
+	}): Promise<Draft>;
+	deleteDraft(id: string): Promise<void>;
+	archivedPosts(): Promise<ArchivedPost[]>;
+	archivePost(postId: string): Promise<ArchivedPost>;
+	unarchivePost(postId: string): Promise<void>;
+	forYou(limit?: number, offset?: number): Promise<ForYouData>;
 	followedTags(): Promise<FollowedTag[]>;
 	followTag(tag: string): Promise<void>;
 	unfollowTag(tag: string): Promise<void>;
@@ -708,6 +727,38 @@ function normalizeCollection(value: unknown): Collection | null {
 		post_ids: Array.isArray(value.post_ids)
 			? value.post_ids.filter((id): id is string => typeof id === 'string')
 			: undefined,
+	};
+}
+
+function normalizeDraft(value: unknown): Draft | null {
+	if (!isRecord(value) || typeof value.id !== 'string') {
+		return null;
+	}
+
+	const poll = isRecord(value.poll) && Array.isArray(value.poll.options)
+		? {
+			options: value.poll.options.filter((option): option is string => typeof option === 'string'),
+			multiple: value.poll.multiple === true,
+			hide_totals: value.poll.hide_totals === true,
+			expires_in: typeof value.poll.expires_in === 'number' ? value.poll.expires_in : 86400,
+		}
+		: null;
+
+	return {
+		id: value.id,
+		account_id: typeof value.account_id === 'string' ? value.account_id : '',
+		context: typeof value.context === 'string' ? value.context : '',
+		content: typeof value.content === 'string' ? value.content : '',
+		content_warning: typeof value.content_warning === 'string' ? value.content_warning : null,
+		visibility: typeof value.visibility === 'string' ? value.visibility : 'public',
+		attachment_ids: Array.isArray(value.attachment_ids)
+			? value.attachment_ids.filter((id): id is string => typeof id === 'string')
+			: [],
+		in_reply_to_id: typeof value.in_reply_to_id === 'string' ? value.in_reply_to_id : null,
+		quoted_post_id: typeof value.quoted_post_id === 'string' ? value.quoted_post_id : null,
+		poll,
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		updated_at: typeof value.updated_at === 'string' ? value.updated_at : '',
 	};
 }
 
@@ -1901,6 +1952,105 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					edited_at: typeof current.edited_at === 'string' ? current.edited_at : null,
 				},
 				revisions,
+			};
+		},
+
+		async drafts(): Promise<Draft[]> {
+			const data = await request<{ drafts?: unknown }>('GET', '/api/v1/host/drafts');
+
+			return Array.isArray(data?.drafts)
+				? data.drafts.map(normalizeDraft).filter((draft): draft is Draft => draft !== null)
+				: [];
+		},
+
+		async saveDraft(payload: {
+			context?: string;
+			content: string;
+			content_warning?: string | null;
+			visibility?: string;
+			attachment_ids?: string[];
+			in_reply_to_id?: string | null;
+			quoted_post_id?: string | null;
+			poll?: { options: string[]; multiple?: boolean; hide_totals?: boolean; expires_in?: number } | null;
+		}): Promise<Draft> {
+			const data = await request<{ draft?: unknown }>(
+				'POST',
+				'/api/v1/host/drafts',
+				undefined,
+				payload,
+			);
+			const draft = normalizeDraft(data?.draft);
+			if (draft === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Entwurf.');
+			}
+
+			return draft;
+		},
+
+		async deleteDraft(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/drafts/${encodeURIComponent(id)}`);
+		},
+
+		async archivedPosts(): Promise<ArchivedPost[]> {
+			const data = await request<{ archived?: unknown }>('GET', '/api/v1/host/archived');
+
+			return Array.isArray(data?.archived)
+				? data.archived.filter(isRecord).map((row) => ({
+					post_id: String(row.post_id ?? ''),
+					archived_at: String(row.archived_at ?? ''),
+				})).filter((row) => row.post_id !== '')
+				: [];
+		},
+
+		async archivePost(postId: string): Promise<ArchivedPost> {
+			const data = await request<{ archived?: unknown }>(
+				'POST',
+				'/api/v1/host/archived',
+				undefined,
+				{ post_id: postId },
+			);
+			const row = isRecord(data?.archived) ? data.archived : null;
+			if (row === null) {
+				throw new ApiError(502, 'invalid_response', 'Die Antwort enthält keinen Archiv-Eintrag.');
+			}
+
+			return {
+				post_id: String(row.post_id ?? postId),
+				archived_at: String(row.archived_at ?? ''),
+			};
+		},
+
+		async unarchivePost(postId: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/archived/${encodeURIComponent(postId)}`);
+		},
+
+		async forYou(limit = 20, offset = 0): Promise<ForYouData> {
+			const data = await request<{
+				posts?: unknown;
+				reasons?: unknown;
+				next?: unknown;
+				total?: unknown;
+			}>('GET', '/api/v1/host/for-you', {
+				limit: String(limit),
+				offset: String(offset),
+			});
+
+			const reasons: Record<string, string> = {};
+			if (isRecord(data?.reasons)) {
+				for (const [key, value] of Object.entries(data.reasons)) {
+					if (typeof value === 'string') {
+						reasons[key] = value;
+					}
+				}
+			}
+
+			return {
+				posts: Array.isArray(data?.posts)
+					? data.posts.filter((id): id is string => typeof id === 'string')
+					: [],
+				reasons,
+				next: typeof data?.next === 'number' ? data.next : null,
+				total: typeof data?.total === 'number' ? data.total : 0,
 			};
 		},
 

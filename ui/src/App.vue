@@ -27,8 +27,10 @@ import ListsView from './views/ListsView.vue';
 import MutesView from './views/MutesView.vue';
 import MemoriesView from './views/MemoriesView.vue';
 import MessagesView from './views/MessagesView.vue';
+import ArchivedView from './views/ArchivedView.vue';
 import CollectionView from './views/CollectionView.vue';
 import CollectionsView from './views/CollectionsView.vue';
+import DraftsView from './views/DraftsView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import NotificationsView from './views/NotificationsView.vue';
 import PostView from './views/PostView.vue';
@@ -92,6 +94,10 @@ const currentView = computed(() => {
 			return CollectionsView;
 		case 'collection':
 			return CollectionView;
+		case 'drafts':
+			return DraftsView;
+		case 'archived':
+			return ArchivedView;
 		case 'admin':
 			return AdminView;
 		case 'home':
