@@ -34,9 +34,11 @@ use AlohaSocial\Server\Community\Announcements;
 use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
+use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
+use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Auth\PasswordHasher;
@@ -182,6 +184,8 @@ final class ApplicationFactory
             drafts: new Drafts($database, $clock),
             archives: new Archives($database, $clock, $app->posts),
             forYou: new ForYouFeed($database, $clock),
+            preferences: new Preferences($database, $clock),
+            exports: new Exports($database, $clock, new Preferences($database, $clock), $this->config),
             postRevisions: new PdoPostRevisionRepository($database),
         );
     }

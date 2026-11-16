@@ -37,6 +37,7 @@ import PostView from './views/PostView.vue';
 import ProfileView from './views/ProfileView.vue';
 import ScheduledView from './views/ScheduledView.vue';
 import SearchView from './views/SearchView.vue';
+import SettingsView from './views/SettingsView.vue';
 import TagView from './views/TagView.vue';
 import { loadHostDisplayNames, setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
@@ -98,6 +99,8 @@ const currentView = computed(() => {
 			return DraftsView;
 		case 'archived':
 			return ArchivedView;
+		case 'settings':
+			return SettingsView;
 		case 'admin':
 			return AdminView;
 		case 'home':

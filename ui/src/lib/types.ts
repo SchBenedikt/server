@@ -454,4 +454,18 @@ export interface ForYouData {
 	total: number;
 }
 
+export interface AccountPreferences {
+	account_id: string;
+	default_visibility: string;
+	default_quote_policy: string;
+	dm_policy: string;
+	show_boosts: boolean;
+	discoverable: boolean;
+	notify_follows: boolean;
+	notify_favourites: boolean;
+	notify_boosts: boolean;
+	notify_mentions: boolean;
+	updated_at: string | null;
+}
+
 export type ThemeName = 'dark' | 'light';

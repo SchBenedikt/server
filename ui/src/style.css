@@ -5288,3 +5288,126 @@ dialog.a-modal::backdrop {
 	color: var(--a-muted);
 	font-size: 12px;
 }
+
+/* ---------------------------------------------------------- account settings */
+
+.a-settings {
+	display: grid;
+	gap: 14px;
+	max-width: 760px;
+}
+
+.a-settings__section {
+	display: grid;
+	gap: 10px;
+	padding: 18px 20px;
+	border: 1px solid var(--a-border);
+	border-radius: 16px;
+	background: var(--a-surface);
+}
+
+.a-settings__section h2 {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 650;
+}
+
+.a-settings__hint {
+	margin: 0;
+	color: var(--a-muted);
+	font-size: 13px;
+	line-height: 1.55;
+}
+
+.a-settings__fieldset {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.a-settings__fieldset legend {
+	padding: 0;
+	margin-bottom: 6px;
+	color: var(--a-muted);
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.a-settings__choice {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border: 1px solid var(--a-border);
+	border-radius: 12px;
+	background: var(--a-bg-soft);
+	cursor: pointer;
+}
+
+.a-settings__choice input {
+	margin-top: 3px;
+	accent-color: var(--a-accent);
+}
+
+.a-settings__choice span {
+	display: grid;
+	gap: 2px;
+}
+
+.a-settings__choice strong {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.a-settings__choice small {
+	color: var(--a-muted);
+	font-size: 12.5px;
+}
+
+.a-settings__choice--inline {
+	align-items: center;
+	padding: 7px 10px;
+}
+
+.a-settings__choice--inline span {
+	display: inline;
+}
+
+.a-settings__row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 10px 2px;
+	border-top: 1px solid var(--a-border);
+}
+
+.a-settings__row:first-of-type {
+	border-top: 0;
+}
+
+.a-settings__row span {
+	display: grid;
+	gap: 2px;
+}
+
+.a-settings__row strong {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.a-settings__row small {
+	color: var(--a-muted);
+	font-size: 12.5px;
+}
+
+.a-settings__row input[type='checkbox'] {
+	width: 20px;
+	height: 20px;
+	flex: none;
+	accent-color: var(--a-accent);
+}

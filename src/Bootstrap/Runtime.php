@@ -25,9 +25,11 @@ use AlohaSocial\Server\Community\Announcements;
 use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
+use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
+use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Config\HostConfig;
@@ -72,6 +74,8 @@ final readonly class Runtime
         public Drafts $drafts,
         public Archives $archives,
         public ForYouFeed $forYou,
+        public Preferences $preferences,
+        public Exports $exports,
         public PostRevisionRepository $postRevisions,
     ) {
     }
