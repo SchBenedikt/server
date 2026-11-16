@@ -402,6 +402,43 @@ final class CommunityApiController
                 return Response::json(['request' => $request]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/pinned') {
+                $account = $this->account($request, $session, 'account');
+                if ($account === null) {
+                    return $this->error(404, 'not_found', 'Dieses Konto gibt es nicht.');
+                }
+
+                return Response::json([
+                    'account_id' => $account->id,
+                    'pins' => $this->runtime->pinnedPosts->idsFor($account->id),
+                ]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/pinned') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'pin' => $this->runtime->pinnedPosts->pin(
+                        $userId,
+                        is_string($body['post_id'] ?? null) ? $body['post_id'] : '',
+                    ),
+                ], 201);
+            }
+
+            if (preg_match('#^/api/v1/host/pinned/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Für diese Aktion musst du angemeldet sein.');
+                }
+
+                return Response::json([
+                    'pin' => $this->runtime->pinnedPosts->unpin($userId, rawurldecode($matches[1])),
+                ]);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/bluesky') {
                 if ($userId === null) {
                     return $this->error(401, 'not_authenticated', 'Melde dich an, um deine Bluesky-Verbindung zu sehen.');

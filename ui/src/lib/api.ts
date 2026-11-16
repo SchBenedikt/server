@@ -1182,6 +1182,43 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return normalizeRelationship(data?.relationship);
 		},
 
+		async pinnedPosts(account?: string): Promise<string[]> {
+			const query: Record<string, string> = {};
+			if (account !== undefined && account !== '') {
+				query.account = account;
+			}
+
+			const data = await request<{ pins?: unknown }>('GET', '/api/v1/host/pinned', query);
+
+			return Array.isArray(data?.pins)
+				? data.pins.filter((id): id is string => typeof id === 'string')
+				: [];
+		},
+
+		async pinPost(postId: string): Promise<string[]> {
+			const data = await request<{ pin?: unknown }>(
+				'POST',
+				'/api/v1/host/pinned',
+				undefined,
+				{ post_id: postId },
+			);
+
+			const pins = isRecord(data?.pin) && Array.isArray(data.pin.pins) ? data.pin.pins : [];
+
+			return pins.filter((id): id is string => typeof id === 'string');
+		},
+
+		async unpinPost(postId: string): Promise<string[]> {
+			const data = await request<{ pin?: unknown }>(
+				'DELETE',
+				`/api/v1/host/pinned/${encodeURIComponent(postId)}`,
+			);
+
+			const pins = isRecord(data?.pin) && Array.isArray(data.pin.pins) ? data.pin.pins : [];
+
+			return pins.filter((id): id is string => typeof id === 'string');
+		},
+
 		async followRequests(): Promise<FollowRequestData> {
 			const data = await request<{ requests?: unknown; locked?: unknown }>(
 				'GET',

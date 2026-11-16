@@ -30,6 +30,7 @@ use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\Memories;
+use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
@@ -79,6 +80,7 @@ final readonly class Runtime
         public Preferences $preferences,
         public Exports $exports,
         public FollowRequests $followRequests,
+        public PinnedPosts $pinnedPosts,
         public BlueskyAccounts $blueskyAccounts,
         public PostRevisionRepository $postRevisions,
     ) {
