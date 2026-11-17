@@ -1,0 +1,225 @@
+# Features
+
+The standalone host and the core together provide the social features below. Installation, configuration and operations are in the linked guides.
+
+## Shared UI
+
+The page at `/app` is a small host app that mounts `@alohasocial/ui` through
+the standalone `HostBridge` (`src` under `ui/`). The bridge attaches the session
+cookie and `X-CSRF-Token`, and the shared screens consume only `/api/v1`.
+
+The desktop shell keeps its navigation in a fixed sidebar: six primary entries,
+a composer button and a **More** popover for the library, moderation and
+instance pages, so the sidebar never needs to scroll. Below 900 px the shell
+becomes a single column with a five-tab bottom bar and the same **More** entries
+in a bottom sheet. Touch targets and media layouts adapt to small screens.
+
+```shell
+# Only needed after changing the shared package or the host app. The core's
+# Composer dist export-ignores ui/, so check out the matching core source once
+# (use the reference from composer.lock) before building the shared package.
+git clone --depth 1 https://github.com/SchBenedikt/core.git /tmp/aloha-core
+mkdir -p vendor/alohasocial/core/ui
+cp -a /tmp/aloha-core/ui/. vendor/alohasocial/core/ui/
+(cd vendor/alohasocial/core/ui && npm ci && npm run build)
+(cd ui && npm ci && npm run build)   # writes public/ui/app.js + app.css
+```
+
+The bundled `public/ui/` files are committed, so a deployment only needs the
+PHP host and never runs Node. The hosting decision is recorded in
+[Frontend hosting](frontend.md).
+
+## Host UI extensions
+
+The shared screens need several things the core's anonymous v1 timeline does not
+expose directly. The host adds them as same-origin routes; they are not part of
+the core route contract:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and the viewer's own like/boost state. |
+| `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
+| `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
+| `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. |
+| `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
+| `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
+| `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |
+| `GET /api/v1/host/kokua?kind=all\|request\|offer&category=…&state=open\|done` | Read the Kokua mutual-aid board with open/request/offer filters. |
+| `POST /api/v1/host/kokua` | Ask for help or offer it. |
+| `GET` / `PATCH` / `DELETE /api/v1/host/kokua/{id}` | Read, complete/reopen or remove one Kokua (author only for mutations). |
+| `POST` / `DELETE /api/v1/host/kokua/{id}/help` | Offer a hand with an optional note, or withdraw the offer. |
+| `GET /api/v1/host/quoted?ids=…` | Resolve the quoted note behind a quote post, local or remote. |
+| `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
+| `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
+
+The post menu on your own posts opens the composer in edit mode. Saving sends
+the core's `PATCH /api/v1/posts/{id}` with the `revision` the reader loaded;
+a concurrent edit answers `409` instead of overwriting it, and the updated
+record is broadcast to every open timeline and detail view. Edits can keep or
+replace attachments, but cannot widen a post's audience.
+
+All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
+posts the viewer may already see; private posts still go through the core's
+visibility rules. The implementation lives in `src/Interactions/` and
+`FrontController`.
+
+## Kokua board
+
+Kokua is the Hawaiian word for help, and the board is deliberately not another
+feed. It is a public noticeboard where a signed-in member can ask for practical
+help or offer it: a lift, a tool, a skill, company, goods or an extra pair of
+hands. Every card has a category, an optional place and an optional date. Other
+members can offer a hand with a short note; the author can mark the exchange as
+done and reopen it later. Nothing is federated, nothing is scored and there is no
+marketplace transaction.
+
+`#/kokua` is linked from the sidebar's discovery menu, the mobile sheet and the
+home rail. The board defaults to open requests and offers and can be filtered by
+kind, category and completed state. Completed cards stay readable as a record of
+help that actually happened.
+
+The tables (`kokua`, `kokua_help`) and indexes are created by host migration
+`202611170001`. The service is `src/Community/KokuaBoard.php`; the API is part
+of `CommunityApiController`. Authors alone can complete, reopen or delete a
+card, and the author cannot offer help on their own request. Offers are
+idempotent: a second click updates the note instead of inflating the count.
+
+## Reading, organising and scheduling
+
+The core's Mastodon-compatible API at `/api/mastodon/v1` is enabled by default
+in `HostConfig` (`mastodon_api`), and the standalone UI uses it for the features
+Mastodon clients expect instead of duplicating federation logic in the host:
+
+| Screen | Route | What it uses |
+| --- | --- | --- |
+| Lesezeichen | `#/bookmarks` | `GET /bookmarks`, `POST /statuses/{id}/bookmark` and `/unbookmark`. Bookmark state is also rendered on every post. |
+| Suchen | `#/search` | `GET /search` for local accounts, statuses and hashtags; an `@handle` additionally resolves through the remote profile lookup. |
+| Listen | `#/lists`, `#/l/<id>` | List CRUD and membership through `/lists`, and the list timeline through `/timelines/list/{id}`. Only local accounts can be members. |
+| Stummgeschaltet | `#/muted` | `GET /mutes`, mute/unmute per account. Profiles can mute and unmute directly. |
+| Blockiert | `#/blocked` | `GET /api/v1/blocks` and block/unblock per actor URL. Profiles can block and unblock directly. |
+| Filter | `#/filters` | Full filter rules through `/api/v1/filters` with action, contexts, keywords and optional expiry. |
+| Scheduled posts | `#/scheduled` | `/api/v1/scheduled-posts`; a schedule can be re-timed or cancelled, but not edited after queueing. |
+| Notifications | `#/notifications` | `GET /api/mastodon/v1/notifications` with actor and status previews, plus the core dismiss/clear actions. |
+
+The composer can attach a poll (2–4 options, multiple choice, hide totals,
+expiry) or schedule a post. Polls are created through
+`POST /api/mastodon/v1/statuses` because the neutral create route has no poll
+field; poll voting uses `GET /polls/{id}` and `POST /polls/{id}/votes`. A poll
+cannot be combined with scheduling, because a schedule stores no poll. First-party
+sessions receive the `['*']` scope, so these routes work without a separately
+issued bearer token; bearer clients keep their own scopes.
+
+## Remote profiles and Bluesky
+
+`#/u/<handle>` opens a profile that is not hosted here. The handle may be an
+`@user@server` address, a profile URL, a Bluesky handle (`name.bsky.social`) or
+a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
+
+- **ActivityPub**: WebFinger resolves the handle, the actor document supplies
+  the profile and the actor's public outbox supplies the posts. Local posts
+  are dereferenceable both as their `Note` URL and as the `Create` activity
+  the outbox advertises; `/.well-known/nodeinfo` completes the public
+  discovery surface. An instance that enables authorized fetch answers
+  `401`/`403` to an unsigned actor request; for reading, the host then falls
+  back to that instance's public Mastodon-compatible API (`can_follow` stays
+  `false`).
+- **Bluesky**: the unauthenticated public AppView supplies the profile and the
+  author feed. Posting, liking and following would need ATProto OAuth, so the
+  profile view links out to Bluesky instead.
+
+A remote post opens in the same detail view as a local post. The canonical
+ActivityPub object id or AT Protocol URI is encoded into `#/p/…`; the host
+fetches the post live and shows its parent and replies. Mastodon instances are
+read through the public status and context API, other ActivityPub servers
+through the object and its `replies` collection, and Bluesky through
+`app.bsky.feed.getPostThread`. The view shows like, reply and boost counts
+alongside a link to the original. Opening a remote profile's follower or
+following count loads that list page by page: the Mastodon API when available,
+otherwise the actor's ActivityPub collection, or `app.bsky.graph.getFollowers`
+and `getFollows` for Bluesky. Remote profile and post counts are shown exactly
+as the origin reports them, and replies, followers and following remain
+read-only because acting on them needs a local federation or ATProto identity.
+
+Every remote document is checked by `FederationTargetGuard` (SSRF, redirects,
+DNS) and fetched with a byte limit; remote HTML is converted to plain text
+before it reaches Vue, which does not use `v-html` for remote content. Remote
+lookup and connections are limited to 30 requests per minute per session or
+address, and remote post detail to 60.
+The implementation is `src/Federation/` plus the host route in
+`FrontController`.
+
+The bundle is committed, so a fresh clone serves `/app` without Node. The
+production web server serves `public/`; the PHP built-in server serves the
+bundle through the router fallback in `public/index.php`.
+
+## Administration and moderation
+
+Accounts with the `admin` role see an **Administration** entry in the sidebar
+and in the profile menu. `/admin` redirects to `/app#/admin`; the page and every
+`/api/v1/host/admin/*` route require an admin session, so a normal account gets
+`403` and a signed-out visitor gets `401`. The interface is host-owned because
+the core deliberately has no administration API.
+
+| Section | What it does |
+| --- | --- |
+| Overview | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
+| Accounts | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
+| Meldungen | Open, resolved and dismissed reports with target preview, reporter, category and internal note; delete the reported post or disable the reported local account. |
+| Federation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
+| Warteschlange | Pending, running and dead jobs with payload inspection, single retry/delete, retry-all, purge of old dead jobs and an immediate worker run. |
+| Instance | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
+| Protokoll | Every administrative mutation with actor, action, target, details and time. |
+
+Every signed-in reader can report a post from its action bar or a profile from
+its header. A report stores the reporter, target, category (`spam`, `abuse`,
+`harassment`, `misinformation`, `other`), an optional comment and the target
+snapshot. Remote posts and profiles may be reported by canonical URL, `at://`
+or `did:` even before they are cached; the moderation view marks them as
+`remote` and links to the origin. Duplicate open reports from the same reporter
+for the same target answer `409`. Resolving or dismissing a report, deleting a
+post and disabling an account are written to the audit log.
+
+```text
+GET    /api/v1/host/admin/overview
+GET    /api/v1/host/admin/users?query=&page=&per_page=
+POST   /api/v1/host/admin/users
+PATCH  /api/v1/host/admin/users/{id}
+POST   /api/v1/host/admin/users/{id}/disable|enable|password|sessions
+GET    /api/v1/host/admin/reports?state=open|resolved|dismissed|all
+POST   /api/v1/host/admin/reports/{id}/resolve
+DELETE /api/v1/host/admin/posts/{id}
+GET    /api/v1/host/admin/jobs?state=
+POST   /api/v1/host/admin/jobs/{id}/retry
+DELETE /api/v1/host/admin/jobs/{id}
+POST   /api/v1/host/admin/jobs/retry-dead|purge
+POST   /api/v1/host/admin/queue/run
+GET    /api/v1/host/admin/federation|communications|instance|audit
+POST   /api/v1/host/reports
+```
+
+The self-protection rules are intentional: an admin cannot disable their own
+account or remove the last active admin. Those requests answer `409`, as does
+any attempt to change state that a concurrent moderator already changed.The moderation tables (`moderation_report`, `admin_audit`) and the worker
+heartbeat (`runtime_state`) are created by host migration `202611150001`.
+Warnings and failures from the worker and federation layer are mirrored into
+`runtime_error` by the runtime logger; the admin **Errors** tab shows them next
+to dead delivery jobs. The table is created by migration `202611170002`.
+
+Post actions — reply, boost, quote, like, bookmark, share, report and open —
+render as icons with accessible labels. Counts appear only when they are greater
+than zero, so a quiet post stays quiet without losing the action. The quote icon
+is a closed glyph that stays legible at 15–18 px.
+
+Attachments support images (JPEG, PNG, WebP, GIF), video (MP4, WebM) and audio
+(MP3, M4A, Ogg, WAV), up to ten per post. Images render as a grid and open in
+the lightbox; video plays inline with native controls and its poster frame;
+audio uses a native player. The composer previews each kind before upload, and
+quoted posts render their first attachment with the same rules. The limits are
+5 MiB for images, 20 MiB for video and 10 MiB for audio, but PHP's
+`upload_max_filesize` and `post_max_size` still cap what reaches the app.
+
+Followers and following on a **local** profile open the same list dialog as a
+remote profile. The list is read from
+`/api/mastodon/v1/accounts/{handle}/followers|following`; remote profiles keep
+their existing public ActivityPub/Bluesky lookup.
+
