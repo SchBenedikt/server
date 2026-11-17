@@ -16,6 +16,7 @@ export type Route =
 	| { name: 'tag'; tag: string }
 	| { name: 'bookmarks' }
 	| { name: 'search' }
+	| { name: 'kokua' }
 	| { name: 'lists' }
 	| { name: 'list'; id: string }
 	| { name: 'muted' }
@@ -68,6 +69,10 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'search' && parts.length === 1) {
 		return { name: 'search' };
+	}
+
+	if (parts[0] === 'kokua' && parts.length === 1) {
+		return { name: 'kokua' };
 	}
 
 	if (parts[0] === 'lists' && parts.length === 1) {
@@ -206,6 +211,8 @@ export function routeTitle(current: Route): string {
 			return 'bookmarks';
 		case 'search':
 			return 'Search';
+		case 'kokua':
+			return 'Kokua';
 		case 'lists':
 			return 'lists';
 		case 'list':

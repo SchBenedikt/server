@@ -9,6 +9,49 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.0] - 2026-11-17
+
+### Added
+
+- **Terminal reset:** `php bin/reset.php` creates a verified backup, drops all
+  application tables, rebuilds the empty schema, clears media and mail by
+  default and prints a one-time setup URL. `--yes`, `--keep-media` and backup
+  controls are available for scripted and cautious use.
+- **Token-protected web setup:** after a reset, `/setup?token=…` writes the
+  final public origin, instance identity, contact address and first admin to
+  `.env`. The token is single-use and setup is closed as soon as an account
+  exists, so an empty database alone cannot be claimed by a visitor.
+- **Admin Errors view:** runtime warnings and failures are mirrored from the
+  PSR logger into `runtime_error`, with source, level, message, context and
+  time. The new admin tab also lists dead delivery jobs and is included in
+  system health.
+- Migration `202611170002` creates `runtime_error`.
+
+### Changed
+
+- A failed boot now returns a readable HTML maintenance page (HTTP 503) for
+  browser requests instead of raw JSON; API clients still receive
+  `server_not_ready`.
+- The runtime logger keeps the PHP error log but no longer relies on shell
+  access for the admin-visible operational picture.
+
+## [0.10.0] - 2026-11-17
+
+### Added
+
+- **Kokua board** at `#/kokua`: a public mutual-aid noticeboard for local help.
+  Members can ask for help or offer it, choose a category, place and optional
+  date, and respond to a card with a short note. Authors can mark an exchange
+  as done, reopen it or remove it. The board filters by request/offer,
+  category and completed state, and is linked from the sidebar, mobile sheet
+  and home rail.
+- Kokua schema migration `202611170001` with `kokua` and `kokua_help`, plus
+  the first-party `/api/v1/host/kokua` routes for reading, creating, offering
+  help, withdrawing, completing and deleting cards.
+- End-to-end tests for visibility, filtering, idempotent offers, author-only
+  completion/deletion and validation; the UI bundle test now checks the Kokua
+  markers.
+
 ## [0.9.1] - 2026-11-17
 
 ### Added

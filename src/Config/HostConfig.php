@@ -54,6 +54,7 @@ final readonly class HostConfig
         public ?string $smtpUser,
         public ?string $smtpPassword,
         public string $smtpEncryption,
+        public string $envFile,
     ) {
     }
 
@@ -178,6 +179,7 @@ final readonly class HostConfig
             smtpUser: self::nullable($pick('smtp_user', 'ALOHASOCIAL_SMTP_USER', null)),
             smtpPassword: self::nullable($pick('smtp_password', 'ALOHASOCIAL_SMTP_PASSWORD', null)),
             smtpEncryption: $smtpEncryption,
+            envFile: self::resolvePath((string) $pick('env_file', 'ALOHASOCIAL_ENV_FILE', $root . '/.env'), $root),
         );
     }
 

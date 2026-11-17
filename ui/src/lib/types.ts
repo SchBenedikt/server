@@ -370,6 +370,58 @@ export interface Announcement {
 	expired: boolean;
 }
 
+export interface KokuaHelper {
+	account_id: string;
+	message: string;
+	created_at: string;
+}
+
+export type KokuaKind = 'request' | 'offer';
+export type KokuaCategory = 'everyday' | 'skills' | 'company' | 'goods' | 'other';
+export type KokuaStatus = 'open' | 'done';
+
+export interface KokuaEntry {
+	id: string;
+	account_id: string;
+	kind: KokuaKind;
+	title: string;
+	details: string;
+	category: KokuaCategory;
+	place: string;
+	needed_by: string | null;
+	status: KokuaStatus;
+	created_at: string;
+	updated_at: string;
+	done_at: string | null;
+	helpers: KokuaHelper[];
+	help_count: number;
+	viewer_helping: boolean;
+	is_owner: boolean;
+}
+
+export interface KokuaCounts {
+	open_requests: number;
+	open_offers: number;
+	done: number;
+}
+
+export interface KokuaPage {
+	items: KokuaEntry[];
+	total: number;
+	limit: number;
+	offset: number;
+	counts: KokuaCounts;
+}
+
+export interface KokuaCreatePayload {
+	kind: KokuaKind;
+	title: string;
+	details: string;
+	category: KokuaCategory;
+	place: string;
+	needed_by?: string | null;
+}
+
 export interface FeaturedTag {
 	tag: string;
 	position: number;

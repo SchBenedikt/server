@@ -11,6 +11,7 @@ import { route } from '../lib/router';
 import { appState } from '../lib/state';
 import AdminAnnouncements from './admin/AdminAnnouncements.vue';
 import AdminAudit from './admin/AdminAudit.vue';
+import AdminErrors from './admin/AdminErrors.vue';
 import AdminFederation from './admin/AdminFederation.vue';
 import AdminOverview from './admin/AdminOverview.vue';
 import AdminQueue from './admin/AdminQueue.vue';
@@ -31,6 +32,8 @@ const sectionView = computed(() => {
 			return AdminReports;
 		case 'federation':
 			return AdminFederation;
+		case 'communications':
+			return AdminErrors;
 		case 'queue':
 			return AdminQueue;
 		case 'settings':

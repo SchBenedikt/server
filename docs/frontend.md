@@ -148,7 +148,7 @@ Reasons, in order of importance:
    and `composer.lock` pins the installed commit; the installed core reports
    `0.7.0` in `vendor/alohasocial/core/src/Version.php`, and the shared UI is
    versioned with that core line (`@alohasocial/ui` 0.7.0 in the installed
-   package). The server itself is released as `0.9.1` (see the changelog). At
+   package). The server itself is released as `0.11.0` (see the changelog). At
    the time of writing, `@alohasocial/ui` is not published on the public npm
    registry (`npm view @alohasocial/ui version` returns 404), so an external web
    repository could not consume it as a normal semver dependency yet.

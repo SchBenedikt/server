@@ -129,6 +129,7 @@ reset messages are delivered. A message that cannot be handed off returns
 | Variable | Config file key | Default | Meaning |
 | --- | --- | --- | --- |
 | `ALOHASOCIAL_DEBUG` | `debug` | `false` | Adds exception details to error responses. Never enable in production. |
+| `ALOHASOCIAL_ENV_FILE` | `env_file` | `.env` | File the web setup reads and rewrites. Usually left at the default; useful for tests or a container-managed environment file. |
 
 Logs go to PHP's configured `error_log` (PHP-FPM, the built-in server's
 terminal, or the system journal). The worker writes to stdout/stderr, so

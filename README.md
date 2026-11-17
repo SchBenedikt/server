@@ -22,10 +22,11 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 | [Documentation index](docs/README.md) | A short route through all guides |
 | [Changelog](CHANGELOG.md) | Release history and versioning rules |
 
-**Status: release 0.9.1** — phases 0–6 of the blueprint plus account mail, the
-shared Vue UI, host-owned community and moderation features, a federation
-smoke test and a guarded update path that keeps accounts, keys and media in
-place. The standalone instance signs, delivers and accepts ActivityPub,
+**Status: release 0.11.0** — phases 0–6 of the blueprint plus account mail, the
+shared Vue UI, host-owned community and moderation features, the Kokua mutual-aid
+board, a guarded terminal reset with a token-protected web setup, structured
+runtime and communication errors in the admin, a federation smoke test and a
+guarded update path that keeps accounts, keys and media in place. The standalone instance signs, delivers and accepts ActivityPub,
 resets passwords by email and serves the shared Vue app. Release history and
 the versioning rules are in [CHANGELOG.md](CHANGELOG.md).
 
@@ -120,6 +121,27 @@ Vue interface; without SMTP the password-reset mail is written to
 Registration is disabled by design (`instance.registrations=false`). Create
 each account with `bin/create-account.php`; the command prompts for a password
 unless `--password=…` is supplied.
+
+### Reset and configure in the browser
+
+`bin/reset.php` deletes every account, post, report and session, creates a
+verified database backup first, rebuilds the empty schema and keeps `.env`,
+the database connection and the instance key. Media and mail files are removed
+unless `--keep-media` is passed.
+
+```shell
+php bin/reset.php              # asks you to type RESET
+php bin/reset.php --yes        # scripted reset, still backs up first
+php bin/reset.php --keep-media --yes
+```
+
+The reset prints a one-time `/setup?token=…` URL (also stored in
+`var/setup.token`). Open it in the browser, enter the final public HTTPS origin,
+the instance name, contact address and the first admin account. Setup writes
+those values to `.env` and closes the token; it is not reachable just because a
+database is empty. Restart PHP-FPM after setup in production so every worker
+reads the new origin, then start the worker. Actor IDs, WebFinger and federation
+links use the new domain from the next request.
 
 ### Updates without recreating accounts
 
@@ -245,6 +267,10 @@ the core route contract:
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
 | `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |
+| `GET /api/v1/host/kokua?kind=all\|request\|offer&category=…&state=open\|done` | Read the Kokua mutual-aid board with open/request/offer filters. |
+| `POST /api/v1/host/kokua` | Ask for help or offer it. |
+| `GET` / `PATCH` / `DELETE /api/v1/host/kokua/{id}` | Read, complete/reopen or remove one Kokua (author only for mutations). |
+| `POST` / `DELETE /api/v1/host/kokua/{id}/help` | Offer a hand with an optional note, or withdraw the offer. |
 | `GET /api/v1/host/quoted?ids=…` | Resolve the quoted note behind a quote post, local or remote. |
 | `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
@@ -259,6 +285,27 @@ All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
 posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
 `FrontController`.
+
+### Kokua board
+
+Kokua is the Hawaiian word for help, and the board is deliberately not another
+feed. It is a public noticeboard where a signed-in member can ask for practical
+help or offer it: a lift, a tool, a skill, company, goods or an extra pair of
+hands. Every card has a category, an optional place and an optional date. Other
+members can offer a hand with a short note; the author can mark the exchange as
+done and reopen it later. Nothing is federated, nothing is scored and there is no
+marketplace transaction.
+
+`#/kokua` is linked from the sidebar's discovery menu, the mobile sheet and the
+home rail. The board defaults to open requests and offers and can be filtered by
+kind, category and completed state. Completed cards stay readable as a record of
+help that actually happened.
+
+The tables (`kokua`, `kokua_help`) and indexes are created by host migration
+`202611170001`. The service is `src/Community/KokuaBoard.php`; the API is part
+of `CommunityApiController`. Authors alone can complete, reopen or delete a
+card, and the author cannot offer help on their own request. Offers are
+idempotent: a second click updates the note instead of inflating the count.
 
 ### Reading, organising and scheduling
 
@@ -366,15 +413,17 @@ POST   /api/v1/host/admin/jobs/{id}/retry
 DELETE /api/v1/host/admin/jobs/{id}
 POST   /api/v1/host/admin/jobs/retry-dead|purge
 POST   /api/v1/host/admin/queue/run
-GET    /api/v1/host/admin/federation|instance|audit
+GET    /api/v1/host/admin/federation|communications|instance|audit
 POST   /api/v1/host/reports
 ```
 
 The self-protection rules are intentional: an admin cannot disable their own
 account or remove the last active admin. Those requests answer `409`, as does
-any attempt to change state that a concurrent moderator already changed. The
-moderation tables (`moderation_report`, `admin_audit`) and the worker
+any attempt to change state that a concurrent moderator already changed.The moderation tables (`moderation_report`, `admin_audit`) and the worker
 heartbeat (`runtime_state`) are created by host migration `202611150001`.
+Warnings and failures from the worker and federation layer are mirrored into
+`runtime_error` by the runtime logger; the admin **Errors** tab shows them next
+to dead delivery jobs. The table is created by migration `202611170002`.
 
 Post actions — reply, boost, quote, like, bookmark, share, report and open —
 render as icons with accessible labels. Counts appear only when they are greater
@@ -437,6 +486,7 @@ rules and production examples.
 ```
 public/index.php          one entry point: boot, authenticate, dispatch
 bin/update.php            backup, migrate and verify accounts
+bin/reset.php             backup, empty the instance and print the setup URL
 bin/backup.php            verified database backup with metadata
 bin/doctor.php            data-path, schema, key and backup diagnostics
 bin/migrate.php           low-level migration runner
@@ -525,9 +575,9 @@ The suite boots the real `Application::forHost()` assembly on a throwaway
 SQLite database and drives the real front controller: migrations twice,
 login/rotation/CSRF/logout/throttle, route budgets, a post written and read
 over HTTP, media upload/serving/attachment, batched host interactions, likes,
-profile updates, post hydration, password reset by mailed token, the UI mount
-and its bundle, actor document and WebFinger, the cleanup job through the
-worker, and route parity against the core manifest. The bundle test also checks
+profile updates, post hydration, password reset by mailed token, the Kokua
+board and its offers, the UI mount and its bundle, actor document and WebFinger,
+the cleanup job through the worker, and route parity against the core manifest. The bundle test also checks
 the markers for the sidebar popover, the mobile sheet, video/audio rendering,
 the local account connection endpoint and the new quote glyph. `VersionTest`
 keeps `composer.json`, `ui/package.json` and the newest changelog heading on the

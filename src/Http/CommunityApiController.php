@@ -58,6 +58,88 @@ final class CommunityApiController
         $isAdmin = $session?->account?->isAdmin() === true;
 
         try {
+            if ($method === 'GET' && $path === '/api/v1/host/kokua') {
+                return Response::json($this->runtime->kokua->page(
+                    $userId,
+                    trim((string) ($request->queryParam('kind') ?? 'all')),
+                    trim((string) ($request->queryParam('category') ?? 'all')),
+                    trim((string) ($request->queryParam('state') ?? 'open')),
+                    $this->intParam($request, 'limit', 30, 1, 50),
+                    $this->intParam($request, 'offset', 0, 0, 10_000),
+                ));
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/kokua') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in to ask for or offer help.');
+                }
+
+                return Response::json([
+                    'kokua' => $this->runtime->kokua->create($userId, $this->jsonBody($request)),
+                ], 201);
+            }
+
+            if (preg_match('#^/api/v1/host/kokua/([^/]+)$#', $path, $matches) === 1 && $method === 'GET') {
+                $entry = $this->runtime->kokua->find(rawurldecode($matches[1]), $userId);
+                if ($entry === null) {
+                    return $this->error(404, 'not_found', 'This Kokua does not exist.');
+                }
+
+                return Response::json(['kokua' => $entry]);
+            }
+
+            if (preg_match('#^/api/v1/host/kokua/([^/]+)$#', $path, $matches) === 1 && $method === 'PATCH') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'kokua' => $this->runtime->kokua->setStatus(
+                        rawurldecode($matches[1]),
+                        $userId,
+                        $body['status'] ?? null,
+                    ),
+                ]);
+            }
+
+            if (preg_match('#^/api/v1/host/kokua/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                $this->runtime->kokua->delete(rawurldecode($matches[1]), $userId);
+
+                return Response::json(['deleted' => true]);
+            }
+
+            if (preg_match('#^/api/v1/host/kokua/([^/]+)/help$#', $path, $matches) === 1 && $method === 'POST') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in to offer help.');
+                }
+
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'kokua' => $this->runtime->kokua->help(
+                        rawurldecode($matches[1]),
+                        $userId,
+                        $body['message'] ?? null,
+                    ),
+                ]);
+            }
+
+            if (preg_match('#^/api/v1/host/kokua/([^/]+)/help$#', $path, $matches) === 1 && $method === 'DELETE') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                return Response::json([
+                    'kokua' => $this->runtime->kokua->withdrawHelp(rawurldecode($matches[1]), $userId),
+                ]);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/announcements') {
                 if ($request->queryParam('all') === '1') {
                     if (!$isAdmin) {

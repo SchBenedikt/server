@@ -15,6 +15,7 @@ php bin/routes.php                 # inspect the served route manifest
 php bin/set-password.php alice     # reset a password and revoke sessions
 php bin/backup.php                 # verified database backup
 php bin/update.php                 # backup, migrate and verify accounts
+php bin/reset.php                  # back up, empty the instance, print setup URL
 php bin/doctor.php                 # paths, schema, key, database and mail
 ```
 
@@ -85,7 +86,22 @@ php bin/create-account.php admin admin@example.com --admin
 An operator can always create a new admin account from the CLI when locked out,
 but the UI is the normal path because it writes an audit entry. Every mutation
 is recorded in `admin_audit` with actor, action, target, details and time; the
-**Protokoll** section reads that table.
+**Audit log** section reads that table.
+
+### Communication and runtime errors
+
+The **Errors** tab lists warnings and failures recorded by the worker and the
+federation layer: outbound delivery errors, remote fetch problems, media
+failures and other background work. It also lists dead jobs that exhausted
+their retries. The runtime logger writes the same messages to the PHP error log,
+so shell access still gives the full context; the admin view keeps the
+operational picture available without it.
+
+Do not treat every warning as an outage. A remote server returning `404` or a
+blocked media fetch is a peer problem; repeated failures for the same domain,
+a growing dead-job count, or failures immediately after a domain change point
+to local configuration. Check the worker and the public origin first, then the
+peer's HTTP response.
 
 ### Reports
 
@@ -295,6 +311,9 @@ convenience, not a monitoring signal.
 | Accounts seem to be gone after an update | Wrong data directory, a lost Docker volume, or a release directory that was replaced. | Stop services; check `php bin/doctor.php` for the database path; restore the newest `var/backups/*.sqlite` or the PostgreSQL dump with `var/secret.key`; set `--data-dir` for the next install. Never use `docker compose down -v`. |
 | `Migration stopped: the safety backup could not be created` | `var/backups` is not writable, or `pg_dump` is missing/incompatible. | Fix permissions or install the matching PostgreSQL client; run `php bin/backup.php`; only then retry. `--allow-unbacked` is a last resort. |
 | `/healthz` is green but pages return 500 | Database, key or schema problem. | Check the PHP error log; set `ALOHASOCIAL_DEBUG=true` temporarily. |
+| Browser shows **Server is not ready** | Boot failed, usually a pending migration, missing schema or an invalid secret key. | Run `php bin/doctor.php`, then `php bin/update.php`; the HTML error page and the PHP log name the cause. Restart PHP-FPM/worker. |
+| Web setup is locked after a reset | The one-time token is missing or was already used. | Open the URL printed by `php bin/reset.php`; read `var/setup.token` as the application user. Run the reset again if the token was lost. |
+| Federation links still use the old domain after web setup | Long-running FPM workers or the worker still hold the old environment. | Restart PHP-FPM and the worker after setup; verify `/api/v1/instance` reports the new domain. Changing the domain after accounts exist is not supported. |
 | Login succeeds but the next request is signed out | Origin mismatch or secure-cookie policy. | Use the exact `ALOHASOCIAL_INSTANCE_URL` origin; use HTTPS in production; check proxy/forwarding. |
 | `csrf_token_invalid` from the UI | The page has no CSRF token or the session changed. | Reload `/app`; ensure cookies are enabled; check that the app is served from the same origin as the API. |
 | Upload returns `413` | PHP or web-server body limit is too small. | Raise `upload_max_filesize`, `post_max_size` and the Nginx/Apache body limit. |

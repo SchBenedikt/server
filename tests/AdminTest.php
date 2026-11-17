@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Server\Support\RuntimeLogger;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -81,6 +82,27 @@ final class AdminTest extends TestCase
         self::assertSame(1, $body['stats']['accounts']['admins']);
         self::assertIsArray($body['health']);
         self::assertNotEmpty($body['health']);
+    }
+
+    public function testCommunicationErrorsAreListedForTheAdministration(): void
+    {
+        ['server' => $server, 'cookies' => $cookies] = $this->admin();
+
+        (new RuntimeLogger($server->runtime->database, $server->runtime->clock))->warning(
+            'Remote delivery to {domain} failed with {code}.',
+            ['domain' => 'peer.example', 'code' => 'timeout'],
+        );
+
+        $response = $server->send('GET', '/api/v1/host/admin/communications', [
+            'cookies' => $cookies,
+        ]);
+
+        self::assertSame(200, $response->status);
+        $body = $this->decoded($response);
+        self::assertSame(1, $body['counts']['last_24h']);
+        self::assertSame('peer.example', $body['errors'][0]['source']);
+        self::assertStringContainsString('peer.example', $body['errors'][0]['message']);
+        self::assertSame('timeout', $body['errors'][0]['context']['code']);
     }
 
     public function testWorkerHeartbeatMarksTheWorkerOnline(): void

@@ -23,6 +23,7 @@ import ExploreView from './views/ExploreView.vue';
 import FiltersView from './views/FiltersView.vue';
 import FollowRequestsView from './views/FollowRequestsView.vue';
 import HomeView from './views/HomeView.vue';
+import KokuaView from './views/KokuaView.vue';
 import ListView from './views/ListView.vue';
 import ListsView from './views/ListsView.vue';
 import MutesView from './views/MutesView.vue';
@@ -74,6 +75,8 @@ const currentView = computed(() => {
 			return BookmarksView;
 		case 'search':
 			return SearchView;
+		case 'kokua':
+			return KokuaView;
 		case 'lists':
 			return ListsView;
 		case 'list':

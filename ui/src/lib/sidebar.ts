@@ -22,6 +22,7 @@ export const SIDEBAR_CATALOG: SidebarItem[] = [
 	{ id: 'profile', label: 'Profile', icon: 'user', href: '#/profile', group: 'main', requiresAuth: true },
 	{ id: 'settings', label: 'Settings', icon: 'settings', href: '#/settings', group: 'main', requiresAuth: true },
 	{ id: 'search', label: 'Search', icon: 'search', href: '#/search', group: 'main' },
+	{ id: 'kokua', label: 'Kokua board', icon: 'handHeart', href: '#/kokua', group: 'main' },
 	{ id: 'memories', label: 'Memories', icon: 'clock', href: '#/memories', group: 'library', requiresAuth: true },
 	{ id: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', href: '#/bookmarks', group: 'library', requiresAuth: true },
 	{ id: 'collections', label: 'Collections', icon: 'list', href: '#/collections', group: 'library', requiresAuth: true },

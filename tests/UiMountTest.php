@@ -63,12 +63,18 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('video/mp4', $script);
         self::assertStringContainsString('audio/wav', $script);
         self::assertStringContainsString('M16 3a2 2 0 0 0-2 2v6', $script);
+        self::assertStringContainsString('Kokua', $script);
+        self::assertStringContainsString('/api/v1/host/kokua', $script);
+        self::assertStringContainsString('/api/v1/host/admin/communications', $script);
+        self::assertStringContainsString('Delivery, federation and background errors', $script);
 
         $style = (string) file_get_contents($root . '/public/ui/app.css');
         self::assertStringContainsString('.a-sidebar__more-menu', $style);
         self::assertStringContainsString('.a-mobile-sheet', $style);
         self::assertStringContainsString('.a-media__item--video', $style);
         self::assertStringContainsString('.a-composer__audio', $style);
+        self::assertStringContainsString('.a-kokua-card', $style);
+        self::assertStringContainsString('.a-admin-error__message', $style);
     }
 
     public function testDashboardLinksTheSharedApp(): void

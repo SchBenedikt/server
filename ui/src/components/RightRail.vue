@@ -92,6 +92,19 @@ function compose(): void {
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
+				<h2>Kokua</h2>
+				<a href="#/kokua" class="a-rail__more">Open</a>
+			</header>
+			<p class="a-rail__instance-description">
+				Need a hand, or have one to offer? The Kokua board is for practical help between people here.
+			</p>
+			<a href="#/kokua" class="a-btn a-btn--ghost a-btn--small a-rail__login">
+				<AppIcon name="handHeart" :size="16" /> Visit the board
+			</a>
+		</section>
+
+		<section class="a-rail__card">
+			<header class="a-rail__card-head">
 				<h2>Popular Tags</h2>
 				<a href="#/explore" class="a-rail__more">All</a>
 			</header>

@@ -40,6 +40,7 @@ use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
+use AlohaSocial\Server\Community\KokuaBoard;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
@@ -58,7 +59,8 @@ use AlohaSocial\Server\Mail\LogMailer;
 use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
-use AlohaSocial\Server\Support\ErrorLogLogger;
+use AlohaSocial\Server\Setup\SetupService;
+use AlohaSocial\Server\Support\RuntimeLogger;
 use RuntimeException;
 use Throwable;
 
@@ -91,6 +93,7 @@ final class ApplicationFactory
         $signingKey = (new KeyStore($database, $this->secretBox(), $clock))->loadOrCreate();
 
         // 5. HTTP client and DNS policy (shared by federation, media, threads)
+        $logger = new RuntimeLogger($database, $clock);
         $httpClient = new CurlHttpClient();
         $hostResolver = new DnsHostResolver();
         $remoteDirectory = new RemoteDirectory(
@@ -122,7 +125,7 @@ final class ApplicationFactory
             activityLog: $activityLog,
             actorResolver: new HttpActorResolver($httpClient),
             clock: $clock,
-            logger: new ErrorLogLogger(),
+            logger: $logger,
             debug: $this->config->debug,
             blobStore: new LocalBlobStore($blobDirectory),
             hostResolver: $hostResolver,
@@ -146,7 +149,7 @@ final class ApplicationFactory
             $app->posts,
             $database,
             $clock,
-            new NotificationService(new PdoNotificationRepository($database), $clock, new ErrorLogLogger()),
+            new NotificationService(new PdoNotificationRepository($database), $clock, $logger),
         );
 
         return new Runtime(
@@ -198,10 +201,18 @@ final class ApplicationFactory
                 $clock,
                 $app->followers,
                 new ActivityFactory($this->config->coreConfig()),
-                new NotificationService(new PdoNotificationRepository($database), $clock, new ErrorLogLogger()),
+                new NotificationService(new PdoNotificationRepository($database), $clock, $logger),
             ),
             postRevisions: new PdoPostRevisionRepository($database),
             pinnedPosts: new PinnedPosts($database, $clock, $app->posts),
+            kokua: new KokuaBoard($database, $clock),
+            setup: new SetupService(
+                $this->config,
+                $database,
+                $accounts,
+                $passwordHasher,
+                $clock,
+            ),
             blueskyAccounts: $blueskyAccounts,
         );
     }

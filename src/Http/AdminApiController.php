@@ -223,6 +223,12 @@ final class AdminApiController
             return Response::empty(204);
         }
 
+        if ($method === 'GET' && $path === self::PREFIX . '/communications') {
+            return Response::json($this->runtime->admin->communications(
+                $this->intParam($request, 'limit', 100, 1, 200),
+            ));
+        }
+
         if ($method === 'GET' && $path === self::PREFIX . '/federation') {
             return Response::json($this->runtime->admin->federation());
         }
