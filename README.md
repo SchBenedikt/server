@@ -22,7 +22,7 @@ and [the standalone host checklist](https://github.com/SchBenedikt/core/blob/mai
 | [Documentation index](docs/README.md) | A short route through all guides |
 | [Changelog](CHANGELOG.md) | Release history and versioning rules |
 
-**Status: release 0.9.0** — phases 0–6 of the blueprint plus account mail, the
+**Status: release 0.9.1** — phases 0–6 of the blueprint plus account mail, the
 shared Vue UI, host-owned community and moderation features, a federation
 smoke test and a guarded update path that keeps accounts, keys and media in
 place. The standalone instance signs, delivers and accepts ActivityPub,
@@ -92,7 +92,7 @@ answers as options:
 ```shell
 git clone https://github.com/SchBenedikt/server.git aloha
 cd aloha
-scripts/install.sh            # interactive: URL, name, database, admin
+scripts/install.sh            # URL, name, storage, database, mail, admin
 php -S localhost:3000 -t public public/index.php
 ```
 
@@ -138,9 +138,13 @@ scripts/install.sh --data-dir=/srv/aloha-data …
 ```
 
 That writes `ALOHASOCIAL_VAR_DIRECTORY`, `ALOHASOCIAL_BLOB_DIRECTORY`,
-`ALOHASOCIAL_SECRET_KEY_FILE` and `ALOHASOCIAL_MAIL_LOG_DIR` into `.env`. The
-Docker stack already keeps `var/` in the named `aloha-social_aloha-var`
-volume.
+`ALOHASOCIAL_SECRET_KEY_FILE`, `ALOHASOCIAL_MAIL_LOG_DIR` and the SQLite DSN
+into `.env`. On an existing SQLite installation the script copies the
+database, key, media and mail to the new directory before switching, and
+leaves the old copy in place. The Docker stack already keeps `var/` in the
+named `aloha-social_aloha-var` volume. The interactive wizard asks for the
+data directory and mail transport and finishes with `bin/doctor.php`; use
+`--no-verify` to skip that check in automation.
 
 For a production instance, point the web server at `public/` and run PHP-FPM;
 serve every request through `public/index.php` (the core route manifest lives

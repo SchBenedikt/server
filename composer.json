@@ -2,7 +2,7 @@
     "name": "alohasocial/server",
     "description": "Standalone Aloha Social host: accounts, sessions, migrations, worker and the core HTTP contract.",
     "type": "project",
-    "version": "0.9.0",
+    "version": "0.9.1",
     "license": "AGPL-3.0-or-later",
     "keywords": [
         "activitypub",

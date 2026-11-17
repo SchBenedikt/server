@@ -15,7 +15,7 @@ php bin/routes.php                 # inspect the served route manifest
 php bin/set-password.php alice     # reset a password and revoke sessions
 php bin/backup.php                 # verified database backup
 php bin/update.php                 # backup, migrate and verify accounts
-php bin/doctor.php                 # diagnose data path, schema and key
+php bin/doctor.php                 # paths, schema, key, database and mail
 ```
 
 `php bin/worker.php` without `--once` is the supervised long-running worker.
@@ -258,8 +258,8 @@ lives in Git, but both can be lost by moving or deleting the wrong directory:
 - Do not delete `var/secret.key` while the database still contains accounts;
   the sealed instance key becomes unreadable and federation identity is lost.
 - Run `php bin/doctor.php` after every update. It reports account count,
-  pending migrations, key presence and writable paths without printing
-  secrets.
+  pending migrations, key validity, writable database, blob and mail paths
+  and the newest backup without printing secrets.
 
 The core is a pinned Composer dependency. Update it deliberately, review the
 changelog, and run `composer test` before deploying if you have a development

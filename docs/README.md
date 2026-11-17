@@ -1,6 +1,6 @@
 # Aloha Social server documentation
 
-Release **0.9.0** (see [the changelog](../CHANGELOG.md)).
+Release **0.9.1** (see [the changelog](../CHANGELOG.md)).
 
 The application is a standalone Aloha Social host: PHP serves the accounts,
 sessions, API, dashboard and the Vue social UI at `/app`; a worker handles

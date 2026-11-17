@@ -40,11 +40,19 @@ cd aloha
 scripts/install.sh
 ```
 
-Started on a terminal without arguments, the script opens a short interactive
-setup and asks for the public URL, the instance name, SQLite or PostgreSQL and
-the first admin account. Every question has a default, so pressing Enter walks
-through the whole installation. Nothing is written before the final
-confirmation.
+Started on a terminal without arguments, the script opens an interactive
+setup and asks for the public URL, the instance name, the data directory,
+SQLite or PostgreSQL, the mail transport and the first admin account. It also
+offers the systemd/Nginx templates. Every question has a default, so pressing
+Enter walks through the whole installation; on an existing instance those
+defaults are read from `.env`, and pressing Enter keeps the running URL,
+database and paths unchanged. Nothing is written before the final
+confirmation, and the script validates the answers before it touches `.env`
+or the database.
+
+After the migrations and account creation the installer runs
+`bin/doctor.php` and fails if the instance is not usable. `--no-verify` skips
+that last check for provisioning systems that run their own checks.
 
 For unattended installs pass the answers as options (or use
 `--non-interactive`):
@@ -59,11 +67,11 @@ scripts/install.sh \
 
 `scripts/install.sh --help` lists every option, including `--interactive` to
 force the wizard, `--non-interactive` to never prompt, `--data-dir=DIR` to
-keep the database, key and media outside the checkout, and
-`--write-service-files` for a matching systemd unit and Nginx server block.
-Without `--handle` and without the wizard it leaves account creation to you.
-The script does not start PHP-FPM, Nginx or the worker; the sections below
-cover those services.
+keep the database, key and media outside the checkout, the `--mail-*` and
+`--smtp-*` options for unattended mail setup, and `--write-service-files` for a
+matching systemd unit and Nginx server block. Without `--handle` and without
+the wizard it leaves account creation to you. The script does not start
+PHP-FPM, Nginx or the worker; the sections below cover those services.
 
 ## What you are installing
 
@@ -194,9 +202,17 @@ scripts/install.sh --data-dir=/srv/aloha-data …
 ```
 
 This sets `ALOHASOCIAL_VAR_DIRECTORY`, `ALOHASOCIAL_BLOB_DIRECTORY`,
-`ALOHASOCIAL_SECRET_KEY_FILE` and `ALOHASOCIAL_MAIL_LOG_DIR`. A later release
-directory, `git clean` or checkout replacement then cannot delete accounts,
-the secret key or uploaded media. Back up that directory with the database.
+`ALOHASOCIAL_SECRET_KEY_FILE`, `ALOHASOCIAL_MAIL_LOG_DIR` and, for SQLite,
+`ALOHASOCIAL_DB_DSN` to the new directory. A later release directory,
+`git clean` or checkout replacement then cannot delete accounts, the secret
+key or uploaded media. Back up that directory with the database.
+
+Running `--data-dir` on an existing SQLite installation copies the database
+with a consistent `VACUUM INTO` snapshot, the secret key, uploads and mail to
+the new directory before switching `.env`. The old files are left untouched,
+so the operation can be checked before they are removed. If a database exists
+at both locations, or a key exists with different contents, the installer
+stops instead of choosing one silently.
 
 ### 5. Start the development server
 
