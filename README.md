@@ -47,11 +47,9 @@ without an account. Native ATProto follows and OAuth-based publishing are not
 part of this host yet. The Nextcloud host is a separate application
 (`AlohaSocial/social`) and is not built here. Installation is available as a
 [Docker image](docs/docker.md), a [Compose stack](docker-compose.yml) and an
-[installer script](scripts/install.sh). The federation
-smoke also shows a core-level gap: an inbound `Accept` is not in the core's
-supported activity list, so the `Accept` a core instance queues for an inbound
-`Follow` is retried by the worker. The follower edge and the `Create` delivery
-are unaffected; the fix belongs in the core package, not in this host.
+[installer script](scripts/install.sh). The federation smoke starts two real
+instances and their workers; it needs a public test address because the
+production SSRF guard refuses loopback targets.
 
 ## Requirements
 
@@ -339,10 +337,13 @@ issued bearer token; bearer clients keep their own scopes.
 a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
 
 - **ActivityPub**: WebFinger resolves the handle, the actor document supplies
-  the profile and the actor's public outbox supplies the posts. An instance
-  that enables authorized fetch answers `401`/`403` to an unsigned actor
-  request; for reading, the host then falls back to that instance's public
-  Mastodon-compatible API (`can_follow` stays `false`).
+  the profile and the actor's public outbox supplies the posts. Local posts
+  are dereferenceable both as their `Note` URL and as the `Create` activity
+  the outbox advertises; `/.well-known/nodeinfo` completes the public
+  discovery surface. An instance that enables authorized fetch answers
+  `401`/`403` to an unsigned actor request; for reading, the host then falls
+  back to that instance's public Mastodon-compatible API (`can_follow` stays
+  `false`).
 - **Bluesky**: the unauthenticated public AppView supplies the profile and the
   author feed. Posting, liking and following would need ATProto OAuth, so the
   profile view links out to Bluesky instead.
@@ -528,6 +529,33 @@ VCS repository) pinned by `composer.lock`. The installed core reports its
 release line in `vendor/alohasocial/core/src/Version.php` (currently `0.7.0`).
 Nothing from the core is copied here.
 
+### Working on the core and host together
+
+Composer installs the core as a git source checkout, so
+`vendor/alohasocial/core` is the core working tree and is loaded directly by
+the host. Use this checkout instead of a second clone; a second clone would
+not be autoloaded. Keep both repositories on `main` and make the host lock
+follow the core commit:
+
+```shell
+# 1. Change, test, commit and push the core first.
+git -C vendor/alohasocial/core status -sb
+composer --working-dir=vendor/alohasocial/core install
+composer --working-dir=vendor/alohasocial/core check
+git -C vendor/alohasocial/core push origin main
+
+# 2. Point the host lock at that core commit and run its checks.
+composer update alohasocial/core
+composer test
+
+# 3. Commit the host changes, including composer.lock, and push server main.
+```
+
+A normal `composer install` keeps the VCS checkout; if Composer replaces it
+with a dist copy, restore the source tree with
+`composer reinstall alohasocial/core --prefer-source`. The host's deployed
+version is only correct when `composer.lock` names the core commit it expects.
+
 ## Design notes
 
 - **No framework, no ORM.** PDO plus the core's ports, as the blueprint
@@ -577,7 +605,8 @@ login/rotation/CSRF/logout/throttle, route budgets, a post written and read
 over HTTP, media upload/serving/attachment, batched host interactions, likes,
 profile updates, post hydration, password reset by mailed token, the Kokua
 board and its offers, the UI mount and its bundle, actor document and WebFinger,
-the cleanup job through the worker, and route parity against the core manifest. The bundle test also checks
+the cleanup job through the worker, ActivityPub post and NodeInfo discovery,
+and route parity against the core manifest. The bundle test also checks
 the markers for the sidebar popover, the mobile sheet, video/audio rendering,
 the local account connection endpoint and the new quote glyph. `VersionTest`
 keeps `composer.json`, `ui/package.json` and the newest changelog heading on the
@@ -588,11 +617,14 @@ composer smoke:federation      # or: php bin/federation-smoke.php
 ```
 
 The smoke starts two real `php -S` instances with separate databases and keys,
-lets bob follow alice, checks the follower edge on alice's instance, posts as
-alice and asserts that bob receives the signed `Create` in his home timeline.
-It runs on loopback with `PHP_CLI_SERVER_WORKERS=4`, because the synchronous
-Follow makes each server fetch the other's actor document. `--keep` keeps the
-temporary directories for inspection.
+lets bob follow alice, runs each instance's worker for the queued Follow and
+Accept, checks the follower edge on alice's instance, posts as alice and
+asserts that bob receives the signed `Create` in his home timeline. It runs on
+loopback with `PHP_CLI_SERVER_WORKERS=4` so the two servers can fetch each
+other's actor documents. The production SSRF guard blocks literal loopback
+destinations, so the smoke's delivery step needs a public test address in
+environments that enforce that guard. `--keep` keeps the temporary directories
+for inspection.
 
 The PostgreSQL path is exercised separately: migrations twice, account
 creation, login, post write/read, media upload/serve and WebFinger against a

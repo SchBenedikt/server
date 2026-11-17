@@ -510,6 +510,8 @@ both a service and cron for the same queue:
 ```shell
 curl -fsS https://social.example/healthz
 curl -fsS https://social.example/api/v1/instance
+curl -fsS 'https://social.example/.well-known/webfinger?resource=acct:alice@social.example'
+curl -fsS https://social.example/.well-known/nodeinfo
 curl -fsS -o /dev/null -w '%{http_code}\n' https://social.example/app
 curl -fsS -o /dev/null -w '%{http_code}\n' https://social.example/ui/app.js
 sudo -u aloha php /srv/aloha/bin/routes.php >/dev/null

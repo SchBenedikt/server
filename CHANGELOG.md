@@ -9,6 +9,25 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.1] - 2026-11-17
+
+### Fixed
+
+- **ActivityPub post discovery:** the activity URLs the outbox advertises
+  (`/api/v1/posts/{id}/activity`) now return the signed `Create` document, and
+  the Note URL negotiates a `Note` document when a peer sends an ActivityPub
+  `Accept` header. Peers that dereference a post no longer receive the
+  internal API JSON or a 404.
+- **NodeInfo:** `/.well-known/nodeinfo`, `/nodeinfo/2.0` and `/nodeinfo/2.1`
+  now advertise ActivityPub, the software and the local public post count.
+- **Federation smoke:** the test now runs the worker that sends the queued
+  Follow and Accept instead of asserting a follower edge that was never
+  delivered.
+
+### Changed
+
+- Release `0.11.1`.
+
 ## [0.11.0] - 2026-11-17
 
 ### Added

@@ -346,10 +346,21 @@ $bobActor = $baseB . '/@bob';
     'headers' => ['Content-Type: application/json', 'X-CSRF-Token: ' . $csrfB],
     'body' => json_encode(['actor' => $aliceActor, 'inbox' => $aliceInbox], JSON_THROW_ON_ERROR),
 ]);
-check('B: signed Follow delivered to A', $status === 201, 'status ' . $status . ' ' . $body);
+check('B: signed Follow queued', $status === 201, 'status ' . $status . ' ' . $body);
+
+// The Follow is intentionally asynchronous: B stores a pending edge and the
+// worker sends the signed activity. Without this tick the follower edge never
+// exists and A has nobody to deliver a new post to.
+$code = runPhp($root, ['bin/worker.php', '--once'], $envB, $output);
+check('B: worker delivered the Follow', $code === 0, (string) $output);
+fwrite(STDOUT, '     worker: ' . str_replace("\n", ' | ', (string) $output) . "\n");
 
 [$status, $body] = httpRequest('GET', $baseA . '/api/v1/followers', ['jar' => $jarA]);
 check('A: bob is recorded as follower', $status === 200 && str_contains($body, $bobActor), 'status ' . $status . ' ' . $body);
+
+// A's worker handles the Accept queued by the inbound Follow before A posts.
+$code = runPhp($root, ['bin/worker.php', '--once'], $envA, $output);
+check('A: worker delivered the Accept', $code === 0, (string) $output);
 
 // A posts. Fan-out is queued; the worker delivers the Create to bob's inbox,
 // where B verifies the signature and stores it as a remote post.
@@ -370,13 +381,6 @@ check('B: delivered post appears in bob\'s home timeline', $status === 200 && st
 
 [$status, $body] = httpRequest('GET', $baseB . '/api/v1/timelines/public');
 check('B: public timeline still answers', $status === 200, 'status ' . $status);
-
-fwrite(
-    STDOUT,
-    "Note: the core queues an Accept for the inbound Follow but does not accept\n"
-    . "an inbound Accept, so that one queued delivery retries. The follower edge\n"
-    . "and the Create delivery asserted above are unaffected.\n",
-);
 
 fwrite(STDOUT, $failures === 0 ? "FEDERATION SMOKE PASS\n" : 'FEDERATION SMOKE FAIL (' . $failures . ")\n");
 
