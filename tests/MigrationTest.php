@@ -51,6 +51,9 @@ final class MigrationTest extends TestCase
             'session',
             'login_attempt',
             'instance_key',
+            'kokua',
+            'kokua_help',
+            'runtime_error',
         ] as $expected) {
             self::assertContains($expected, $tables, 'Missing table: ' . $expected);
         }

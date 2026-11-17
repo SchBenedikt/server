@@ -69,6 +69,7 @@ const paths: Record<string, string> = {
 	play: '<path d="m8 5 11 7-11 7z"/>',
 	sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
 	music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+	handHeart: '<path d="M12 20.5S4 15.8 4 9.7A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 8 2.7c0 6.1-8 10.8-8 10.8z"/><path d="M9.5 11h5M12 8.5v5"/>',
 };
 
 const markup = computed(() => paths[props.name] ?? paths.info);

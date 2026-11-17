@@ -40,6 +40,7 @@ const sheetGroups = computed(() => {
 		title: 'Explore',
 		items: [
 			{ name: 'search', label: 'Search', icon: 'search', href: '#/search' },
+			{ name: 'kokua', label: 'Kokua', icon: 'handHeart', href: '#/kokua' },
 			{ name: 'memories', label: 'memories', icon: 'clock', href: '#/memories' },
 		],
 	});

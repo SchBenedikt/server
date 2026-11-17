@@ -73,6 +73,46 @@ matching systemd unit and Nginx server block. Without `--handle` and without
 the wizard it leaves account creation to you. The script does not start
 PHP-FPM, Nginx or the worker; the sections below cover those services.
 
+## Reset and reconfigure in the browser
+
+A running instance can be returned to an empty installation without losing its
+database connection or instance key. Stop the worker and PHP-FPM first (or put
+the site in maintenance mode) so no request writes to the tables while they are
+dropped:
+
+```shell
+sudo systemctl stop aloha-worker php8.3-fpm
+php bin/reset.php              # asks for the word RESET
+php bin/reset.php --yes        # controlled scripts; still backs up first
+php bin/reset.php --keep-media --yes
+```
+
+When accounts exist, the command creates and verifies a database backup in
+`var/backups/` before dropping anything. It then drops every application table,
+rebuilds the current schema, removes uploaded media and mail files (unless
+`--keep-media` is given), and writes a one-time `var/setup.token`.
+
+It prints a URL like `https://social.example/setup?token=…`. Open it and fill in:
+
+- the final public HTTPS origin (for example `https://social.example`),
+- the instance name, description and federation contact address,
+- the first administrator's handle, email and password.
+
+The setup writes only these values to `.env` and closes the token after success.
+It cannot be opened on a normal running instance, and an empty database alone
+is not enough: the token is required. Restart PHP-FPM after setup so every
+worker process reads the new origin, then start `bin/worker.php` again:
+
+```shell
+sudo systemctl start php8.3-fpm
+sudo systemctl start aloha-worker
+``` The
+actor IDs and WebFinger links of the new accounts use the new domain.
+
+If the setup token is lost, run `php bin/reset.php` again or read
+`var/setup.token` as the application user. Never publish that file or paste the
+setup URL into a chat.
+
 ## What you are installing
 
 | Part | Where | Required to run |

@@ -19,6 +19,7 @@ use AlohaSocial\Server\Auth\SessionIssue;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Federation\RemoteDirectoryException;
 use AlohaSocial\Server\Mail\MailException;
+use AlohaSocial\Server\Setup\SetupException;
 use Throwable;
 
 /**
@@ -57,16 +58,21 @@ final class FrontController
 
         $session = $this->runtime->sessions->resolve($rawCookie);
 
+        if ($request->path === '/setup' && in_array($request->method, ['GET', 'POST'], true)) {
+            return $request->method === 'GET'
+                ? $this->setupForm($request, $session, $rawCookie, $userAgent, $ip)
+                : $this->setupSubmit($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
         if ($request->method === 'GET' && $request->path === '/login') {
-            return $this->loginForm(
-                $session,
-                $rawCookie,
-                $userAgent,
-                $ip,
-                $request->queryParam('reset') === '1'
-                    ? 'Your password was changed. Please sign in again.'
-                    : null,
-            );
+            $notice = null;
+            if ($request->queryParam('reset') === '1') {
+                $notice = 'Your password was changed. Please sign in again.';
+            } elseif ($request->queryParam('setup') === '1') {
+                $notice = 'The instance is configured. Sign in with the administrator account you created.';
+            }
+
+            return $this->loginForm($session, $rawCookie, $userAgent, $ip, $notice);
         }
 
         if ($request->method === 'POST' && $request->path === '/login') {
@@ -534,6 +540,109 @@ final class FrontController
             429,
             ['Retry-After' => (string) $retryAfter, 'Cache-Control' => 'no-store'],
         );
+    }
+
+    private function setupForm(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        if (!$this->runtime->setup->enabled()) {
+            return $this->page('error', [
+                'message' => 'Web setup is closed. Reset the instance from the terminal to open it again.',
+            ], 'Setup closed', 404);
+        }
+
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+        $token = (string) ($request->queryParam('token') ?? '');
+        $valid = $this->runtime->setup->verifyToken($token);
+
+        return $this->page(
+            'setup',
+            $this->setupData($session, $token, $valid),
+            'Set up your instance',
+            $valid ? 200 : 403,
+            $issue,
+        );
+    }
+
+    private function setupSubmit(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+        $params = $this->formParams($request);
+        $token = (string) ($params['token'] ?? '');
+        $valid = $this->runtime->setup->verifyToken($token);
+
+        if (!$this->runtime->sessions->csrfMatches($session, $this->csrfToken($request))) {
+            return $this->page(
+                'setup',
+                $this->setupData($session, $token, $valid, 'Your session has expired. Please try again.', $params),
+                'Set up your instance',
+                403,
+                $issue,
+            );
+        }
+
+        try {
+            $result = $this->runtime->setup->install($params);
+        } catch (SetupException $exception) {
+            return $this->page(
+                'setup',
+                $this->setupData($session, $token, $valid, $exception->getMessage(), $params, $exception->fields),
+                'Set up your instance',
+                $valid ? 422 : 403,
+                $issue,
+            );
+        }
+
+        return $this->redirect($result['url'] . '/login?setup=1');
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @param array<string, string> $errors
+     *
+     * @return array<string, mixed>
+     */
+    private function setupData(
+        ?AuthenticatedSession $session,
+        string $token,
+        bool $tokenValid,
+        ?string $error = null,
+        array $values = [],
+        array $errors = [],
+    ): array {
+        $defaults = [
+            'url' => $this->runtime->config->instanceUrl,
+            'name' => $this->runtime->config->instanceName,
+            'description' => $this->runtime->config->instanceDescription,
+            'contact' => $this->runtime->config->contactEmail,
+            'handle' => '',
+            'email' => '',
+            'display_name' => '',
+        ];
+
+        foreach ($defaults as $key => $default) {
+            $value = $values[$key] ?? null;
+            $defaults[$key] = is_string($value) ? $value : $default;
+        }
+
+        return [
+            'instance' => $this->runtime->config->instanceName,
+            'csrf' => $session?->session->csrfToken ?? '',
+            'token' => $token,
+            'tokenValid' => $tokenValid,
+            'error' => $error,
+            'errors' => $errors,
+            'values' => $defaults,
+        ];
     }
 
     private function loginForm(

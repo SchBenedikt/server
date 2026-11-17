@@ -50,6 +50,11 @@ import type {
 	FollowRequestData,
 	BlueskyData,
 	BlueskyAccountStatus,
+	KokuaCategory,
+	KokuaCreatePayload,
+	KokuaEntry,
+	KokuaPage,
+	KokuaStatus,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -124,6 +129,12 @@ export interface Api {
 	deleteCollection(id: string): Promise<void>;
 	addCollectionItem(id: string, postId: string): Promise<Collection>;
 	removeCollectionItem(id: string, postId: string): Promise<Collection>;
+	kokua(params?: { kind?: string; category?: string; state?: string; limit?: number; offset?: number }): Promise<KokuaPage>;
+	createKokua(payload: KokuaCreatePayload): Promise<KokuaEntry>;
+	setKokuaStatus(id: string, status: KokuaStatus): Promise<KokuaEntry>;
+	deleteKokua(id: string): Promise<void>;
+	helpKokua(id: string, message: string): Promise<KokuaEntry>;
+	withdrawKokuaHelp(id: string): Promise<KokuaEntry>;
 	postRevisions(id: string): Promise<PostRevisionData>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
@@ -733,6 +744,48 @@ function normalizeBlock(value: unknown): BlockEntry | null {
 		id: value.id,
 		actor: value.actor,
 		blocked_at: typeof value.blocked_at === 'string' ? value.blocked_at : '',
+	};
+}
+
+function normalizeKokua(value: unknown): KokuaEntry | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.account_id !== 'string') {
+		return null;
+	}
+
+	const kind = value.kind === 'offer' ? 'offer' : 'request';
+	const categories: KokuaCategory[] = ['everyday', 'skills', 'company', 'goods', 'other'];
+	const category = typeof value.category === 'string' && categories.includes(value.category as KokuaCategory)
+		? value.category as KokuaCategory
+		: 'other';
+	const status: KokuaStatus = value.status === 'done' ? 'done' : 'open';
+	const helpers = Array.isArray(value.helpers)
+		? value.helpers
+			.filter(isRecord)
+			.map((helper) => ({
+				account_id: typeof helper.account_id === 'string' ? helper.account_id : '',
+				message: typeof helper.message === 'string' ? helper.message : '',
+				created_at: typeof helper.created_at === 'string' ? helper.created_at : '',
+			}))
+			.filter((helper) => helper.account_id !== '')
+		: [];
+
+	return {
+		id: value.id,
+		account_id: value.account_id,
+		kind,
+		title: typeof value.title === 'string' ? value.title : '',
+		details: typeof value.details === 'string' ? value.details : '',
+		category,
+		place: typeof value.place === 'string' ? value.place : '',
+		needed_by: typeof value.needed_by === 'string' ? value.needed_by : null,
+		status,
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		updated_at: typeof value.updated_at === 'string' ? value.updated_at : '',
+		done_at: typeof value.done_at === 'string' ? value.done_at : null,
+		helpers,
+		help_count: typeof value.help_count === 'number' ? value.help_count : helpers.length,
+		viewer_helping: value.viewer_helping === true,
+		is_owner: value.is_owner === true,
 	};
 }
 
@@ -2129,6 +2182,103 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return collection;
+		},
+
+		async kokua(params: { kind?: string; category?: string; state?: string; limit?: number; offset?: number } = {}): Promise<KokuaPage> {
+			const query: Record<string, string> = {};
+			if (params.kind !== undefined && params.kind !== '') {
+				query.kind = params.kind;
+			}
+			if (params.category !== undefined && params.category !== '') {
+				query.category = params.category;
+			}
+			if (params.state !== undefined && params.state !== '') {
+				query.state = params.state;
+			}
+			if (params.limit !== undefined) {
+				query.limit = String(params.limit);
+			}
+			if (params.offset !== undefined) {
+				query.offset = String(params.offset);
+			}
+
+			const data = await request<{ items?: unknown; total?: unknown; limit?: unknown; offset?: unknown; counts?: unknown }>(
+				'GET',
+				'/api/v1/host/kokua',
+				query,
+			);
+			const counts = isRecord(data?.counts) ? data.counts : {};
+
+			return {
+				items: Array.isArray(data?.items)
+					? data.items.map(normalizeKokua).filter((item): item is KokuaEntry => item !== null)
+					: [],
+				total: typeof data?.total === 'number' ? data.total : 0,
+				limit: typeof data?.limit === 'number' ? data.limit : 30,
+				offset: typeof data?.offset === 'number' ? data.offset : 0,
+				counts: {
+					open_requests: typeof counts.open_requests === 'number' ? counts.open_requests : 0,
+					open_offers: typeof counts.open_offers === 'number' ? counts.open_offers : 0,
+					done: typeof counts.done === 'number' ? counts.done : 0,
+				},
+			};
+		},
+
+		async createKokua(payload: KokuaCreatePayload): Promise<KokuaEntry> {
+			const data = await request<{ kokua?: unknown }>('POST', '/api/v1/host/kokua', undefined, payload);
+			const entry = normalizeKokua(data?.kokua);
+			if (entry === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a Kokua.');
+			}
+
+			return entry;
+		},
+
+		async setKokuaStatus(id: string, status: KokuaStatus): Promise<KokuaEntry> {
+			const data = await request<{ kokua?: unknown }>(
+				'PATCH',
+				`/api/v1/host/kokua/${encodeURIComponent(id)}`,
+				undefined,
+				{ status },
+			);
+			const entry = normalizeKokua(data?.kokua);
+			if (entry === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a Kokua.');
+			}
+
+			return entry;
+		},
+
+		async deleteKokua(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/kokua/${encodeURIComponent(id)}`);
+		},
+
+		async helpKokua(id: string, message: string): Promise<KokuaEntry> {
+			const data = await request<{ kokua?: unknown }>(
+				'POST',
+				`/api/v1/host/kokua/${encodeURIComponent(id)}/help`,
+				undefined,
+				{ message },
+			);
+			const entry = normalizeKokua(data?.kokua);
+			if (entry === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a Kokua.');
+			}
+
+			return entry;
+		},
+
+		async withdrawKokuaHelp(id: string): Promise<KokuaEntry> {
+			const data = await request<{ kokua?: unknown }>(
+				'DELETE',
+				`/api/v1/host/kokua/${encodeURIComponent(id)}/help`,
+			);
+			const entry = normalizeKokua(data?.kokua);
+			if (entry === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a Kokua.');
+			}
+
+			return entry;
 		},
 
 		async postRevisions(id: string): Promise<PostRevisionData> {

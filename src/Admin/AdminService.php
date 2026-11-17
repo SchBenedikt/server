@@ -109,6 +109,7 @@ final class AdminService
         $now = $this->clock->now();
         $today = Time::format($now->setTime(0, 0));
         $weekAgo = Time::format($now->modify('-7 days'));
+        $dayAgo = Time::format($now->modify('-24 hours'));
 
         $stats = [
             'accounts' => [
@@ -148,6 +149,14 @@ final class AdminService
                 'total' => $this->intValue('SELECT COUNT(*) FROM moderation_report'),
             ],
             'scheduled' => $this->scheduledCounts(),
+            'errors' => [
+                'recent' => $this->intValue('SELECT COUNT(*) FROM runtime_error WHERE created_at >= :cutoff', ['cutoff' => $dayAgo]),
+                'warnings' => $this->intValue("SELECT COUNT(*) FROM runtime_error WHERE created_at >= :cutoff AND level = 'warning'", ['cutoff' => $dayAgo]),
+                'failures' => $this->intValue(
+                    "SELECT COUNT(*) FROM runtime_error WHERE created_at >= :cutoff AND level IN ('error', 'critical', 'alert', 'emergency')",
+                    ['cutoff' => $dayAgo],
+                ),
+            ],
         ];
 
         return [
@@ -732,6 +741,44 @@ final class AdminService
     }
 
     /**
+     * Recent background and communication failures, plus dead delivery jobs.
+     *
+     * @return array<string, mixed>
+     */
+    public function communications(int $limit = 100): array
+    {
+        $limit = max(1, min(200, $limit));
+        $cutoff = Time::format($this->clock->now()->modify('-24 hours'));
+
+        $rows = $this->db->fetchAll(
+            'SELECT * FROM runtime_error ORDER BY created_at DESC, id DESC LIMIT ' . $limit,
+        );
+        $dead = $this->db->fetchAll(
+            'SELECT * FROM social_job WHERE dead_at IS NOT NULL ORDER BY dead_at DESC, id DESC LIMIT 25',
+        );
+
+        return [
+            'errors' => array_map(fn (array $row): array => [
+                'id' => (string) $row['id'],
+                'level' => (string) $row['level'],
+                'source' => $row['source'] === null ? null : (string) $row['source'],
+                'message' => (string) $row['message'],
+                'context' => $this->decodeDetails($row['context']),
+                'created_at' => (string) $row['created_at'],
+            ], $rows),
+            'counts' => [
+                'last_24h' => $this->intValue('SELECT COUNT(*) FROM runtime_error WHERE created_at >= :cutoff', ['cutoff' => $cutoff]),
+                'warnings' => $this->intValue("SELECT COUNT(*) FROM runtime_error WHERE level = 'warning'"),
+                'failures' => $this->intValue(
+                    "SELECT COUNT(*) FROM runtime_error WHERE level IN ('error', 'critical', 'alert', 'emergency')",
+                ),
+                'dead_jobs' => $this->intValue('SELECT COUNT(*) FROM social_job WHERE dead_at IS NOT NULL'),
+            ],
+            'dead_jobs' => array_map(fn (array $row): array => $this->jobRow($row), $dead),
+        ];
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function audit(int $limit = 100): array
@@ -1081,6 +1128,16 @@ final class AdminService
                 'label' => 'Job queue',
                 'status' => $dead > 0 ? 'warn' : 'ok',
                 'detail' => $dead > 0 ? $dead . ' failed jobs' : 'No failed jobs',
+            ],
+            [
+                'id' => 'errors',
+                'label' => 'Delivery and federation errors',
+                'status' => (int) ($stats['errors']['failures'] ?? 0) > 0
+                    ? 'error'
+                    : ((int) ($stats['errors']['warnings'] ?? 0) > 0 ? 'warn' : 'ok'),
+                'detail' => (int) ($stats['errors']['recent'] ?? 0) === 0
+                    ? 'No errors in the last 24 hours'
+                    : (int) ($stats['errors']['recent'] ?? 0) . ' logged in the last 24 hours',
             ],
             [
                 'id' => 'storage',

@@ -36,6 +36,8 @@ final class Migrations
             new Version202611160005AtprotoAccountSchema(),
             new Version202611160006PinnedPostSchema(),
             new Version202611160007CoreUpdateSchema(),
+            new Version202611170001KokuaSchema(),
+            new Version202611170002RuntimeErrorSchema(),
         ];
     }
 }

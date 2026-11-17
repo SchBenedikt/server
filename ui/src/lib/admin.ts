@@ -12,6 +12,7 @@ export type AdminSection =
 	| 'users'
 	| 'reports'
 	| 'federation'
+	| 'communications'
 	| 'queue'
 	| 'settings'
 	| 'announcements'
@@ -29,6 +30,7 @@ export const ADMIN_SECTIONS: AdminSectionDefinition[] = [
 	{ id: 'users', label: 'Accounts', icon: 'users', hint: 'Create accounts, manage roles and access' },
 	{ id: 'reports', label: 'Reports', icon: 'flag', hint: 'Review reported posts and profiles' },
 	{ id: 'federation', label: 'Federation', icon: 'globe', hint: 'Peers, blocks and remote posts' },
+	{ id: 'communications', label: 'Errors', icon: 'alert', hint: 'Delivery, federation and background failures' },
 	{ id: 'queue', label: 'Queue', icon: 'server', hint: 'Jobs, retries and dead tasks' },
 	{ id: 'settings', label: 'Instance', icon: 'settings', hint: 'Runtime, limits and configuration warnings' },
 	{ id: 'announcements', label: 'Announcements', icon: 'bell', hint: 'Publish notices as a banner on the home page' },
@@ -114,6 +116,11 @@ export interface AdminStats {
 		total: number;
 	};
 	scheduled: ScheduledCounts;
+	errors: {
+		recent: number;
+		warnings: number;
+		failures: number;
+	};
 }
 
 export interface AdminUser {
@@ -261,6 +268,26 @@ export interface FederationData {
 	blocks: FederationBlock[];
 }
 
+export interface CommunicationError {
+	id: string;
+	level: 'warning' | 'error' | 'critical' | 'alert' | 'emergency' | string;
+	source: string | null;
+	message: string;
+	context: Record<string, unknown>;
+	created_at: string;
+}
+
+export interface CommunicationData {
+	errors: CommunicationError[];
+	counts: {
+		last_24h: number;
+		warnings: number;
+		failures: number;
+		dead_jobs: number;
+	};
+	dead_jobs: AdminJob[];
+}
+
 export interface AdminInstance {
 	instance: {
 		name: string;
@@ -316,6 +343,7 @@ export interface AdminApi {
 	purgeDeadJobs(): Promise<number>;
 	runQueue(): Promise<number>;
 	federation(): Promise<FederationData>;
+	communications(limit?: number): Promise<CommunicationData>;
 	instance(): Promise<AdminInstance>;
 	audit(limit?: number): Promise<AuditEntry[]>;
 	createReport(payload: ReportPayload): Promise<AdminReport>;
@@ -505,6 +533,12 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 
 		async federation(): Promise<FederationData> {
 			return request<FederationData>('GET', '/api/v1/host/admin/federation');
+		},
+
+		async communications(limit = 100): Promise<CommunicationData> {
+			return request<CommunicationData>('GET', '/api/v1/host/admin/communications', {
+				limit: String(limit),
+			});
 		},
 
 		async instance(): Promise<AdminInstance> {

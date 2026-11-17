@@ -56,7 +56,10 @@ const moreGroups = computed(() => {
 	const groups: Array<{ title: string; items: SidebarItem[] }> = [
 		{
 			title: 'Discover',
-			items: [{ id: 'search', label: 'Search', icon: 'search', href: '#/search', group: 'main' }],
+			items: [
+				{ id: 'search', label: 'Search', icon: 'search', href: '#/search', group: 'main' },
+				{ id: 'kokua', label: 'Kokua board', icon: 'handHeart', href: '#/kokua', group: 'main' },
+			],
 		},
 	];
 

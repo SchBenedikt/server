@@ -29,6 +29,7 @@ use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
+use AlohaSocial\Server\Community\KokuaBoard;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
@@ -41,6 +42,7 @@ use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Mail\Mailer;
+use AlohaSocial\Server\Setup\SetupService;
 
 /**
  * Everything one request or worker tick needs, already wired.
@@ -81,6 +83,8 @@ final readonly class Runtime
         public Exports $exports,
         public FollowRequests $followRequests,
         public PinnedPosts $pinnedPosts,
+        public KokuaBoard $kokua,
+        public SetupService $setup,
         public BlueskyAccounts $blueskyAccounts,
         public PostRevisionRepository $postRevisions,
     ) {

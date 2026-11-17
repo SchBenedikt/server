@@ -47,6 +47,51 @@ try {
 } catch (Throwable $exception) {
     error_log('alohasocial/server boot failed: ' . $exception->getMessage());
 
+    $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+    $accept = strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? ''));
+    $wantsJson = str_starts_with($path, '/api/')
+        || str_contains($accept, 'application/json')
+        || str_contains($accept, 'application/activity+json');
+
+    if (!$wantsJson) {
+        http_response_code(503);
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('Retry-After: 30');
+
+        $detail = $debug ? $exception->getMessage() : null;
+        $message = 'This instance is not ready yet.';
+        ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Not ready · Aloha Social</title>
+    <style>
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #fbf4ea; color: #1c2f37; font: 16px/1.6 system-ui, sans-serif; }
+        main { width: min(34rem, 100% - 2rem); padding: 2rem; background: #fff; border: 1px solid #e9dfd1; border-radius: 1rem; }
+        h1 { margin: 0 0 .5rem; color: #0f4c5c; font-size: 1.6rem; }
+        p { margin: .6rem 0; }
+        code { font-family: ui-monospace, monospace; background: #f7efe3; padding: .1rem .3rem; border-radius: .3rem; }
+        .detail { margin-top: 1rem; padding: .8rem; background: #f8e3df; border-radius: .6rem; overflow-wrap: anywhere; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Server is not ready</h1>
+    <p><?= htmlspecialchars($message, ENT_QUOTES) ?></p>
+    <p>The operator can run <code>php bin/doctor.php</code> and <code>php bin/update.php</code> on the server.</p>
+    <?php if ($detail !== null && $detail !== ''): ?>
+        <p class="detail"><?= htmlspecialchars($detail, ENT_QUOTES) ?></p>
+    <?php endif; ?>
+</main>
+</body>
+</html>
+        <?php
+        exit;
+    }
+
     $response = Response::json(
         [
             'error' => [
@@ -54,7 +99,7 @@ try {
                 'message' => $debug ? $exception->getMessage() : 'The server is not ready.',
             ],
         ],
-        500,
+        503,
     );
 }
 

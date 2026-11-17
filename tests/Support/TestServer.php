@@ -76,6 +76,7 @@ final class TestServer
             'mail_transport' => 'log',
             'mail_from' => 'no-reply@example.test',
             'mail_log_directory' => $this->directory . '/mail',
+            'env_file' => $this->directory . '/.env',
         ], $overrides));
 
         $database = PdoFactory::connect($this->config);

@@ -1,6 +1,6 @@
 # Aloha Social server documentation
 
-Release **0.9.1** (see [the changelog](../CHANGELOG.md)).
+Release **0.11.0** (see [the changelog](../CHANGELOG.md)).
 
 The application is a standalone Aloha Social host: PHP serves the accounts,
 sessions, API, dashboard and the Vue social UI at `/app`; a worker handles
@@ -49,6 +49,11 @@ Nginx, PHP-FPM, mail, the worker and verification: see
 - The shared Aloha Social UI: feed, composer, replies, boosts, quotes, likes,
   bookmarks, lists, filters, polls, scheduling, direct messages, collections,
   stories, memories, search, notifications, profiles and themes
+- A Kokua mutual-aid board where members ask for or offer practical help,
+  respond with an offer and mark the exchange as done
+- A guarded terminal reset and a token-protected web setup for the public
+  domain and first administrator
+- An admin **Errors** tab for delivery, federation and background failures
 - Image, video and audio attachments (up to ten per post) with inline players,
   a lightbox and previews in the composer
 - Local and remote follower/following lists on profiles
