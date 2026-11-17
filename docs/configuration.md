@@ -103,9 +103,12 @@ the host does not override them. Set PHP's `upload_max_filesize` to at least
 post with several files needs room for their sum too. Set the web server's
 request-body limit to at least the same value.
 
-Federation is enabled by the host. Actor documents, WebFinger and inbox/outbox
-routes must be served from the same origin through `public/index.php`; do not
-rewrite only `/api/` and leave `/.well-known/` or `/@handle` unhandled.
+Federation is enabled by the host. Actor documents, WebFinger, NodeInfo
+(`/.well-known/nodeinfo`, `/nodeinfo/2.0`) and inbox/outbox routes must be
+served from the same origin through `public/index.php`; do not rewrite only
+`/api/` and leave `/.well-known/` or `/@handle` unhandled. Post URLs negotiate
+ActivityPub from the `Accept` header and the activity URLs advertised by the
+outbox are publicly dereferenceable.
 
 ## Mail
 

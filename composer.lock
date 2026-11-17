@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "bbfb61e44b2c9f0cf80c7fc82835689b",
+    "content-hash": "27b4ec2c83b171688477cf54574891b5",
     "packages": [
         {
             "name": "alohasocial/core",

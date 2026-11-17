@@ -40,11 +40,14 @@ final class FrontController
 
     private readonly CommunityApiController $communityApi;
 
+    private readonly FederationController $federation;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
         $this->adminApi = new AdminApiController($runtime);
         $this->communityApi = new CommunityApiController($runtime);
+        $this->federation = new FederationController($runtime);
     }
 
     /**
@@ -57,6 +60,14 @@ final class FrontController
         $rawCookie = is_string($rawCookie) && $rawCookie !== '' ? $rawCookie : null;
 
         $session = $this->runtime->sessions->resolve($rawCookie);
+
+        // Public ActivityPub/NodeInfo documents the core does not route. This
+        // must run before the compatibility API so a post URL can negotiate
+        // between its internal JSON shape and its Note document.
+        $federationResponse = $this->federation->handle($request);
+        if ($federationResponse !== null) {
+            return $federationResponse;
+        }
 
         if ($request->path === '/setup' && in_array($request->method, ['GET', 'POST'], true)) {
             return $request->method === 'GET'
@@ -494,7 +505,10 @@ final class FrontController
             ? $request->withUserId(null)
             : $request->withUserId($userId)->withScopes(['*']);
 
-        return $this->runtime->app->handle($authenticated);
+        return $this->federation->decorate(
+            $request,
+            $this->runtime->app->handle($authenticated),
+        );
     }
 
     /**

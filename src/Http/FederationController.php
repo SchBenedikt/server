@@ -1,0 +1,215 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace AlohaSocial\Server\Http;
+
+use AlohaSocial\Core\Domain\Post\Post;
+use AlohaSocial\Core\Domain\Post\PostNotFoundException;
+use AlohaSocial\Core\Http\Request;
+use AlohaSocial\Core\Http\Response;
+use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
+use AlohaSocial\Server\Bootstrap\Runtime;
+use AlohaSocial\Server\Support\CoreVersion;
+
+/**
+ * Public discovery documents the core does not route itself.
+ *
+ * The core publishes Create activities whose ids end in `/activity` and uses
+ * `/api/v1/posts/{id}` as the Note id. Those URLs must themselves be readable
+ * as ActivityPub, otherwise a peer that dereferences an activity or a remote
+ * post receives the host's internal API JSON (or a 404) and drops the post.
+ *
+ * NodeInfo is the second discovery surface: directory services and some
+ * servers probe it to confirm that the origin actually speaks ActivityPub.
+ */
+final class FederationController
+{
+    private const ACTIVITY_CONTENT_TYPE = 'application/activity+json; charset=utf-8';
+
+    private readonly ActivityFactory $activities;
+
+    public function __construct(
+        private readonly Runtime $runtime,
+    ) {
+        $this->activities = new ActivityFactory(
+            $runtime->config->coreConfig(),
+            $runtime->app->media,
+        );
+    }
+
+    /**
+     * Add the CORS header WebFinger requires without taking over the core's
+     * account lookup and 404 rules.
+     */
+    public function decorate(Request $request, Response $response): Response
+    {
+        if ($request->path === '/.well-known/webfinger') {
+            return $response->withHeader('Access-Control-Allow-Origin', '*');
+        }
+
+        return $response;
+    }
+
+    public function handle(Request $request): ?Response
+    {
+        if ($request->method !== 'GET') {
+            return null;
+        }
+
+        if ($request->path === '/.well-known/nodeinfo') {
+            return $this->nodeInfoIndex();
+        }
+
+        if ($request->path === '/nodeinfo/2.0' || $request->path === '/nodeinfo/2.1') {
+            return $this->nodeInfo(str_ends_with($request->path, '/2.1') ? '2.1' : '2.0');
+        }
+
+        if (preg_match('#^/api/v1/posts/([^/]+)/activity$#', $request->path, $match) === 1) {
+            $post = $this->visiblePost(rawurldecode($match[1]));
+            if ($post === null) {
+                return $this->notFound();
+            }
+
+            return $this->activityResponse($this->activities->createNote($post));
+        }
+
+        if (preg_match('#^/api/v1/posts/([^/]+)$#', $request->path, $match) === 1
+            && $this->wantsActivityPub($request)
+        ) {
+            $post = $this->visiblePost(rawurldecode($match[1]));
+            if ($post === null) {
+                return $this->notFound();
+            }
+
+            // The Create embeds the exact Note the outbox and delivery use, so
+            // the dereferenced object and the delivered object cannot drift.
+            $activity = $this->activities->createNote($post);
+            $note = $activity['object'] ?? null;
+            if (!is_array($note)) {
+                return $this->notFound();
+            }
+
+            return Response::json($note, 200, [
+                'Content-Type' => self::ACTIVITY_CONTENT_TYPE,
+                'Vary' => 'Accept',
+                'Access-Control-Allow-Origin' => '*',
+            ]);
+        }
+
+        return null;
+    }
+
+    private function visiblePost(string $id): ?Post
+    {
+        if ($id === '' || str_contains($id, '/')) {
+            return null;
+        }
+
+        try {
+            return $this->runtime->app->posts->getVisible($id, null);
+        } catch (PostNotFoundException) {
+            return null;
+        }
+    }
+
+    private function wantsActivityPub(Request $request): bool
+    {
+        $accept = strtolower((string) $request->header('accept'));
+
+        return str_contains($accept, 'application/activity+json')
+            || (str_contains($accept, 'application/ld+json')
+                && str_contains($accept, 'activitystreams'));
+    }
+
+    /**
+     * @param array<string, mixed> $activity
+     */
+    private function activityResponse(array $activity): Response
+    {
+        return Response::json($activity, 200, [
+            'Content-Type' => self::ACTIVITY_CONTENT_TYPE,
+            'Access-Control-Allow-Origin' => '*',
+        ]);
+    }
+
+    private function nodeInfoIndex(): Response
+    {
+        $base = $this->runtime->config->instanceUrl;
+
+        return Response::json([
+            'links' => [
+                [
+                    'rel' => 'http://nodeinfo.diaspora.software/ns/schema/2.0',
+                    'href' => $base . '/nodeinfo/2.0',
+                ],
+                [
+                    'rel' => 'http://nodeinfo.diaspora.software/ns/schema/2.1',
+                    'href' => $base . '/nodeinfo/2.1',
+                ],
+            ],
+        ], 200, [
+            'Content-Type' => 'application/jrd+json; charset=utf-8',
+            'Access-Control-Allow-Origin' => '*',
+        ]);
+    }
+
+    private function nodeInfo(string $version): Response
+    {
+        $users = (int) $this->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM account WHERE disabled_at IS NULL',
+        );
+        $posts = (int) $this->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND visibility = 'public'",
+        );
+
+        $metadata = [
+            'nodeName' => $this->runtime->config->instanceName,
+        ];
+        if ($this->runtime->config->instanceDescription !== '') {
+            $metadata['nodeDescription'] = $this->runtime->config->instanceDescription;
+        }
+        if ($this->runtime->config->contactEmail !== '') {
+            $metadata['contactEmail'] = $this->runtime->config->contactEmail;
+        }
+
+        return Response::json([
+            'version' => $version,
+            'software' => [
+                'name' => 'alohasocial',
+                'version' => CoreVersion::current(),
+            ],
+            'protocols' => ['activitypub'],
+            'services' => ['inbound' => [], 'outbound' => []],
+            'openRegistrations' => false,
+            'usage' => [
+                'users' => [
+                    'total' => $users,
+                    'activeMonth' => $users,
+                    'activeHalfyear' => $users,
+                ],
+                'localPosts' => $posts,
+            ],
+            'metadata' => $metadata,
+        ], 200, [
+            'Content-Type' => 'application/json; profile="http://nodeinfo.diaspora.software/ns/schema/'
+                . $version . '"; charset=utf-8',
+            'Access-Control-Allow-Origin' => '*',
+        ]);
+    }
+
+    private function notFound(): Response
+    {
+        return Response::json([
+            'error' => [
+                'code' => 'post_not_found',
+                'message' => 'Post not found.',
+            ],
+        ], 404);
+    }
+}

@@ -324,6 +324,8 @@ convenience, not a monitoring signal.
 | Password reset mail missing | `log` transport is active or SMTP is misconfigured. | Look in `var/mail/` for development; check SMTP host, port, TLS and credentials for production. |
 | Worker exits immediately | Boot/schema/config error. | Run `php bin/worker.php --once` in the foreground and read the error. |
 | Federation delivery is delayed | Worker is not running or SMTP/HTTP outbound access is blocked. | Start the worker; inspect `journalctl`; check DNS and firewall egress. |
+| A remote instance cannot find the handle or posts | The public origin is wrong, `/.well-known/webfinger` or the post URLs are not served through PHP, or the worker never delivered the post. | Verify `ALOHASOCIAL_INSTANCE_URL` is the public HTTPS origin; check WebFinger, the actor, `/api/v1/posts/{id}` with an ActivityPub `Accept`, and the activity URL; inspect the job queue and worker heartbeat. |
+| Posts exist locally but never arrive on a follower's instance | No follower edge was accepted, or federation jobs are still pending/dead. | Check **Administration → Federation** and **Errors**, then run `php bin/worker.php --once`; confirm the peer can reach the public inbox. |
 | Login page loads but styling is stale after deploy | Browser or opcache served an old build. | Rebuild `public/ui/`, reload with cache disabled, restart PHP-FPM. |
 
 For a failure that is not listed here, reproduce it with the relevant CLI
