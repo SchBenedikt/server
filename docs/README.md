@@ -1,6 +1,6 @@
 # Aloha Social server documentation
 
-Release **0.11.0** (see [the changelog](../CHANGELOG.md)).
+Release **0.11.2** (see [the changelog](../CHANGELOG.md)).
 
 The application is a standalone Aloha Social host: PHP serves the accounts,
 sessions, API, dashboard and the Vue social UI at `/app`; a worker handles
@@ -15,6 +15,8 @@ delivery and cleanup; the social behaviour lives in the Composer package
 | Install locally or in production | [Installation and setup](installation.md) |
 | Understand every environment variable | [Configuration](configuration.md) |
 | Run, back up, upgrade or repair an instance | [Operations](operations.md) |
+| See the user-facing feature surface | [Features](features.md) |
+| Understand the architecture, core checkout and test gates | [Development](development.md) |
 | Understand where the frontend lives and how it is built | [Frontend hosting decision](frontend.md) |
 | See the project overview and architecture | [README](../README.md) |
 | Read the release history and versioning rules | [Changelog](../CHANGELOG.md) |
@@ -61,7 +63,8 @@ Nginx, PHP-FPM, mail, the worker and verification: see
   federation, the job queue, instance checks and the audit log
 - User-facing reporting for posts and profiles, with a moderation queue that
   can resolve, dismiss, delete or disable
-- ActivityPub actor documents, WebFinger, federation delivery and a smoke test
+- ActivityPub actor documents, WebFinger, NodeInfo, dereferenceable Note/Create documents, federation delivery and a real two-instance smoke test
+- Media-only posts, alongside text, polls, replies, quotes, edits and scheduled posts
 - A migration runner, a worker, cleanup and route parity checks
 - A committed Vue bundle, so running the app does not require Node.js
 
