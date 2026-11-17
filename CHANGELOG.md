@@ -9,6 +9,22 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.2] - 2026-11-17
+
+### Fixed
+
+- **Media-only posts:** core `5879c32` accepts a post with attachments and no
+  text, matching the composer. Empty posts without media are still refused,
+  and an edit cannot remove the last attachment while leaving the text empty.
+- **Federation smoke:** the two-instance test now selects a globally routable
+  local address by default, so the production SSRF guard stays active and the
+  signed Follow, Accept and Create are delivered end to end. Set
+  `ALOHASOCIAL_SMOKE_HOST` to override the address.
+
+### Changed
+
+- Release `0.11.2`.
+
 ## [0.11.1] - 2026-11-17
 
 ### Fixed
