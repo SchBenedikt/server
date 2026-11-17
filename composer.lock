@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "27b4ec2c83b171688477cf54574891b5",
+    "content-hash": "2062900cb8ba771c7879f073d43118ea",
     "packages": [
         {
             "name": "alohasocial/core",
@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "fce4ca204af8b5f6ac43846247a122aebe253bd5"
+                "reference": "5879c322a4a7a7d021d3f2ae37f96e80e489e4bb"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/fce4ca204af8b5f6ac43846247a122aebe253bd5",
-                "reference": "fce4ca204af8b5f6ac43846247a122aebe253bd5",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/5879c322a4a7a7d021d3f2ae37f96e80e489e4bb",
+                "reference": "5879c322a4a7a7d021d3f2ae37f96e80e489e4bb",
                 "shasum": ""
             },
             "require": {
@@ -111,7 +111,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-16T19:32:41+00:00"
+            "time": "2026-11-17T19:59:38+00:00"
         },
         {
             "name": "psr/log",
