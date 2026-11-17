@@ -1,6 +1,7 @@
 /vendor/
 /ui/node_modules/
 /.env
+/.env.backup-*
 /var/
 /storage/
 .phpunit.cache/

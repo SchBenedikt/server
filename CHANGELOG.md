@@ -9,6 +9,52 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.9.1] - 2026-11-17
+
+### Added
+
+- The interactive installer now asks for the data directory and mail
+transport (log or SMTP), offers the systemd/Nginx templates, shows a complete
+summary and runs `bin/doctor.php` before declaring success. `--no-verify`
+skips the final check for scripted setups.
+- Installer preflight validates the public URL, database driver and DSN, admin
+handle, email, password length and SMTP settings before writing `.env` or
+migrating the database.
+- New installer tests cover a fresh install, an unchanged rerun, the
+interactive defaults and a data-directory move with accounts, key and media.
+
+### Changed
+
+- Re-running the installer never replaces existing URL, instance name or
+database values with built-in defaults. The wizard uses the current `.env`
+(and real environment) for every prompt, so pressing Enter keeps the running
+instance unchanged.
+- `scripts/install.sh --data-dir=DIR` now actually moves SQLite to `DIR`.
+On an existing installation it copies the database with `VACUUM INTO`, the
+secret key, blobs and mail before switching the paths; the old copy stays in
+place until the operator removes it.
+- The installer creates and permission-checks the configured var, blob, key
+and mail directories instead of always creating `var/blobs` and `var/mail`.
+- `--force` keeps the existing database DSN, credentials and runtime paths
+when it regenerates `.env`, so resetting the file cannot hide accounts.
+
+### Fixed
+
+- `--data-dir` previously wrote the new var/blob/key/mail paths but left
+`ALOHASOCIAL_DB_DSN` at `sqlite:var/server.sqlite`, so the database and all
+accounts stayed in the release directory.
+- The generated Nginx template now allows the documented 64 MiB request body
+and includes the actual service user and group. A backtick in the final
+installer message was executed by the shell, and an HTTPS instance was offered
+an unusable `php -S …:443` command.
+- `bin/doctor.php` now checks the SQLite file and mail log directory for
+writability, validates the configured secret key and counts SQLite and
+PostgreSQL backups together.
+- Installer `.env` backups are ignored by Git so a rollback copy cannot be
+committed by accident.
+- Database and SMTP passwords are written through standard input instead of
+being exposed briefly as process arguments.
+
 ## [0.9.0] - 2026-11-16
 
 ### Added

@@ -37,9 +37,17 @@ try {
 
     $accounts = $backups->accountCount();
     $keyExists = $config->secretKey !== null || is_file($config->secretKeyFile);
-    $backupFiles = glob($config->varDirectory . '/backups/alohasocial-*.sqlite')
-        ?: glob($config->varDirectory . '/backups/alohasocial-*.dump')
-        ?: [];
+    $keyValid = secretKeyIsValid($config);
+    $backupFiles = array_merge(
+        glob($config->varDirectory . '/backups/alohasocial-*.sqlite') ?: [],
+        glob($config->varDirectory . '/backups/alohasocial-*.dump') ?: [],
+    );
+    usort($backupFiles, static fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
+    $databaseFile = str_starts_with($config->databaseDsn, 'sqlite:') ? substr($config->databaseDsn, 7) : null;
+    $databaseWritable = $databaseFile === null
+        || $databaseFile === ':memory:'
+        || (is_file($databaseFile) ? is_writable($databaseFile) : writableDirectory(dirname($databaseFile)));
+    $mailWritable = $config->mailTransport !== 'log' || writableDirectory($config->mailLogDirectory);
 
     $report = [
         'root' => $root,
@@ -57,9 +65,15 @@ try {
         'blob_writable' => writableDirectory($config->blobDirectory),
         'secret_key' => $config->secretKey !== null ? 'environment' : $config->secretKeyFile,
         'secret_key_present' => $keyExists,
+        'secret_key_valid' => $keyValid,
+        'database_file' => $databaseFile,
+        'database_writable' => $databaseWritable,
+        'mail_transport' => $config->mailTransport,
+        'mail_directory' => $config->mailLogDirectory,
+        'mail_writable' => $mailWritable,
         'backup_directory' => $config->varDirectory . '/backups',
         'backup_count' => count($backupFiles),
-        'newest_backup' => $backupFiles === [] ? null : max($backupFiles),
+        'newest_backup' => $backupFiles[0] ?? null,
     ];
 
     $problems = [];
@@ -71,11 +85,20 @@ try {
     if (($accounts ?? 0) > 0 && !$keyExists) {
         $problems[] = 'Accounts exist but the secret key file is missing; federation identity cannot be decrypted.';
     }
+    if ($keyExists && !$keyValid) {
+        $problems[] = 'The configured secret key is not 32 bytes, base64 encoded.';
+    }
     if (!writableDirectory($config->varDirectory)) {
         $problems[] = 'The var directory is not writable: ' . $config->varDirectory;
     }
     if (!writableDirectory($config->blobDirectory)) {
         $problems[] = 'The blob directory is not writable: ' . $config->blobDirectory;
+    }
+    if (!$databaseWritable) {
+        $problems[] = 'The SQLite database is not writable: ' . (string) $databaseFile;
+    }
+    if (!$mailWritable) {
+        $problems[] = 'The mail log directory is not writable: ' . $config->mailLogDirectory;
     }
 
     $report['problems'] = $problems;
@@ -95,7 +118,9 @@ try {
     fwrite(STDOUT, "  Accounts:       " . ($accounts ?? 'unknown') . "\n");
     fwrite(STDOUT, "  Data directory: " . $config->varDirectory . (writableDirectory($config->varDirectory) ? ' (writable)' : ' (NOT writable)') . "\n");
     fwrite(STDOUT, "  Blobs:          " . $config->blobDirectory . (writableDirectory($config->blobDirectory) ? ' (writable)' : ' (NOT writable)') . "\n");
-    fwrite(STDOUT, "  Secret key:     " . ($config->secretKey !== null ? 'from environment' : $config->secretKeyFile) . ($keyExists ? ' (present)' : ' (MISSING)') . "\n");
+    fwrite(STDOUT, "  Secret key:     " . ($config->secretKey !== null ? 'from environment' : $config->secretKeyFile) . ($keyExists ? ($keyValid ? ' (present)' : ' (INVALID)') : ' (MISSING)') . "\n");
+    fwrite(STDOUT, "  Database file:  " . ($databaseFile ?? 'server-managed') . ($databaseWritable ? ' (writable)' : ' (NOT writable)') . "\n");
+    fwrite(STDOUT, "  Mail:           " . $config->mailTransport . ' -> ' . $config->mailLogDirectory . ($mailWritable ? ' (writable)' : ' (NOT writable)') . "\n");
     fwrite(STDOUT, "  Backups:        " . count($backupFiles) . " in " . $report['backup_directory'] . "\n");
 
     if ($problems !== []) {
@@ -125,4 +150,26 @@ function writableDirectory(string $path): bool
     $parent = dirname($path);
 
     return is_dir($parent) && is_writable($parent);
+}
+
+/**
+ * Reads the environment key or the key file without exposing either value.
+ */
+function secretKeyIsValid(HostConfig $config): bool
+{
+    $encoded = $config->secretKey;
+    if ($encoded === null) {
+        if (!is_file($config->secretKeyFile)) {
+            return false;
+        }
+
+        $encoded = file_get_contents($config->secretKeyFile);
+        if ($encoded === false) {
+            return false;
+        }
+    }
+
+    $decoded = base64_decode(trim($encoded), true);
+
+    return $decoded !== false && strlen($decoded) === 32;
 }
