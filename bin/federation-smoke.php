@@ -18,6 +18,12 @@ declare(strict_types=1);
  * and the queue are the production code path.
  *
  * Usage: php bin/federation-smoke.php [--keep]
+ *
+ * The production federation guard refuses loopback destinations. When no
+ * public address is passed in ALOHASOCIAL_SMOKE_HOST, the smoke looks for a
+ * globally routable local address and uses it, so the delivery step exercises
+ * the real guard instead of a test-only bypass. It falls back to loopback and
+ * reports that the delivery step cannot pass when no public address exists.
  */
 
 $root = dirname(__DIR__);
@@ -148,9 +154,48 @@ function check(string $label, bool $ok, string $detail = ''): void
     fwrite(STDOUT, ($ok ? 'PASS' : 'FAIL') . ' ' . $label . ($ok || $detail === '' ? '' : ' — ' . $detail) . "\n");
 }
 
-function freePort(): int
+/**
+ * A host the federation guard accepts. An explicit ALOHASOCIAL_SMOKE_HOST
+ * wins; otherwise the first globally routable local address is used. The
+ * loopback fallback keeps the rest of the smoke runnable, but the delivery
+ * check cannot pass because the production guard blocks it.
+ */
+function smokeHost(): string
 {
-    $socket = stream_socket_server('tcp://127.0.0.1:0', $errorCode, $errorMessage);
+    $configured = getenv('ALOHASOCIAL_SMOKE_HOST');
+    if (is_string($configured) && trim($configured) !== '') {
+        return trim($configured, "[] \t\n\r\0\x0B");
+    }
+
+    if (PHP_OS_FAMILY === 'Linux') {
+        foreach (['ip -6 addr show scope global 2>/dev/null', 'ip -4 addr show scope global 2>/dev/null'] as $command) {
+            $lines = [];
+            @exec($command, $lines);
+            foreach ($lines as $line) {
+                if (preg_match('/\binet6?\s+([0-9a-f:.]+)\//i', $line, $match) !== 1) {
+                    continue;
+                }
+
+                if (\AlohaSocial\Core\Service\Federation\RemoteFetcher::isPublicAddress($match[1])) {
+                    return $match[1];
+                }
+            }
+        }
+    }
+
+    return '127.0.0.1';
+}
+
+function urlHost(string $host): string
+{
+    return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false
+        ? '[' . $host . ']'
+        : $host;
+}
+
+function freePort(string $host): int
+{
+    $socket = stream_socket_server('tcp://' . urlHost($host) . ':0', $errorCode, $errorMessage);
     if ($socket === false) {
         throw new RuntimeException('Cannot reserve a port: ' . $errorMessage);
     }
@@ -166,10 +211,10 @@ function freePort(): int
 }
 
 /** @return array<string, string> */
-function instanceEnvironment(string $directory, int $port): array
+function instanceEnvironment(string $directory, int $port, string $host): array
 {
     return [
-        'ALOHASOCIAL_INSTANCE_URL' => 'http://127.0.0.1:' . $port,
+        'ALOHASOCIAL_INSTANCE_URL' => 'http://' . urlHost($host) . ':' . $port,
         'ALOHASOCIAL_INSTANCE_NAME' => 'Federation smoke',
         'ALOHASOCIAL_DB_DSN' => 'sqlite:' . $directory . '/server.sqlite',
         'ALOHASOCIAL_VAR_DIRECTORY' => $directory,
@@ -213,7 +258,7 @@ function runPhp(string $root, array $arguments, array $environment, ?string &$ou
 }
 
 /** @return array{process: resource, port: int, log: string} */
-function startServer(string $root, string $directory, int $port, array $environment): array
+function startServer(string $root, string $directory, int $port, string $host, array $environment): array
 {
     $log = $directory . '/server.log';
     $descriptors = [
@@ -223,7 +268,7 @@ function startServer(string $root, string $directory, int $port, array $environm
     ];
 
     $process = proc_open(
-        [PHP_BINARY, '-S', '127.0.0.1:' . $port, '-t', 'public', 'public/index.php'],
+        [PHP_BINARY, '-S', urlHost($host) . ':' . $port, '-t', 'public', 'public/index.php'],
         $descriptors,
         $pipes,
         $root,
@@ -286,8 +331,10 @@ function removeDirectory(string $directory): void
 fwrite(STDOUT, "Federation smoke — two instances, one signed round trip\n");
 fwrite(STDOUT, 'Workspace: ' . $work . "\n");
 
-$portA = freePort();
-$portB = freePort();
+$smokeHost = smokeHost();
+$baseHost = urlHost($smokeHost);
+$portA = freePort($smokeHost);
+$portB = freePort($smokeHost);
 $dirA = $work . '/a';
 $dirB = $work . '/b';
 
@@ -298,11 +345,15 @@ foreach ([$dirA, $dirB] as $directory) {
     }
 }
 
-$envA = instanceEnvironment($dirA, $portA);
-$envB = instanceEnvironment($dirB, $portB);
-$baseA = 'http://127.0.0.1:' . $portA;
-$baseB = 'http://127.0.0.1:' . $portB;
+$envA = instanceEnvironment($dirA, $portA, $smokeHost);
+$envB = instanceEnvironment($dirB, $portB, $smokeHost);
+$baseA = 'http://' . $baseHost . ':' . $portA;
+$baseB = 'http://' . $baseHost . ':' . $portB;
 $password = 'federation-smoke-password';
+
+fwrite(STDOUT, 'Transport: ' . $baseHost . ($smokeHost === '127.0.0.1'
+    ? ' (loopback; set ALOHASOCIAL_SMOKE_HOST to a public test address)'
+    : ' (public; the SSRF guard allows it)') . "\n");
 
 $code = runPhp($root, ['bin/migrate.php'], $envA, $output);
 check('A: migrations applied', $code === 0, (string) $output);
@@ -316,8 +367,8 @@ check('A: account alice created', $code === 0, (string) $output);
 $code = runPhp($root, ['bin/create-account.php', 'bob', 'bob@b.example.test', '--password=' . $password], $envB, $output);
 check('B: account bob created', $code === 0, (string) $output);
 
-$servers[] = startServer($root, $dirA, $portA, $envA);
-$servers[] = startServer($root, $dirB, $portB, $envB);
+$servers[] = startServer($root, $dirA, $portA, $smokeHost, $envA);
+$servers[] = startServer($root, $dirB, $portB, $smokeHost, $envB);
 
 check('A: health endpoint answers', waitForHealth($baseA));
 check('B: health endpoint answers', waitForHealth($baseB));
