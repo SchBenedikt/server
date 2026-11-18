@@ -5175,6 +5175,23 @@ dialog.a-modal::backdrop {
 	background: var(--a-border);
 }
 
+/* Five feed tabs no longer fit a narrow phone; scroll them instead of
+   squeezing the labels until they wrap. */
+.a-tabs {
+	overflow-x: auto;
+	flex-wrap: nowrap;
+	scrollbar-width: none;
+}
+
+.a-tabs::-webkit-scrollbar {
+	display: none;
+}
+
+.a-tabs__item {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
 .a-admin-form {
 	display: grid;
 	gap: 14px;

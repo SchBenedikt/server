@@ -984,14 +984,16 @@ final class AdminService
         $handleDomain = HostConfig::normalizeHandleDomain((string) ($input['atproto_pds_handle_domain'] ?? $this->config->atprotoPdsHandleDomain));
         $plcUrl = rtrim(trim((string) ($input['atproto_plc_url'] ?? $this->config->atprotoPlcUrl)), '/');
 
-        $instanceName = trim((string) ($input['instance_name'] ?? $this->config->instanceName));
+        // The env format is line based: a pasted line break would otherwise
+        // corrupt the file when the form is saved.
+        $instanceName = trim((string) preg_replace('/\s+/u', ' ', (string) ($input['instance_name'] ?? $this->config->instanceName)));
         if ($instanceName === '' || mb_strlen($instanceName) > 80) {
             throw AdminException::invalid('The instance name needs 1 to 80 characters.', [
                 'instance_name' => 'Use a short public name.',
             ]);
         }
 
-        $instanceDescription = trim((string) ($input['instance_description'] ?? $this->config->instanceDescription));
+        $instanceDescription = trim((string) preg_replace('/\s+/u', ' ', (string) ($input['instance_description'] ?? $this->config->instanceDescription)));
         if (mb_strlen($instanceDescription) > 500) {
             throw AdminException::invalid('The description is too long.', [
                 'instance_description' => 'At most 500 characters.',

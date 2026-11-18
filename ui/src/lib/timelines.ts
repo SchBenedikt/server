@@ -111,7 +111,7 @@ export function useTimeline(source: () => TimelineSource) {
 		const currentGeneration = ++generation;
 		const before = reset ? null : cursor;
 
-		const isRanked = current.kind === 'for-you' || current.kind === 'trending';
+		const isRanked = source().kind === 'for-you' || source().kind === 'trending';
 		if (reset) {
 			offset = 0;
 			loading.value = true;

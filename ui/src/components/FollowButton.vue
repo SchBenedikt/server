@@ -31,7 +31,16 @@ watch(() => props.account?.relationship?.requested, (value) => {
 	requested.value = value === true;
 }, { immediate: true });
 
-const isSelf = computed(() => props.account?.id === appState.session.user?.handle);
+const isSelf = computed(() => {
+	const user = appState.session.user;
+	if (user === null || props.account === null) {
+		return false;
+	}
+
+	return props.account.id === user.id
+		|| props.account.id === user.handle
+		|| props.account.handle === user.handle;
+});
 const canFollow = computed(() => (
 	appState.session.user !== null
 	&& props.account !== null

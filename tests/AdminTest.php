@@ -325,8 +325,7 @@ final class AdminTest extends TestCase
         self::assertStringContainsString('data-is-admin="1"', $app->body);
 
         $console = $server->send('GET', '/admin', ['cookies' => $cookies]);
-        self::assertSame(200, $console->status);
-        self::assertStringContainsString('Standalone console', $console->body);
-        self::assertStringContainsString('/admin/admin.js', $console->body);
+        self::assertSame(303, $console->status);
+        self::assertSame('/app#/admin', $console->header('Location'));
     }
 }
