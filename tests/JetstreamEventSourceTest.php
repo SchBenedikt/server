@@ -9,8 +9,11 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Domain\Atproto\AllowAllAtprotoContent;
 use AlohaSocial\Core\Domain\Atproto\AtprotoEventKind;
 use AlohaSocial\Core\Domain\Atproto\AtprotoRecordOperation;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
+use AlohaSocial\Core\Service\Atproto\AtprotoSyncService;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
 use AlohaSocial\Server\Tests\Support\TestServer;
@@ -60,7 +63,7 @@ final class JetstreamEventSourceTest extends TestCase
 
         $port = $this->freePort();
         $process = proc_open(
-            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port],
+            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port, '3'],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );
@@ -110,6 +113,27 @@ final class JetstreamEventSourceTest extends TestCase
             foreach ($page->events as $event) {
                 self::assertNotSame('Spam from a stranger', $event->record['text'] ?? null);
             }
+
+            // A replay after a reconnect must not create a second row and must
+            // advance the same durable cursor instead of restarting.
+            $sync = new AtprotoSyncService(
+                $source,
+                new PdoAtprotoInboundRepository($database),
+                new AllowAllAtprotoContent(),
+                $server->runtime->clock,
+            );
+            $first = $sync->sync(10);
+            self::assertSame(3, $first->applied);
+
+            $second = $sync->sync(10);
+            self::assertLessThanOrEqual(1, $second->applied);
+            self::assertGreaterThanOrEqual(2, $second->skipped);
+            self::assertSame($first->checkpoint->cursor, $second->checkpoint->cursor);
+
+            self::assertSame(1, (int) $database->fetchValue(
+                'SELECT COUNT(*) FROM social_atproto_remote_record WHERE uri = :uri',
+                ['uri' => 'at://did:plc:followed/app.bsky.feed.post/3kpost'],
+            ));
         } finally {
             proc_terminate($process);
             @proc_close($process);

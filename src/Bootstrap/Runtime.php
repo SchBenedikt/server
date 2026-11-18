@@ -39,6 +39,7 @@ use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\RemoteDirectory;
@@ -95,6 +96,7 @@ final readonly class Runtime
         public ?NativePdsService $pds,
         public PdsRepository $pdsRepository,
         public ?AtprotoReconciler $atprotoReconciler = null,
+        public ?AtprotoBackoff $atprotoBackoff = null,
     ) {
     }
 }

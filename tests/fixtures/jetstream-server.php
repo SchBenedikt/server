@@ -6,49 +6,22 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * A one-connection Jetstream stand-in for tests.
+ * A Jetstream stand-in for tests.
  *
  * It performs the RFC 6455 handshake, sends a fixed sequence of Jetstream
- * messages and closes. That exercises the real socket, frame parser and event
+ * messages and closes, for as many connections as the caller asks for. That
+ * exercises the real socket, frame parser, reconnect path and event
  * normalization without contacting a public relay.
  */
 
 $port = (int) ($argv[1] ?? 0);
+$connections = max(1, (int) ($argv[2] ?? 1));
+
 $server = @stream_socket_server('tcp://127.0.0.1:' . $port, $errorNumber, $errorMessage);
 if ($server === false) {
     fwrite(STDERR, 'listen failed: ' . $errorMessage . "\n");
     exit(1);
 }
-
-$connection = @stream_socket_accept($server, 15);
-if ($connection === false) {
-    fclose($server);
-    exit(1);
-}
-
-$headers = '';
-while (!str_contains($headers, "\r\n\r\n") && strlen($headers) < 65_536) {
-    $chunk = fread($connection, 1024);
-    if ($chunk === false || $chunk === '') {
-        break;
-    }
-
-    $headers .= $chunk;
-}
-
-$key = '';
-if (preg_match('/Sec-WebSocket-Key:\s*(\S+)/i', $headers, $match) === 1) {
-    $key = $match[1];
-}
-
-$accept = base64_encode(sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', true));
-fwrite(
-    $connection,
-    "HTTP/1.1 101 Switching Protocols\r\n"
-    . "Upgrade: websocket\r\n"
-    . "Connection: Upgrade\r\n"
-    . 'Sec-WebSocket-Accept: ' . $accept . "\r\n\r\n",
-);
 
 $messages = [
     // A followed account creates a post.
@@ -122,13 +95,45 @@ $messages = [
     ], JSON_THROW_ON_ERROR),
 ];
 
-foreach ($messages as $message) {
-    fwrite($connection, frame($message));
-    usleep(15_000);
+for ($served = 0; $served < $connections; ++$served) {
+    $connection = @stream_socket_accept($server, 10);
+    if ($connection === false) {
+        break;
+    }
+
+    $headers = '';
+    while (!str_contains($headers, "\r\n\r\n") && strlen($headers) < 65_536) {
+        $chunk = fread($connection, 1024);
+        if ($chunk === false || $chunk === '') {
+            break;
+        }
+
+        $headers .= $chunk;
+    }
+
+    $key = '';
+    if (preg_match('/Sec-WebSocket-Key:\s*(\S+)/i', $headers, $match) === 1) {
+        $key = $match[1];
+    }
+
+    $accept = base64_encode(sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11', true));
+    fwrite(
+        $connection,
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        . "Upgrade: websocket\r\n"
+        . "Connection: Upgrade\r\n"
+        . 'Sec-WebSocket-Accept: ' . $accept . "\r\n\r\n",
+    );
+
+    foreach ($messages as $message) {
+        fwrite($connection, frame($message));
+        usleep(15_000);
+    }
+
+    usleep(30_000);
+    fclose($connection);
 }
 
-usleep(50_000);
-fclose($connection);
 fclose($server);
 
 function frame(string $payload): string

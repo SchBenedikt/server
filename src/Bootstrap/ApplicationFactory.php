@@ -32,6 +32,7 @@ use AlohaSocial\Core\Security\SecretBox;
 use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
+use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
@@ -168,6 +169,9 @@ final class ApplicationFactory
         $atprotoJetstream = $this->config->atprotoJetstreamUrl === ''
             ? null
             : new JetstreamEventSource($this->config->atprotoJetstreamUrl, $database, $clock);
+        $atprotoBackoff = $atprotoJetstream === null
+            ? null
+            : new AtprotoBackoff($this->config->varDirectory . '/atproto-sync.json', $clock);
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -284,6 +288,7 @@ final class ApplicationFactory
             atprotoReconciler: $atprotoJetstream === null
                 ? null
                 : new AtprotoReconciler($database, $clock, $atprotoJetstream->name()),
+            atprotoBackoff: $atprotoBackoff,
         );
     }
 
