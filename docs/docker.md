@@ -272,10 +272,10 @@ value: the volume names are derived from the fixed project name in
 `docker-compose.yml`.
 
 For a source change to the Vue app rebuild the committed bundle first. The
-core must be a source checkout because its dist archive omits `ui/`:
+shared UI package is committed under `ui/shared-ui/`, so a normal Composer
+dist install is enough:
 
 ```shell
-composer reinstall alohasocial/core --prefer-source
 npm --prefix ui ci
 npm --prefix ui run build
 docker compose up -d --build
