@@ -228,6 +228,19 @@ after the app is healthy. If you pinned `ALOHASOCIAL_IMAGE_TAG`, update the tag.
 To follow a source change instead of the published image, use
 `docker compose up -d --build` (and rebuild the UI bundle first, see below).
 
+If you configured the public domain in the browser before `0.11.3`, that value
+was written to the container's ephemeral `/var/www/html/.env`. Copy it out
+before recreating the container, check the origin, and put it in the host
+`.env`:
+
+```shell
+docker compose exec -T app cat /var/www/html/.env > .env.before-0.11.3
+# copy ALOHASOCIAL_INSTANCE_URL (and any other setup value) into .env
+```
+
+From `0.11.3` on, setup writes `/var/www/html/var/.env` inside the persistent
+`aloha-var` volume and no longer needs this step.
+
 **Never use `docker compose down -v` on an instance you want to keep.** The
 `-v` flag deletes the named volumes, including the SQLite database,
 `var/secret.key` and uploaded media. Plain `docker compose down` followed by
