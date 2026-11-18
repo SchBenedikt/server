@@ -175,6 +175,55 @@ Do not put passwords or private keys in this file. Use `.env` or the process
 environment for secrets, and keep the file out of version control changes that
 are environment-specific.
 
+## Registration and Core version policy
+
+Public registration is off by default. Set `ALOHASOCIAL_REGISTRATIONS=true` to
+show the sign-up form. With `ALOHASOCIAL_REGISTRATION_APPROVAL=true`, a new
+account is created disabled and an administrator must activate it. Both values
+can also be changed in the admin console at `/admin`.
+
+The console stores the Core dependency policy in the env file:
+
+```dotenv
+ALOHASOCIAL_CORE_CHANNEL=main
+ALOHASOCIAL_CORE_VERSION=
+```
+
+`main` follows the development branch. `release` installs the tag in
+`ALOHASOCIAL_CORE_VERSION`. Apply a change on a bare-metal install with:
+
+```bash
+php bin/core-version.php
+```
+
+The helper runs `composer require alohasocial/core:...` and the database
+migrations. Docker images are immutable; rebuild the image with the chosen
+Core version instead of changing the vendor tree inside a running container.
+
+## Native AT Protocol PDS
+
+The native PDS is optional and disabled by default:
+
+```dotenv
+ALOHASOCIAL_ATPROTO_PDS=true
+ALOHASOCIAL_ATPROTO_PDS_URL=https://social.example
+ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN=social.example
+ALOHASOCIAL_ATPROTO_PLC_URL=https://plc.directory
+```
+
+`ALOHASOCIAL_ATPROTO_PDS_URL` must be the public HTTPS origin that serves the
+host, and `ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN` is the suffix members get
+(for example `alice.social.example`). Point a wildcard DNS record for
+`*.social.example` at the instance so the handle verifier can serve
+`https://alice.social.example/.well-known/atproto-did`. The instance signs PLC
+operations with the key sealed by `ALOHASOCIAL_SECRET_KEY`; back that secret up
+before the first identity is created. Without a wildcard record, members can
+still create a DID, but handle verification and external discovery will fail.
+
+A new identity is created under **Settings → AT Protocol** in the app. Rotating
+the keys is available there as well. Keep the PDS disabled until the domain and
+TLS certificate are reachable from the public internet.
+
 ## Complete production example
 
 ```dotenv

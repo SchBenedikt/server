@@ -816,6 +816,16 @@ final class AdminService
                 'atproto_pds_handle_domain' => 'Use the domain under which member handles are issued.',
             ]);
         }
+        if ($pdsEnabled && parse_url($pdsUrl, PHP_URL_SCHEME) !== 'https') {
+            throw AdminException::invalid('The native PDS needs a public HTTPS URL.', [
+                'atproto_pds_url' => 'Use an https origin such as https://social.example.',
+            ]);
+        }
+        if ($pdsEnabled && parse_url($plcUrl, PHP_URL_SCHEME) !== 'https') {
+            throw AdminException::invalid('The PLC directory must use HTTPS.', [
+                'atproto_plc_url' => 'Use https://plc.directory unless you run a private directory.',
+            ]);
+        }
         if (preg_match('#^https?://[^/]+#', $plcUrl) !== 1) {
             throw AdminException::invalid('The PLC directory URL must be an absolute http(s) URL.', [
                 'atproto_plc_url' => 'Use https://plc.directory unless you run a private directory.',

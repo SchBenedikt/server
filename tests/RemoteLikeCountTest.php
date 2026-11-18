@@ -54,6 +54,35 @@ final class RemoteLikeCountTest extends TestCase
         self::assertSame(1, $body['interactions'][$postId]['favourites_count']);
     }
 
+    public function testReplyCountsOnlyIncludeRepliesTheViewerMayRead(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $parent = $server->runtime->app->posts->create(
+            new CreatePost('alice', 'Parent', Visibility::Public),
+        )->id;
+        $server->runtime->app->posts->create(new CreatePost(
+            'alice',
+            'Public reply',
+            Visibility::Public,
+            inReplyToId: $parent,
+        ));
+        $server->runtime->app->posts->create(new CreatePost(
+            'alice',
+            'Followers-only reply',
+            Visibility::Followers,
+            inReplyToId: $parent,
+        ));
+
+        $response = $server->send('GET', '/api/v1/host/interactions', [
+            'query' => ['ids' => $parent],
+        ]);
+
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(1, $body['interactions'][$parent]['replies_count']);
+    }
+
     public function testPrivatePostsDoNotLeakInteractionCounts(): void
     {
         $server = new TestServer();

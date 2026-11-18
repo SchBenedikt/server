@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Service\FollowActor;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -49,6 +50,45 @@ final class ProtectedRemoteFollowTest extends TestCase
 
         $actor = $this->actor($server);
         self::assertArrayNotHasKey('manuallyApprovesFollowers', $actor);
+    }
+
+    public function testTheOwnerCanAcceptARemoteFollowRequestFromTheUiRoute(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+        $server->runtime->app->followers->follow(
+            new FollowActor('alice', 'https://peer.example/@bob', 'https://peer.example/inbox'),
+            requiresApproval: true,
+            followActivity: [
+                'id' => 'https://peer.example/activities/follow-1',
+                'type' => 'Follow',
+                'actor' => 'https://peer.example/@bob',
+                'object' => 'http://localhost:3000/@alice',
+            ],
+        );
+
+        $session = $server->signIn('alice');
+        $list = $server->send('GET', '/api/v1/host/follow-requests', [
+            'cookies' => $session['cookies'],
+        ]);
+        self::assertSame(200, $list->status);
+        $requests = json_decode($list->body, true, 512, JSON_THROW_ON_ERROR)['requests'];
+        self::assertCount(1, $requests);
+        self::assertFalse($requests[0]['is_local']);
+
+        $accept = $server->json(
+            'POST',
+            '/api/v1/host/follow-requests/' . $requests[0]['id'] . '/accept',
+            [],
+            $session['cookies'],
+            $session['csrf'],
+        );
+        self::assertSame(200, $accept->status);
+
+        $after = $server->send('GET', '/api/v1/host/follow-requests', [
+            'cookies' => $session['cookies'],
+        ]);
+        self::assertSame([], json_decode($after->body, true, 512, JSON_THROW_ON_ERROR)['requests']);
     }
 
     /** @return array<string, mixed> */

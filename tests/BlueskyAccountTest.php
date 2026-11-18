@@ -36,6 +36,10 @@ final class FakeBlueskyHttpClient implements HttpClient
 
     public bool $rejectRefresh = false;
 
+    public string $pdsEndpoint = 'https://pds.example.test';
+
+    public string $sessionDid = 'did:plc:alice123';
+
     public function request(
         string $method,
         string $url,
@@ -55,7 +59,7 @@ final class FakeBlueskyHttpClient implements HttpClient
                 'service' => [[
                     'id' => '#atproto_pds',
                     'type' => 'AtprotoPersonalDataServer',
-                    'serviceEndpoint' => 'https://pds.example.test',
+                    'serviceEndpoint' => $this->pdsEndpoint,
                 ]],
             ], JSON_THROW_ON_ERROR));
         }
@@ -89,7 +93,7 @@ final class FakeBlueskyHttpClient implements HttpClient
     public function session(string $access, string $refresh): array
     {
         return [
-            'did' => 'did:plc:alice123',
+            'did' => $this->sessionDid,
             'handle' => 'alice.bsky.social',
             'accessJwt' => $this->jwt($access, time() + $this->expiresIn),
             'refreshJwt' => $this->jwt($refresh, time() + 86400),
@@ -154,6 +158,24 @@ final class BlueskyAccountTest extends TestCase
             $this->http->session('access-1', 'refresh-1')['accessJwt'],
             $account->accessToken,
         );
+    }
+
+    public function testAnHttpPdsEndpointIsRejectedBeforeCredentialsAreSent(): void
+    {
+        $this->http->pdsEndpoint = 'http://pds.example.test';
+
+        $this->expectException(BlueskyException::class);
+        $this->expectExceptionMessage('does not specify a PDS');
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+    }
+
+    public function testASessionForAnotherDidIsRejected(): void
+    {
+        $this->http->sessionDid = 'did:plc:someoneelse';
+
+        $this->expectException(BlueskyException::class);
+        $this->expectExceptionMessage('different DID');
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
     }
 
     public function testAnExpiredAccessTokenIsRefreshed(): void

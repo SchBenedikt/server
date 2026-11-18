@@ -85,6 +85,12 @@ final class RegistrationTest extends TestCase
         $login = $server->send('GET', '/login', ['query' => ['next' => '/admin']]);
         self::assertSame(200, $login->status);
         self::assertStringContainsString('name="return_to" value="/admin"', $login->body);
+
+        foreach (['https://evil.example', '//evil.example', '/\\evil'] as $unsafe) {
+            $rejected = $server->send('GET', '/login', ['query' => ['next' => $unsafe]]);
+            self::assertSame(200, $rejected->status);
+            self::assertStringNotContainsString('name="return_to"', $rejected->body);
+        }
     }
 
     public function testTheAdminConsoleIsServedOutsideTheSocialShell(): void
