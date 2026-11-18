@@ -67,13 +67,14 @@ final class AccountRepository
         string $passwordHash,
         string $role = Account::ROLE_USER,
         ?string $displayName = null,
+        bool $disabled = false,
     ): Account {
         $handle = strtolower(trim($handle));
         $email = strtolower(trim($email));
 
         $this->db->execute(
             'INSERT INTO account (id, handle, email, password_hash, role, display_name, created_at, disabled_at)'
-            . ' VALUES (:id, :handle, :email, :password_hash, :role, :display_name, :created_at, NULL)',
+            . ' VALUES (:id, :handle, :email, :password_hash, :role, :display_name, :created_at, :disabled_at)',
             [
                 'id' => $handle,
                 'handle' => $handle,
@@ -82,6 +83,7 @@ final class AccountRepository
                 'role' => $role,
                 'display_name' => $displayName,
                 'created_at' => Time::format($this->clock->now()),
+                'disabled_at' => $disabled ? Time::format($this->clock->now()) : null,
             ],
         );
 
@@ -193,7 +195,9 @@ final class AccountRepository
 
         $query = trim($query);
         if ($query !== '') {
-            $sql .= ' AND (handle LIKE :query OR display_name LIKE :query OR email LIKE :query)';
+            // Never match the private registration email here. Admin account
+            // search has its own authorized query in AdminService::users().
+            $sql .= ' AND (handle LIKE :query OR display_name LIKE :query)';
             $parameters['query'] = '%' . $query . '%';
         }
 

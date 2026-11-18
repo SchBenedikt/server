@@ -105,6 +105,43 @@ final class AdminTest extends TestCase
         self::assertSame('timeout', $body['errors'][0]['context']['code']);
     }
 
+    public function testAdminCanBlockAndUnblockADomain(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        $blocked = $server->json('POST', '/api/v1/host/admin/moderation', [
+            'kind' => 'block_domain',
+            'target' => 'https://bad.example/@spam',
+            'note' => 'Harassment campaign',
+        ], $cookies, $csrf);
+        self::assertSame(201, $blocked->status);
+        $action = $this->decoded($blocked)['action'];
+        self::assertSame('block_domain', $action['kind']);
+        self::assertSame('bad.example', $action['target']);
+
+        $list = $this->decoded($server->send('GET', '/api/v1/host/admin/moderation', ['cookies' => $cookies]));
+        self::assertSame(1, $list['active']);
+        self::assertSame('bad.example', $list['actions'][0]['target']);
+
+        $reversed = $server->json(
+            'POST',
+            '/api/v1/host/admin/moderation/' . rawurlencode($action['id']) . '/reverse',
+            ['note' => 'False positive'],
+            $cookies,
+            $csrf,
+        );
+        self::assertSame(200, $reversed->status);
+
+        $after = $this->decoded($server->send('GET', '/api/v1/host/admin/moderation', ['cookies' => $cookies]));
+        self::assertSame(0, $after['active']);
+        self::assertNotNull($after['actions'][0]['reversed_at']);
+
+        $audit = $this->decoded($server->send('GET', '/api/v1/host/admin/audit', ['cookies' => $cookies]));
+        $actions = array_column($audit['entries'], 'action');
+        self::assertContains('moderation.reverse', $actions);
+        self::assertContains('moderation.block_domain', $actions);
+    }
+
     public function testWorkerHeartbeatMarksTheWorkerOnline(): void
     {
         $server = new TestServer();

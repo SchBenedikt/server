@@ -93,6 +93,19 @@ final class MigrationTest extends TestCase
         );
     }
 
+    public function testCoreSchemaDriftIsReportedBeforeQueriesRun(): void
+    {
+        $server = new TestServer();
+        $server->runtime->database->execute(
+            'UPDATE runtime_state SET value = :value WHERE name = :name',
+            ['value' => 'stale', 'name' => 'core_schema_fingerprint'],
+        );
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Add a host migration');
+        \AlohaSocial\Server\Migrations\CoreSchemaFingerprint::assertCurrent($server->runtime->database);
+    }
+
     public function testChangedChecksumIsRejected(): void
     {
         $server = new TestServer();

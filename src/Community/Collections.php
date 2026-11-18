@@ -40,7 +40,7 @@ final class Collections
     /**
      * @return list<array<string, mixed>>
      */
-    public function forAccount(string $accountId, bool $includePrivate = true): array
+    public function forAccount(string $accountId, bool $includePrivate = true, ?string $viewerId = null): array
     {
         $sql = 'SELECT c.*, (SELECT COUNT(*) FROM collection_item i WHERE i.collection_id = c.id) AS item_count'
             . ' FROM collection c WHERE c.account_id = :account_id';
@@ -50,8 +50,24 @@ final class Collections
         $sql .= ' ORDER BY c.updated_at DESC, c.created_at DESC LIMIT 100';
 
         $rows = $this->db->fetchAll($sql, ['account_id' => $accountId]);
+        $collections = array_map([$this, 'hydrate'], $rows);
 
-        return array_map([$this, 'hydrate'], $rows);
+        // A public listing must not reveal how many inaccessible posts an
+        // owner has collected. The owner and private views keep the total.
+        if ($accountId !== $viewerId) {
+            foreach ($collections as &$collection) {
+                if ((bool) $collection['is_public']) {
+                    $collection['item_count'] = count($this->visiblePostIds(
+                        (string) $collection['id'],
+                        $viewerId,
+                        false,
+                    ));
+                }
+            }
+            unset($collection);
+        }
+
+        return $collections;
     }
 
     /**
@@ -154,6 +170,12 @@ final class Collections
             throw CommunityException::invalid('Direct messages cannot be added to a collection.');
         }
 
+        // A public collection is a public reading list. Keep follower-only and
+        // other restricted posts out of it instead of leaking their ids later.
+        if ((bool) $collection['is_public'] && !$post->visibility->isPubliclyVisible()) {
+            throw CommunityException::invalid('Only public posts can be added to a public collection.');
+        }
+
         $existing = $this->db->fetchOne(
             'SELECT 1 FROM collection_item WHERE collection_id = :collection_id AND post_id = :post_id',
             ['collection_id' => $id, 'post_id' => $postId],
@@ -218,15 +240,45 @@ final class Collections
             return null;
         }
 
+        $isOwner = $collection['account_id'] === $viewerId;
+        $postIds = $this->visiblePostIds($id, $viewerId, $isOwner);
+        $collection['post_ids'] = $postIds;
+        if ((bool) $collection['is_public']) {
+            $collection['item_count'] = count($postIds);
+        }
+
+        return $collection;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function visiblePostIds(string $id, ?string $viewerId, bool $isOwner = false): array
+    {
         $items = $this->db->fetchAll(
-            'SELECT i.post_id, i.created_at FROM collection_item i'
+            'SELECT i.post_id FROM collection_item i'
             . ' JOIN social_post p ON p.id = i.post_id AND p.deleted_at IS NULL'
             . ' WHERE i.collection_id = :id ORDER BY i.position ASC, i.created_at ASC LIMIT 200',
             ['id' => $id],
         );
-        $collection['post_ids'] = array_map(static fn (array $item): string => (string) $item['post_id'], $items);
 
-        return $collection;
+        $visible = [];
+        foreach ($items as $item) {
+            $postId = (string) $item['post_id'];
+
+            try {
+                // Rechecks follow relationships, privacy changes and deletion
+                // at read time, not only when the item was added. The owner is
+                // not exempt: unfollowing the author also hides the post from
+                // the owner's public collection view.
+                $this->posts->getVisible($postId, $viewerId);
+                $visible[] = $postId;
+            } catch (PostNotFoundException) {
+                continue;
+            }
+        }
+
+        return $visible;
     }
 
     private function touch(string $id): void

@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Accounts;
 
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Config\HostConfig;
+use PDOException;
 
 /**
  * Public self-registration.
@@ -76,19 +77,24 @@ final class RegistrationService
             throw new RegistrationException('Handle or email address is already in use.');
         }
 
-        $account = $this->accounts->create(
-            $handle,
-            $email,
-            $this->hasher->hash($password),
-            Account::ROLE_USER,
-            $displayName,
-        );
+        try {
+            // Approval-required accounts are inserted disabled. There is no
+            // active intermediate state for a concurrent login to observe and
+            // no second write that could fail open.
+            return $this->accounts->create(
+                $handle,
+                $email,
+                $this->hasher->hash($password),
+                Account::ROLE_USER,
+                $displayName,
+                $this->approvalRequired(),
+            );
+        } catch (PDOException $exception) {
+            if ($exception->getCode() === '23000') {
+                throw new RegistrationException('Handle or email address is already in use.', 409);
+            }
 
-        if ($this->approvalRequired()) {
-            $this->accounts->disable($account->id);
-            $account = $this->accounts->find($account->id) ?? $account;
+            throw $exception;
         }
-
-        return $account;
     }
 }

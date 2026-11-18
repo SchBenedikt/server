@@ -229,6 +229,37 @@ final class AdminApiController
             ));
         }
 
+        if ($method === 'GET' && $path === self::PREFIX . '/moderation') {
+            return Response::json($this->runtime->admin->moderation(
+                $this->intParam($request, 'limit', 100, 1, 250),
+            ));
+        }
+
+        if ($method === 'POST' && $path === self::PREFIX . '/moderation') {
+            $body = $this->jsonBody($request);
+
+            return Response::json([
+                'action' => $this->runtime->admin->applyModeration(
+                    $userId,
+                    $this->text($body, 'kind'),
+                    $this->text($body, 'target'),
+                    $this->optionalText($body, 'note'),
+                ),
+            ], 201);
+        }
+
+        if ($method === 'POST' && preg_match('#^' . self::PREFIX . '/moderation/([^/]+)/reverse$#', $path, $match) === 1) {
+            $body = $this->jsonBody($request);
+
+            return Response::json([
+                'action' => $this->runtime->admin->reverseModeration(
+                    $userId,
+                    rawurldecode($match[1]),
+                    $this->optionalText($body, 'note'),
+                ),
+            ]);
+        }
+
         if ($method === 'GET' && $path === self::PREFIX . '/federation') {
             return Response::json($this->runtime->admin->federation());
         }

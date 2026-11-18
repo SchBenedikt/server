@@ -34,6 +34,31 @@ final class RegistrationTest extends TestCase
 
         self::assertTrue($account->isDisabled());
         self::assertSame('newbie', $account->handle);
+        self::assertNotNull($server->runtime->database->fetchValue(
+            "SELECT disabled_at FROM account WHERE id = 'newbie'",
+        ));
+    }
+
+    public function testDuplicateRegistrationIsAConflictInsteadOfAnUnhandledWrite(): void
+    {
+        $server = new TestServer([
+            'registrations' => true,
+            'registration_approval' => false,
+        ]);
+        $server->runtime->registration->register('newbie', 'new@example.test', 'correct-horse');
+
+        $this->expectException(RegistrationException::class);
+        $this->expectExceptionMessage('already in use');
+        $server->runtime->registration->register('newbie', 'other@example.test', 'correct-horse');
+    }
+
+    public function testAccountSearchDoesNotMatchPrivateEmailAddresses(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'private-alice@example.test');
+
+        self::assertSame([], $server->runtime->directory->search('private-alice@example.test', 20, 0));
+        self::assertSame(['alice'], $server->runtime->directory->search('ali', 20, 0));
     }
 
     public function testWithoutApprovalTheAccountCanSignInImmediately(): void

@@ -10,6 +10,9 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Admin;
 
 use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Moderation\ModerationAction;
+use AlohaSocial\Core\Domain\Moderation\ModerationActionKind;
+use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
@@ -19,6 +22,7 @@ use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Support\EnvFile;
 use DateTimeImmutable;
@@ -105,6 +109,51 @@ final class AdminService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Public readiness for orchestrators: HTTP liveness is the separate
+     * `/healthz` route; this checks the state that actually serves requests.
+     * No secret, DSN or raw exception text is returned.
+     *
+     * @return array<string, mixed>
+     */
+    public function readiness(): array
+    {
+        $database = false;
+        try {
+            $this->db->fetchValue('SELECT 1');
+            CoreSchemaFingerprint::assertCurrent($this->db);
+            $database = true;
+        } catch (Throwable) {
+            $database = false;
+        }
+
+        $worker = $this->workerStatus();
+        $queue = $database ? $this->queueCounts() : ['pending' => 0, 'running' => 0, 'dead' => 0, 'oldest_pending' => null];
+        $ready = $database;
+
+        return [
+            'status' => $ready ? ($worker['online'] ? 'ok' : 'degraded') : 'unavailable',
+            'ready' => $ready,
+            'checks' => [
+                'database' => [
+                    'status' => $database ? 'ok' : 'error',
+                    'detail' => $database ? 'Reachable and schema current' : 'Unavailable, migration pending or schema drift',
+                ],
+                'worker' => [
+                    'status' => $worker['online'] ? 'ok' : 'warn',
+                    'last_beat' => $worker['last_beat'],
+                ],
+                'queue' => [
+                    'status' => (int) ($queue['dead'] ?? 0) > 0 ? 'warn' : 'ok',
+                    'pending' => (int) ($queue['pending'] ?? 0),
+                    'running' => (int) ($queue['running'] ?? 0),
+                    'dead' => (int) ($queue['dead'] ?? 0),
+                    'oldest_pending' => $queue['oldest_pending'] ?? null,
+                ],
+            ],
+        ];
+    }
+
     public function overview(): array
     {
         $now = $this->clock->now();
@@ -684,6 +733,122 @@ final class AdminService
                 'domain' => $this->hostOf((string) $row['actor_id']),
                 'blocked_at' => (string) $row['blocked_at'],
             ], $blocks),
+        ];
+    }
+
+    /**
+     * Active actor/domain policies plus the history needed for an audit view.
+     *
+     * @return array<string, mixed>
+     */
+    public function moderation(int $limit = 100): array
+    {
+        $limit = max(1, min(250, $limit));
+        $rows = $this->db->fetchAll(
+            'SELECT id, kind, target, report_id, moderator_id, note, created_at, reversed_at, reversed_by, reversal_note'
+            . ' FROM social_moderation_action ORDER BY created_at DESC LIMIT ' . $limit,
+        );
+
+        $actions = array_map(static fn (array $row): array => [
+            'id' => (string) $row['id'],
+            'kind' => (string) $row['kind'],
+            'target' => (string) $row['target'],
+            'report_id' => $row['report_id'] === null ? null : (string) $row['report_id'],
+            'moderator_id' => (string) $row['moderator_id'],
+            'note' => $row['note'] === null ? null : (string) $row['note'],
+            'created_at' => (string) $row['created_at'],
+            'reversed_at' => $row['reversed_at'] === null ? null : (string) $row['reversed_at'],
+            'reversed_by' => $row['reversed_by'] === null ? null : (string) $row['reversed_by'],
+            'reversal_note' => $row['reversal_note'] === null ? null : (string) $row['reversal_note'],
+        ], $rows);
+
+        return ['actions' => $actions, 'active' => count(array_filter($actions, static fn (array $a): bool => $a['reversed_at'] === null))];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function applyModeration(string $adminId, string $kind, string $target, ?string $note = null): array
+    {
+        $actionKind = ModerationActionKind::tryFrom(strtolower(trim($kind)));
+        if ($actionKind === null) {
+            throw AdminException::invalid('Unknown moderation action.', [
+                'kind' => 'silence_actor, suspend_actor or block_domain.',
+            ]);
+        }
+
+        $target = trim($target);
+        if ($actionKind === ModerationActionKind::BlockDomain) {
+            $host = parse_url(str_contains($target, '://') ? $target : 'https://' . $target, PHP_URL_HOST);
+            $target = is_string($host) ? strtolower($host) : '';
+            if ($target === '' || preg_match('/^[a-z0-9.-]+$/', $target) !== 1) {
+                throw AdminException::invalid('Enter a valid domain.', ['target' => 'For example example.com.']);
+            }
+        } elseif (preg_match('#^https?://#i', $target) !== 1) {
+            throw AdminException::invalid('Enter the actor URL to moderate.', [
+                'target' => 'Use an absolute http(s) actor URL.',
+            ]);
+        }
+
+        $existing = $this->db->fetchValue(
+            'SELECT COUNT(*) FROM social_moderation_action WHERE kind = :kind AND target = :target AND reversed_at IS NULL',
+            ['kind' => $actionKind->value, 'target' => $target],
+        );
+        if ((int) ($existing ?? 0) > 0) {
+            throw AdminException::conflict('This target already has an active action.');
+        }
+
+        $note = $note === null ? null : trim($note);
+        if ($note !== null && mb_strlen($note) > ModerationAction::MAX_NOTE_LENGTH) {
+            throw AdminException::invalid('The note is too long.', ['note' => 'At most 2000 characters.']);
+        }
+
+        $action = new ModerationAction(
+            id: $this->newId(),
+            kind: $actionKind,
+            target: $target,
+            reportId: null,
+            moderatorId: $adminId,
+            note: $note === '' ? null : $note,
+            createdAt: $this->clock->now(),
+        );
+        (new PdoModerationActionRepository($this->db))->insert($action);
+        $this->record(
+            $adminId,
+            'moderation.' . $actionKind->value,
+            $actionKind === ModerationActionKind::BlockDomain ? 'domain' : 'actor',
+            $target,
+            ['note' => $note],
+        );
+
+        return $action->toArray();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function reverseModeration(string $adminId, string $id, ?string $note = null): array
+    {
+        $row = $this->db->fetchOne('SELECT * FROM social_moderation_action WHERE id = :id', ['id' => $id]);
+        if ($row === null || $row['reversed_at'] !== null) {
+            throw AdminException::notFound('This moderation action is not active.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'UPDATE social_moderation_action SET reversed_at = :now, reversed_by = :admin, reversal_note = :note WHERE id = :id',
+            ['now' => $now, 'admin' => $adminId, 'note' => $note === null || trim($note) === '' ? null : trim($note), 'id' => $id],
+        );
+        $this->record($adminId, 'moderation.reverse', 'moderation_action', $id, [
+            'kind' => (string) $row['kind'],
+            'target' => (string) $row['target'],
+        ]);
+
+        return [
+            'id' => (string) $row['id'],
+            'kind' => (string) $row['kind'],
+            'target' => (string) $row['target'],
+            'reversed_at' => $now,
         ];
     }
 

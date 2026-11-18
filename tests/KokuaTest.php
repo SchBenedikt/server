@@ -36,6 +36,7 @@ final class KokuaTest extends TestCase
         $this->server = new TestServer();
         $this->server->createAccount('alice', 'alice@example.test', TestServer::PASSWORD, true);
         $this->server->createAccount('bob', 'bob@example.test');
+        $this->server->createAccount('carol', 'carol@example.test');
 
         $alice = $this->server->signIn('alice');
         $this->aliceCookies = $alice['cookies'];
@@ -154,6 +155,22 @@ final class KokuaTest extends TestCase
         self::assertTrue($authorEntry['is_owner']);
         self::assertFalse($authorEntry['viewer_helping']);
         self::assertSame(1, $authorEntry['help_count']);
+        self::assertSame('I can also take the return trip.', $authorEntry['helpers'][0]['message']);
+
+        $anonymousView = $this->server->send('GET', '/api/v1/host/kokua/' . $request['id']);
+        $anonymousEntry = $this->decoded($anonymousView)['kokua'];
+        self::assertSame(1, $anonymousEntry['help_count']);
+        self::assertSame([], $anonymousEntry['helpers']);
+        self::assertFalse($anonymousEntry['viewer_can_read_notes']);
+
+        $unrelated = $this->server->signIn('carol');
+        $unrelatedView = $this->server->send('GET', '/api/v1/host/kokua/' . $request['id'], [
+            'cookies' => $unrelated['cookies'],
+        ]);
+        $unrelatedEntry = $this->decoded($unrelatedView)['kokua'];
+        self::assertSame(1, $unrelatedEntry['help_count']);
+        self::assertSame([], $unrelatedEntry['helpers']);
+        self::assertFalse($unrelatedEntry['viewer_can_read_notes']);
 
         $withdrawn = $this->server->json(
             'DELETE',

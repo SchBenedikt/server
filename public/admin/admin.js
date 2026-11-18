@@ -20,11 +20,14 @@
         reports: 'Reports',
         queue: 'Queue',
         errors: 'Errors',
+        moderation: 'Moderation',
         settings: 'Settings',
         audit: 'Audit log',
     };
     let section = location.hash.replace(/^#\/?/, '') || 'overview';
     if (!labels[section]) section = 'overview';
+
+    const asArray = (value) => Array.isArray(value) ? value : [];
 
     const esc = (value) => String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -70,16 +73,21 @@
     }
 
     function table(headers, rows) {
+        // Callers build a row string with map(...).join(''); accept both a
+        // string and an array so a single view cannot crash the console.
+        const body = Array.isArray(rows) ? rows.join('') : String(rows ?? '');
         return '<div class="admin-table-wrap"><table class="admin-table"><thead><tr>'
             + headers.map((header) => '<th>' + esc(header) + '</th>').join('')
-            + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+            + '</tr></thead><tbody>' + body + '</tbody></table></div>';
     }
 
     function stat(label, value) {
         return '<div class="admin-stat"><span>' + esc(label) + '</span><strong>' + esc(value) + '</strong></div>';
     }
 
-    function overview(data) {
+    async function overview() {
+        const data = await api('GET', '/overview');
+        if (!data || !data.stats) throw new Error('The overview response is incomplete.');
         const s = data.stats;
         return '<section class="admin-section"><h2>Instance at a glance</h2>'
             + '<div class="admin-grid">'
@@ -89,10 +97,10 @@
             + stat('Open reports', s.reports.open) + stat('Errors 24h', s.errors.recent)
             + '</div>'
             + '<div class="admin-split"><div><h2>Health</h2><ul class="admin-list">'
-            + data.health.map((check) => '<li><span>' + esc(check.label) + '</span><strong class="'
+            + asArray(data.health).map((check) => '<li><span>' + esc(check.label) + '</span><strong class="'
                 + (check.status === 'ok' ? 'admin-ok' : 'admin-bad') + '">' + esc(check.status) + '</strong></li>').join('')
             + '</ul></div><div><h2>Recent audit</h2><ul class="admin-list">'
-            + data.audit.slice(0, 8).map((entry) => '<li><span>' + esc(entry.action) + '</span><small class="admin-muted">'
+            + asArray(data.audit).slice(0, 8).map((entry) => '<li><span>' + esc(entry.action) + '</span><small class="admin-muted">'
                 + esc(entry.created_at) + '</small></li>').join('')
             + '</ul></div></div></section>';
     }
@@ -159,6 +167,29 @@
                 + esc(entry.created_at) + '</td></tr>').join('')) + '</section>';
     }
 
+    async function moderation() {
+        const data = await api('GET', '/moderation');
+        const rows = asArray(data.actions).map((action) =>
+            '<tr><td><strong>' + esc(action.kind) + '</strong><br><small class="admin-muted">' + esc(action.note || '') + '</small></td>'
+            + '<td class="admin-mono">' + esc(action.target) + '</td><td>@' + esc(action.moderator_id) + '</td>'
+            + '<td class="admin-mono">' + esc(action.created_at) + '</td>'
+            + '<td>' + (action.reversed_at
+                ? '<span class="admin-muted">reversed ' + esc(action.reversed_at) + '</span>'
+                : '<button type="button" class="admin-button admin-button--small admin-button--quiet" data-action="moderation-reverse" data-id="'
+                    + esc(action.id) + '">Reverse</button>') + '</td></tr>').join('');
+
+        return '<section class="admin-section"><h2>Actor and domain policy</h2>'
+            + '<p class="admin-lead">' + esc(data.active) + ' active actions. A blocked domain also stops outgoing federation to it.</p>'
+            + table(['Action', 'Target', 'Moderator', 'Created', ''], rows)
+            + '<h2 style="margin-top:26px">Apply moderation</h2><form id="moderation-form" class="admin-form">'
+            + '<fieldset><legend>New action</legend>'
+            + '<label>Action<select name="kind"><option value="block_domain">Block domain</option>'
+            + '<option value="suspend_actor">Suspend actor</option><option value="silence_actor">Silence actor</option></select></label>'
+            + '<label>Domain or actor URL<input name="target" required placeholder="example.com or https://example.com/@actor"></label>'
+            + '<label>Note<input name="note" maxlength="2000"></label>'
+            + '<button class="admin-button" type="submit">Apply action</button></fieldset></form></section>';
+    }
+
     async function settings() {
         const data = await api('GET', '/settings');
         return '<section class="admin-section"><h2>Instance settings</h2>'
@@ -189,7 +220,7 @@
                 + '<td class="admin-pre">' + esc(JSON.stringify(entry.details)) + '</td></tr>').join('')) + '</section>';
     }
 
-    const loaders = { overview, users, reports, queue, errors, settings, audit };
+    const loaders = { overview, users, reports, queue, errors, moderation, settings, audit };
 
     async function load() {
         clearError();
@@ -222,6 +253,8 @@
                 await api('POST', '/jobs/retry-dead');
             } else if (action === 'queue-purge') {
                 await api('POST', '/jobs/purge');
+            } else if (action === 'moderation-reverse') {
+                await api('POST', '/moderation/' + encodeURIComponent(button.dataset.id) + '/reverse', {});
             }
             await load();
         } catch (error) {
@@ -232,7 +265,7 @@
 
     document.addEventListener('submit', async (event) => {
         const form = event.target;
-        if (form.id !== 'create-user' && form.id !== 'settings-form') return;
+        if (form.id !== 'create-user' && form.id !== 'settings-form' && form.id !== 'moderation-form') return;
         event.preventDefault();
         clearError();
         const data = new FormData(form);
@@ -244,6 +277,12 @@
                     display_name: data.get('display_name') || undefined,
                     password: data.get('password'),
                     role: data.get('role'),
+                });
+            } else if (form.id === 'moderation-form') {
+                await api('POST', '/moderation', {
+                    kind: data.get('kind'),
+                    target: data.get('target'),
+                    note: data.get('note') || undefined,
                 });
             } else {
                 await api('POST', '/settings', {
