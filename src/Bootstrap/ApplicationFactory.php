@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Bootstrap;
 
 use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
+use AlohaSocial\Core\Protocol\Atproto\PlcDirectoryClient;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
 use AlohaSocial\Core\Domain\Notification\PdoNotificationRepository;
 use AlohaSocial\Core\Domain\Post\PdoPostRevisionRepository;
@@ -31,6 +33,7 @@ use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Community\Announcements;
@@ -97,9 +100,10 @@ final class ApplicationFactory
         $logger = new RuntimeLogger($database, $clock);
         $httpClient = new CurlHttpClient();
         $hostResolver = new DnsHostResolver();
+        $targetGuard = new FederationTargetGuard($hostResolver);
         $remoteDirectory = new RemoteDirectory(
             $httpClient,
-            new FederationTargetGuard($hostResolver),
+            $targetGuard,
             $this->config->discoveryInstance,
         );
 
@@ -114,7 +118,8 @@ final class ApplicationFactory
             throw new RuntimeException('Cannot create the blob directory: ' . $blobDirectory);
         }
 
-        $blueskyAccounts = new BlueskyAccounts($database, $httpClient, $this->secretBox(), $clock);
+        $blueskyAccounts = new BlueskyAccounts($database, $httpClient, $this->secretBox(), $clock, $targetGuard);
+        $pdsRepository = new PdoPdsRepository($database);
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -132,6 +137,11 @@ final class ApplicationFactory
             blobStore: new LocalBlobStore($blobDirectory),
             hostResolver: $hostResolver,
             atprotoAccounts: $blueskyAccounts,
+            pdsRepository: $pdsRepository,
+            pdsSecrets: $this->secretBox(),
+            pdsDirectory: $this->config->atprotoPds
+                ? new PlcDirectoryClient($httpClient, $this->config->atprotoPlcUrl)
+                : null,
         );
 
         $mailer = $this->config->mailTransport === 'smtp'
@@ -162,6 +172,7 @@ final class ApplicationFactory
             rateLimiter: new RateLimiter($database, $clock),
             accounts: $accounts,
             directory: $directory,
+            registration: new RegistrationService($this->config, $accounts, $passwordHasher),
             sessions: $sessions,
             throttle: new LoginThrottle($database, $clock),
             passwordHasher: $passwordHasher,
@@ -216,6 +227,8 @@ final class ApplicationFactory
                 $clock,
             ),
             blueskyAccounts: $blueskyAccounts,
+            pds: $app->pds,
+            pdsRepository: $pdsRepository,
         );
     }
 

@@ -4006,6 +4006,48 @@ dialog.a-modal::backdrop {
 	}
 }
 
+/* ------------------------------------------------ narrow-screen post rows */
+
+@media (max-width: 600px) {
+	.a-main__inner {
+		padding: 0 16px 32px;
+	}
+
+	.a-page {
+		padding-top: 12px;
+	}
+
+	.a-feed__list {
+		gap: 0;
+		border-top: 1px solid var(--a-border);
+	}
+
+	.a-feed__list > li {
+		border-bottom: 1px solid var(--a-border);
+	}
+
+	.a-feed__list .a-post {
+		padding: 14px 2px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+	}
+
+	.a-feed__list .a-post:hover {
+		background: transparent;
+	}
+
+	.a-feed__list .a-post--detail {
+		padding: 16px 2px;
+		background: transparent;
+		box-shadow: none;
+	}
+
+	.a-post__content {
+		margin-top: 8px;
+	}
+}
+
 /* --------------------------------------------------------------- animation */
 
 @keyframes a-rise {

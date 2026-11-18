@@ -274,8 +274,9 @@ final class AdminTest extends TestCase
         self::assertSame(200, $app->status);
         self::assertStringContainsString('data-is-admin="1"', $app->body);
 
-        $redirect = $server->send('GET', '/admin', ['cookies' => $cookies]);
-        self::assertSame(303, $redirect->status);
-        self::assertSame('/app#/admin', $redirect->header('Location'));
+        $console = $server->send('GET', '/admin', ['cookies' => $cookies]);
+        self::assertSame(200, $console->status);
+        self::assertStringContainsString('Standalone console', $console->body);
+        self::assertStringContainsString('/admin/admin.js', $console->body);
     }
 }

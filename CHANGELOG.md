@@ -9,6 +9,53 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.12.0] - 2026-11-18
+
+### Added
+
+- **Standalone administration console:** `/admin` is now a separate, dense
+  page with its own CSS and JavaScript. It no longer renders inside the social
+  cards, so instance administration has the full desktop width and the app
+  sidebar links straight to it.
+- **Public registration switch:** administrators can enable or disable public
+  registration and choose whether new accounts need approval. Both values are
+  persisted in the env file. With approval enabled, a new account starts
+  disabled until an administrator activates it.
+- **Core version policy:** the admin console stores whether the instance follows
+  the Core `main` branch or a tagged release, plus the version to install.
+  `php bin/core-version.php` applies the policy with Composer and runs the
+  database migrations. Docker installations rebuild the image with the chosen
+  version.
+- **Native AT Protocol identity:** an optional built-in PDS lets every member
+  create their own DID and handle on the instance, rotate keys, and use it
+  alongside a separate Bluesky connection. The host serves
+  `/.well-known/atproto-did` for HTTPS handle verification.
+- **Following and follower lists:** the profile counters open lists of local
+  and remote accounts, including accepted remote followers.
+- **Docker:** the final image ships Composer so the version helper can run
+  during maintenance.
+
+### Changed
+
+- **Mobile layout:** under 600 px, feed posts use flat rows separated by a line
+  instead of floating cards, leaving more room for content. Page-level cards
+  keep a consistent outer margin.
+- **Remote follow policy:** a locked account now advertises
+  `manuallyApprovesFollowers` and receives remote Follow activities as pending
+  requests instead of being followed immediately.
+- **Security:** inbound interaction counts are only returned for posts the
+  caller may read; Bluesky PDS discovery requires HTTPS and a DID match and
+  refuses private-network targets; a LICENSE and a security policy are now
+  part of the repository, and CI runs lint, tests and the UI build.
+
+### Fixed
+
+- **Like counter for remote likes:** inbound Likes stored in the core reaction
+  table are added to the local favourite count, so a Like from another instance
+  increases the number shown on the post.
+- **Sign-in return path:** an anonymous visit to `/admin` returns there after
+  signing in instead of dropping the member on the timeline.
+
 ## [0.11.6] - 2026-11-18
 
 ### Added

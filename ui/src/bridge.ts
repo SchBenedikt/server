@@ -94,8 +94,7 @@ export const bridge: AlohaHostBridge = {
 		window.location.assign(path);
 	},
 
-	capabilities() {
-		return { media: true, atproto: false };
+	capabilities() {        return { media: true, atproto: true };
 	},
 
 	async uploadMedia(file: File, altText: string): Promise<Attachment> {

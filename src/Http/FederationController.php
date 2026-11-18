@@ -66,6 +66,10 @@ final class FederationController
             return $this->nodeInfoIndex();
         }
 
+        if ($request->path === '/.well-known/atproto-did') {
+            return $this->atprotoDid($request);
+        }
+
         if ($request->path === '/nodeinfo/2.0' || $request->path === '/nodeinfo/2.1') {
             return $this->nodeInfo(str_ends_with($request->path, '/2.1') ? '2.1' : '2.0');
         }
@@ -138,6 +142,45 @@ final class FederationController
         ]);
     }
 
+    /**
+     * HTTPS handle verification for the optional native PDS.
+     *
+     * A handle like `alice.social.example` is verified by requesting
+     * `https://alice.social.example/.well-known/atproto-did`; the PDS stores
+     * the DID for each local identity, so this route only translates the
+     * request host back into that handle.
+     */
+    private function atprotoDid(Request $request): Response
+    {
+        if (!$this->runtime->config->atprotoPds) {
+            return $this->notFound();
+        }
+
+        $domain = $this->runtime->config->atprotoPdsHandleDomain;
+        $host = strtolower(trim((string) ($request->header('host') ?? $this->runtime->config->host())));
+        $host = explode(':', $host)[0];
+
+        $handle = '';
+        if ($domain !== '' && $host !== $domain && str_ends_with($host, '.' . $domain)) {
+            $handle = substr($host, 0, -strlen('.' . $domain)) . '.' . $domain;
+        } elseif ($domain !== '' && $host === $domain) {
+            $handle = trim((string) $request->queryParam('handle'));
+        }
+
+        if ($handle === '') {
+            return $this->notFound();
+        }
+
+        $identity = $this->runtime->pdsRepository->identityByHandle($handle);
+        if ($identity === null) {
+            return $this->notFound();
+        }
+
+        return new Response(200, [
+            'Content-Type' => 'text/plain; charset=utf-8',
+        ], $identity->did . "\n");
+    }
+
     private function nodeInfoIndex(): Response
     {
         $base = $this->runtime->config->instanceUrl;
@@ -186,7 +229,7 @@ final class FederationController
             ],
             'protocols' => ['activitypub'],
             'services' => ['inbound' => [], 'outbound' => []],
-            'openRegistrations' => false,
+            'openRegistrations' => $this->runtime->config->registrations,
             'usage' => [
                 'users' => [
                     'total' => $users,

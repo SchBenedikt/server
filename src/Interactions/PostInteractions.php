@@ -58,6 +58,14 @@ final class PostInteractions
         $favourites = new PdoFavouriteRepository($this->db);
         $boosts = new PdoBoostRepository($this->db);
         $favouriteCounts = $favourites->countsForPosts($postIds);
+
+        // A remote Like is stored in the core's reaction table, not in the
+        // local favourite table. Both are one like from the reader's point of
+        // view, so the card counter has to add them together.
+        $remoteLikeCounts = $this->remoteLikeCounts($postIds);
+        foreach ($remoteLikeCounts as $postId => $count) {
+            $favouriteCounts[$postId] = ($favouriteCounts[$postId] ?? 0) + $count;
+        }
         $boostCounts = $boosts->countsForPosts($postIds);
         $favourited = $viewerId === null ? [] : $favourites->existsForPosts($viewerId, $postIds);
         $reblogged = $viewerId === null ? [] : $boosts->existsForPosts($viewerId, $postIds);
@@ -77,6 +85,43 @@ final class PostInteractions
         }
 
         return $result;
+    }
+
+    /**
+     * @param list<string> $postIds
+     *
+     * @return array<string, int>
+     */
+    private function remoteLikeCounts(array $postIds): array
+    {
+        $placeholders = [];
+        $parameters = [];
+        foreach ($postIds as $index => $postId) {
+            $key = 'like_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT local_post_id, COUNT(*) AS total FROM ' . ReactionSchema::TABLE
+                . " WHERE kind = 'like' AND direction = 'in' AND local_post_id IN (" . implode(', ', $placeholders) . ')'
+                . ' GROUP BY local_post_id',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            return [];
+        }
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $postId = is_string($row['local_post_id'] ?? null) ? $row['local_post_id'] : '';
+            if ($postId !== '') {
+                $counts[$postId] = (int) ($row['total'] ?? 0);
+            }
+        }
+
+        return $counts;
     }
 
     /**

@@ -78,6 +78,20 @@ export interface AccountStatusesData {
 	next_before: string | null;
 }
 
+export interface AtprotoIdentityData {
+	enabled: boolean;
+	publish: boolean;
+	handle_domain: string;
+	pds_url: string;
+	identity: {
+		did: string;
+		handle: string;
+		pds_url: string;
+		created_at: string;
+	} | null;
+	external: BlueskyAccountStatus;
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
@@ -189,6 +203,13 @@ export interface Api {
 	poll(postId: string): Promise<Poll | null>;
 	votePoll(pollId: string, choices: number[]): Promise<Poll | null>;
 	uploadMedia(file: File, altText: string): Promise<Attachment>;
+	blueskyAccount(): Promise<BlueskyData>;
+	connectBluesky(handle: string, appPassword: string): Promise<BlueskyAccountStatus>;
+	disconnectBluesky(): Promise<boolean>;
+	publishToBluesky(postId: string): Promise<void>;
+	atprotoIdentity(): Promise<AtprotoIdentityData>;
+	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
+	rotateAtprotoKeys(): Promise<void>;
 	logout(): Promise<void>;
 }
 
@@ -2476,6 +2497,44 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return response.blob();
+		},
+
+		async atprotoIdentity(): Promise<AtprotoIdentityData> {
+			const data = await request<Record<string, unknown>>('GET', '/api/v1/host/atproto');
+			const identity = isRecord(data?.identity) ? data.identity : null;
+
+			return {
+				enabled: data?.enabled === true,
+				publish: data?.publish === true,
+				handle_domain: typeof data?.handle_domain === 'string' ? data.handle_domain : '',
+				pds_url: typeof data?.pds_url === 'string' ? data.pds_url : '',
+				identity: identity === null ? null : {
+					did: typeof identity.did === 'string' ? identity.did : '',
+					handle: typeof identity.handle === 'string' ? identity.handle : '',
+					pds_url: typeof identity.pds_url === 'string' ? identity.pds_url : '',
+					created_at: typeof identity.created_at === 'string' ? identity.created_at : '',
+				},
+				external: normalizeBlueskyAccount(data?.external),
+			};
+		},
+
+		async createAtprotoIdentity(handle = ''): Promise<{ did: string; handle: string }> {
+			const data = await request<{ identity?: unknown }>(
+				'POST',
+				'/api/v1/host/atproto/identity',
+				undefined,
+				handle === '' ? {} : { handle },
+			);
+			const identity = isRecord(data?.identity) ? data.identity : {};
+
+			return {
+				did: typeof identity.did === 'string' ? identity.did : '',
+				handle: typeof identity.handle === 'string' ? identity.handle : '',
+			};
+		},
+
+		async rotateAtprotoKeys(): Promise<void> {
+			await request<unknown>('POST', '/api/v1/host/atproto/identity/rotate');
 		},
 
 		async blueskyAccount(): Promise<BlueskyData> {

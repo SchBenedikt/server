@@ -34,8 +34,7 @@ export const SIDEBAR_CATALOG: SidebarItem[] = [
 	{ id: 'filters', label: 'Filters', icon: 'filter', href: '#/filters', group: 'moderation', requiresAuth: true },
 	{ id: 'muted', label: 'Muted', icon: 'bellOff', href: '#/muted', group: 'moderation', requiresAuth: true },
 	{ id: 'blocked', label: 'Blocked', icon: 'ban', href: '#/blocked', group: 'moderation', requiresAuth: true },
-	{ id: 'about', label: 'About this instance', icon: 'info', href: '#/about', group: 'instance' },
-	{ id: 'admin', label: 'Administration', icon: 'shield', href: '#/admin', group: 'instance', adminOnly: true },
+	{ id: 'about', label: 'About this instance', icon: 'info', href: '#/about', group: 'instance' },        { id: 'admin', label: 'Administration', icon: 'shield', href: '/admin', group: 'instance', adminOnly: true },
 	{ id: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/', group: 'instance' },
 ];
 

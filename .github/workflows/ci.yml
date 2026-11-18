@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, intl, mbstring, pdo_sqlite, sqlite3
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: PHP lint
+        run: find src bin -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Backend tests
+        run: vendor/bin/phpunit
+
+      - name: Frontend build
+        run: |
+          npm ci --prefix ui
+          npm run build --prefix ui

@@ -237,6 +237,14 @@ final class AdminApiController
             return Response::json($this->runtime->admin->instance());
         }
 
+        if ($method === 'GET' && $path === self::PREFIX . '/settings') {
+            return Response::json($this->runtime->admin->settings());
+        }
+
+        if ($method === 'POST' && $path === self::PREFIX . '/settings') {
+            return Response::json($this->runtime->admin->updateSettings($userId, $this->jsonBody($request)));
+        }
+
         if ($method === 'GET' && $path === self::PREFIX . '/audit') {
             return Response::json([
                 'entries' => $this->runtime->admin->audit($this->intParam($request, 'limit', 100, 1, 500)),
