@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Config;
 
 use AlohaSocial\Core\Platform\Config\ArrayConfig;
 use AlohaSocial\Core\Platform\Config\Config;
+use AlohaSocial\Server\Support\CoreVersion;
 use RuntimeException;
 
 /**
@@ -222,6 +223,7 @@ final readonly class HostConfig
         $social = [
             'instance.url' => $this->instanceUrl,
             'instance.name' => $this->instanceName,
+            'instance.version' => CoreVersion::current(),
             'federation.enabled' => 'true',
             'instance.registrations' => 'false',
             'instance.approval_required' => 'true',

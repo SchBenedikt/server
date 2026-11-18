@@ -9,6 +9,27 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.4] - 2026-11-18
+
+### Fixed
+
+- **Following lists behind a CDN:** API, profile and ActivityPub responses now
+  send `Cache-Control: no-store` and the Cloudflare CDN header. A cached
+  profile could keep advertising `localhost` and `following_count: 0` hours
+  after the domain and the remote follows were already stored correctly.
+- **Own following list:** the following and follower counters on a local
+  profile open the connection list again, and the list includes accepted
+  remote accounts from `social_following`, not just local accounts.
+- **Actor and WebFinger URLs:** the actor document advertises its canonical
+  `url`, WebFinger accepts Unicode IDN handles as well as their `xn--` form,
+  and the instance metadata reports the installed core version instead of
+  the core's `0.1.0` default.
+
+### Changed
+
+- Core updated to `b18d6aa` for the actor `url` and IDN WebFinger fixes.
+- Release `0.11.4`.
+
 ## [0.11.3] - 2026-11-18
 
 ### Fixed

@@ -80,6 +80,16 @@ final class RemoteFollowingTest extends TestCase
         self::assertSame([], $this->decoded($other)['following']);
     }
 
+    public function testTheLocalProfileCountsAcceptedRemoteFollows(): void
+    {
+        $response = $this->server->send('GET', '/api/v1/accounts/alice');
+
+        self::assertSame(200, $response->status);
+        $account = $this->decoded($response)['account'];
+        self::assertSame(1, $account['following_count']);
+        self::assertSame('http://localhost:3000/@alice', $account['url']);
+    }
+
     public function testAnonymousCallersAreRejected(): void
     {
         $response = $this->server->send('GET', '/api/v1/host/following');

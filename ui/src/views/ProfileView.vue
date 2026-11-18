@@ -87,8 +87,8 @@ const connectionTitle = computed(() => connectionType.value === 'followers' ? 'F
 const connectionEmptyText = computed(() => {
 	if (connectionLocal.value) {
 		return connectionType.value === 'followers'
-			? 'Nobody on this instance follows this profile yet.'
-			: 'This profile does not follow anyone on this instance yet.';
+			? 'Nobody follows this profile yet.'
+			: 'This profile does not follow anyone yet.';
 	}
 
 	return connectionType.value === 'followers'
@@ -996,7 +996,6 @@ onUnmounted(() => {
 
 					<dl class="a-profile__stats">
 						<div
-							v-if="isRemoteProfile"
 							class="a-profile__stat--button"
 							role="button"
 							tabindex="0"
@@ -1008,12 +1007,7 @@ onUnmounted(() => {
 							<dt>{{ formatCount(account.following_count) }}</dt>
 							<dd>following</dd>
 						</div>
-						<div v-else>
-							<dt>{{ formatCount(account.following_count) }}</dt>
-							<dd>following</dd>
-						</div>
 						<div
-							v-if="isRemoteProfile"
 							class="a-profile__stat--button"
 							role="button"
 							tabindex="0"
@@ -1022,10 +1016,6 @@ onUnmounted(() => {
 							@keydown.enter.prevent="openConnections('followers')"
 							@keydown.space.prevent="openConnections('followers')"
 						>
-							<dt>{{ formatCount(account.followers_count) }}</dt>
-							<dd>followers</dd>
-						</div>
-						<div v-else>
 							<dt>{{ formatCount(account.followers_count) }}</dt>
 							<dd>followers</dd>
 						</div>
@@ -1206,7 +1196,7 @@ onUnmounted(() => {
 				<p class="a-connections__meta">
 					<AppIcon :name="connectionNetwork === 'bluesky' && !connectionLocal ? 'sparkles' : 'globe'" :size="14" />
 					{{ connectionLocal
-						? 'This instance · local'
+						? 'This instance'
 						: connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'fediverse · ActivityPub' }}
 					<span>· {{ connectionProfiles.length }} loaded</span>
 				</p>

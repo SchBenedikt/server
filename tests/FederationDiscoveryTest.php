@@ -115,6 +115,55 @@ final class FederationDiscoveryTest extends TestCase
         );
     }
 
+    public function testDynamicFederationDocumentsAreNeverCachedByACdn(): void
+    {
+        $requests = [
+            ['/.well-known/webfinger', ['resource' => 'acct:alice@localhost:3000']],
+            ['/@alice', []],
+            ['/api/v1/accounts/alice', []],
+        ];
+
+        foreach ($requests as [$path, $query]) {
+            $response = $this->server->send('GET', $path, [
+                'query' => $query,
+                'headers' => ['Accept' => 'application/activity+json'],
+            ]);
+
+            self::assertSame(200, $response->status, $path);
+            self::assertSame('no-store, max-age=0', $response->header('Cache-Control'), $path);
+            self::assertSame('no-store', $response->header('CDN-Cache-Control'), $path);
+            self::assertSame('no-store', $response->header('Cloudflare-CDN-Cache-Control'), $path);
+        }
+    }
+
+    public function testActorDocumentAdvertisesItsProfileUrl(): void
+    {
+        $response = $this->server->send('GET', '/@alice', [
+            'headers' => ['Accept' => 'application/activity+json'],
+        ]);
+
+        self::assertSame(200, $response->status);
+        $document = $this->decode($response->body);
+        self::assertSame('http://localhost:3000/@alice', $document['id']);
+        self::assertSame($document['id'], $document['url']);
+    }
+
+    public function testWebFingerAcceptsTheUnicodeFormOfAnIdnHandle(): void
+    {
+        $server = new TestServer(['instance_url' => 'http://social.schöchner.test:3000']);
+        $server->createAccount();
+
+        $response = $server->send('GET', '/.well-known/webfinger', [
+            'query' => ['resource' => 'acct:alice@social.schöchner.test:3000'],
+        ]);
+
+        self::assertSame(200, $response->status, $response->body);
+        self::assertSame(
+            'acct:alice@social.xn--schchner-p4a.test:3000',
+            $this->decode($response->body)['subject'],
+        );
+    }
+
     public function testNodeInfoAdvertisesActivityPubAndTheInstanceCounts(): void
     {
         $index = $this->server->send('GET', '/.well-known/nodeinfo');
