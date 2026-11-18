@@ -134,7 +134,7 @@ const scheduleReady = computed(() => (
 ));
 const canSubmit = computed(() => (
 	appState.session.user !== null
-	&& (content.value.trim() !== '' || restoredAttachmentIds.value.length > 0 || (showPoll.value && pollReady.value))
+	&& (content.value.trim() !== '' || images.value.length > 0 || restoredAttachmentIds.value.length > 0 || (showPoll.value && pollReady.value))
 	&& !overLimit.value
 	&& !warningOverLimit.value
 	&& !submitting.value
@@ -485,8 +485,8 @@ async function submit(): Promise<void> {
 	error.value = '';
 
 	if (!canSubmit.value) {
-		if (content.value.trim() === '') {
-			error.value = 'A post needs text.';
+		if (content.value.trim() === '' && images.value.length === 0 && restoredAttachmentIds.value.length === 0) {
+			error.value = 'A post needs text, media or a poll.';
 		}
 		return;
 	}

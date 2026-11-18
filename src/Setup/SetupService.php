@@ -155,12 +155,15 @@ final class SetupService
         ];
         EnvFile::set($this->config->envFile, $settings);
 
-        // HostConfig reads .env through getenv(). Refresh this process as well,
-        // so the built-in server and the current CLI request see the new origin
-        // immediately; FPM workers pick the file up on their next restart.
+        // HostConfig reads the env file through getenv(). Refresh this process
+        // as well, so the current request sees the new origin immediately.
+        // Mark the keys as file-backed; the next request clears and reloads
+        // them, which is what makes setup changes visible to long-running
+        // FPM workers without a restart.
         foreach ($settings as $key => $value) {
             putenv($key . '=' . $value);
         }
+        HostConfig::markLoadedEnvironment($settings);
 
         $account = $this->accounts->create(
             $handle,

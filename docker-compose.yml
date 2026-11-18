@@ -18,9 +18,12 @@
 
 name: aloha-social
 
+# Web setup writes this file. It lives in the persistent `var` volume, so a
+# configured domain survives `docker compose up -d`, image updates and
+# container recreation. Values in the host `.env` still work; real process
+# environment variables keep the highest precedence.
 x-app-environment: &app-environment
-  ALOHASOCIAL_INSTANCE_URL: ${ALOHASOCIAL_INSTANCE_URL:-http://localhost:3000}
-  ALOHASOCIAL_DB_DSN: ${ALOHASOCIAL_DB_DSN:-sqlite:var/server.sqlite}
+  ALOHASOCIAL_ENV_FILE: ${ALOHASOCIAL_ENV_FILE:-/var/www/html/var/.env}
 
 x-app-service: &app-service
   image: ghcr.io/schbenedikt/server:${ALOHASOCIAL_IMAGE_TAG:-latest}

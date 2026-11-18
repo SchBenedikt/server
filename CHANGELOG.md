@@ -9,6 +9,32 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.3] - 2026-11-18
+
+### Fixed
+
+- **Web setup persistence in Docker:** setup now writes
+  `/var/www/html/var/.env` inside the persistent `var` volume instead of a
+  container-local `.env`. A configured domain survives image updates,
+  `docker compose up -d` and container recreation.
+- **Domain overrides:** Compose no longer pins `ALOHASOCIAL_INSTANCE_URL`
+  (or the SQLite DSN), and the setup-owned file now outranks the host `.env`
+  values Compose forwards as process environment. Actor IDs, media URLs and
+  federation use the public origin configured in the browser instead of a
+  localhost default.
+- **Configuration reloads:** a long-running PHP process no longer treats its
+  own previously loaded dotenv values as real environment variables. Editing
+  `.env` or completing setup takes effect on the next request without an FPM
+  or Apache restart, while genuine process variables keep the highest
+  precedence.
+- **Media-only composer:** a newly selected image, video or audio file now
+  enables the Post button without requiring text, matching the core rule that
+  allows attachments without a caption.
+
+### Changed
+
+- Release `0.11.3`.
+
 ## [0.11.2] - 2026-11-17
 
 ### Fixed
