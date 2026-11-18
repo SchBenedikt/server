@@ -633,9 +633,15 @@ final class CommunityApiController
                     return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
-                return Response::json([
-                    'preferences' => $this->runtime->preferences->update($userId, $this->jsonBody($request)),
-                ]);
+                $preferences = $this->runtime->preferences->update($userId, $this->jsonBody($request));
+                try {
+                    $this->runtime->app->profileUpdates?->publish($userId);
+                } catch (\Throwable) {
+                    // Keep the local preference even when a peer update cannot
+                    // be queued; the next edit publishes the current document.
+                }
+
+                return Response::json(['preferences' => $preferences]);
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/export') {

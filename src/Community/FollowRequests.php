@@ -13,6 +13,8 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Service\FollowActor;
+use AlohaSocial\Core\Service\FollowRequestNotFoundException;
+use AlohaSocial\Core\Service\FollowRequestService;
 use AlohaSocial\Core\Service\FollowerService;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\Time;
@@ -32,10 +34,9 @@ use function trim;
  * trace in the social graph at all.
  *
  * The request records the follower's actor URL and, for a local account, its
- * handle. Remote requests are not accepted through this service yet because a
- * remote follower needs the original signed Follow activity to receive a valid
- * Accept; the host rejects those at the inbox policy instead. This service is
- * therefore deliberately the local-account half of the feature.
+ * handle. Remote requests live in the core's follower table because the core
+ * has the original signed Follow activity, which is required for a valid
+ * Accept or Reject. Both sources are presented through one host route.
  */
 final class FollowRequests
 {
@@ -45,6 +46,7 @@ final class FollowRequests
         private readonly FollowerService $followers,
         private readonly ActivityFactory $activities,
         private readonly ?NotificationService $notifications = null,
+        private readonly ?FollowRequestService $remoteRequests = null,
     ) {
     }
 
@@ -59,7 +61,24 @@ final class FollowRequests
             ['target' => $targetAccountId],
         );
 
-        return array_map([$this, 'hydrate'], $rows);
+        $requests = array_map([$this, 'hydrate'], $rows);
+
+        if ($this->remoteRequests !== null) {
+            foreach ($this->remoteRequests->pending($targetAccountId, FollowRequestService::MAX_LIMIT) as $follower) {
+                $requests[] = [
+                    'id' => $follower->id,
+                    'target_account_id' => $follower->localUserId,
+                    'actor_id' => $follower->actorId,
+                    'actor_handle' => $follower->actorId,
+                    'is_local' => false,
+                    'created_at' => $follower->followedAt->format(DATE_ATOM),
+                ];
+            }
+        }
+
+        usort($requests, static fn (array $a, array $b): int => (string) $b['created_at'] <=> (string) $a['created_at']);
+
+        return $requests;
     }
 
     /**
@@ -137,6 +156,24 @@ final class FollowRequests
     {
         $request = $this->find($id, $targetAccountId);
         if ($request === null) {
+            if ($this->remoteRequests !== null) {
+                try {
+                    $follower = $this->remoteRequests->accept($targetAccountId, $id);
+                } catch (FollowRequestNotFoundException) {
+                    throw CommunityException::notFound('This follow request no longer exists.');
+                }
+                $this->notifications?->recordFollow($targetAccountId, $follower->actorId);
+
+                return [
+                    'id' => $follower->id,
+                    'target_account_id' => $follower->localUserId,
+                    'actor_id' => $follower->actorId,
+                    'actor_handle' => $follower->actorId,
+                    'is_local' => false,
+                    'created_at' => $follower->followedAt->format(DATE_ATOM),
+                ];
+            }
+
             throw CommunityException::notFound('This follow request no longer exists.');
         }
         if ($request['is_local'] !== true) {
@@ -169,6 +206,23 @@ final class FollowRequests
     {
         $request = $this->find($id, $targetAccountId);
         if ($request === null) {
+            if ($this->remoteRequests !== null) {
+                try {
+                    $follower = $this->remoteRequests->reject($targetAccountId, $id);
+                } catch (FollowRequestNotFoundException) {
+                    throw CommunityException::notFound('This follow request no longer exists.');
+                }
+
+                return [
+                    'id' => $follower->id,
+                    'target_account_id' => $follower->localUserId,
+                    'actor_id' => $follower->actorId,
+                    'actor_handle' => $follower->actorId,
+                    'is_local' => false,
+                    'created_at' => $follower->followedAt->format(DATE_ATOM),
+                ];
+            }
+
             throw CommunityException::notFound('This follow request no longer exists.');
         }
 

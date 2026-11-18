@@ -26,15 +26,20 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
+      - run: composer validate --strict
+
       - run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: PHP lint
         run: find src bin -name '*.php' -print0 | xargs -0 -n1 php -l
 
-      - name: Backend tests
-        run: vendor/bin/phpunit
+      - name: Backend tests and federation smoke
+        run: composer check
 
       - name: Frontend build
         run: |
           npm ci --prefix ui
           npm run build --prefix ui
+
+      - name: Committed UI bundle is current
+        run: git diff --exit-code -- public/ui

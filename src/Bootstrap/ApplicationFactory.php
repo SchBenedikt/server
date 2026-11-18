@@ -218,6 +218,7 @@ final class ApplicationFactory
                 $app->followers,
                 new ActivityFactory($this->config->coreConfig()),
                 new NotificationService(new PdoNotificationRepository($database), $clock, $logger),
+                $app->followRequests,
             ),
             postRevisions: new PdoPostRevisionRepository($database),
             pinnedPosts: new PinnedPosts($database, $clock, $app->posts),

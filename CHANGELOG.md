@@ -32,6 +32,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   `/.well-known/atproto-did` for HTTPS handle verification.
 - **Following and follower lists:** the profile counters open lists of local
   and remote accounts, including accepted remote followers.
+- **Remote follow approval:** pending Follow activities from remote accounts
+  appear in the same request list as local requests and can be accepted or
+  rejected there; the core queues the signed answer.
+- **Accurate NodeInfo:** `activeMonth` and `activeHalfyear` count distinct
+  users who posted or signed in during the window, the software version is the
+  standalone server release, and the Core version is reported separately.
 - **Docker:** the final image ships Composer so the version helper can run
   during maintenance.
 
@@ -55,6 +61,11 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   increases the number shown on the post.
 - **Sign-in return path:** an anonymous visit to `/admin` returns there after
   signing in instead of dropping the member on the timeline.
+- **Reply counts:** follower-only and direct replies no longer contribute to
+  an anonymous interaction count, and a private parent post is omitted.
+- **Profile updates:** changing the display name or locked setting now queues
+  a signed ActivityPub `Update` for accepted followers.
+- **Registration abuse:** sign-up attempts are rate limited per address.
 
 ## [0.11.6] - 2026-11-18
 

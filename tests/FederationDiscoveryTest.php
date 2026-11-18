@@ -183,8 +183,12 @@ final class FederationDiscoveryTest extends TestCase
         $nodeInfo = $this->decode($document->body);
         self::assertSame('2.0', $nodeInfo['version']);
         self::assertSame('alohasocial', $nodeInfo['software']['name']);
+        self::assertSame('0.12.0', $nodeInfo['software']['version']);
         self::assertSame(['activitypub'], $nodeInfo['protocols']);
         self::assertSame(1, $nodeInfo['usage']['users']['total']);
+        self::assertSame(1, $nodeInfo['usage']['users']['activeMonth']);
+        self::assertSame(1, $nodeInfo['usage']['users']['activeHalfyear']);
+        self::assertIsString($nodeInfo['metadata']['coreVersion']);
         self::assertSame('Aloha Test', $nodeInfo['metadata']['nodeName']);
 
         $v21 = $this->server->send('GET', '/nodeinfo/2.1');

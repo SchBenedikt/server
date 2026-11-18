@@ -16,6 +16,8 @@ use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Support\CoreVersion;
+use AlohaSocial\Server\Support\ServerVersion;
+use AlohaSocial\Core\Support\Time;
 
 /**
  * Public discovery documents the core does not route itself.
@@ -204,9 +206,14 @@ final class FederationController
 
     private function nodeInfo(string $version): Response
     {
+        $now = $this->runtime->clock->now();
+        $month = Time::format($now->modify('-30 days'));
+        $halfYear = Time::format($now->modify('-180 days'));
         $users = (int) $this->runtime->database->fetchValue(
             'SELECT COUNT(*) FROM account WHERE disabled_at IS NULL',
         );
+        $activeMonth = $this->activeUsersSince($month);
+        $activeHalfYear = $this->activeUsersSince($halfYear);
         $posts = (int) $this->runtime->database->fetchValue(
             "SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND visibility = 'public'",
         );
@@ -225,7 +232,7 @@ final class FederationController
             'version' => $version,
             'software' => [
                 'name' => 'alohasocial',
-                'version' => CoreVersion::current(),
+                'version' => ServerVersion::current(),
             ],
             'protocols' => ['activitypub'],
             'services' => ['inbound' => [], 'outbound' => []],
@@ -233,17 +240,32 @@ final class FederationController
             'usage' => [
                 'users' => [
                     'total' => $users,
-                    'activeMonth' => $users,
-                    'activeHalfyear' => $users,
+                    'activeMonth' => $activeMonth,
+                    'activeHalfyear' => $activeHalfYear,
                 ],
                 'localPosts' => $posts,
             ],
-            'metadata' => $metadata,
+            'metadata' => $metadata + ['coreVersion' => CoreVersion::current()],
         ], 200, [
             'Content-Type' => 'application/json; profile="http://nodeinfo.diaspora.software/ns/schema/'
                 . $version . '"; charset=utf-8',
             'Access-Control-Allow-Origin' => '*',
         ]);
+    }
+
+    /**
+     * A user counts as active after posting or signing in within the window.
+     * Disabled accounts are excluded and the union avoids counting a user twice.
+     */
+    private function activeUsersSince(string $since): int
+    {
+        return (int) $this->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM ('
+            . 'SELECT author_id AS id FROM social_post WHERE deleted_at IS NULL AND published_at >= :since_post '
+            . 'UNION SELECT account_id AS id FROM session WHERE account_id IS NOT NULL AND created_at >= :since_session'
+            . ') active JOIN account a ON a.id = active.id WHERE a.disabled_at IS NULL',
+            ['since_post' => $since, 'since_session' => $since],
+        );
     }
 
     private function notFound(): Response

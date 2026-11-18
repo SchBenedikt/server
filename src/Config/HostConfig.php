@@ -260,6 +260,17 @@ final readonly class HostConfig
             throw new RuntimeException('atproto_pds_handle_domain is required when the native PDS is enabled.');
         }
 
+        if ($this->atprotoPds
+            && parse_url($this->atprotoPdsUrl, PHP_URL_SCHEME) !== 'https'
+            && !self::isLoopbackUrl($this->atprotoPdsUrl)
+        ) {
+            throw new RuntimeException('atproto_pds_url must be an https origin when the native PDS is enabled.');
+        }
+
+        if ($this->atprotoPds && parse_url($this->atprotoPlcUrl, PHP_URL_SCHEME) !== 'https') {
+            throw new RuntimeException('atproto_plc_url must be https when the native PDS is enabled.');
+        }
+
         if ($this->instanceDescription !== '') {
             $social['instance.description'] = $this->instanceDescription;
         }
@@ -291,6 +302,13 @@ final readonly class HostConfig
         $value = strtolower(trim($value));
 
         return in_array($value, ['main', 'release'], true) ? $value : 'main';
+    }
+
+    private static function isLoopbackUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1', '[::1]'], true);
     }
 
     public static function normalizeHandleDomain(string $value): string

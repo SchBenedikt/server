@@ -155,4 +155,5 @@ database service.
 
 ## License
 
-AGPL-3.0-or-later, like the core.
+AGPL-3.0-or-later, like the core. See [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled fonts.

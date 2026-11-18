@@ -69,7 +69,7 @@ final class PostInteractions
         $boostCounts = $boosts->countsForPosts($postIds);
         $favourited = $viewerId === null ? [] : $favourites->existsForPosts($viewerId, $postIds);
         $reblogged = $viewerId === null ? [] : $boosts->existsForPosts($viewerId, $postIds);
-        $replyCounts = $this->replyCounts($postIds);
+        $replyCounts = $this->replyCounts($postIds, $viewerId);
         $emoji = $this->emojiReactions($postIds);
 
         $result = [];
@@ -215,14 +215,19 @@ final class PostInteractions
     }
 
     /**
+     * Only replies the viewer may read contribute to the count. A public
+     * reply is readable by anybody; an unlisted reply is readable by link; a
+     * follower-only or direct reply is not counted for an anonymous caller.
+     * The author always sees their own replies.
+     *
      * @param list<string> $postIds
      *
      * @return array<string, int>
      */
-    private function replyCounts(array $postIds): array
+    private function replyCounts(array $postIds, ?string $viewerId): array
     {
         $placeholders = [];
-        $parameters = [];
+        $parameters = ['viewer' => $viewerId ?? ''];
         foreach ($postIds as $index => $postId) {
             $key = 'reply_' . $index;
             $placeholders[] = ':' . $key;
@@ -232,7 +237,8 @@ final class PostInteractions
         $rows = $this->db->fetchAll(
             'SELECT in_reply_to_id, COUNT(*) AS total FROM ' . PostSchema::TABLE
             . ' WHERE in_reply_to_id IN (' . implode(', ', $placeholders) . ')'
-            . ' AND deleted_at IS NULL GROUP BY in_reply_to_id',
+            . " AND deleted_at IS NULL AND (visibility IN ('public', 'unlisted') OR author_id = :viewer)"
+            . ' GROUP BY in_reply_to_id',
             $parameters,
         );
 

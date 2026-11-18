@@ -540,6 +540,12 @@ final class FrontController
             }
 
             $this->runtime->accounts->updateDisplayName($userId, $displayName === '' ? null : $displayName);
+            try {
+                $this->runtime->app->profileUpdates?->publish($userId);
+            } catch (Throwable) {
+                // The local edit stays; a peer update is retried on the next
+                // profile change instead of failing the member's request.
+            }
             $account = $this->runtime->accounts->find($userId);
 
             return Response::json([
@@ -794,6 +800,12 @@ final class FrontController
             return $this->signupForm($session, $rawCookie, $userAgent, $ip, [
                 '_form' => 'Your session has expired. Please try again.',
             ], $values, 403);
+        }
+
+        if ($ip !== null && $this->runtime->rateLimiter->attempt('host.signup', $ip, 5, 3600) !== null) {
+            return $this->signupForm($session, $rawCookie, $userAgent, $ip, [
+                '_form' => 'Too many registration attempts. Please try again later.',
+            ], $values, 429);
         }
 
         try {
