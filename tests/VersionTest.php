@@ -21,10 +21,7 @@ final class VersionTest extends TestCase
     {
         $root = dirname(__DIR__);
 
-        $composer = json_decode((string) file_get_contents($root . '/composer.json'), true);
-        self::assertIsArray($composer);
-        self::assertArrayHasKey('version', $composer);
-        $version = (string) $composer['version'];
+        $version = trim((string) file_get_contents($root . '/VERSION'));
         self::assertMatchesRegularExpression('/^\d+\.\d+\.\d+$/', $version);
 
         $ui = json_decode((string) file_get_contents($root . '/ui/package.json'), true);

@@ -10,12 +10,9 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Support;
 
 use function dirname;
-use function is_array;
 use function is_file;
-use function is_string;
-use function json_decode;
-
-use const JSON_THROW_ON_ERROR;
+use function preg_match;
+use function trim;
 
 /**
  * The standalone host version, not the Core dependency version.
@@ -33,15 +30,11 @@ final class ServerVersion
             return self::$cached;
         }
 
-        $file = dirname(__DIR__, 2) . '/composer.json';
+        $file = dirname(__DIR__, 2) . '/VERSION';
         if (is_file($file)) {
-            try {
-                $data = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
-                if (is_array($data) && is_string($data['version'] ?? null) && $data['version'] !== '') {
-                    return self::$cached = $data['version'];
-                }
-            } catch (\Throwable) {
-                // Fall through to a stable, honest placeholder.
+            $version = trim((string) file_get_contents($file));
+            if (preg_match('/^\\d+\\.\\d+\\.\\d+$/', $version) === 1) {
+                return self::$cached = $version;
             }
         }
 
