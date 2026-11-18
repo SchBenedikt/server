@@ -38,6 +38,11 @@ jobs:
 
       - name: Backend tests and federation smoke
         run: composer check
+        env:
+          # Hosted runners normally have no globally routable address; the
+          # guard correctly refuses loopback delivery. A self-hosted runner or
+          # ALOHASOCIAL_SMOKE_HOST runs the full round trip instead.
+          ALOHASOCIAL_SMOKE_ALLOW_SKIP: '1'
 
       - name: Frontend build
         run: |
