@@ -28,6 +28,31 @@ final class RemoteDirectoryTest extends TestCase
         $this->directory = new RemoteDirectory($this->http, new FederationTargetGuard());
     }
 
+    public function testAMentionResolvesToTheActorInboxWithoutReadingTheOutbox(): void
+    {
+        $webfinger = 'https://mastodon.test/.well-known/webfinger?resource=acct%3Aalice%40mastodon.test';
+        $actorUrl = 'https://mastodon.test/users/alice';
+
+        $this->http->json($webfinger, [
+            'links' => [
+                ['rel' => 'self', 'type' => 'application/activity+json', 'href' => $actorUrl],
+            ],
+        ]);
+        $this->http->json($actorUrl, [
+            'id' => $actorUrl,
+            'type' => 'Person',
+            'preferredUsername' => 'alice',
+            'inbox' => 'https://mastodon.test/users/alice/inbox',
+            'outbox' => 'https://mastodon.test/users/alice/outbox',
+        ]);
+
+        $target = $this->directory->mentionTarget('alice@mastodon.test');
+
+        self::assertNotNull($target);
+        self::assertSame($actorUrl, $target->actorId);
+        self::assertSame('https://mastodon.test/users/alice/inbox', $target->inboxUrl);
+    }
+
     public function testActivityPubProfileIsReadFromWebFingerActorAndOutbox(): void
     {
         $webfinger = 'https://mastodon.test/.well-known/webfinger?resource=acct%3Aalice%40mastodon.test';

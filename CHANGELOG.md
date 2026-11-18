@@ -9,6 +9,23 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.5] - 2026-11-18
+
+### Fixed
+
+- **Mentions in posts:** `@user@host` in the text is resolved through
+  WebFinger and the actor document. The Create is delivered to the mentioned
+  actor's inbox even when they do not follow the author, and the note carries
+  the standard `Mention` tag plus the actor in `cc`, so the peer can link and
+  notify the account. A plain `@user` notifies a local account.
+- **Mention lookup failures:** an unreachable or unknown mention is skipped;
+  the post itself is still stored and published.
+
+### Changed
+
+- Core updated to `39e33bd` for mention parsing, delivery and tags.
+- Release `0.11.5`.
+
 ## [0.11.4] - 2026-11-18
 
 ### Fixed
