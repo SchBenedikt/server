@@ -241,6 +241,28 @@ docker compose exec -T app cat /var/www/html/.env > .env.before-0.11.3
 From `0.11.3` on, setup writes `/var/www/html/var/.env` inside the persistent
 `aloha-var` volume and no longer needs this step.
 
+### Cloudflare and other CDNs
+
+Dynamic API, profile and ActivityPub responses are sent with
+`Cache-Control: no-store`, `CDN-Cache-Control: no-store` and
+`Cloudflare-CDN-Cache-Control: no-store`. A CDN must not cache a profile: the
+following count, relationship lists and the configured origin change while
+the instance keeps running.
+
+Up to `0.11.3` these headers were missing, so Cloudflare could keep an old
+`/api/v1/accounts/...` or `/.well-known/webfinger` response for four hours.
+After updating, purge the Cloudflare cache once for the zone (or at least for
+`/api/*`, `/@*` and `/.well-known/*`). Otherwise the old cached response stays
+until its TTL expires even though the origin is already correct. Verify with:
+
+```shell
+curl -sSI https://social.example/api/v1/accounts/admin | grep -i cache-control
+curl -sS https://social.example/api/v1/accounts/admin | grep following_count
+```
+
+Both requests must bypass an old cache entry; the first should show
+`no-store` and the second the current count.
+
 **Never use `docker compose down -v` on an instance you want to keep.** The
 `-v` flag deletes the named volumes, including the SQLite database,
 `var/secret.key` and uploaded media. Plain `docker compose down` followed by

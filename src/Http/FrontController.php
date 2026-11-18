@@ -55,6 +55,35 @@ final class FrontController
      */
     public function handle(Request $request, array $cookies = [], ?string $userAgent = null, ?string $ip = null): Response
     {
+        return $this->withDynamicCachePolicy(
+            $this->dispatch($request, $cookies, $userAgent, $ip),
+        );
+    }
+
+    /**
+     * Every response from this controller is generated per request: profiles,
+     * counts, relationship lists and ActivityPub documents change as soon as
+     * somebody follows or posts. A CDN in front of the instance must not keep
+     * them, or a profile can show a previous domain and an empty following
+     * list for hours. The explicit Cloudflare header has the highest
+     * precedence for zones that cache API paths by page rule.
+     */
+    private function withDynamicCachePolicy(Response $response): Response
+    {
+        if ($response->header('Cache-Control') === null) {
+            $response = $response->withHeader('Cache-Control', 'no-store, max-age=0');
+        }
+
+        return $response
+            ->withHeader('CDN-Cache-Control', 'no-store')
+            ->withHeader('Cloudflare-CDN-Cache-Control', 'no-store');
+    }
+
+    /**
+     * @param array<string, string> $cookies the request's cookies
+     */
+    private function dispatch(Request $request, array $cookies = [], ?string $userAgent = null, ?string $ip = null): Response
+    {
         $cookieName = $this->runtime->config->sessionCookieName;
         $rawCookie = $cookies[$cookieName] ?? null;
         $rawCookie = is_string($rawCookie) && $rawCookie !== '' ? $rawCookie : null;
