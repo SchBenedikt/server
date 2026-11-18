@@ -33,6 +33,9 @@ jobs:
       - name: PHP lint
         run: find src bin -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: License and attribution
+        run: php bin/check-licenses.php
+
       - name: Backend tests and federation smoke
         run: composer check
 
