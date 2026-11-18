@@ -47,6 +47,8 @@ final class MigrationTest extends TestCase
             'social_recommendation_preference',
             'social_account_deletion',
             'social_pds_identity',
+            'social_remote_reply',
+            'atproto_session',
             'account',
             'session',
             'login_attempt',

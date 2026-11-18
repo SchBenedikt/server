@@ -39,6 +39,8 @@ final class Migrations
             new Version202611170001KokuaSchema(),
             new Version202611170002RuntimeErrorSchema(),
             new Version202611180001CoreSchemaFingerprint(),
+            new Version202611180002RemoteReplySchema(),
+            new Version202611180003AtprotoSessionSchema(),
         ];
     }
 }

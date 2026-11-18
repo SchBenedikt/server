@@ -19,6 +19,7 @@ use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Auth\AtprotoSessionRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
@@ -75,6 +76,8 @@ final class AdminService
 
     private const WORKER_HEARTBEAT = 'worker';
 
+    private readonly AtprotoSessionRepository $atprotoSessions;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
@@ -84,6 +87,7 @@ final class AdminService
         private readonly Application $app,
         private readonly HostConfig $config,
     ) {
+        $this->atprotoSessions = new AtprotoSessionRepository($db);
     }
 
     /**
@@ -377,6 +381,7 @@ final class AdminService
 
         $this->accounts->disable($id);
         $revoked = $this->sessions->revokeAccount($id);
+        $revoked += $this->atprotoSessions->deleteForAccount($id);
         $this->record($adminId, 'user.disable', 'account', $id, ['sessions_revoked' => $revoked]);
 
         return $this->user($id);
@@ -405,6 +410,7 @@ final class AdminService
 
         $this->accounts->updatePasswordHash($id, $this->hasher->hash($password));
         $revoked = $this->sessions->revokeAccount($id);
+        $revoked += $this->atprotoSessions->deleteForAccount($id);
         $this->record($adminId, 'user.password', 'account', $id, ['sessions_revoked' => $revoked]);
 
         return $revoked;
@@ -414,6 +420,7 @@ final class AdminService
     {
         $this->requireUser($id);
         $revoked = $this->sessions->revokeAccount($id);
+        $revoked += $this->atprotoSessions->deleteForAccount($id);
         $this->record($adminId, 'user.sessions', 'account', $id, ['sessions_revoked' => $revoked]);
 
         return $revoked;
