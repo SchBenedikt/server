@@ -179,9 +179,17 @@ export function hrefFor(path: string): string {
 
 export function initRouter(): () => void {
 	const update = (): void => {
+		// `/admin` serves the app shell directly. Without a hash the SPA would
+		// otherwise land on the home feed instead of the admin console.
+		if (window.location.hash === '' && window.location.pathname.replace(/\/+$/, '') === '/admin') {
+			route.value = { name: 'admin', section: 'overview' };
+			return;
+		}
+
 		route.value = parseHash(window.location.hash);
 	};
 
+	update();
 	window.addEventListener('hashchange', update);
 
 	return () => window.removeEventListener('hashchange', update);

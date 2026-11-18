@@ -203,9 +203,10 @@ final class FrontController
                 ], 'No access', 403);
             }
 
-            // The console lives in the shared SPA. /admin stays a stable
-            // bookmark and hands over to the client-side admin route.
-            return $this->redirect('/app#/admin');
+            // The console is part of the shared SPA and must look exactly like
+            // the rest of the application. Render the app shell at /admin; the
+            // router selects the admin section because the path is /admin.
+            return $this->appPage($session);
         }
 
         if ($request->method === 'GET' && $request->path === '/favicon.ico') {
