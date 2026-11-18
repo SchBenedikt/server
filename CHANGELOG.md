@@ -6,7 +6,7 @@ version changes when an operator has to change configuration or data, the
 minor version when features are added without breaking an existing install,
 and the patch version for fixes.
 
-The release version is kept in `composer.json`, `ui/package.json` and the newest
+The release version is kept in `VERSION`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ## [0.12.0] - 2026-11-18
