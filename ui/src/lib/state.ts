@@ -16,7 +16,9 @@ import type {
 } from './types';
 
 const THEME_KEY = 'aloha.theme';
-const HOME_TAB_KEY = 'aloha.home-tab';
+// A versioned key so browsers that stored the old default ("home") open the
+// populated For You tab once after this update.
+const HOME_TAB_KEY = 'aloha.home-tab.v2';
 
 type HomeTab = 'home' | 'for-you' | 'trending' | 'public' | 'tags';
 

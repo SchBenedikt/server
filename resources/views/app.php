@@ -14,9 +14,17 @@ declare(strict_types=1);
  * @var bool $isAdmin
  */
 
+// The bundle filenames never change, so browsers and CDNs would keep serving
+// the previous build. Tie the URLs to the file mtimes instead.
+$assetVersion = static function (string $file): string {
+    $path = __DIR__ . '/../../public/ui/' . $file;
+    $mtime = @filemtime($path);
+
+    return $mtime === false ? '' : '?v=' . $mtime;
+};
 ?>
 <link rel="icon" href="/ui/brand/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/ui/app.css">
+<link rel="stylesheet" href="/ui/app.css<?= $assetVersion('app.css') ?>">
 <div
     id="aloha-social"
     class="aloha-root"
@@ -43,4 +51,4 @@ declare(strict_types=1);
         </section>
     </noscript>
 </div>
-<script type="module" src="/ui/app.js"></script>
+<script type="module" src="/ui/app.js<?= $assetVersion('app.js') ?>"></script>
