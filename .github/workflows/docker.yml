@@ -2,7 +2,7 @@
 #
 #   ghcr.io/<owner>/server:latest    on every push to main
 #   ghcr.io/<owner>/server:sha-<…>   immutable tag for the same commit
-#   ghcr.io/<owner>/server:vX.Y.Z    for a semantic-version tag
+#   ghcr.io/<owner>/server:X.Y.Z     for a semantic-version tag
 #
 # The image is multi-arch (amd64 + arm64), so the same tag runs on a regular
 # server and on an ARM host. `GITHUB_TOKEN` is enough; no extra secret is
@@ -13,7 +13,7 @@ name: Docker image
 on:
   push:
     branches: [main]
-    tags: ['v*.*.*']
+    tags: ['[0-9]*.[0-9]*.[0-9]*']
   workflow_dispatch:
 
 permissions:
