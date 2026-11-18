@@ -203,10 +203,9 @@ final class FrontController
                 ], 'No access', 403);
             }
 
-            // The console is part of the shared SPA and must look exactly like
-            // the rest of the application. Render the app shell at /admin; the
-            // router selects the admin section because the path is /admin.
-            return $this->appPage($session);
+            // The standalone HTML console remains the primary admin UI.
+            // The SPA admin stays available at /app#/admin.
+            return $this->adminConsole($session);
         }
 
         if ($request->method === 'GET' && $request->path === '/favicon.ico') {
@@ -1147,6 +1146,23 @@ final class FrontController
         }
 
         return $this->redirect('/login?reset=1');
+    }
+
+    private function adminConsole(AuthenticatedSession $session): Response
+    {
+        $body = $this->runtime->view->render('admin', [
+            'csrf' => $session->session->csrfToken,
+            'handle' => $session->account?->handle ?? '',
+            'instance' => $this->runtime->config->instanceName,
+        ]);
+
+        return new Response(200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+            'Cache-Control' => 'no-store',
+            'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+            'X-Content-Type-Options' => 'nosniff',
+            'Referrer-Policy' => 'same-origin',
+        ], $body);
     }
 
     private function appPage(?AuthenticatedSession $session): Response

@@ -287,13 +287,13 @@ final class ForYouFeed
             . ' (SELECT COUNT(*) FROM social_post r WHERE r.in_reply_to_id = p.id AND r.deleted_at IS NULL) AS replies'
             . ' FROM social_post p'
             . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.published_at >= :since"
-            . ' AND p.author_id <> :viewer'
+            // Own posts stay in the feed. A single-author instance would
+            // otherwise always see an empty feed even though posts exist.
             . ' AND p.author_id NOT IN (SELECT actor_id FROM social_mute WHERE user_id = :muted_viewer)'
             . ' AND p.author_id NOT IN (SELECT actor_id FROM social_block WHERE local_user_id = :blocked_viewer)'
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             [
                 'since' => $since,
-                'viewer' => $accountId,
                 'muted_viewer' => $accountId,
                 'blocked_viewer' => $accountId,
             ],

@@ -126,10 +126,10 @@ final class RegistrationTest extends TestCase
 
         $response = $server->send('GET', '/admin', ['cookies' => $session['cookies']]);
 
-        // The admin console is the normal app shell, not a separate page.
+        // The standalone HTML admin console is served at /admin again.
         self::assertSame(200, $response->status);
-        self::assertStringContainsString('id="aloha-social"', $response->body);
-        self::assertStringContainsString('data-is-admin="1"', $response->body);
+        self::assertStringContainsString('admin.css', $response->body);
+        self::assertStringContainsString('admin.js', $response->body);
     }
 
     public function testAdminSettingsWriteThePersistentEnvFile(): void
