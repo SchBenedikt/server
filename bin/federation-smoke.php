@@ -332,6 +332,12 @@ fwrite(STDOUT, "Federation smoke — two instances, one signed round trip\n");
 fwrite(STDOUT, 'Workspace: ' . $work . "\n");
 
 $smokeHost = smokeHost();
+if ($smokeHost === '127.0.0.1' && getenv('ALOHASOCIAL_SMOKE_ALLOW_SKIP') === '1') {
+    fwrite(STDOUT, "FEDERATION SMOKE SKIP: no globally routable address on this runner.\n");
+    fwrite(STDOUT, "Set ALOHASOCIAL_SMOKE_HOST to a public test address to run the delivery round trip.\n");
+    exit(0);
+}
+
 $baseHost = urlHost($smokeHost);
 $portA = freePort($smokeHost);
 $portB = freePort($smokeHost);
