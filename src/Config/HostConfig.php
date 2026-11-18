@@ -74,7 +74,38 @@ final readonly class HostConfig
             $file = $loaded;
         }
 
-        self::loadDotEnv($root . '/.env');
+        // Drop values this process published for an earlier request. They
+        // came from a file, not from the operator's real environment, and the
+        // file may have changed (web setup, deployment, an edited .env).
+        foreach (self::loadedEnvironment() as $key => $value) {
+            if (getenv($key) === $value) {
+                putenv($key);
+            }
+        }
+        self::loadedEnvironment(clear: true);
+
+        // Snapshot the remaining real process environment. It keeps the
+        // highest precedence and must not be overwritten by any dotenv file.
+        $realEnv = getenv();
+        $realEnv = is_array($realEnv) ? $realEnv : [];
+
+        $rootEnv = $root . '/.env';
+        self::loadDotEnv($rootEnv, $realEnv, false);
+
+        // Setup writes to the configured env file. In Docker that file lives in
+        // the persistent `var` volume, so it survives container recreation; it
+        // deliberately overrides the checkout's `.env` defaults.
+        $configuredEnv = $overrides['env_file'] ?? getenv('ALOHASOCIAL_ENV_FILE');
+        $envFile = is_string($configuredEnv) && trim($configuredEnv) !== ''
+            ? self::resolvePath(trim($configuredEnv), $root)
+            : $rootEnv;
+        if ($envFile !== $rootEnv) {
+            // Compose forwards the host `.env` as real process variables. The
+            // setup-owned file must still win there, otherwise a localhost
+            // default from the host file would silently override the domain a
+            // visitor configured in the browser.
+            self::loadDotEnv($envFile, [], true);
+        }
 
         $pick = static function (string $key, string $env, mixed $default) use ($file, $overrides): mixed {
             if (array_key_exists($key, $overrides)) {
@@ -290,9 +321,13 @@ final readonly class HostConfig
 
     /**
      * A minimal `.env` reader: KEY=VALUE lines, comments ignored, real
-     * environment variables win. No dependency, no magic.
+     * environment variables win. `$override` lets the setup-owned env file
+     * take precedence over the checkout's `.env`, while `$protected` keeps
+     * genuine process variables above both. No dependency, no magic.
+     *
+     * @param array<string, string> $protected
      */
-    private static function loadDotEnv(string $file): void
+    private static function loadDotEnv(string $file, array $protected, bool $override): void
     {
         if (!is_file($file)) {
             return;
@@ -311,7 +346,11 @@ final readonly class HostConfig
 
             [$key, $value] = explode('=', $line, 2);
             $key = trim($key);
-            if ($key === '' || getenv($key) !== false) {
+            if ($key === '' || array_key_exists($key, $protected)) {
+                continue;
+            }
+
+            if (!$override && getenv($key) !== false) {
                 continue;
             }
 
@@ -321,6 +360,41 @@ final readonly class HostConfig
             }
 
             putenv($key . '=' . $value);
+            self::loadedEnvironment($key, $value);
+        }
+    }
+
+    /**
+     * Keys this process loaded from a dotenv file. A static local keeps the
+     * state without making the immutable config object hold mutable state.
+     *
+     * @return array<string, string>
+     */
+    private static function loadedEnvironment(?string $track = null, ?string $value = null, bool $clear = false): array
+    {
+        static $loaded = [];
+
+        if ($clear) {
+            $loaded = [];
+        }
+
+        if ($track !== null && $value !== null) {
+            $loaded[$track] = $value;
+        }
+
+        return $loaded;
+    }
+
+    /**
+     * Marks values written by the caller as file-backed, so the next load
+     * clears and re-reads them instead of treating them as real environment.
+     *
+     * @param array<string, string> $values
+     */
+    public static function markLoadedEnvironment(array $values): void
+    {
+        foreach ($values as $key => $value) {
+            self::loadedEnvironment($key, $value);
         }
     }
 }

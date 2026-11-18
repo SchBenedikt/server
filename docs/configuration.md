@@ -4,9 +4,16 @@ Aloha Social reads configuration in this order, lowest to highest precedence:
 
 1. built-in defaults in `src/Config/HostConfig.php`
 2. `config/server.php`
-3. environment variables, including values loaded from `.env`
+3. the checkout's `.env`
+4. real process environment variables
+5. the setup-owned file named by `ALOHASOCIAL_ENV_FILE`, for the keys it defines
 
-Real environment variables win over `.env`. `.env` is never committed.
+`ALOHASOCIAL_ENV_FILE` defaults to `.env`; when it points to a different file,
+that file wins over the process environment. Under Docker Compose it is
+`/var/www/html/var/.env`, inside the persistent `var` volume, so a domain set
+in the browser survives container updates and overrides the localhost default
+that Compose forwards from the host `.env`. Keys not present in the setup file
+still come from the process environment or `.env`. `.env` is never committed.
 
 The same file is read by the web process, the CLI scripts and the worker, so
 keep one authoritative configuration for all of them. Paths in configuration
@@ -23,6 +30,12 @@ cp .env.example .env
 The application loads `.env` itself. With PHP-FPM, the file must be readable by
 the PHP-FPM user and should not be reachable through the web server (it is
 outside `public/`, and Nginx dotfile rules deny it).
+
+If `ALOHASOCIAL_ENV_FILE` is set to another path, that file is loaded last and
+is authoritative for every key it contains. This is how the browser setup
+works in Docker without making the checkout writable. Set
+`ALOHASOCIAL_ENV_FILE` only when the process that reads and the process that
+writes the file agree on the path.
 
 ## Instance
 

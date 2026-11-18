@@ -102,6 +102,14 @@ For a public HTTPS deployment terminate TLS in a reverse proxy and point
 `https://social.example`. The container itself keeps listening on HTTP; the
 host derives secure-cookie defaults from the configured URL.
 
+You can set the origin either in the host `.env` before the first start or in
+the browser setup. The setup writes `/var/www/html/var/.env`, which is inside
+the persistent `aloha-var` volume and overrides checkout defaults, including
+the host `.env` values Compose forwards as environment. It survives
+`docker compose pull`, `up -d` and container recreation. Keep the origin in
+one place; if you prefer the host `.env`, set it there before first boot and
+leave the browser setup's origin unchanged.
+
 Example Caddy:
 
 ```caddy
@@ -160,6 +168,7 @@ most useful Docker-specific values are:
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `ALOHASOCIAL_PORT` | `3000` | Host port published by the app service. |
+| `ALOHASOCIAL_ENV_FILE` | `/var/www/html/var/.env` | Persistent file written by web setup; overrides `.env` defaults. |
 | `ALOHASOCIAL_IMAGE_TAG` | `latest` | Tag of the `ghcr.io/schbenedikt/server` image. |
 | `ALOHASOCIAL_ADMIN_HANDLE` | empty | First admin handle; created on boot. |
 | `ALOHASOCIAL_ADMIN_EMAIL` | `<handle>@example.invalid` | First admin email. |
