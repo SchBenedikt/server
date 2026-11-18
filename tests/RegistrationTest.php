@@ -118,7 +118,7 @@ final class RegistrationTest extends TestCase
         }
     }
 
-    public function testTheAdminConsoleIsServedOutsideTheSocialShell(): void
+    public function testTheAdminBookmarkHandsOverToTheSharedConsole(): void
     {
         $server = new TestServer();
         $server->createAccount('admin', 'admin@example.test', TestServer::PASSWORD, true);
@@ -126,10 +126,8 @@ final class RegistrationTest extends TestCase
 
         $response = $server->send('GET', '/admin', ['cookies' => $session['cookies']]);
 
-        self::assertSame(200, $response->status);
-        self::assertStringContainsString('/admin/admin.css', $response->body);
-        self::assertStringContainsString('Standalone console', $response->body);
-        self::assertStringNotContainsString('aloha-social', $response->body);
+        self::assertSame(303, $response->status);
+        self::assertSame('/app#/admin', $response->header('Location'));
     }
 
     public function testAdminSettingsWriteThePersistentEnvFile(): void

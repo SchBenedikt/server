@@ -59,7 +59,11 @@ try {
         header('Cache-Control: no-store');
         header('Retry-After: 30');
 
-        $detail = $debug ? $exception->getMessage() : null;
+        // A configuration or migration failure is actionable and contains no
+        // credentials. Show it even without debug so the operator does not
+        // have to guess why the instance refuses to boot.
+        $configFailure = $exception instanceof RuntimeException && !$exception instanceof PDOException;
+        $detail = $debug || $configFailure ? $exception->getMessage() : null;
         $message = 'This instance is not ready yet.';
         ?>
 <!DOCTYPE html>
@@ -81,10 +85,10 @@ try {
 <main>
     <h1>Server is not ready</h1>
     <p><?= htmlspecialchars($message, ENT_QUOTES) ?></p>
-    <p>The operator can run <code>php bin/doctor.php</code> and <code>php bin/update.php</code> on the server.</p>
     <?php if ($detail !== null && $detail !== ''): ?>
-        <p class="detail"><?= htmlspecialchars($detail, ENT_QUOTES) ?></p>
+        <p class="detail"><strong>Reason:</strong> <?= htmlspecialchars($detail, ENT_QUOTES) ?></p>
     <?php endif; ?>
+    <p>The operator can run <code>php bin/doctor.php</code> and <code>php bin/update.php</code> on the server.</p>
 </main>
 </body>
 </html>

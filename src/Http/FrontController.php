@@ -203,7 +203,9 @@ final class FrontController
                 ], 'No access', 403);
             }
 
-            return $this->adminConsole($session);
+            // The console lives in the shared SPA. /admin stays a stable
+            // bookmark and hands over to the client-side admin route.
+            return $this->redirect('/app#/admin');
         }
 
         if ($request->method === 'GET' && $request->path === '/favicon.ico') {
@@ -817,23 +819,6 @@ final class FrontController
             'errors' => $errors,
             'values' => $defaults,
         ];
-    }
-
-    private function adminConsole(AuthenticatedSession $session): Response
-    {
-        $body = $this->runtime->view->render('admin', [
-            'csrf' => $session->session->csrfToken,
-            'handle' => $session->account?->handle ?? '',
-            'instance' => $this->runtime->config->instanceName,
-        ]);
-
-        return new Response(200, [
-            'Content-Type' => 'text/html; charset=utf-8',
-            'Cache-Control' => 'no-store',
-            'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
-            'X-Content-Type-Options' => 'nosniff',
-            'Referrer-Policy' => 'same-origin',
-        ], $body);
     }
 
     private function signupForm(
