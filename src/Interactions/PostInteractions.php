@@ -18,6 +18,7 @@ use AlohaSocial\Core\Domain\Post\PostSchema;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\DatabaseException;
+use AlohaSocial\Core\Service\Atproto\AtprotoInteractionService;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Service\PostService;
 
@@ -37,6 +38,7 @@ final class PostInteractions
         private readonly Clock $clock,
         private readonly NotificationService $notifications,
         private readonly string $instanceUrl,
+        private readonly ?AtprotoInteractionService $atproto = null,
     ) {
     }
 
@@ -199,6 +201,8 @@ final class PostInteractions
             $this->notifications->recordFavourite($post->authorId, $viewerId, $post->id);
         }
 
+        $this->mirrorLike($viewerId, $post->id, true);
+
         return $this->forPosts([$post->id], $viewerId)[$post->id];
     }
 
@@ -211,8 +215,36 @@ final class PostInteractions
     {
         $post = $this->posts->getVisible($postId, $viewerId);
         (new PdoFavouriteRepository($this->db))->remove($viewerId, $post->id);
+        $this->mirrorLike($viewerId, $post->id, false);
 
         return $this->forPosts([$post->id], $viewerId)[$post->id];
+    }
+
+    /**
+     * Mirror a local favourite as an AT Protocol like when the post was
+     * published there.
+     *
+     * The local favourite is the source of truth and must succeed even when
+     * the PDS is down, the account has no ATProto identity or the post was
+     * never published. The remote record is therefore best effort: a failure
+     * is swallowed here and the next like attempt rewrites the same record key.
+     */
+    private function mirrorLike(string $viewerId, string $postId, bool $liked): void
+    {
+        if ($this->atproto === null || !$this->atproto->isEnabled()) {
+            return;
+        }
+
+        try {
+            if ($liked) {
+                $this->atproto->like($viewerId, $postId);
+            } else {
+                $this->atproto->unlike($viewerId, $postId);
+            }
+        } catch (\Throwable) {
+            // A missing publication or an unreachable PDS only means the
+            // Bluesky copy of this favourite is skipped.
+        }
     }
 
     /**

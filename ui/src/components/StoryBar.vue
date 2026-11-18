@@ -37,8 +37,9 @@ let timer = 0;
 
 const signedIn = computed(() => appState.session.user !== null);
 const selfHandle = computed(() => appState.session.user?.handle ?? '');
+const selfId = computed(() => appState.session.user?.id ?? '');
 const visibleGroups = computed(() => groups.value.filter((group) => group.stories.length > 0));
-const ownGroupIndex = computed(() => visibleGroups.value.findIndex((group) => group.account_id === selfHandle.value));
+const ownGroupIndex = computed(() => visibleGroups.value.findIndex((group) => group.account_id === selfId.value));
 const activeStory = computed<Story | null>(() => {
 	const groupIndex = activeGroup.value;
 	if (groupIndex === null) {
@@ -57,7 +58,7 @@ const activeGroupStories = computed(() => {
 	return visibleGroups.value[groupIndex]?.stories ?? [];
 });
 const activeAuthor = computed(() => activeStory.value?.account_id ?? '');
-const canDeleteActive = computed(() => signedIn.value && activeAuthor.value === selfHandle.value);
+const canDeleteActive = computed(() => signedIn.value && activeAuthor.value === selfId.value);
 
 async function load(): Promise<void> {
 	loading.value = true;
@@ -188,12 +189,12 @@ async function removeActive(): Promise<void> {
 	}
 }
 
-function authorName(accountId: string): string {
-	if (accountId === selfHandle.value) {
-		return appState.session.user?.displayName || handleLabel(accountId);
+function authorName(accountId: string, handle?: string, name?: string): string {
+	if (accountId === selfId.value) {
+		return appState.session.user?.displayName || handleLabel(selfHandle.value);
 	}
 
-	return handleLabel(accountId);
+	return name !== undefined && name.trim() !== '' ? name : handleLabel(handle ?? accountId);
 }
 
 watch(activeStory, (story) => {
@@ -258,14 +259,14 @@ onUnmounted(() => {
 				:key="group.account_id"
 				type="button"
 				class="a-story"
-				:class="{ 'a-story--own': group.account_id === selfHandle }"
-				:aria-label="`View the story by ${authorName(group.account_id)}`"
+				:class="{ 'a-story--own': group.account_id === selfId }"
+				:aria-label="`View the story by ${authorName(group.account_id, group.handle, group.name)}`"
 				@click="open(index)"
 			>
 				<span class="a-story__ring">
-					<Avatar :id="group.account_id" :name="authorName(group.account_id)" :size="54" />
+					<Avatar :id="group.handle ?? group.account_id" :name="authorName(group.account_id, group.handle, group.name)" :size="54" />
 				</span>
-				<small>{{ group.account_id === selfHandle ? 'You' : authorName(group.account_id) }}</small>
+				<small>{{ group.account_id === selfId ? 'You' : authorName(group.account_id, group.handle, group.name) }}</small>
 			</button>
 		</div>
 
@@ -303,9 +304,9 @@ onUnmounted(() => {
 			<div class="a-story-viewer__backdrop" @click="close" />
 			<article class="a-story-viewer__card" :class="`a-story-tone--${activeStory.background}`">
 				<header class="a-story-viewer__head">
-					<Avatar :id="activeStory.account_id" :name="authorName(activeStory.account_id)" :size="36" />
+					<Avatar :id="activeStory.author_handle ?? activeStory.account_id" :name="authorName(activeStory.account_id, activeStory.author_handle, activeStory.author_name)" :size="36" />
 					<div>
-						<strong>{{ authorName(activeStory.account_id) }}</strong>
+						<strong>{{ authorName(activeStory.account_id, activeStory.author_handle, activeStory.author_name) }}</strong>
 						<small>{{ relativeTime(activeStory.created_at) }}</small>
 					</div>
 					<button type="button" class="a-icon-btn" aria-label="Close story" @click="close">

@@ -232,6 +232,34 @@ password; the client receives Bearer tokens and can use the same
 as any other PDS. Public posts are also written into the native repository by
 the background worker, so the local post and its ATProto record stay in sync.
 
+## Inbound AT Protocol ingestion
+
+Federated AT Protocol content arrives through a public Jetstream relay:
+
+```dotenv
+ALOHASOCIAL_ATPROTO_JETSTREAM=wss://jetstream2.us-east.bsky.network
+```
+
+Leave the value empty to disable the ingestion. When set, the background
+worker subscribes to the relay, advances the durable `time_us` cursor stored in
+`social_atproto_sync_checkpoint`, and saves the records the instance cares
+about: posts and account updates from followed DIDs, plus likes and replies
+that reference a post this instance published. A reconciler then projects
+those records into the same tables the timelines already read, so Bluesky
+likes count on the card and Bluesky replies appear in the reply counter.
+
+Jetstream is a global firehose. The host filters client-side by the accounts
+this instance follows and by its own published records, so the amount of
+stored data scales with the instance, not with Bluesky. Every projection is
+keyed by the AT record URI and a tombstone removes exactly what its record
+created, which makes the pass safe to repeat after a reconnect. The relay
+keeps roughly a day of replayable events; a longer outage leaves the
+checkpoint stale and the next successful pull sets reconciliation as required.
+
+Run the worker under a supervisor (`docker compose` does this for you).
+Without a running worker nothing is ingested, and no outbound post, reply or
+like is published either.
+
 ## Complete production example
 
 ```dotenv

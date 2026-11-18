@@ -32,6 +32,8 @@ use AlohaSocial\Core\Security\SecretBox;
 use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
+use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
+use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
@@ -160,6 +162,13 @@ final class ApplicationFactory
             );
         $preferences = new Preferences($database, $clock);
 
+        // Inbound AT Protocol content arrives through a host-owned Jetstream
+        // relay. The core keeps the durable store and the cursor; this object
+        // only owns the WebSocket transport and the instance-side filter.
+        $atprotoJetstream = $this->config->atprotoJetstreamUrl === ''
+            ? null
+            : new JetstreamEventSource($this->config->atprotoJetstreamUrl, $database, $clock);
+
         $app = Application::forHost(
             config: $this->config->coreConfig(),
             database: $database,
@@ -181,6 +190,7 @@ final class ApplicationFactory
             pdsRepository: $pdsRepository,
             pdsSecrets: $this->secretBox(),
             pdsDirectory: $pdsDirectory,
+            atprotoEventSource: $atprotoJetstream,
         );
 
         $mailer = $this->config->mailTransport === 'smtp'
@@ -202,6 +212,7 @@ final class ApplicationFactory
             $clock,
             new NotificationService(new PdoNotificationRepository($database), $clock, $logger),
             $this->config->instanceUrl,
+            $app->atprotoInteractions,
         );
 
         return new Runtime(
@@ -270,6 +281,9 @@ final class ApplicationFactory
             blueskyAccounts: $blueskyAccounts,
             pds: $app->pds,
             pdsRepository: $pdsRepository,
+            atprotoReconciler: $atprotoJetstream === null
+                ? null
+                : new AtprotoReconciler($database, $clock, $atprotoJetstream->name()),
         );
     }
 

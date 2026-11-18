@@ -463,6 +463,8 @@ export interface MemoriesData {
 export interface Story {
 	id: string;
 	account_id: string;
+	author_handle?: string;
+	author_name?: string;
 	content: string;
 	background: string;
 	created_at: string;
@@ -471,6 +473,8 @@ export interface Story {
 
 export interface StoryGroup {
 	account_id: string;
+	handle?: string;
+	name?: string;
 	stories: Story[];
 }
 

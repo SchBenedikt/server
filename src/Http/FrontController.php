@@ -9,7 +9,11 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Http;
 
+use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
+use AlohaSocial\Core\Domain\Federation\RemotePost;
+use AlohaSocial\Core\Domain\Federation\RemotePostKind;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
+use AlohaSocial\Core\Domain\Timeline\TimelineEntry;
 use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
@@ -190,7 +194,11 @@ final class FrontController
 
         if ($request->method === 'GET' && $request->path === '/admin') {
             if ($session?->account?->isAdmin() !== true) {
-                return $session === null ? $this->redirect('/login?next=%2Fadmin') : $this->page('error', [
+                // An anonymous session cookie is still a session object. It
+                // must be sent to the login page, not shown a misleading 403
+                // after the instance moves to a real domain and its old
+                // cookie can no longer identify the administrator.
+                return $session?->account === null ? $this->redirect('/login?next=%2Fadmin') : $this->page('error', [
                     'message' => 'This page is reserved for the administration.',
                 ], 'No access', 403);
             }
@@ -391,17 +399,19 @@ final class FrontController
             $posts = [];
             foreach ($ids as $id) {
                 $id = trim($id);
-                if ($id === '' || mb_strlen($id) > 64) {
+                if ($id === '' || mb_strlen($id) > 512) {
                     continue;
                 }
 
                 try {
                     $post = $this->runtime->app->posts->getVisible($id, $session?->userId());
+                    $posts[$id] = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
                 } catch (PostNotFoundException) {
-                    continue;
+                    $remote = $this->presentRemotePost($id);
+                    if ($remote !== null) {
+                        $posts[$id] = $remote;
+                    }
                 }
-
-                $posts[$id] = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
             }
 
             return Response::json(['posts' => $posts]);
@@ -628,6 +638,44 @@ final class FrontController
      * host. The identity is the signed-in account, or the client address for
      * anonymous requests.
      */
+    /**
+     * Hydrate a cached federated post for the shared card without a network
+     * call. The home timeline uses the same entry shape, so a For You card and
+     * a Following card render from one representation.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function presentRemotePost(string $id): ?array
+    {
+        $repository = new PdoRemotePostRepository($this->runtime->database);
+        $post = str_starts_with($id, 'at://')
+            ? $repository->findPostByObjectId($id)
+            : $repository->findByActivityId($id);
+        if (!$post instanceof RemotePost || $post->deletedAt !== null) {
+            return null;
+        }
+
+        $entry = new TimelineEntry(
+            id: $post->activityId,
+            authorId: $post->actorId,
+            objectId: $post->objectId,
+            objectAuthorId: $post->objectAuthorId,
+            content: $post->content,
+            contentWarning: $post->contentWarning,
+            publishedAt: $post->publishedAt,
+            boostedBy: $post->kind === RemotePostKind::Boost ? $post->actorId : null,
+        );
+        $presented = $this->runtime->app->media?->presentTimelineEntries([$entry])[0]
+            ?? $entry->toArray();
+
+        // The caller asked for this key. A boost is hydrated by its object id
+        // when a card fetches the original, so keep the requested id stable.
+        $presented['id'] = $id;
+        $presented['is_remote'] = true;
+
+        return $presented;
+    }
+
     private function enforceRateLimit(Request $request, ?string $userId): ?Response
     {
         try {

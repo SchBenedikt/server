@@ -41,23 +41,49 @@ final class Stories
      *
      * @return array{
      *     stories: list<array<string, mixed>>,
-     *     groups: list<array{account_id: string, stories: list<array<string, mixed>>}>
+     *     groups: list<array{account_id: string, handle: string, name: string, stories: list<array<string, mixed>>}>
      * }
      */
-    public function active(int $limit = 100): array
+    public function active(?string $viewerId = null, int $limit = 100): array
     {
         $limit = max(1, min(200, $limit));
-        $rows = $this->db->fetchAll(
-            'SELECT * FROM story WHERE expires_at > :now ORDER BY created_at DESC LIMIT ' . $limit,
-            ['now' => Time::format($this->clock->now())],
-        );
+        $sql = 'SELECT * FROM story WHERE expires_at > :now';
+        $parameters = ['now' => Time::format($this->clock->now())];
 
-        $stories = array_map([$this, 'hydrate'], $rows);
+        if ($viewerId !== null && $viewerId !== '') {
+            // A story is for the author and the people who follow them. A
+            // public carousel that includes every local account leaks who is
+            // posting and fills the bar with strangers.
+            $sql .= ' AND (account_id = :viewer OR account_id IN ('
+                . ' SELECT actor_id FROM social_following'
+                . " WHERE local_user_id = :follow_viewer AND state = 'accepted'"
+                . '))';
+            $parameters['viewer'] = $viewerId;
+            $parameters['follow_viewer'] = $viewerId;
+        }
+
+        $sql .= ' ORDER BY created_at DESC LIMIT ' . $limit;
+        $rows = $this->db->fetchAll($sql, $parameters);
+
+        $stories = $this->withAuthors(array_map([$this, 'hydrate'], $rows));
         $groups = [];
         foreach ($stories as $story) {
             $accountId = (string) $story['account_id'];
-            $groups[$accountId] ??= ['account_id' => $accountId, 'stories' => []];
+            $groups[$accountId] ??= [
+                'account_id' => $accountId,
+                'handle' => (string) $story['author_handle'],
+                'name' => (string) $story['author_name'],
+                'stories' => [],
+            ];
             $groups[$accountId]['stories'][] = $story;
+        }
+
+        // The reader's own story is the first ring, like every story UI. The
+        // remaining groups stay newest-first.
+        if ($viewerId !== null && isset($groups[$viewerId])) {
+            $own = $groups[$viewerId];
+            unset($groups[$viewerId]);
+            $groups = [$viewerId => $own] + $groups;
         }
 
         return ['stories' => $stories, 'groups' => array_values($groups)];
@@ -73,7 +99,63 @@ final class Stories
             ['account_id' => $accountId, 'now' => Time::format($this->clock->now())],
         );
 
-        return array_map([$this, 'hydrate'], $rows);
+        return $this->withAuthors(array_map([$this, 'hydrate'], $rows));
+    }
+
+    /**
+     * Stories store the account id, but a client renders a handle. Resolving it
+     * here keeps the story bar from comparing an id with a handle, which used
+     * to hide the reader's own ring and its delete action.
+     *
+     * @param list<array<string, mixed>> $stories
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function withAuthors(array $stories): array
+    {
+        if ($stories === []) {
+            return $stories;
+        }
+
+        $ids = [];
+        foreach ($stories as $story) {
+            $id = (string) $story['account_id'];
+            if ($id !== '') {
+                $ids[$id] = true;
+            }
+        }
+
+        $placeholders = [];
+        $parameters = [];
+        $index = 0;
+        foreach (array_keys($ids) as $id) {
+            $key = 'author_' . $index++;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $id;
+        }
+
+        $accounts = [];
+        if ($placeholders !== []) {
+            $rows = $this->db->fetchAll(
+                'SELECT id, handle, display_name FROM account WHERE id IN (' . implode(', ', $placeholders) . ')',
+                $parameters,
+            );
+            foreach ($rows as $row) {
+                $accounts[(string) $row['id']] = $row;
+            }
+        }
+
+        foreach ($stories as $position => $story) {
+            $account = $accounts[(string) $story['account_id']] ?? null;
+            $stories[$position]['author_handle'] = $account === null
+                ? (string) $story['account_id']
+                : (string) $account['handle'];
+            $stories[$position]['author_name'] = $account === null
+                ? ''
+                : (string) ($account['display_name'] ?? '');
+        }
+
+        return $stories;
     }
 
     /**
