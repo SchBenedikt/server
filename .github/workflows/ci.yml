@@ -28,7 +28,9 @@ jobs:
 
       - run: composer validate --strict
 
-      - run: composer install --no-interaction --no-progress --prefer-dist
+      # The Core dist archive intentionally omits ui/; the shared Vue source
+      # needs a source checkout for the frontend build (see issue #3).
+      - run: composer install --no-interaction --no-progress --prefer-source
 
       - name: PHP lint
         run: find src bin -name '*.php' -print0 | xargs -0 -n1 php -l
