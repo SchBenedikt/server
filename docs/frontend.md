@@ -16,8 +16,9 @@ repository contains a single commit (`b6b8776 Initial commit`) with a
 `README.md` containing only `# web`; it has no application code.
 
 The reusable presentation layer is not in this repository. It is
-`@alohasocial/ui` in the upstream core repository (`SchBenedikt/core`, `ui/`)
-and is consumed here from the Composer-installed core package.
+`@alohasocial/ui` in the upstream core repository (`SchBenedikt/core`, `ui/`).
+A prebuilt, versioned copy is committed under `ui/shared-ui/`, so building this
+repository does not depend on the Core Composer archive containing `ui/`.
 
 ## The three layers
 
@@ -37,17 +38,15 @@ Accounts, sessions and CSRF are host-owned per
 
 - **Dependency.** `ui/package.json` declares the private host app
   `@alohasocial/server-ui` and depends on
-  `"@alohasocial/ui": "file:../vendor/alohasocial/core/ui"`. Vue 3 is a direct
-  dependency; the shared package declares Vue as a peer dependency.
+  `"@alohasocial/ui": "file:./shared-ui"`. Vue 3 is a direct dependency; the
+  shared package declares Vue as a peer dependency.
 - **Build.** `npm run build` first runs `ui/scripts/prepare-shared.mjs`, which
-  builds `@alohasocial/ui` from the installed core checkout when its `dist/`
-  is missing, then runs `vite build`. `ui/vite.config.ts` writes to
-  `../public/ui` with stable names: `app.js`, `app.css` and `app-[name].js`.
-  `npm run build:shared` only prepares the shared package. The core marks
-  `ui/` as `export-ignore`, so it is absent from a Composer dist archive; in
-  that case the helper prints the one-line fix
-  (`composer reinstall alohasocial/core --prefer-source`). A normal source
-  checkout only needs `(cd ui && npm ci && npm run build)`.
+  verifies the committed `ui/shared-ui/dist/`, then runs `vite build`.
+  `ui/vite.config.ts` writes to `../public/ui` with stable names: `app.js`,
+  `app.css` and `app-[name].js`. The Core marks `ui/` as `export-ignore` and
+  omits it from Composer archives, so the shared package is vendored as a
+  built artifact instead. A clean checkout only needs
+  `(cd ui && npm ci && npm run build)`; no Core Git checkout is required.
 - **Committed artifact.** `public/ui/app.js` and `public/ui/app.css` are tracked
   in Git. A deployment serves them from `public/` and does not need Node; Node
   is only required to rebuild the UI.
@@ -193,7 +192,7 @@ the core ADR.
 
 ```shell
 git ls-files ui public/ui
-grep -n 'file:../vendor/alohasocial/core/ui' ui/package.json
+grep -n 'file:./shared-ui' ui/package.json
 grep -n 'outDir' ui/vite.config.ts
 grep -n 'appPage\|/app' src/Http/FrontController.php
 php vendor/bin/phpunit --filter UiMountTest

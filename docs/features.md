@@ -15,13 +15,8 @@ becomes a single column with a five-tab bottom bar and the same **More** entries
 in a bottom sheet. Touch targets and media layouts adapt to small screens.
 
 ```shell
-# Only needed after changing the shared package or the host app. The core's
-# Composer dist export-ignores ui/, so check out the matching core source once
-# (use the reference from composer.lock) before building the shared package.
-git clone --depth 1 https://github.com/SchBenedikt/core.git /tmp/aloha-core
-mkdir -p vendor/alohasocial/core/ui
-cp -a /tmp/aloha-core/ui/. vendor/alohasocial/core/ui/
-(cd vendor/alohasocial/core/ui && npm ci && npm run build)
+# Only needed after changing the host app. The shared @alohasocial/ui package
+# is committed prebuilt under ui/shared-ui/, so no Core Git checkout is needed.
 (cd ui && npm ci && npm run build)   # writes public/ui/app.js + app.css
 ```
 

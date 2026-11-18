@@ -9,7 +9,7 @@
 		"build:shared": "node scripts/prepare-shared.mjs"
 	},
 	"dependencies": {
-		"@alohasocial/ui": "file:../vendor/alohasocial/core/ui",
+		"@alohasocial/ui": "file:./shared-ui",
 		"vue": "^3.5.13"
 	},
 	"devDependencies": {

@@ -71,10 +71,10 @@ composer test
 # 3. Commit the host changes, including composer.lock, and push server main.
 ```
 
-A normal `composer install` keeps the VCS checkout; if Composer replaces it
-with a dist copy, restore the source tree with
-`composer reinstall alohasocial/core --prefer-source`. The host's deployed
-version is only correct when `composer.lock` names the core commit it expects.
+A normal `composer install` with a dist archive is enough: the frontend uses
+the committed `ui/shared-ui/` package and does not read Core's `ui/` directory.
+The host's deployed version is only correct when `composer.lock` names the core
+commit it expects.
 
 ## Design notes
 

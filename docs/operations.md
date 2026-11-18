@@ -245,8 +245,7 @@ git pull --ff-only
 composer install --no-dev --classmap-authoritative
 php bin/update.php                 # backup, migrate, account check
 # Only when the UI changed (dev checkout; the committed bundle is enough
-# for a normal deployment):
-composer reinstall alohasocial/core --prefer-source
+# for a normal deployment). ui/shared-ui/ is committed, no Core checkout needed:
 npm --prefix ui ci
 npm --prefix ui run build
 sudo systemctl restart php8.3-fpm
