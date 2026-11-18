@@ -253,12 +253,13 @@ final class EngagementTest extends TestCase
         $body = $this->decoded($response);
 
         self::assertCount(2, $body['posts']);
-        self::assertNotContains($own, $body['posts']);
         self::assertSame($engaged, $body['posts'][0]);
         self::assertSame($other, $body['posts'][1]);
         self::assertSame('Because you follow #aloha', $body['reasons'][$engaged]);
         self::assertSame('Because you follow this account', $body['reasons'][$other]);
-        self::assertSame(3, $body['total']);
+        // The reader's own posts stay in the feed; a single-author instance
+        // must never render an empty For You feed.
+        self::assertSame(4, $body['total']);
 
         $firstPage = $this->server->send('GET', '/api/v1/host/for-you', [
             'query' => ['limit' => '2', 'offset' => '0'],
@@ -270,7 +271,9 @@ final class EngagementTest extends TestCase
             'query' => ['limit' => '2', 'offset' => '2'],
             'cookies' => $this->aliceCookies,
         ]);
-        self::assertNull($this->decoded($secondPage)['next']);
+        $secondBody = $this->decoded($secondPage);
+        self::assertContains($own, $secondBody['posts']);
+        self::assertNull($secondBody['next']);
     }
 
     public function testForYouIncludesFollowedFediversePostsAndHydratesThem(): void
