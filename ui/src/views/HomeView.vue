@@ -51,7 +51,7 @@ const subtitle = computed(() => {
 
 	switch (currentTab.value) {
 		case 'for-you':
-			return 'Recommended from this instance — based on interest, engagement and recency.';
+			return 'Recommended from this instance and the fediverse — based on who you follow, your tags, engagement and recency.';
 		case 'home':
 			return 'Posts from people you follow.';
 		case 'followed':
@@ -80,7 +80,7 @@ const emptyText = computed(() => {
 		return 'Follow hashtags you care about and their posts will show up here.';
 	}
 	if (currentTab.value === 'for-you') {
-		return "Once there are public posts, you'll find a selection here based on interest and engagement.";
+		return 'Follow people and hashtags, and this feed mixes their posts with what is moving on this instance.';
 	}
 	if (currentTab.value === 'home') {
 		return 'Follow people who share interesting things — or write the first post yourself.';

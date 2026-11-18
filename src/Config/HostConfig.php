@@ -64,6 +64,7 @@ final readonly class HostConfig
         public ?string $smtpPassword,
         public string $smtpEncryption,
         public string $envFile,
+        public string $atprotoJetstreamUrl = '',
     ) {
     }
 
@@ -190,6 +191,13 @@ final readonly class HostConfig
             throw new RuntimeException('mail_from must be an email address, got: ' . $mailFrom);
         }
 
+        // Inbound AT Protocol ingestion is opt-in: without a relay URL the
+        // host neither opens a WebSocket nor runs the reconciler.
+        $atprotoJetstream = trim((string) $pick('atproto_jetstream', 'ALOHASOCIAL_ATPROTO_JETSTREAM', ''));
+        if ($atprotoJetstream !== '' && preg_match('#^wss?://[^/]+#i', $atprotoJetstream) !== 1) {
+            throw new RuntimeException('The AT Protocol Jetstream URL must be a ws(s) URL, got: ' . $atprotoJetstream);
+        }
+
         return new self(
             instanceUrl: $instanceUrl,
             instanceName: trim((string) $pick('instance_name', 'ALOHASOCIAL_INSTANCE_NAME', 'Aloha Social')),
@@ -232,6 +240,7 @@ final readonly class HostConfig
             smtpPassword: self::nullable($pick('smtp_password', 'ALOHASOCIAL_SMTP_PASSWORD', null)),
             smtpEncryption: $smtpEncryption,
             envFile: self::resolvePath((string) $pick('env_file', 'ALOHASOCIAL_ENV_FILE', $root . '/.env'), $root),
+            atprotoJetstreamUrl: $atprotoJetstream,
         );
     }
 

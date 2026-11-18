@@ -13,23 +13,35 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 
+use function array_filter;
+use function array_intersect;
 use function array_keys;
+use function array_map;
+use function array_merge;
 use function array_slice;
+use function array_unique;
+use function array_values;
 use function count;
 use function in_array;
 use function log;
 use function max;
+use function mb_strtolower;
 use function min;
+use function preg_match_all;
+use function strcmp;
 use function strtolower;
 use function usort;
 
 /**
- * A first-party "For You" ranking over local public posts.
+ * A first-party "For You" ranking over local and federated public posts.
  *
- * The core owns the social graph and the engagement rows. This host service
- * only reads them: it scores recent public posts by engagement, freshness,
- * followed authors and followed hashtags, then removes muted and blocked
- * authors and damps repeated authors so one account cannot fill the page.
+ * The core owns the social graph, the engagement rows and the cache of remote
+ * posts. This host service only reads them: it scores recent public posts by
+ * engagement, freshness, followed authors and followed hashtags, then removes
+ * muted and blocked authors and damps repeated authors so one account cannot
+ * fill the page. Remote candidates are posts that local accounts actually
+ * follow, so the feed reaches the fediverse without turning into a public
+ * firehose.
  *
  * The rank is deterministic for a given database state, which keeps cursor
  * paging stable within one session. No remote call is made, so the feed still
@@ -74,6 +86,7 @@ final class ForYouFeed
         foreach ($candidates as $candidate) {
             $postId = (string) $candidate['id'];
             $authorId = (string) $candidate['author_id'];
+            $remote = (int) ($candidate['remote'] ?? 0) === 1;
 
             // A post the reader asked to see less of never enters the feed.
             if (($feedback[$postId] ?? '') === 'less') {
@@ -82,24 +95,30 @@ final class ForYouFeed
 
             $published = Time::parse((string) $candidate['published_at'])->getTimestamp();
             $ageHours = max(0, ($now - $published) / 3600);
-            $engagement = (int) $candidate['favourites'] * 2
+            $engagement = $remote ? 0 : (int) $candidate['favourites'] * 2
                 + (int) $candidate['boosts'] * 3
                 + (int) $candidate['replies'] * 1.5;
             $score = log(1 + $engagement) * 3.2;
             $score += max(0, 6.0 * (1 - $ageHours / 168));
-            $reason = 'From the instance and your circles';
+            $reason = $remote
+                ? 'From a fediverse account you follow'
+                : 'From the instance and your circles';
 
             if (isset($followedAuthors[$authorId])) {
                 $score += 5.0;
-                $reason = 'Because you follow this account';
+                $reason = $remote
+                    ? 'Because you follow this account on the fediverse'
+                    : 'Because you follow this account';
             }
-            $tags = $this->postTags($postId);
+            $tags = $remote
+                ? $this->tagsFromText((string) ($candidate['content'] ?? ''))
+                : $this->postTags($postId);
             $matching = array_values(array_intersect($tags, $followedTags));
             if ($matching !== []) {
                 $score += min(3.0, count($matching) * 1.5);
                 $reason = 'Because you follow #' . $matching[0];
             }
-            if ((int) $candidate['boosts'] > 0) {
+            if (!$remote && (int) $candidate['boosts'] > 0) {
                 $score += 2.0;
             }
             if (($feedback[$postId] ?? '') === 'more') {
@@ -160,10 +179,11 @@ final class ForYouFeed
      */
     private function candidates(string $accountId): array
     {
-        $since = Time::format($this->clock->now()->modify('-7 days'));
+        $now = $this->clock->now();
+        $since = Time::format($now->modify('-7 days'));
 
-        return $this->db->fetchAll(
-            'SELECT p.id, p.author_id, p.published_at,'
+        $local = $this->db->fetchAll(
+            'SELECT p.id, p.author_id, p.published_at, p.content, 0 AS remote,'
             . ' (SELECT COUNT(*) FROM social_favourite f WHERE f.post_id = p.id) AS favourites,'
             . ' (SELECT COUNT(*) FROM social_boost b WHERE b.post_id = p.id) AS boosts,'
             . ' (SELECT COUNT(*) FROM social_post r WHERE r.in_reply_to_id = p.id AND r.deleted_at IS NULL) AS replies'
@@ -180,6 +200,41 @@ final class ForYouFeed
                 'blocked_viewer' => $accountId,
             ],
         );
+
+        $remote = $this->db->fetchAll(
+            'SELECT r.activity_id AS id, r.actor_id AS author_id, r.object_author_id,'
+            . ' r.content, r.published_at, 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
+            . ' FROM social_remote_post r'
+            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.published_at >= :since"
+            . ' AND r.actor_id IN ('
+            . " SELECT f.actor_id FROM social_following f WHERE f.local_user_id = :remote_viewer AND f.state = 'accepted'"
+            . ')'
+            . ' AND NOT EXISTS ('
+            . ' SELECT 1 FROM social_mute m WHERE m.user_id = :remote_mute_viewer'
+            . ' AND (m.actor_id = r.actor_id OR m.actor_id = r.object_author_id)'
+            . ' AND (m.expires_at IS NULL OR m.expires_at > :mute_now)'
+            . ')'
+            . ' AND NOT EXISTS ('
+            . ' SELECT 1 FROM social_block b WHERE b.local_user_id = :remote_block_viewer'
+            . ' AND (b.actor_id = r.actor_id OR b.actor_id = r.object_author_id)'
+            . ')'
+            . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
+            [
+                'since' => $since,
+                'remote_viewer' => $accountId,
+                'remote_mute_viewer' => $accountId,
+                'remote_block_viewer' => $accountId,
+                'mute_now' => Time::format($now),
+            ],
+        );
+
+        $candidates = array_merge($local, $remote);
+        usort($candidates, static fn (array $a, array $b): int => strcmp(
+            (string) $b['published_at'],
+            (string) $a['published_at'],
+        ));
+
+        return array_slice($candidates, 0, self::CANDIDATE_LIMIT);
     }
 
     /**
@@ -233,6 +288,30 @@ final class ForYouFeed
             array_map(static fn (array $row): string => strtolower((string) ($row['hashtag'] ?? '')), $rows),
             static fn (string $tag): bool => $tag !== '',
         ));
+    }
+
+    /**
+     * Remote posts arrive as text, not as a local hashtag index. Extracting the
+     * tags here keeps the follow signal working without a second write path.
+     *
+     * @return list<string>
+     */
+    private function tagsFromText(string $text): array
+    {
+        if ($text === '') {
+            return [];
+        }
+
+        preg_match_all('/(?<![\p{L}\p{N}_])#([\p{L}\p{N}_]{1,100})/u', $text, $matches);
+        $tags = [];
+        foreach ($matches[1] ?? [] as $tag) {
+            $normalized = mb_strtolower((string) $tag);
+            if ($normalized !== '') {
+                $tags[$normalized] = true;
+            }
+        }
+
+        return array_keys($tags);
     }
 
     /**

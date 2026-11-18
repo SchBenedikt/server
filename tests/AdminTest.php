@@ -53,6 +53,19 @@ final class AdminTest extends TestCase
         self::assertStringContainsString('admin_required', $forbidden->body);
     }
 
+    public function testAnonymousSessionIsRedirectedToLoginInsteadOfForbidden(): void
+    {
+        $server = new TestServer();
+        $login = $server->send('GET', '/login');
+        self::assertSame(200, $login->status);
+        $cookies = $server->cookiesFrom($login);
+        self::assertNotSame([], $cookies);
+
+        $admin = $server->send('GET', '/admin', ['cookies' => $cookies]);
+        self::assertSame(303, $admin->status);
+        self::assertStringContainsString('/login?next=%2Fadmin', (string) $admin->header('Location'));
+    }
+
     public function testAdminMutationsRequireCsrf(): void
     {
         ['server' => $server, 'cookies' => $cookies] = $this->admin();

@@ -264,8 +264,11 @@ final class CommunityApiController
 
             if ($method === 'GET' && $path === '/api/v1/host/stories') {
                 $this->limit($request, $ip, $session);
+                if ($userId === null) {
+                    return Response::json(['stories' => [], 'groups' => []]);
+                }
 
-                return Response::json($this->runtime->stories->active());
+                return Response::json($this->runtime->stories->active($userId));
             }
 
             if ($method === 'POST' && $path === '/api/v1/host/stories') {

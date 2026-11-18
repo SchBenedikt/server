@@ -273,6 +273,49 @@ final class EngagementTest extends TestCase
         self::assertNull($this->decoded($secondPage)['next']);
     }
 
+    public function testForYouIncludesFollowedFediversePostsAndHydratesThem(): void
+    {
+        $remoteId = 'https://remote.test/activities/111';
+        $objectId = 'https://remote.test/objects/111';
+        $actorId = 'https://remote.test/users/bob';
+
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
+            . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content, :published_at)',
+            [
+                'activity_id' => $remoteId,
+                'object_id' => $objectId,
+                'object_author_id' => $actorId,
+                'actor_id' => $actorId,
+                'kind' => 'post',
+                'content' => 'Hallo aus dem Fediverse #aloha',
+                'published_at' => '2026-11-18T10:00:00Z',
+            ],
+        );
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
+            . " VALUES ('f-remote', 'alice', :actor_id, 'https://remote.test/inbox', '2026-11-18T10:00:00Z', 'accepted')",
+            ['actor_id' => $actorId],
+        );
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_followed_hashtag (user_id, hashtag, created_at)'
+            . " VALUES ('alice', 'aloha', '2026-11-18T10:00:00Z')",
+        );
+
+        $response = $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]);
+        self::assertSame(200, $response->status);
+        $body = $this->decoded($response);
+        self::assertContains($remoteId, $body['posts']);
+        self::assertSame('Because you follow #aloha', $body['reasons'][$remoteId]);
+
+        $cards = $this->decoded($this->server->send('GET', '/api/v1/host/posts', [
+            'query' => ['ids' => $remoteId],
+        ]));
+        self::assertSame('Hallo aus dem Fediverse #aloha', $cards['posts'][$remoteId]['content']);
+        self::assertTrue($cards['posts'][$remoteId]['is_remote']);
+    }
+
     public function testForYouHidesMutedAndBlockedAuthors(): void
     {
         $this->post('bob', 'Sichtbar');
