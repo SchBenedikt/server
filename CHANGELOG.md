@@ -9,6 +9,26 @@ and the patch version for fixes.
 The release version is kept in `composer.json`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## [0.11.6] - 2026-11-18
+
+### Added
+
+- **Complete profile timelines:** local profiles now read
+  `GET /api/v1/accounts/{id}/statuses` instead of scanning the newest public
+  posts. Older posts no longer disappear once 120 newer posts exist, and a
+  signed-out visitor receives exactly the public and unlisted rows the viewer
+  may see.
+- **Nextcloud API compatibility:** the Mastodon-compatible routes are also
+  served under `/api/v1` when that path is not already a native route. This
+  covers statuses, bookmarks, lists, mutes, filters, scheduled posts, polls and
+  media for Nextcloud Social clients. Native routes keep precedence.
+
+### Changed
+
+- Core updated to `c9a5f91` for the profile timeline and compatibility alias
+  layer.
+- Release `0.11.6`.
+
 ## [0.11.5] - 2026-11-18
 
 ### Fixed

@@ -514,42 +514,27 @@ async function loadPosts(reset: boolean): Promise<void> {
 		let nextCursor = reset ? null : cursor.value;
 
 		for (let page = 0; page < pages; page += 1) {
-			const batch = await getApi().publicTimeline(PAGE_SIZE, nextCursor);
+			const batch = await getApi().accountStatuses(handle.value, PAGE_SIZE, nextCursor);
 			if (current !== generation) {
 				return;
 			}
 
-			for (const post of batch) {
-				const author = post.object_author_id ?? post.author_id;
-				if (author === handle.value && !seen.has(post.id)) {
+			for (const post of batch.posts) {
+				if (!seen.has(post.id)) {
 					seen.add(post.id);
 					collected.push(post);
 				}
 			}
 
-			nextCursor = batch.length > 0 ? batch[batch.length - 1].id : nextCursor;
-			if (batch.length < PAGE_SIZE) {
+			nextCursor = batch.next_before;
+			if (nextCursor === null) {
 				hasMore.value = false;
 				break;
 			}
 		}
 
 		cursor.value = nextCursor;
-
-		if (reset && isSelf.value && signedIn.value) {
-			try {
-				const home = await getApi().homeTimeline(40, null);
-				for (const post of home) {
-					const author = post.object_author_id ?? post.author_id;
-					if (author === handle.value && !seen.has(post.id)) {
-						seen.add(post.id);
-						collected.push(post);
-					}
-				}
-			} catch {
-				// The public scan above already provides the profile's public posts.
-			}
-		}
+		hasMore.value = nextCursor !== null;
 
 		if (reset) {
 			const missingPins = pinnedIds.value.filter((id) => !seen.has(id));
