@@ -32,6 +32,7 @@ use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountDirectory;
+use AlohaSocial\Server\Accounts\AccountProfileProvider;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
@@ -120,6 +121,7 @@ final class ApplicationFactory
 
         $blueskyAccounts = new BlueskyAccounts($database, $httpClient, $this->secretBox(), $clock, $targetGuard);
         $pdsRepository = new PdoPdsRepository($database);
+        $preferences = new Preferences($database, $clock);
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -137,6 +139,7 @@ final class ApplicationFactory
             blobStore: new LocalBlobStore($blobDirectory),
             hostResolver: $hostResolver,
             atprotoAccounts: $blueskyAccounts,
+            localProfiles: new AccountProfileProvider($accounts, $preferences),
             pdsRepository: $pdsRepository,
             pdsSecrets: $this->secretBox(),
             pdsDirectory: $this->config->atprotoPds
@@ -207,8 +210,8 @@ final class ApplicationFactory
             drafts: new Drafts($database, $clock),
             archives: new Archives($database, $clock, $app->posts),
             forYou: new ForYouFeed($database, $clock),
-            preferences: new Preferences($database, $clock),
-            exports: new Exports($database, $clock, new Preferences($database, $clock), $this->config),
+            preferences: $preferences,
+            exports: new Exports($database, $clock, $preferences, $this->config),
             followRequests: new FollowRequests(
                 $database,
                 $clock,
