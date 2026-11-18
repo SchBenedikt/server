@@ -36,6 +36,7 @@ final class PostInteractions
         private readonly Connection $db,
         private readonly Clock $clock,
         private readonly NotificationService $notifications,
+        private readonly string $instanceUrl,
     ) {
     }
 
@@ -250,6 +251,189 @@ final class PostInteractions
             }
         }
 
+        foreach ($this->remoteReplyCounts($postIds) as $postId => $remote) {
+            if (isset($counts[$postId])) {
+                $counts[$postId] += $remote;
+            }
+        }
+
         return $counts;
+    }
+
+    /**
+     * Count ActivityPub replies received by this instance.
+     *
+     * The core's RemotePost table has no reply parent column, so the host
+     * keeps the edge in its own table. A remote reply to a followers-only post
+     * is never counted for the public card: the host cannot tell which local
+     * viewer may read the remote author's object, and a public count would leak
+     * the existence of private conversation. Local replies keep their existing
+     * visibility-aware count.
+     *
+     * @param list<string> $postIds
+     *
+     * @return array<string, int>
+     */
+    private function remoteReplyCounts(array $postIds): array
+    {
+        $placeholders = [];
+        $parameters = [];
+        foreach ($postIds as $index => $postId) {
+            $key = 'remote_reply_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT reply.in_reply_to_id, COUNT(DISTINCT reply.object_id) AS total'
+                . ' FROM social_remote_reply reply'
+                . ' INNER JOIN ' . PostSchema::TABLE . ' parent ON parent.id = reply.in_reply_to_id'
+                . ' WHERE reply.in_reply_to_id IN (' . implode(', ', $placeholders) . ')'
+                . " AND parent.deleted_at IS NULL AND parent.visibility IN ('public', 'unlisted')"
+                . ' GROUP BY reply.in_reply_to_id',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            // An installation that has not run the host migration yet must
+            // still serve its existing interaction counters.
+            return [];
+        }
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $postId = is_string($row['in_reply_to_id'] ?? null) ? $row['in_reply_to_id'] : '';
+            if ($postId !== '') {
+                $counts[$postId] = (int) ($row['total'] ?? 0);
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Record a successfully accepted inbox activity that creates or deletes a
+     * reply to one of this instance's public posts.
+     *
+     * This is called only after the core's signature, follow-gate and replay
+     * checks accepted the activity. A malformed document or a failed insert is
+     * ignored: the reply count is a projection and must never turn an accepted
+     * federation delivery into an error response for the peer.
+     */
+    public function recordInboundActivity(string $body): void
+    {
+        try {
+            $activity = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return;
+        }
+
+        if (!is_array($activity)) {
+            return;
+        }
+
+        $type = is_string($activity['type'] ?? null) ? $activity['type'] : '';
+        $object = $activity['object'] ?? null;
+
+        if ($type === 'Create' && is_array($object)) {
+            $this->storeInboundReply($activity, $object);
+
+            return;
+        }
+
+        if ($type !== 'Delete') {
+            return;
+        }
+
+        $objectId = is_string($object)
+            ? trim($object)
+            : (is_array($object) && is_string($object['id'] ?? null) ? trim($object['id']) : '');
+        if ($objectId === '') {
+            return;
+        }
+
+        try {
+            $this->db->execute(
+                'DELETE FROM social_remote_reply WHERE object_id = :object_id',
+                ['object_id' => $objectId],
+            );
+        } catch (DatabaseException) {
+            // The reply index is optional for an old database.
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $activity
+     * @param array<string, mixed> $object
+     */
+    private function storeInboundReply(array $activity, array $object): void
+    {
+        $activityId = is_string($activity['id'] ?? null) ? trim($activity['id']) : '';
+        $objectId = is_string($object['id'] ?? null) ? trim($object['id']) : '';
+        $actorId = is_string($object['attributedTo'] ?? null)
+            ? trim($object['attributedTo'])
+            : (is_string($activity['actor'] ?? null) ? trim($activity['actor']) : '');
+
+        $inReplyTo = $object['inReplyTo'] ?? null;
+        if (is_array($inReplyTo)) {
+            $inReplyTo = $inReplyTo['id'] ?? null;
+        }
+
+        $parentId = is_string($inReplyTo) ? $this->localPostId($inReplyTo) : null;
+        if ($activityId === '' || $objectId === '' || $actorId === '' || $parentId === null) {
+            return;
+        }
+
+        try {
+            $parent = $this->posts->getVisible($parentId, null);
+        } catch (PostNotFoundException) {
+            return;
+        }
+
+        if (!in_array($parent->visibility->value, ['public', 'unlisted'], true)) {
+            return;
+        }
+
+        try {
+            if ((int) $this->db->fetchValue(
+                'SELECT COUNT(*) FROM social_remote_reply WHERE object_id = :object_id',
+                ['object_id' => $objectId],
+            ) > 0) {
+                return;
+            }
+
+            $this->db->execute(
+                'INSERT INTO social_remote_reply'
+                . ' (activity_id, object_id, in_reply_to_id, actor_id, created_at)'
+                . ' VALUES (:activity_id, :object_id, :in_reply_to_id, :actor_id, :created_at)',
+                [
+                    'activity_id' => $activityId,
+                    'object_id' => $objectId,
+                    'in_reply_to_id' => $parentId,
+                    'actor_id' => $actorId,
+                    'created_at' => \AlohaSocial\Core\Support\Time::format($this->clock->now()),
+                ],
+            );
+        } catch (DatabaseException) {
+            // A concurrent duplicate Create is harmless; the object id is the
+            // identity and the existing row already represents this reply.
+        }
+    }
+
+    private function localPostId(string $objectId): ?string
+    {
+        $prefix = rtrim($this->instanceUrl, '/') . '/api/v1/posts/';
+        if (!str_starts_with($objectId, $prefix)) {
+            return null;
+        }
+
+        $encoded = substr($objectId, strlen($prefix));
+        if ($encoded === '' || str_contains($encoded, '/')) {
+            return null;
+        }
+
+        $postId = rawurldecode($encoded);
+
+        return $postId !== '' && mb_strlen($postId) <= 64 ? $postId : null;
     }
 }

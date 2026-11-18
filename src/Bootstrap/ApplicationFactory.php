@@ -10,8 +10,10 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Bootstrap;
 
 use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Atproto\Pds\NativePdsService;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
 use AlohaSocial\Core\Protocol\Atproto\PlcDirectoryClient;
+use AlohaSocial\Core\Protocol\Atproto\XrpcAtprotoPublisher;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
 use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
 use AlohaSocial\Core\Domain\Moderation\StoredModerationPolicy;
@@ -31,6 +33,10 @@ use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
+use AlohaSocial\Server\Federation\CompositeAtprotoAccounts;
+use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
+use AlohaSocial\Server\Federation\NativePdsAccountResolver;
+use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountDirectory;
@@ -127,6 +133,31 @@ final class ApplicationFactory
 
         $blueskyAccounts = new BlueskyAccounts($database, $httpClient, $this->secretBox(), $clock, $targetGuard);
         $pdsRepository = new PdoPdsRepository($database);
+        $pdsDirectory = $this->config->atprotoPds
+            ? new PlcDirectoryClient($httpClient, $this->config->atprotoPlcUrl)
+            : null;
+        $nativePds = $this->config->atprotoPds
+            ? new NativePdsService(
+                $this->config->coreConfig(),
+                $pdsRepository,
+                $this->secretBox(),
+                $clock,
+                new LocalBlobStore($blobDirectory),
+                $pdsDirectory,
+            )
+            : null;
+        $atprotoAccounts = $nativePds === null
+            ? $blueskyAccounts
+            : new CompositeAtprotoAccounts(
+                new NativePdsAccountResolver($this->config, $pdsRepository),
+                $blueskyAccounts,
+            );
+        $atprotoPublisher = $nativePds === null
+            ? null
+            : new CompositeAtprotoPublisher(
+                new NativePdsPublisher($nativePds, $pdsRepository),
+                new XrpcAtprotoPublisher($httpClient),
+            );
         $preferences = new Preferences($database, $clock);
 
         $app = Application::forHost(
@@ -144,13 +175,12 @@ final class ApplicationFactory
             debug: $this->config->debug,
             blobStore: new LocalBlobStore($blobDirectory),
             hostResolver: $hostResolver,
-            atprotoAccounts: $blueskyAccounts,
+            atprotoAccounts: $atprotoAccounts,
+            atprotoPublisher: $atprotoPublisher,
             localProfiles: new AccountProfileProvider($accounts, $preferences),
             pdsRepository: $pdsRepository,
             pdsSecrets: $this->secretBox(),
-            pdsDirectory: $this->config->atprotoPds
-                ? new PlcDirectoryClient($httpClient, $this->config->atprotoPlcUrl)
-                : null,
+            pdsDirectory: $pdsDirectory,
         );
 
         $mailer = $this->config->mailTransport === 'smtp'
@@ -171,6 +201,7 @@ final class ApplicationFactory
             $database,
             $clock,
             new NotificationService(new PdoNotificationRepository($database), $clock, $logger),
+            $this->config->instanceUrl,
         );
 
         return new Runtime(

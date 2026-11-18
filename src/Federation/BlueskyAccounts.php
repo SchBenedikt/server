@@ -14,6 +14,7 @@ use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\DatabaseException;
+use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClientException;
 use AlohaSocial\Core\Platform\Http\HttpResponse;
@@ -65,6 +66,8 @@ final class BlueskyAccounts implements AtprotoAccountResolver
     private const REFRESH_SKEW_SECONDS = 120;
 
     private const TIMEOUT_SECONDS = 20;
+
+    private const MAX_RESPONSE_BYTES = 1_048_576;
 
     public function __construct(
         private readonly Connection $db,
@@ -447,13 +450,38 @@ final class BlueskyAccounts implements AtprotoAccountResolver
      */
     private function request(string $method, string $url, array $headers = [], string $body = ''): HttpResponse
     {
+        if (parse_url($url, PHP_URL_SCHEME) !== 'https') {
+            throw new BlueskyException(
+                422,
+                'bluesky_target_insecure',
+                'AT Protocol endpoints must use HTTPS.',
+            );
+        }
+
+        $addresses = [];
         try {
-            $this->guard?->addressesFor($url);
+            $addresses = $this->guard?->addressesFor($url) ?? [];
         } catch (RemoteFetchException $exception) {
             throw new BlueskyException(422, 'bluesky_target_blocked', $exception->getMessage());
         }
 
         try {
+            // Pinning the validated IPs prevents a second DNS answer from
+            // redirecting an app password or bearer token to a private host.
+            // The bounded path also stops an oversized response before it can
+            // exhaust worker memory.
+            if ($this->http instanceof BoundedHttpClient) {
+                return $this->http->requestBounded(
+                    $method,
+                    $url,
+                    $headers,
+                    $body,
+                    self::TIMEOUT_SECONDS,
+                    self::MAX_RESPONSE_BYTES,
+                    $addresses,
+                );
+            }
+
             return $this->http->request($method, $url, $headers, $body, self::TIMEOUT_SECONDS);
         } catch (HttpClientException $exception) {
             throw new BlueskyException(

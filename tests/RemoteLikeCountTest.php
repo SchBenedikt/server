@@ -83,6 +83,50 @@ final class RemoteLikeCountTest extends TestCase
         self::assertSame(1, $body['interactions'][$parent]['replies_count']);
     }
 
+    public function testInboundRemoteRepliesAreCountedAndDeleteRemovesThem(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $parent = $server->runtime->app->posts->create(
+            new CreatePost('alice', 'Parent', Visibility::Public),
+        )->id;
+
+        $create = [
+            'id' => 'https://remote.example/activities/create-1',
+            'type' => 'Create',
+            'actor' => 'https://remote.example/@bob',
+            'object' => [
+                'id' => 'https://remote.example/notes/1',
+                'type' => 'Note',
+                'attributedTo' => 'https://remote.example/@bob',
+                'inReplyTo' => 'http://localhost:3000/api/v1/posts/' . $parent,
+                'content' => 'A federated reply',
+            ],
+        ];
+
+        $server->runtime->interactions->recordInboundActivity(json_encode($create, JSON_THROW_ON_ERROR));
+
+        $response = $server->send('GET', '/api/v1/host/interactions', [
+            'query' => ['ids' => $parent],
+        ]);
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(1, $body['interactions'][$parent]['replies_count']);
+
+        $server->runtime->interactions->recordInboundActivity(json_encode([
+            'id' => 'https://remote.example/activities/delete-1',
+            'type' => 'Delete',
+            'actor' => 'https://remote.example/@bob',
+            'object' => 'https://remote.example/notes/1',
+        ], JSON_THROW_ON_ERROR));
+
+        $response = $server->send('GET', '/api/v1/host/interactions', [
+            'query' => ['ids' => $parent],
+        ]);
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(0, $body['interactions'][$parent]['replies_count']);
+    }
+
     public function testPrivatePostsDoNotLeakInteractionCounts(): void
     {
         $server = new TestServer();

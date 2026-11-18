@@ -45,6 +45,8 @@ final class FrontController
 
     private readonly AtprotoIdentityController $atprotoIdentity;
 
+    private readonly AtprotoSessionController $atprotoSession;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
@@ -52,6 +54,7 @@ final class FrontController
         $this->communityApi = new CommunityApiController($runtime);
         $this->federation = new FederationController($runtime);
         $this->atprotoIdentity = new AtprotoIdentityController($runtime);
+        $this->atprotoSession = new AtprotoSessionController($runtime);
     }
 
     /**
@@ -93,6 +96,13 @@ final class FrontController
         $rawCookie = is_string($rawCookie) && $rawCookie !== '' ? $rawCookie : null;
 
         $session = $this->runtime->sessions->resolve($rawCookie);
+
+        $atprotoSessionResponse = $this->atprotoSession->handle($request);
+        if ($atprotoSessionResponse !== null) {
+            return $atprotoSessionResponse;
+        }
+
+        $request = $this->atprotoSession->authenticate($request);
 
         // Public ActivityPub/NodeInfo documents the core does not route. This
         // must run before the compatibility API so a post URL can negotiate
@@ -463,9 +473,10 @@ final class FrontController
             return Response::json(['quoted' => $quoted]);
         }
 
-        $userId = $session?->userId();
+        $sessionUserId = $session?->userId();
+        $userId = $sessionUserId ?? $request->userId;
 
-        if ($userId !== null && in_array($request->method, self::MUTATING_METHODS, true)) {
+        if ($sessionUserId !== null && in_array($request->method, self::MUTATING_METHODS, true)) {
             $token = (string) ($request->header('x-csrf-token') ?? '');
             if (!$this->runtime->sessions->csrfMatches($session, $token)) {
                 return Response::json(
@@ -593,10 +604,23 @@ final class FrontController
             ? $request->withUserId(null)
             : $request->withUserId($userId)->withScopes(['*']);
 
-        return $this->federation->decorate(
+        $response = $this->federation->decorate(
             $request,
             $this->runtime->app->handle($authenticated),
         );
+
+        // The core accepted an inbox POST, but a remote Create has no local
+        // reply row and its RemotePost record does not keep `inReplyTo`. Index
+        // the reply only after signature, audience and replay checks passed.
+        if ($request->method === 'POST'
+            && str_ends_with($request->path, '/inbox')
+            && $response->status >= 200
+            && $response->status < 300
+        ) {
+            $this->runtime->interactions->recordInboundActivity($request->body);
+        }
+
+        return $response;
     }
 
     /**
@@ -1101,6 +1125,7 @@ final class FrontController
             'handle' => $account?->handle ?? '',
             'displayName' => $account?->name() ?? '',
             'isAdmin' => $account?->isAdmin() === true,
+            'atproto' => $this->runtime->config->atprotoPublish || $this->runtime->config->atprotoPds,
             'appShell' => true,
         ], 'App', 200, null, [
             'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",

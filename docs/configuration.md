@@ -224,6 +224,14 @@ A new identity is created under **Settings → AT Protocol** in the app. Rotatin
 the keys is available there as well. Keep the PDS disabled until the domain and
 TLS certificate are reachable from the public internet.
 
+The PDS exposes the standard `com.atproto.server.createSession`,
+`getSession`, `refreshSession` and `deleteSession` XRPC methods. Members can
+therefore use a normal ATProto client with their handle (or email) and account
+password; the client receives Bearer tokens and can use the same
+`com.atproto.identity.*`, `com.atproto.repo.*` and `com.atproto.sync.*` routes
+as any other PDS. Public posts are also written into the native repository by
+the background worker, so the local post and its ATProto record stay in sync.
+
 ## Complete production example
 
 ```dotenv

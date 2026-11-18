@@ -158,6 +158,7 @@ final class PasswordResetService
         $this->db->transaction(function () use ($account, $hash, $now): void {
             $this->accounts->updatePasswordHash($account->id, $hash);
             $this->db->execute('DELETE FROM session WHERE account_id = :account', ['account' => $account->id]);
+            $this->db->execute('DELETE FROM atproto_session WHERE account_id = :account', ['account' => $account->id]);
             $this->db->execute('DELETE FROM password_reset WHERE account_id = :account', ['account' => $account->id]);
         });
     }
