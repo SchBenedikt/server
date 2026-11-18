@@ -357,3 +357,25 @@ line. The server fails loudly during boot by design.
 - [Configuration reference](configuration.md)
 - [Frontend hosting decision](frontend.md)
 - [Project README](../README.md)
+
+## Monitoring and alert thresholds
+
+`GET /healthz` returns `200` only when the database is reachable and the schema
+is current; any other answer is `503` with the failing check named. The admin
+overview shows the same checks plus queue depth, the oldest pending job and the
+worker heartbeat.
+
+Suggested thresholds for an external monitor:
+
+| Signal | Warning | Critical |
+| --- | --- | --- |
+| `/healthz` status | non-200 for 2 minutes | non-200 for 5 minutes |
+| Queue pending | > 100 for 10 minutes | > 1000 or oldest job > 30 minutes |
+| Dead jobs | any new dead job | > 10 dead jobs |
+| Worker heartbeat | older than 2 minutes | older than 10 minutes |
+| ATProto stream lag | > 1 hour | > 24 hours (`bin/atproto-status.php`) |
+| Federation failures | > 5 in 15 minutes | > 50 in 15 minutes |
+
+Alert on the dead-job count and the worker heartbeat, not only on HTTP: a
+worker that stopped still serves pages, so liveness alone hides a stalled
+federation and a growing outbox.
