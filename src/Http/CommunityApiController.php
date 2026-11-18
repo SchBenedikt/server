@@ -66,6 +66,7 @@ final class CommunityApiController
                     trim((string) ($request->queryParam('state') ?? 'open')),
                     $this->intParam($request, 'limit', 30, 1, 50),
                     $this->intParam($request, 'offset', 0, 0, 10_000),
+                    $isAdmin,
                 ));
             }
 
@@ -80,7 +81,7 @@ final class CommunityApiController
             }
 
             if (preg_match('#^/api/v1/host/kokua/([^/]+)$#', $path, $matches) === 1 && $method === 'GET') {
-                $entry = $this->runtime->kokua->find(rawurldecode($matches[1]), $userId);
+                $entry = $this->runtime->kokua->find(rawurldecode($matches[1]), $userId, $isAdmin);
                 if ($entry === null) {
                     return $this->error(404, 'not_found', 'This Kokua does not exist.');
                 }
@@ -302,7 +303,7 @@ final class CommunityApiController
                 $owner = $account->id === $userId;
 
                 return Response::json([
-                    'collections' => $this->runtime->collections->forAccount($account->id, $owner),
+                    'collections' => $this->runtime->collections->forAccount($account->id, $owner, $userId),
                 ]);
             }
 

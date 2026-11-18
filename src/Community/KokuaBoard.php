@@ -67,6 +67,7 @@ final class KokuaBoard
         string $state = 'open',
         int $limit = 30,
         int $offset = 0,
+        bool $viewerIsAdmin = false,
     ): array {
         $limit = max(1, min(50, $limit));
         $offset = max(0, min(10_000, $offset));
@@ -103,7 +104,7 @@ final class KokuaBoard
         );
 
         return [
-            'items' => $this->presentMany($rows, $viewerId),
+            'items' => $this->presentMany($rows, $viewerId, $viewerIsAdmin),
             'total' => $total,
             'limit' => $limit,
             'offset' => $offset,
@@ -114,14 +115,14 @@ final class KokuaBoard
     /**
      * @return array<string, mixed>|null
      */
-    public function find(string $id, ?string $viewerId = null): ?array
+    public function find(string $id, ?string $viewerId = null, bool $viewerIsAdmin = false): ?array
     {
         $row = $this->findRow($id);
         if ($row === null) {
             return null;
         }
 
-        return $this->presentMany([$row], $viewerId)[0];
+        return $this->presentMany([$row], $viewerId, $viewerIsAdmin)[0];
     }
 
     /**
@@ -319,7 +320,7 @@ final class KokuaBoard
      *
      * @return list<array<string, mixed>>
      */
-    private function presentMany(array $rows, ?string $viewerId): array
+    private function presentMany(array $rows, ?string $viewerId, bool $viewerIsAdmin = false): array
     {
         if ($rows === []) {
             return [];
@@ -329,7 +330,7 @@ final class KokuaBoard
         $helpers = $this->helpersFor($ids);
 
         return array_map(
-            fn (array $row): array => $this->present($row, $helpers[(string) $row['id']] ?? [], $viewerId),
+            fn (array $row): array => $this->present($row, $helpers[(string) $row['id']] ?? [], $viewerId, $viewerIsAdmin),
             $rows,
         );
     }
@@ -367,7 +368,7 @@ final class KokuaBoard
      *
      * @return array<string, mixed>
      */
-    private function present(array $row, array $helpers, ?string $viewerId): array
+    private function present(array $row, array $helpers, ?string $viewerId, bool $viewerIsAdmin = false): array
     {
         $viewerHelping = false;
         if ($viewerId !== null) {
@@ -376,6 +377,17 @@ final class KokuaBoard
                     $viewerHelping = true;
                     break;
                 }
+            }
+        }
+
+        // Helper notes are private to the request author and the author of the
+        // note. Other viewers only get the count, never the note text or the
+        // helper identity. Moderators may review all notes.
+        $isOwner = $viewerId !== null && (string) $row['account_id'] === $viewerId;
+        $visibleHelpers = [];
+        foreach ($helpers as $helper) {
+            if ($viewerIsAdmin || $isOwner || ($viewerHelping && $helper['account_id'] === $viewerId)) {
+                $visibleHelpers[] = $helper;
             }
         }
 
@@ -392,10 +404,11 @@ final class KokuaBoard
             'created_at' => (string) $row['created_at'],
             'updated_at' => (string) $row['updated_at'],
             'done_at' => $row['done_at'] === null ? null : (string) $row['done_at'],
-            'helpers' => $helpers,
+            'helpers' => $visibleHelpers,
             'help_count' => count($helpers),
             'viewer_helping' => $viewerHelping,
-            'is_owner' => $viewerId !== null && (string) $row['account_id'] === $viewerId,
+            'viewer_can_read_notes' => $viewerIsAdmin || $isOwner || $viewerHelping,
+            'is_owner' => $isOwner,
         ];
     }
 

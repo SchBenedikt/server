@@ -102,6 +102,12 @@ final class FrontController
             return $federationResponse;
         }
 
+        if ($request->method === 'GET' && $request->path === '/readyz') {
+            $readiness = $this->runtime->admin->readiness();
+
+            return Response::json($readiness, ($readiness['ready'] ?? false) ? 200 : 503);
+        }
+
         if ($request->path === '/setup' && in_array($request->method, ['GET', 'POST'], true)) {
             return $request->method === 'GET'
                 ? $this->setupForm($request, $session, $rawCookie, $userAgent, $ip)

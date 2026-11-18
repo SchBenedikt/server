@@ -208,7 +208,7 @@ async function submitHelp(entry: KokuaEntry): Promise<void> {
 		replaceEntry(updated);
 		helpingId.value = '';
 		helpMessage.value = '';
-		showToast(updated.viewer_helping ? 'Your offer is visible to the author.' : 'Your offer was saved.', 'success');
+		showToast(updated.viewer_helping ? 'Your private note is visible to the author.' : 'Your offer was saved.', 'success');
 	} catch (caught) {
 		showToast(caught instanceof Error ? caught.message : 'Your offer could not be sent.', 'error');
 	} finally {
@@ -573,7 +573,7 @@ onMounted(() => {
 					@submit.prevent="submitHelp(entry)"
 				>
 					<label>
-						<span>Add a note for {{ authorName(entry) }} <small>(optional)</small></span>
+						<span>Add a private note for {{ authorName(entry) }} <small>(optional — only the author can read it)</small></span>
 						<textarea
 							v-model="helpMessage"
 							maxlength="300"

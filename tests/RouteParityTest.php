@@ -55,6 +55,13 @@ final class RouteParityTest extends TestCase
         self::assertSame(200, $health->status);
         self::assertSame('{"status":"ok"}', $health->body);
 
+        $ready = $server->send('GET', '/readyz');
+        self::assertSame(200, $ready->status);
+        $readiness = json_decode($ready->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($readiness['ready']);
+        self::assertSame('ok', $readiness['checks']['database']['status']);
+        self::assertArrayNotHasKey('dsn', $readiness['checks']['database']);
+
         $instance = $server->send('GET', '/api/v1/instance');
         self::assertSame(200, $instance->status);
         self::assertStringContainsString('Aloha Test', $instance->body);

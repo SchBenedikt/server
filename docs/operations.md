@@ -19,6 +19,11 @@ php bin/reset.php                  # back up, empty the instance, print setup UR
 php bin/doctor.php                 # paths, schema, key, database and mail
 ```
 
+`GET /readyz` is the readiness probe: it checks the database, the Core schema
+fingerprint, the worker heartbeat and queue depth, and returns `503` when the
+database or schema is not ready. `GET /healthz` remains the dependency-free
+liveness probe.
+
 `php bin/worker.php` without `--once` is the supervised long-running worker.
 Stop it with `SIGTERM` or `Ctrl+C`; it finishes the current batch first.
 
@@ -227,7 +232,7 @@ on a separate host. A backup that has never been restored is only a hope.
 4. Run `php bin/doctor.php`; if a migration is pending, run
    `php bin/update.php`.
 5. Start PHP-FPM and the worker.
-6. Verify `/healthz`, sign in, load `/app`, and open an existing image.
+6. Verify `/healthz` (liveness) and `/readyz` (database, schema, worker and queue), sign in, load `/app`, and open an existing image.
 7. Remove or rotate any credentials that were exposed during the incident.
 
 ## Upgrades

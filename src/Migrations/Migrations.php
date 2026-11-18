@@ -38,6 +38,7 @@ final class Migrations
             new Version202611160007CoreUpdateSchema(),
             new Version202611170001KokuaSchema(),
             new Version202611170002RuntimeErrorSchema(),
+            new Version202611180001CoreSchemaFingerprint(),
         ];
     }
 }

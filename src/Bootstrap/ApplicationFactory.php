@@ -13,6 +13,8 @@ use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
 use AlohaSocial\Core\Protocol\Atproto\PlcDirectoryClient;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
+use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
+use AlohaSocial\Core\Domain\Moderation\StoredModerationPolicy;
 use AlohaSocial\Core\Domain\Notification\PdoNotificationRepository;
 use AlohaSocial\Core\Domain\Post\PdoPostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
@@ -62,6 +64,7 @@ use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Mail\LogMailer;
 use AlohaSocial\Server\Mail\SmtpMailer;
+use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Setup\SetupService;
@@ -101,7 +104,10 @@ final class ApplicationFactory
         $logger = new RuntimeLogger($database, $clock);
         $httpClient = new CurlHttpClient();
         $hostResolver = new DnsHostResolver();
-        $targetGuard = new FederationTargetGuard($hostResolver);
+        $targetGuard = new FederationTargetGuard(
+            $hostResolver,
+            new StoredModerationPolicy(new PdoModerationActionRepository($database)),
+        );
         $remoteDirectory = new RemoteDirectory(
             $httpClient,
             $targetGuard,
@@ -265,6 +271,8 @@ final class ApplicationFactory
                 'Pending migrations: ' . implode(', ', $pending) . '. Run: php bin/update.php',
             );
         }
+
+        CoreSchemaFingerprint::assertCurrent($database);
     }
 
     /**

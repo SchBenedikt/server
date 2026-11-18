@@ -388,6 +388,57 @@ final class CommunityTest extends TestCase
         self::assertNull($this->server->runtime->collections->find($collection['id'], $this->alice));
     }
 
+    public function testPublicCollectionsHidePostsTheViewerCannotRead(): void
+    {
+        // Alice follows Bob, so she may read his followers-only post and add it
+        // to a collection she later makes public.
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_follower (id, local_user_id, actor_id, inbox_url, followed_at, is_local, state)'
+            . " VALUES ('f-local-alice', 'bob', 'http://localhost:3000/@alice', 'http://localhost:3000/inbox', '2026-11-16T00:00:00Z', 1, 'accepted')",
+        );
+        $restricted = $this->post($this->bob, 'Followers only', Visibility::Followers);
+
+        $collection = $this->server->runtime->collections->create($this->alice, 'Later public', '', false);
+        $added = $this->server->runtime->collections->addItem($collection['id'], $this->alice, $restricted);
+        self::assertSame([$restricted], $added['post_ids']);
+
+        $this->server->runtime->collections->update($collection['id'], $this->alice, null, null, true);
+
+        $anonymous = $this->server->send('GET', '/api/v1/host/collection', [
+            'query' => ['id' => $collection['id']],
+        ]);
+        self::assertSame(200, $anonymous->status);
+        $anonymousCollection = $this->decoded($anonymous)['collection'];
+        self::assertSame([], $anonymousCollection['post_ids']);
+        self::assertSame(0, $anonymousCollection['item_count']);
+
+        $owner = $this->server->send('GET', '/api/v1/host/collection', [
+            'query' => ['id' => $collection['id']],
+            'cookies' => $this->aliceCookies,
+        ]);
+        self::assertSame([$restricted], $this->decoded($owner)['collection']['post_ids']);
+
+        // Once the follow is gone, even the signed-in follower no longer sees
+        // the id in the public collection.
+        $this->server->runtime->database->execute(
+            "DELETE FROM social_follower WHERE id = 'f-local-alice'",
+        );
+        $formerFollower = $this->server->send('GET', '/api/v1/host/collection', [
+            'query' => ['id' => $collection['id']],
+            'cookies' => $this->aliceCookies,
+        ]);
+        self::assertSame([], $this->decoded($formerFollower)['collection']['post_ids']);
+    }
+
+    public function testPublicCollectionsRejectNonPublicPostsAtInsertion(): void
+    {
+        $restricted = $this->post($this->bob, 'Followers only', Visibility::Followers);
+        $collection = $this->server->runtime->collections->create($this->alice, 'Public');
+
+        $this->expectException(CommunityException::class);
+        $this->server->runtime->collections->addItem($collection['id'], $this->alice, $restricted);
+    }
+
     public function testDirectMessagesCannotBeCollected(): void
     {
         $direct = $this->server->runtime->app->posts

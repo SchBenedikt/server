@@ -39,6 +39,7 @@ declare(strict_types=1);
             <button type="button" data-section="reports">Reports</button>
             <button type="button" data-section="queue">Queue</button>
             <button type="button" data-section="errors">Errors</button>
+            <button type="button" data-section="moderation">Moderation</button>
             <button type="button" data-section="settings">Settings</button>
             <button type="button" data-section="audit">Audit log</button>
         </nav>
