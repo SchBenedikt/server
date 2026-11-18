@@ -73,6 +73,11 @@ export class ApiError extends Error {
 
 export type MediaUploader = (file: File, altText: string) => Promise<Attachment>;
 
+export interface AccountStatusesData {
+	posts: TimelineItem[];
+	next_before: string | null;
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
@@ -84,6 +89,7 @@ export interface Api {
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	quotedPosts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	account(id: string): Promise<Account>;
+	accountStatuses(id: string, limit?: number, before?: string | null): Promise<AccountStatusesData>;
 	remoteProfile(handle: string, cursor?: string | null): Promise<RemoteProfileData>;
 	remotePost(id: string): Promise<RemotePostData>;
 	remoteConnections(handle: string, type: 'followers' | 'following', cursor?: string | null): Promise<RemoteConnectionsData>;
@@ -949,6 +955,24 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		publicTimeline(limit = 20, before = null): Promise<TimelineItem[]> {
 			return timeline('/api/v1/timelines/public', limit, before);
+		},
+
+		async accountStatuses(id: string, limit = 20, before: string | null = null): Promise<AccountStatusesData> {
+			const query: Record<string, string> = { limit: String(limit) };
+			if (before !== null && before !== '') {
+				query.before = before;
+			}
+
+			const data = await request<{ posts?: unknown; next_before?: unknown }>(
+				'GET',
+				`/api/v1/accounts/${encodeURIComponent(id)}/statuses`,
+				query,
+			);
+
+			return {
+				posts: normalizePosts(data?.posts),
+				next_before: typeof data?.next_before === 'string' && data.next_before !== '' ? data.next_before : null,
+			};
 		},
 
 		homeTimeline(limit = 20, before = null): Promise<TimelineItem[]> {
