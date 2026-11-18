@@ -43,9 +43,17 @@ final readonly class HostConfig
         public string $sessionCookieName,
         public int $sessionLifetimeSeconds,
         public bool $remoteMedia,
+        public bool $registrations,
+        public bool $registrationApproval,
+        public string $coreChannel,
+        public string $coreVersion,
         public bool $mastodonApi,
         public string $mastodonPrefix,
         public bool $atprotoPublish,
+        public bool $atprotoPds,
+        public string $atprotoPdsUrl,
+        public string $atprotoPdsHandleDomain,
+        public string $atprotoPlcUrl,
         public string $discoveryInstance,
         public string $mailTransport,
         public string $mailFrom,
@@ -199,9 +207,21 @@ final readonly class HostConfig
             sessionCookieName: (string) $pick('session_cookie_name', 'ALOHASOCIAL_SESSION_COOKIE_NAME', 'alohasocial_session'),
             sessionLifetimeSeconds: $lifetime,
             remoteMedia: $bool($pick('remote_media', 'ALOHASOCIAL_REMOTE_MEDIA', true)),
+            registrations: $bool($pick('registrations', 'ALOHASOCIAL_REGISTRATIONS', false)),
+            registrationApproval: $bool($pick('registration_approval', 'ALOHASOCIAL_REGISTRATION_APPROVAL', true)),
+            coreChannel: self::normalizeCoreChannel((string) $pick('core_channel', 'ALOHASOCIAL_CORE_CHANNEL', 'main')),
+            coreVersion: trim((string) $pick('core_version', 'ALOHASOCIAL_CORE_VERSION', '')),
             mastodonApi: $bool($pick('mastodon_api', 'ALOHASOCIAL_MASTODON_API', true)),
             mastodonPrefix: (string) $pick('mastodon_prefix', 'ALOHASOCIAL_MASTODON_PREFIX', '/api/mastodon/v1'),
             atprotoPublish: $bool($pick('atproto_publish', 'ALOHASOCIAL_ATPROTO_PUBLISH', true)),
+            atprotoPds: $bool($pick('atproto_pds', 'ALOHASOCIAL_ATPROTO_PDS', false)),
+            atprotoPdsUrl: rtrim(trim((string) $pick('atproto_pds_url', 'ALOHASOCIAL_ATPROTO_PDS_URL', $instanceUrl)), '/'),
+            atprotoPdsHandleDomain: self::normalizeHandleDomain((string) $pick(
+                'atproto_pds_handle_domain',
+                'ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN',
+                (string) (parse_url($instanceUrl, PHP_URL_HOST) ?: ''),
+            )),
+            atprotoPlcUrl: rtrim(trim((string) $pick('atproto_plc_url', 'ALOHASOCIAL_ATPROTO_PLC_URL', 'https://plc.directory')), '/'),
             discoveryInstance: self::normalizeDiscoveryHost((string) $pick('discovery_instance', 'ALOHASOCIAL_DISCOVERY_INSTANCE', 'mastodon.social')),
             mailTransport: $mailTransport,
             mailFrom: $mailFrom,
@@ -225,13 +245,20 @@ final readonly class HostConfig
             'instance.name' => $this->instanceName,
             'instance.version' => CoreVersion::current(),
             'federation.enabled' => 'true',
-            'instance.registrations' => 'false',
-            'instance.approval_required' => 'true',
+            'instance.registrations' => $this->registrations ? 'true' : 'false',
+            'instance.approval_required' => $this->registrationApproval ? 'true' : 'false',
             'media.remote_fetch' => $this->remoteMedia ? 'true' : 'false',
             'mastodon.api' => $this->mastodonApi ? 'true' : 'false',
             'mastodon.prefix' => $this->mastodonPrefix,
             'atproto.publish' => $this->atprotoPublish ? 'true' : 'false',
+            'atproto.pds.enabled' => $this->atprotoPds ? 'true' : 'false',
+            'atproto.pds.public_url' => $this->atprotoPdsUrl,
+            'atproto.pds.handle_domain' => $this->atprotoPdsHandleDomain,
         ];
+
+        if ($this->atprotoPds && $this->atprotoPdsHandleDomain === '') {
+            throw new RuntimeException('atproto_pds_handle_domain is required when the native PDS is enabled.');
+        }
 
         if ($this->instanceDescription !== '') {
             $social['instance.description'] = $this->instanceDescription;
@@ -259,6 +286,20 @@ final readonly class HostConfig
      * unauthenticated read; the operator can point it at a different
      * Mastodon-compatible instance or turn it off.
      */
+    public static function normalizeCoreChannel(string $value): string
+    {
+        $value = strtolower(trim($value));
+
+        return in_array($value, ['main', 'release'], true) ? $value : 'main';
+    }
+
+    public static function normalizeHandleDomain(string $value): string
+    {
+        $value = strtolower(trim($value));
+
+        return preg_match('/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/', $value) === 1 ? $value : '';
+    }
+
     public static function normalizeDiscoveryHost(string $value): string
     {
         $value = strtolower(trim($value));

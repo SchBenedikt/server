@@ -50,6 +50,7 @@ ENV APACHE_DOCUMENT_ROOT=/var/www/html/public \
 WORKDIR /var/www/html
 
 COPY --from=vendor /app/vendor ./vendor
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 COPY . .
 
 COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf

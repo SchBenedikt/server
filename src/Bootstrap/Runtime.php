@@ -10,12 +10,15 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Bootstrap;
 
 use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Atproto\Pds\NativePdsService;
+use AlohaSocial\Core\Domain\Atproto\Pds\PdsRepository;
 use AlohaSocial\Core\Domain\Post\PostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\PdoConnection;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
 use AlohaSocial\Server\Auth\PasswordHasher;
@@ -60,6 +63,7 @@ final readonly class Runtime
         public RateLimiter $rateLimiter,
         public AccountRepository $accounts,
         public AccountDirectory $directory,
+        public RegistrationService $registration,
         public SessionManager $sessions,
         public LoginThrottle $throttle,
         public PasswordHasher $passwordHasher,
@@ -87,6 +91,8 @@ final readonly class Runtime
         public SetupService $setup,
         public BlueskyAccounts $blueskyAccounts,
         public PostRevisionRepository $postRevisions,
+        public ?NativePdsService $pds,
+        public PdsRepository $pdsRepository,
     ) {
     }
 }

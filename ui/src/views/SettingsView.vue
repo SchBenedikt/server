@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, type AtprotoIdentityData } from '../lib/api';
 import { appState, showToast } from '../lib/state';
 import type { AccountPreferences, BlueskyAccountStatus } from '../lib/types';
 
@@ -22,6 +22,9 @@ const blueskyPublishEnabled = ref(true);
 const blueskyHandle = ref('');
 const blueskyPassword = ref('');
 const blueskyBusy = ref(false);
+const atproto = ref<AtprotoIdentityData | null>(null);
+const atprotoHandle = ref('');
+const atprotoBusy = ref(false);
 
 const visibilityOptions = [
 	{ value: 'public', label: 'Public', hint: 'Everyone can see the post.' },
@@ -64,10 +67,48 @@ async function load(): Promise<void> {
 		} catch {
 			bluesky.value = { connected: false };
 		}
+		try {
+			atproto.value = await getApi().atprotoIdentity();
+		} catch {
+			atproto.value = null;
+		}
 	} catch (caught) {
 		error.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
 	} finally {
 		loading.value = false;
+	}
+}
+
+async function createIdentity(): Promise<void> {
+	if (atprotoBusy.value) {
+		return;
+	}
+
+	atprotoBusy.value = true;
+	try {
+		await getApi().createAtprotoIdentity(atprotoHandle.value.trim());
+		atproto.value = await getApi().atprotoIdentity();
+		showToast('Your own AT Protocol identity was created.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The identity could not be created.', 'error');
+	} finally {
+		atprotoBusy.value = false;
+	}
+}
+
+async function rotateIdentityKeys(): Promise<void> {
+	if (atprotoBusy.value) {
+		return;
+	}
+
+	atprotoBusy.value = true;
+	try {
+		await getApi().rotateAtprotoKeys();
+		showToast('Signing keys rotated.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The keys could not be rotated.', 'error');
+	} finally {
+		atprotoBusy.value = false;
 	}
 }
 
@@ -351,6 +392,47 @@ watch(signedIn, (value) => {
 						@change="toggleFlag(option.key)"
 					>
 				</label>
+			</section>
+
+			<section v-if="atproto" class="a-settings__section">
+				<h2>Your own AT Protocol identity</h2>
+				<p class="a-settings__hint">
+					When this instance hosts a native PDS, you can own a DID and handle here
+					instead of only linking an existing Bluesky account.
+				</p>
+
+				<div v-if="atproto.identity" class="a-settings__bluesky">
+					<div class="a-settings__bluesky-status">
+						<AppIcon name="check" :size="18" />
+						<span>
+							<strong>@{{ atproto.identity.handle }}</strong>
+							<small>{{ atproto.identity.did }}</small>
+						</span>
+					</div>
+					<p class="a-settings__hint">
+						Repository: <a :href="atproto.identity.pds_url" target="_blank" rel="noopener noreferrer">{{ atproto.identity.pds_url }}</a>
+					</p>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="atprotoBusy" @click="rotateIdentityKeys">
+						<AppIcon name="refresh" :size="15" :class="{ 'a-spin': atprotoBusy }" />
+						Rotate signing keys
+					</button>
+				</div>
+
+				<form v-else-if="atproto.enabled" class="a-settings__bluesky" @submit.prevent="createIdentity">
+					<label class="a-settings__field">
+						<span>Handle <small>(optional)</small></span>
+						<input v-model="atprotoHandle" type="text" :placeholder="`yourname.${atproto.handle_domain}`">
+						<small>Leave empty to use your account handle under {{ atproto.handle_domain }}.</small>
+					</label>
+					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="atprotoBusy">
+						<AppIcon name="plus" :size="15" />
+						Create my DID
+					</button>
+				</form>
+
+				<p v-else class="a-settings__hint">
+					The native PDS is not enabled on this instance. You can still link a Bluesky account below.
+				</p>
 			</section>
 
 			<section class="a-settings__section">

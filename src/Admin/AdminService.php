@@ -20,6 +20,7 @@ use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Support\CoreVersion;
+use AlohaSocial\Server\Support\EnvFile;
 use DateTimeImmutable;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -709,6 +710,7 @@ final class AdminService
             ],
             'versions' => [
                 'application' => CoreVersion::current(),
+                'core' => CoreVersion::current(),
                 'php' => PHP_VERSION,
                 'database' => $this->databaseDriver(),
                 'environment' => $this->config->debug ? 'development' : 'production',
@@ -720,7 +722,9 @@ final class AdminService
                 'mastodon_prefix' => $this->config->mastodonPrefix,
                 'mail_transport' => $this->config->mailTransport,
                 'secure_cookies' => $this->config->secureCookies,
-                'atproto' => false,
+                'atproto' => $this->config->atprotoPublish,
+                'atproto_pds' => $this->config->atprotoPds,
+                'registrations' => $this->config->registrations,
             ],
             'limits' => [
                 'session_lifetime_seconds' => $this->config->sessionLifetimeSeconds,
@@ -738,6 +742,119 @@ final class AdminService
             'checks' => $required,
             'warnings' => $this->configurationWarnings(),
         ];
+    }
+
+    /**
+     * The operator-facing settings that can be changed at runtime. Changes are
+     * written to the persistent env file and take effect on the next request
+     * (some deployment settings need a container restart).
+     *
+     * @return array<string, mixed>
+     */
+    public function settings(): array
+    {
+        return [
+            'core' => [
+                'installed' => CoreVersion::current(),
+                'channel' => $this->config->coreChannel,
+                'version' => $this->config->coreVersion,
+                'env_file' => $this->config->envFile,
+                'apply_command' => 'php bin/core-version.php',
+            ],
+            'registrations' => [
+                'enabled' => $this->config->registrations,
+                'approval' => $this->config->registrationApproval,
+            ],
+            'atproto' => [
+                'publish' => $this->config->atprotoPublish,
+                'pds_enabled' => $this->config->atprotoPds,
+                'pds_url' => $this->config->atprotoPdsUrl,
+                'handle_domain' => $this->config->atprotoPdsHandleDomain,
+                'plc_url' => $this->config->atprotoPlcUrl,
+            ],
+            'restart_required' => false,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     *
+     * @return array<string, mixed>
+     */
+    public function updateSettings(string $adminId, array $input): array
+    {
+        $bool = static function (mixed $value, bool $default): bool {
+            if ($value === null) {
+                return $default;
+            }
+
+            return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+        };
+
+        $channel = HostConfig::normalizeCoreChannel((string) ($input['core_channel'] ?? $this->config->coreChannel));
+        $version = trim((string) ($input['core_version'] ?? $this->config->coreVersion));
+        if ($channel === 'release' && $version !== ''
+            && preg_match('/^v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/', $version) !== 1
+        ) {
+            throw AdminException::invalid('Use a tagged Core version such as 0.7.0.', [
+                'core_version' => 'Expected a release tag like 0.7.0.',
+            ]);
+        }
+
+        $pdsEnabled = $bool($input['atproto_pds'] ?? null, $this->config->atprotoPds);
+        $pdsUrl = rtrim(trim((string) ($input['atproto_pds_url'] ?? $this->config->atprotoPdsUrl)), '/');
+        $handleDomain = HostConfig::normalizeHandleDomain((string) ($input['atproto_pds_handle_domain'] ?? $this->config->atprotoPdsHandleDomain));
+        $plcUrl = rtrim(trim((string) ($input['atproto_plc_url'] ?? $this->config->atprotoPlcUrl)), '/');
+
+        if ($pdsUrl === '' || preg_match('#^https?://[^/]+#', $pdsUrl) !== 1) {
+            throw AdminException::invalid('The PDS URL must be an absolute http(s) URL.', [
+                'atproto_pds_url' => 'Use an origin such as https://social.example.',
+            ]);
+        }
+        if ($pdsEnabled && $handleDomain === '') {
+            throw AdminException::invalid('A handle domain is required for the native PDS.', [
+                'atproto_pds_handle_domain' => 'Use the domain under which member handles are issued.',
+            ]);
+        }
+        if (preg_match('#^https?://[^/]+#', $plcUrl) !== 1) {
+            throw AdminException::invalid('The PLC directory URL must be an absolute http(s) URL.', [
+                'atproto_plc_url' => 'Use https://plc.directory unless you run a private directory.',
+            ]);
+        }
+
+        EnvFile::set($this->config->envFile, [
+            'ALOHASOCIAL_REGISTRATIONS' => $bool($input['registrations'] ?? null, $this->config->registrations) ? 'true' : 'false',
+            'ALOHASOCIAL_REGISTRATION_APPROVAL' => $bool($input['registration_approval'] ?? null, $this->config->registrationApproval) ? 'true' : 'false',
+            'ALOHASOCIAL_CORE_CHANNEL' => $channel,
+            'ALOHASOCIAL_CORE_VERSION' => $version,
+            'ALOHASOCIAL_ATPROTO_PDS' => $pdsEnabled ? 'true' : 'false',
+            'ALOHASOCIAL_ATPROTO_PDS_URL' => $pdsUrl,
+            'ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN' => $handleDomain,
+            'ALOHASOCIAL_ATPROTO_PLC_URL' => $plcUrl,
+        ]);
+
+        $registrations = $bool($input['registrations'] ?? null, $this->config->registrations);
+        $approval = $bool($input['registration_approval'] ?? null, $this->config->registrationApproval);
+
+        $this->record($adminId, 'settings.update', 'instance', null, [
+            'core_channel' => $channel,
+            'core_version' => $version,
+            'registrations' => $registrations,
+            'atproto_pds' => $pdsEnabled,
+        ]);
+
+        $settings = $this->settings();
+        $settings['core']['channel'] = $channel;
+        $settings['core']['version'] = $version;
+        $settings['registrations']['enabled'] = $registrations;
+        $settings['registrations']['approval'] = $approval;
+        $settings['atproto']['pds_enabled'] = $pdsEnabled;
+        $settings['atproto']['pds_url'] = $pdsUrl;
+        $settings['atproto']['handle_domain'] = $handleDomain;
+        $settings['atproto']['plc_url'] = $plcUrl;
+        $settings['restart_required'] = true;
+
+        return $settings;
     }
 
     /**

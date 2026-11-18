@@ -17,6 +17,8 @@ use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Platform\Http\HttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClientException;
 use AlohaSocial\Core\Platform\Http\HttpResponse;
+use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
+use AlohaSocial\Core\Service\Federation\RemoteFetchException;
 use AlohaSocial\Core\Security\SecretBox;
 use AlohaSocial\Core\Security\SecretBoxException;
 use AlohaSocial\Core\Support\Time;
@@ -69,6 +71,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
         private readonly HttpClient $http,
         private readonly SecretBox $box,
         private readonly Clock $clock,
+        private readonly ?FederationTargetGuard $guard = null,
     ) {
     }
 
@@ -163,6 +166,13 @@ final class BlueskyAccounts implements AtprotoAccountResolver
         $session = $this->createSession($pdsUrl, $handle, $appPassword);
 
         $sessionDid = is_string($session['did'] ?? null) ? $session['did'] : $did;
+        if ($sessionDid !== $did) {
+            throw new BlueskyException(
+                502,
+                'bluesky_identity_mismatch',
+                'The PDS session belongs to a different DID than the resolved identity.',
+            );
+        }
         $sessionHandle = is_string($session['handle'] ?? null) ? strtolower($session['handle']) : $handle;
         $accessToken = is_string($session['accessJwt'] ?? null) ? $session['accessJwt'] : '';
         $refreshToken = is_string($session['refreshJwt'] ?? null) ? $session['refreshJwt'] : '';
@@ -424,7 +434,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             return false;
         }
 
-        return in_array(strtolower((string) $parts['scheme']), ['http', 'https'], true)
+        return strtolower((string) $parts['scheme']) === 'https'
             && (string) $parts['host'] !== ''
             && !isset($parts['user'])
             && !isset($parts['pass'])
@@ -437,6 +447,12 @@ final class BlueskyAccounts implements AtprotoAccountResolver
      */
     private function request(string $method, string $url, array $headers = [], string $body = ''): HttpResponse
     {
+        try {
+            $this->guard?->addressesFor($url);
+        } catch (RemoteFetchException $exception) {
+            throw new BlueskyException(422, 'bluesky_target_blocked', $exception->getMessage());
+        }
+
         try {
             return $this->http->request($method, $url, $headers, $body, self::TIMEOUT_SECONDS);
         } catch (HttpClientException $exception) {

@@ -13,6 +13,7 @@ use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
+use AlohaSocial\Server\Accounts\RegistrationException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\SessionIssue;
@@ -42,12 +43,15 @@ final class FrontController
 
     private readonly FederationController $federation;
 
+    private readonly AtprotoIdentityController $atprotoIdentity;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
         $this->adminApi = new AdminApiController($runtime);
         $this->communityApi = new CommunityApiController($runtime);
         $this->federation = new FederationController($runtime);
+        $this->atprotoIdentity = new AtprotoIdentityController($runtime);
     }
 
     /**
@@ -106,17 +110,38 @@ final class FrontController
 
         if ($request->method === 'GET' && $request->path === '/login') {
             $notice = null;
-            if ($request->queryParam('reset') === '1') {
+            if ($request->queryParam('registered') === '1') {
+                $notice = 'Your account is ready. You can sign in now.';
+            } elseif ($request->queryParam('pending') === '1') {
+                $notice = 'Your account was created. An administrator still has to approve it.';
+            } elseif ($request->queryParam('reset') === '1') {
                 $notice = 'Your password was changed. Please sign in again.';
             } elseif ($request->queryParam('setup') === '1') {
                 $notice = 'The instance is configured. Sign in with the administrator account you created.';
             }
 
-            return $this->loginForm($session, $rawCookie, $userAgent, $ip, $notice);
+            return $this->loginForm(
+                $session,
+                $rawCookie,
+                $userAgent,
+                $ip,
+                $notice,
+                $this->safeReturnPath($request->queryParam('next')),
+            );
         }
 
         if ($request->method === 'POST' && $request->path === '/login') {
             return $this->login($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->path === '/signup' && in_array($request->method, ['GET', 'POST'], true)) {
+            if (!$this->runtime->registration->enabled()) {
+                return $this->redirect('/login');
+            }
+
+            return $request->method === 'GET'
+                ? $this->signupForm($session, $rawCookie, $userAgent, $ip)
+                : $this->signup($request, $session, $rawCookie, $userAgent, $ip);
         }
 
         if ($request->method === 'POST' && $request->path === '/logout') {
@@ -149,12 +174,12 @@ final class FrontController
 
         if ($request->method === 'GET' && $request->path === '/admin') {
             if ($session?->account?->isAdmin() !== true) {
-                return $session === null ? $this->redirect('/login') : $this->page('error', [
+                return $session === null ? $this->redirect('/login?next=%2Fadmin') : $this->page('error', [
                     'message' => 'This page is reserved for the administration.',
                 ], 'No access', 403);
             }
 
-            return $this->redirect('/app#/admin');
+            return $this->adminConsole($session);
         }
 
         if ($request->method === 'GET' && $request->path === '/favicon.ico') {
@@ -322,9 +347,26 @@ final class FrontController
 
         if ($request->method === 'GET' && $request->path === '/api/v1/host/interactions') {
             $ids = array_slice(explode(',', (string) ($request->queryParam('ids') ?? '')), 0, 80);
+            $visible = [];
+            foreach ($ids as $id) {
+                $id = trim($id);
+                if ($id === '') {
+                    continue;
+                }
+
+                try {
+                    // The interaction route must not reveal that a private post
+                    // exists, and it must not return counts for a post the
+                    // caller cannot read.
+                    $this->runtime->app->posts->getVisible($id, $session?->userId());
+                    $visible[] = $id;
+                } catch (PostNotFoundException) {
+                    continue;
+                }
+            }
 
             return Response::json([
-                'interactions' => $this->runtime->interactions->forPosts($ids, $session?->userId()),
+                'interactions' => $this->runtime->interactions->forPosts($visible, $session?->userId()),
             ]);
         }
 
@@ -430,6 +472,11 @@ final class FrontController
                     403,
                 );
             }
+        }
+
+        $atprotoResponse = $this->atprotoIdentity->handle($request, $session);
+        if ($atprotoResponse !== null) {
+            return $atprotoResponse;
         }
 
         $adminResponse = $this->adminApi->handle($request, $session);
@@ -688,12 +735,31 @@ final class FrontController
         ];
     }
 
-    private function loginForm(
+    private function adminConsole(AuthenticatedSession $session): Response
+    {
+        $body = $this->runtime->view->render('admin', [
+            'csrf' => $session->session->csrfToken,
+            'handle' => $session->account?->handle ?? '',
+            'instance' => $this->runtime->config->instanceName,
+        ]);
+
+        return new Response(200, [
+            'Content-Type' => 'text/html; charset=utf-8',
+            'Cache-Control' => 'no-store',
+            'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+            'X-Content-Type-Options' => 'nosniff',
+            'Referrer-Policy' => 'same-origin',
+        ], $body);
+    }
+
+    private function signupForm(
         ?AuthenticatedSession $session,
         ?string $rawCookie,
         ?string $userAgent,
         ?string $ip,
-        ?string $notice = null,
+        array $errors = [],
+        array $values = [],
+        int $status = 200,
     ): Response {
         if ($session?->isSignedIn() === true) {
             return $this->redirect('/');
@@ -701,7 +767,71 @@ final class FrontController
 
         [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
 
-        return $this->loginResponse($session, null, 200, $issue, $notice);
+        return $this->runtime->view->page('signup', [
+            'session' => $session,
+            'csrf' => $session?->session->csrfToken ?? '',
+            'errors' => $errors,
+            'values' => $values,
+            'approval' => $this->runtime->registration->approvalRequired(),
+        ], 'Create account', $status, $issue);
+    }
+
+    private function signup(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        $params = $this->formParams($request);
+        $values = [
+            'handle' => trim((string) ($params['handle'] ?? '')),
+            'email' => trim((string) ($params['email'] ?? '')),
+            'display_name' => trim((string) ($params['display_name'] ?? '')),
+        ];
+
+        if (!$this->runtime->sessions->csrfMatches($session, (string) ($params['_csrf'] ?? ''))) {
+            return $this->signupForm($session, $rawCookie, $userAgent, $ip, [
+                '_form' => 'Your session has expired. Please try again.',
+            ], $values, 403);
+        }
+
+        try {
+            $this->runtime->registration->register(
+                $values['handle'],
+                $values['email'],
+                (string) ($params['password'] ?? ''),
+                $values['display_name'] === '' ? null : $values['display_name'],
+            );
+        } catch (RegistrationException $exception) {
+            $errors = $exception->fields;
+            if ($errors === []) {
+                $errors['_form'] = $exception->getMessage();
+            }
+
+            return $this->signupForm($session, $rawCookie, $userAgent, $ip, $errors, $values, $exception->status);
+        }
+
+        return $this->redirect($this->runtime->registration->approvalRequired()
+            ? '/login?pending=1'
+            : '/login?registered=1');
+    }
+
+    private function loginForm(
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+        ?string $notice = null,
+        string $returnTo = '',
+    ): Response {
+        if ($session?->isSignedIn() === true) {
+            return $this->redirect('/');
+        }
+
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+
+        return $this->loginResponse($session, null, 200, $issue, $notice, $returnTo);
     }
 
     private function login(
@@ -715,6 +845,7 @@ final class FrontController
         $csrf = (string) ($params['_csrf'] ?? '');
         $handle = trim((string) ($params['handle'] ?? ''));
         $password = (string) ($params['password'] ?? '');
+        $returnTo = $this->safeReturnPath($params['return_to'] ?? null);
 
         if (!$this->runtime->sessions->csrfMatches($session, $csrf)) {
             $issue = null;
@@ -723,15 +854,15 @@ final class FrontController
                 $session = new AuthenticatedSession($issue->session, null);
             }
 
-            return $this->loginResponse($session, 'Your session has expired. Please try again.', 403, $issue);
+            return $this->loginResponse($session, 'Your session has expired. Please try again.', 403, $issue, null, $returnTo);
         }
 
         if ($handle === '' || $password === '') {
-            return $this->loginResponse($session, 'Handle and password are required.', 422);
+            return $this->loginResponse($session, 'Handle and password are required.', 422, null, null, $returnTo);
         }
 
         if ($this->runtime->throttle->isLimited($handle, $ip)) {
-            return $this->loginResponse($session, 'Too many failed attempts. Please try again in 15 minutes.', 429);
+            return $this->loginResponse($session, 'Too many failed attempts. Please try again in 15 minutes.', 429, null, null, $returnTo);
         }
 
         $account = $this->runtime->accounts->findByHandle($handle)
@@ -744,7 +875,7 @@ final class FrontController
         if (!$valid) {
             $this->runtime->throttle->recordFailure($handle, $ip);
 
-            return $this->loginResponse($session, 'Handle or password is incorrect.', 401);
+            return $this->loginResponse($session, 'Handle or password is incorrect.', 401, null, null, $returnTo);
         }
 
         if ($this->runtime->passwordHasher->needsRehash($account->passwordHash)) {
@@ -756,7 +887,7 @@ final class FrontController
         // Session fixation: the anonymous session is replaced, not upgraded.
         $issue = $this->runtime->sessions->issue($account, $rawCookie, $userAgent, $ip);
 
-        return $this->redirect('/', $issue);
+        return $this->redirect($returnTo !== '' ? $returnTo : '/', $issue);
     }
 
     private function logout(Request $request, ?AuthenticatedSession $session, ?string $rawCookie): Response
@@ -964,6 +1095,7 @@ final class FrontController
         int $status,
         ?SessionIssue $issue = null,
         ?string $notice = null,
+        string $returnTo = '',
     ): Response {
         return $this->page('login', [
             'instance' => $this->runtime->config->instanceName,
@@ -971,7 +1103,27 @@ final class FrontController
             'error' => $error,
             'notice' => $notice,
             'handle' => '',
+            'return_to' => $returnTo,
+            'registrations' => $this->runtime->registration->enabled(),
         ], 'Sign in', $status, $issue);
+    }
+
+    private function safeReturnPath(mixed $value): string
+    {
+        if (!is_string($value)) {
+            return '';
+        }
+
+        $value = trim($value);
+        if ($value === '' || $value[0] !== '/' || str_starts_with($value, '//') || str_contains($value, '\\')) {
+            return '';
+        }
+
+        if (preg_match('/[\x00-\x20\x7f]/', $value) === 1) {
+            return '';
+        }
+
+        return $value;
     }
 
     /**
