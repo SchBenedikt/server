@@ -45,7 +45,9 @@ function initialHomeTab(): HomeTab {
 		// A private window without storage simply starts on Home.
 	}
 
-	return 'home';
+	// A new account follows nobody, so starting on Following renders an empty
+	// feed. For You always has local posts and explains why each one appears.
+	return 'for-you';
 }
 
 export const appState = reactive({
