@@ -10,7 +10,7 @@ everything a process needs. The architecture is described in
 [Development](docs/development.md) and the
 [server blueprint](https://github.com/SchBenedikt/core/blob/main/docs/guides/server-architecture.md).
 
-**Status: release 0.11.4.** The server signs, delivers and accepts ActivityPub,
+**Status: release 0.11.5.** The server signs, delivers and accepts ActivityPub,
 serves WebFinger and NodeInfo, runs the shared Vue UI, resets passwords by
 email and keeps accounts, keys and media across updates. See
 [Features](docs/features.md) for the full surface and

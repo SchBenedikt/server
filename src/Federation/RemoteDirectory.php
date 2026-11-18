@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Federation;
 
+use AlohaSocial\Core\Domain\Federation\MentionTarget;
 use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClientException;
 use AlohaSocial\Core\Platform\Http\HttpResponse;
@@ -99,6 +100,37 @@ final class RemoteDirectory
         }
 
         return $this->lookupActivityPub($query, $cursor);
+    }
+
+    /**
+     * Resolves a `@user@host` mention to the actor and its personal inbox.
+     *
+     * Mention delivery must not fetch the outbox: a public post is stored
+     * immediately and the network lookup is only needed for the actor
+     * document. A normal profile read is far more expensive, so this path
+     * resolves WebFinger and the actor directly.
+     */
+    public function mentionTarget(string $handle): ?MentionTarget
+    {
+        $handle = strtolower(ltrim(trim($handle), '@'));
+        if ($handle === '' || $this->isBlueskyQuery($handle)) {
+            return null;
+        }
+
+        try {
+            [$actorUrl, $actor] = $this->resolveActor($handle);
+            $profile = $this->activityPubProfile($actor, $actorUrl, false);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $id = $profile['id'] ?? null;
+        $inbox = $profile['inbox'] ?? null;
+        if (!is_string($id) || $id === '' || !is_string($inbox) || $inbox === '') {
+            return null;
+        }
+
+        return new MentionTarget($handle, $id, $inbox);
     }
 
     /**

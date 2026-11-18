@@ -28,6 +28,7 @@ use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\RemoteDirectory;
+use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Admin\AdminService;
@@ -124,6 +125,7 @@ final class ApplicationFactory
             queue: $queue,
             activityLog: $activityLog,
             actorResolver: new HttpActorResolver($httpClient),
+            mentionResolver: new RemoteMentionResolver($remoteDirectory),
             clock: $clock,
             logger: $logger,
             debug: $this->config->debug,
