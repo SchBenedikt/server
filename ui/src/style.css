@@ -5171,6 +5171,51 @@ dialog.a-modal::backdrop {
 	background: var(--a-border-strong);
 }
 
+.a-story--seen .a-story__ring {
+	background: var(--a-border);
+}
+
+.a-admin-form {
+	display: grid;
+	gap: 14px;
+}
+
+.a-admin-form__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 12px;
+}
+
+.a-admin-form label {
+	display: grid;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--a-muted);
+}
+
+.a-admin-form .a-input {
+	width: 100%;
+	padding: 9px 11px;
+	border: 1px solid var(--a-border-strong);
+	border-radius: 10px;
+	background: var(--a-bg-soft);
+	color: inherit;
+	font: inherit;
+}
+
+.a-admin-form__check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--a-text);
+}
+
+.a-admin-form__actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
 .a-story__add {
 	display: grid;
 	place-items: center;

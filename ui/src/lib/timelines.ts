@@ -7,7 +7,7 @@ import { ApiError, getApi, hydrateTimelineBoosts } from './api';
 import { onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import type { TimelineItem } from './types';
 
-export type FeedKind = 'home' | 'for-you' | 'public' | 'tag' | 'followed';
+export type FeedKind = 'home' | 'for-you' | 'trending' | 'public' | 'tag' | 'followed';
 
 export interface TimelineSource {
 	kind: FeedKind;
@@ -91,6 +91,13 @@ export function useTimeline(source: () => TimelineSource) {
 						.map((id) => loaded[id])
 						.filter((post): post is TimelineItem => post !== undefined);
 				});
+			case 'trending':
+				return api.trending(PAGE_SIZE, offset).then(async (data) => {
+					const loaded = await api.posts(data.posts);
+					return data.posts
+						.map((id) => loaded[id])
+						.filter((post): post is TimelineItem => post !== undefined);
+				});
 			case 'tag':
 				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, before);
 			case 'followed':
@@ -104,7 +111,7 @@ export function useTimeline(source: () => TimelineSource) {
 		const currentGeneration = ++generation;
 		const before = reset ? null : cursor;
 
-		const isForYou = current.kind === 'for-you';
+		const isRanked = current.kind === 'for-you' || current.kind === 'trending';
 		if (reset) {
 			offset = 0;
 			loading.value = true;
@@ -120,7 +127,7 @@ export function useTimeline(source: () => TimelineSource) {
 			}
 
 			posts.value = reset ? merge([], batch) : merge(posts.value, batch);
-			if (isForYou) {
+			if (isRanked) {
 				offset = (reset ? 0 : offset) + batch.length;
 				hasMore.value = batch.length >= PAGE_SIZE;
 			} else {

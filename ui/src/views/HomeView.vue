@@ -38,6 +38,7 @@ const tabs = computed(() => {
 
 	return [
 		{ id: 'for-you' as const, label: 'For you' },
+		{ id: 'trending' as const, label: 'Trending' },
 		{ id: 'home' as const, label: 'Following' },
 		{ id: 'public' as const, label: 'Public' },
 		{ id: 'tags' as const, label: 'My Tags' },
@@ -52,6 +53,8 @@ const subtitle = computed(() => {
 	switch (currentTab.value) {
 		case 'for-you':
 			return 'Recommended from this instance and the fediverse — based on who you follow, your tags, engagement and recency.';
+		case 'trending':
+			return 'The public posts moving this instance and the fediverse right now.';
 		case 'home':
 			return 'Posts from people you follow.';
 		case 'followed':
@@ -68,6 +71,9 @@ const emptyTitle = computed(() => {
 	if (currentTab.value === 'for-you') {
 		return 'No recommendations yet';
 	}
+	if (currentTab.value === 'trending') {
+		return 'Nothing is trending yet';
+	}
 	if (currentTab.value === 'home') {
 		return 'Your timeline is still quiet';
 	}
@@ -82,6 +88,9 @@ const emptyText = computed(() => {
 	if (currentTab.value === 'for-you') {
 		return 'Follow people and hashtags, and this feed mixes their posts with what is moving on this instance.';
 	}
+	if (currentTab.value === 'trending') {
+		return 'Trending ranks public posts by engagement and freshness — local and federated.';
+	}
 	if (currentTab.value === 'home') {
 		return 'Follow people who share interesting things — or write the first post yourself.';
 	}
@@ -89,7 +98,7 @@ const emptyText = computed(() => {
 	return 'This instance is new. Be the first voice heard here.';
 });
 
-function switchTab(tab: 'home' | 'for-you' | 'public' | 'tags'): void {
+function switchTab(tab: 'home' | 'for-you' | 'trending' | 'public' | 'tags'): void {
 	setHomeTab(tab);
 }
 

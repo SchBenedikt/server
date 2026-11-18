@@ -18,7 +18,7 @@ import type {
 const THEME_KEY = 'aloha.theme';
 const HOME_TAB_KEY = 'aloha.home-tab';
 
-type HomeTab = 'home' | 'for-you' | 'public' | 'tags';
+type HomeTab = 'home' | 'for-you' | 'trending' | 'public' | 'tags';
 
 function initialTheme(): ThemeName {
 	try {
@@ -38,7 +38,7 @@ function initialTheme(): ThemeName {
 function initialHomeTab(): HomeTab {
 	try {
 		const stored = localStorage.getItem(HOME_TAB_KEY);
-		if (stored === 'home' || stored === 'for-you' || stored === 'public' || stored === 'tags') {
+		if (stored === 'home' || stored === 'for-you' || stored === 'trending' || stored === 'public' || stored === 'tags') {
 			return stored;
 		}
 	} catch {

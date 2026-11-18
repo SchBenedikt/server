@@ -256,6 +256,10 @@ created, which makes the pass safe to repeat after a reconnect. The relay
 keeps roughly a day of replayable events; a longer outage leaves the
 checkpoint stale and the next successful pull sets reconciliation as required.
 
+The same instance, registration, PDS and Jetstream values can be changed under
+**Administration → Instance**; saving writes them to the configured env file
+and they apply on the next request.
+
 Run the worker under a supervisor (`docker compose` does this for you).
 Without a running worker nothing is ingested, and no outbound post, reply or
 like is published either.

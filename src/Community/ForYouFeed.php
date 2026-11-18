@@ -175,6 +175,104 @@ final class ForYouFeed
     }
 
     /**
+     * The instance-wide trending page.
+     *
+     * Unlike For You this is the same for every reader and needs no account:
+     * it ranks the last week of public posts by engagement and freshness and
+     * includes cached federated posts so the page is not a local echo. Repeat
+     * authors are damped exactly as in the personal feed.
+     *
+     * @return array{
+     *     posts: list<string>,
+     *     reasons: array<string, string>,
+     *     next: int|null,
+     *     total: int
+     * }
+     */
+    public function trending(int $limit = 20, int $offset = 0): array
+    {
+        $limit = max(1, min(self::MAX_LIMIT, $limit));
+        $offset = max(0, $offset);
+        $now = $this->clock->now();
+        $since = Time::format($now->modify('-7 days'));
+
+        $local = $this->db->fetchAll(
+            'SELECT p.id, p.author_id, p.published_at, 0 AS remote,'
+            . ' (SELECT COUNT(*) FROM social_favourite f WHERE f.post_id = p.id) AS favourites,'
+            . ' (SELECT COUNT(*) FROM social_boost b WHERE b.post_id = p.id) AS boosts,'
+            . ' (SELECT COUNT(*) FROM social_post r WHERE r.in_reply_to_id = p.id AND r.deleted_at IS NULL) AS replies'
+            . ' FROM social_post p'
+            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.published_at >= :since"
+            . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
+            ['since' => $since],
+        );
+
+        $remote = $this->db->fetchAll(
+            'SELECT r.activity_id AS id, r.actor_id AS author_id, r.content, r.published_at,'
+            . ' 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
+            . ' FROM social_remote_post r'
+            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.published_at >= :since"
+            . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
+            ['since' => $since],
+        );
+
+        $scored = [];
+        foreach (array_merge($local, $remote) as $candidate) {
+            $postId = (string) $candidate['id'];
+            $remotePost = (int) ($candidate['remote'] ?? 0) === 1;
+            $published = Time::parse((string) $candidate['published_at'])->getTimestamp();
+            $ageHours = max(0, ($now->getTimestamp() - $published) / 3600);
+            $engagement = $remotePost ? 0 : (int) $candidate['favourites'] * 2
+                + (int) $candidate['boosts'] * 3
+                + (int) $candidate['replies'] * 1.5;
+
+            $scored[] = [
+                'id' => $postId,
+                'author_id' => (string) $candidate['author_id'],
+                'score' => log(1 + $engagement) * 4.0 + max(0, 4.0 * (1 - $ageHours / 168)),
+                'reason' => $remotePost
+                    ? 'Popular across the fediverse right now'
+                    : 'Popular on this instance',
+            ];
+        }
+
+        $compare = static function (array $a, array $b): int {
+            if ($a['score'] === $b['score']) {
+                return $b['id'] <=> $a['id'];
+            }
+
+            return $b['score'] <=> $a['score'];
+        };
+
+        usort($scored, $compare);
+
+        $seenAuthors = [];
+        foreach ($scored as $index => $entry) {
+            $author = $entry['author_id'];
+            $repeat = $seenAuthors[$author] ?? 0;
+            $scored[$index]['score'] -= $repeat * 1.6;
+            $seenAuthors[$author] = $repeat + 1;
+        }
+        usort($scored, $compare);
+
+        $total = count($scored);
+        $window = array_slice($scored, $offset, $limit);
+        $reasons = [];
+        foreach ($window as $entry) {
+            $reasons[$entry['id']] = $entry['reason'];
+        }
+
+        $next = $offset + $limit;
+
+        return [
+            'posts' => array_values(array_column($window, 'id')),
+            'reasons' => $reasons,
+            'next' => $next < $total ? $next : null,
+            'total' => $total,
+        ];
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function candidates(string $accountId): array
