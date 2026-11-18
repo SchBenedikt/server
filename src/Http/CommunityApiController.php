@@ -297,6 +297,21 @@ final class CommunityApiController
                 return Response::json(['deleted' => true]);
             }
 
+            if ($method === 'POST' && $path === '/api/v1/host/stories/seen') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                $body = $this->jsonBody($request);
+                $ids = is_array($body['ids'] ?? null)
+                    ? array_values(array_filter($body['ids'], 'is_string'))
+                    : [];
+
+                return Response::json([
+                    'seen' => $this->runtime->stories->markSeen($userId, $ids),
+                ]);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/collections') {
                 $account = $this->account($request, $session, 'account');
                 if ($account === null) {
@@ -685,6 +700,15 @@ final class CommunityApiController
                         is_string($body['kind'] ?? null) ? $body['kind'] : '',
                     ),
                 ], 201);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/trending') {
+                $this->limit($request, $ip, $session);
+
+                return Response::json($this->runtime->forYou->trending(
+                    $this->intParam($request, 'limit', 20, 1, 40),
+                    $this->intParam($request, 'offset', 0, 0, 10_000),
+                ));
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/for-you') {

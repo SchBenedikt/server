@@ -944,6 +944,12 @@ final class AdminService
                 'handle_domain' => $this->config->atprotoPdsHandleDomain,
                 'plc_url' => $this->config->atprotoPlcUrl,
             ],
+            'instance' => [
+                'name' => $this->config->instanceName,
+                'description' => $this->config->instanceDescription,
+                'contact_email' => $this->config->contactEmail,
+            ],
+            'jetstream' => $this->config->atprotoJetstreamUrl,
             'restart_required' => false,
         ];
     }
@@ -977,6 +983,34 @@ final class AdminService
         $pdsUrl = rtrim(trim((string) ($input['atproto_pds_url'] ?? $this->config->atprotoPdsUrl)), '/');
         $handleDomain = HostConfig::normalizeHandleDomain((string) ($input['atproto_pds_handle_domain'] ?? $this->config->atprotoPdsHandleDomain));
         $plcUrl = rtrim(trim((string) ($input['atproto_plc_url'] ?? $this->config->atprotoPlcUrl)), '/');
+
+        $instanceName = trim((string) ($input['instance_name'] ?? $this->config->instanceName));
+        if ($instanceName === '' || mb_strlen($instanceName) > 80) {
+            throw AdminException::invalid('The instance name needs 1 to 80 characters.', [
+                'instance_name' => 'Use a short public name.',
+            ]);
+        }
+
+        $instanceDescription = trim((string) ($input['instance_description'] ?? $this->config->instanceDescription));
+        if (mb_strlen($instanceDescription) > 500) {
+            throw AdminException::invalid('The description is too long.', [
+                'instance_description' => 'At most 500 characters.',
+            ]);
+        }
+
+        $contactEmail = trim((string) ($input['contact_email'] ?? $this->config->contactEmail));
+        if ($contactEmail !== '' && preg_match('/^[^@\s]+@[^@\s]+$/', $contactEmail) !== 1) {
+            throw AdminException::invalid('The contact address is not an email address.', [
+                'contact_email' => 'Use an address such as admin@example.org.',
+            ]);
+        }
+
+        $jetstream = trim((string) ($input['atproto_jetstream'] ?? $this->config->atprotoJetstreamUrl));
+        if ($jetstream !== '' && preg_match('#^wss?://[^/]+#i', $jetstream) !== 1) {
+            throw AdminException::invalid('The Jetstream relay must be a ws(s) URL.', [
+                'atproto_jetstream' => 'Use wss://jetstream2.us-east.bsky.network or leave it empty.',
+            ]);
+        }
 
         if ($pdsUrl === '' || preg_match('#^https?://[^/]+#', $pdsUrl) !== 1) {
             throw AdminException::invalid('The PDS URL must be an absolute http(s) URL.', [
@@ -1013,6 +1047,10 @@ final class AdminService
             'ALOHASOCIAL_ATPROTO_PDS_URL' => $pdsUrl,
             'ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN' => $handleDomain,
             'ALOHASOCIAL_ATPROTO_PLC_URL' => $plcUrl,
+            'ALOHASOCIAL_INSTANCE_NAME' => $instanceName,
+            'ALOHASOCIAL_INSTANCE_DESCRIPTION' => $instanceDescription,
+            'ALOHASOCIAL_CONTACT_EMAIL' => $contactEmail,
+            'ALOHASOCIAL_ATPROTO_JETSTREAM' => $jetstream,
         ]);
 
         $registrations = $bool($input['registrations'] ?? null, $this->config->registrations);
@@ -1034,6 +1072,10 @@ final class AdminService
         $settings['atproto']['pds_url'] = $pdsUrl;
         $settings['atproto']['handle_domain'] = $handleDomain;
         $settings['atproto']['plc_url'] = $plcUrl;
+        $settings['instance']['name'] = $instanceName;
+        $settings['instance']['description'] = $instanceDescription;
+        $settings['instance']['contact_email'] = $contactEmail;
+        $settings['jetstream'] = $jetstream;
         $settings['restart_required'] = true;
 
         return $settings;

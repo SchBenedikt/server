@@ -25,6 +25,7 @@ const backgrounds = [
 
 const groups = ref<StoryGroup[]>([]);
 const loading = ref(true);
+const loadFailed = ref(false);
 const activeGroup = ref<number | null>(null);
 const activeIndex = ref(0);
 const composing = ref(false);
@@ -62,13 +63,36 @@ const canDeleteActive = computed(() => signedIn.value && activeAuthor.value === 
 
 async function load(): Promise<void> {
 	loading.value = true;
+	loadFailed.value = false;
 	try {
 		groups.value = (await getApi().stories()).groups;
 	} catch {
 		groups.value = [];
+		loadFailed.value = true;
 	} finally {
 		loading.value = false;
 	}
+}
+
+async function markSeen(id: string): Promise<void> {
+	if (id === '') {
+		return;
+	}
+
+	try {
+		await getApi().markStoriesSeen([id]);
+	} catch {
+		// A failed marker is cosmetic; the viewer still works.
+		return;
+	}
+
+	groups.value = groups.value.map((group) => {
+		const stories = group.stories.map((story) => (
+			story.id === id ? { ...story, seen: true } : story
+		));
+
+		return { ...group, stories, unseen: stories.some((story) => story.seen !== true) };
+	});
 }
 
 function open(groupIndex: number): void {
@@ -204,6 +228,7 @@ watch(activeStory, (story) => {
 	} else {
 		startTimer();
 		document.body.style.overflow = 'hidden';
+		void markSeen(story.id);
 	}
 });
 
@@ -240,6 +265,11 @@ onUnmounted(() => {
 			</button>
 		</header>
 
+		<p v-if="loadFailed" class="a-form-error" role="alert">
+			Stories could not be loaded.
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+		</p>
+
 		<div class="a-stories__row">
 			<button
 				v-if="signedIn"
@@ -259,7 +289,7 @@ onUnmounted(() => {
 				:key="group.account_id"
 				type="button"
 				class="a-story"
-				:class="{ 'a-story--own': group.account_id === selfId }"
+				:class="{ 'a-story--own': group.account_id === selfId, 'a-story--seen': group.unseen === false }"
 				:aria-label="`View the story by ${authorName(group.account_id, group.handle, group.name)}`"
 				@click="open(index)"
 			>

@@ -5,12 +5,30 @@
  */
 import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
-import { bytesLabel, getAdminApi, type AdminInstance } from '../../lib/admin';
+import { bytesLabel, getAdminApi, type AdminInstance, type AdminSettingsData } from '../../lib/admin';
 import { absoluteTime } from '../../lib/format';
 
 const data = ref<AdminInstance | null>(null);
 const loading = ref(false);
 const error = ref('');
+const settings = ref<AdminSettingsData | null>(null);
+const saving = ref(false);
+const saved = ref('');
+const saveError = ref('');
+const form = ref({
+	instance_name: '',
+	instance_description: '',
+	contact_email: '',
+	registrations: false,
+	registration_approval: true,
+	core_channel: 'main',
+	core_version: '',
+	atproto_pds: false,
+	atproto_pds_url: '',
+	atproto_pds_handle_domain: '',
+	atproto_plc_url: 'https://plc.directory',
+	atproto_jetstream: '',
+});
 
 const checks = computed(() => {
 	const source = data.value?.checks ?? {};
@@ -110,8 +128,50 @@ async function load(): Promise<void> {
 	}
 }
 
+async function loadSettings(): Promise<void> {
+	try {
+		const loaded = await getAdminApi().settings();
+		settings.value = loaded;
+		form.value = {
+			instance_name: loaded.instance.name,
+			instance_description: loaded.instance.description,
+			contact_email: loaded.instance.contact_email,
+			registrations: loaded.registrations.enabled,
+			registration_approval: loaded.registrations.approval,
+			core_channel: loaded.core.channel,
+			core_version: loaded.core.version,
+			atproto_pds: loaded.atproto.pds_enabled,
+			atproto_pds_url: loaded.atproto.pds_url,
+			atproto_pds_handle_domain: loaded.atproto.handle_domain,
+			atproto_plc_url: loaded.atproto.plc_url,
+			atproto_jetstream: loaded.jetstream,
+		};
+	} catch (caught) {
+		saveError.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
+	}
+}
+
+async function saveSettings(): Promise<void> {
+	if (saving.value) {
+		return;
+	}
+
+	saving.value = true;
+	saved.value = '';
+	saveError.value = '';
+	try {
+		settings.value = await getAdminApi().updateSettings({ ...form.value });
+		saved.value = 'Saved. The worker applies ingestion changes on its next start.';
+	} catch (caught) {
+		saveError.value = caught instanceof Error ? caught.message : 'The settings could not be saved.';
+	} finally {
+		saving.value = false;
+	}
+}
+
 onMounted(() => {
 	void load();
+	void loadSettings();
 });
 </script>
 
@@ -133,6 +193,88 @@ onMounted(() => {
 		</div>
 
 		<p v-if="error !== ''" class="a-form-error" role="alert">{{ error }}</p>
+
+		<form class="a-admin-card a-admin-form" @submit.prevent="saveSettings">
+			<header class="a-admin-card__head">
+				<div>
+					<h3>Instance setup</h3>
+					<p>Saved to the configured env file; no manual editing required.</p>
+				</div>
+				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || settings === null">
+					{{ saving ? 'Saving…' : 'Save' }}
+				</button>
+			</header>
+
+			<p v-if="saveError !== ''" class="a-form-error" role="alert">{{ saveError }}</p>
+			<p v-if="saved !== ''" class="a-admin-muted" role="status">{{ saved }}</p>
+
+			<div class="a-admin-form__grid">
+				<label>
+					<span>Instance name</span>
+					<input v-model="form.instance_name" class="a-input" maxlength="80" />
+				</label>
+				<label>
+					<span>Contact email</span>
+					<input v-model="form.contact_email" class="a-input" type="email" />
+				</label>
+				<label>
+					<span>Core channel</span>
+					<select v-model="form.core_channel" class="a-input">
+						<option value="main">main</option>
+						<option value="release">release</option>
+					</select>
+				</label>
+				<label>
+					<span>Core version (release channel)</span>
+					<input v-model="form.core_version" class="a-input" placeholder="0.7.0" />
+				</label>
+				<label>
+					<span>Jetstream relay</span>
+					<input v-model="form.atproto_jetstream" class="a-input" placeholder="wss://jetstream2.us-east.bsky.network" />
+				</label>
+				<label>
+					<span>PDS public URL</span>
+					<input v-model="form.atproto_pds_url" class="a-input" placeholder="https://social.example" />
+				</label>
+				<label>
+					<span>PDS handle domain</span>
+					<input v-model="form.atproto_pds_handle_domain" class="a-input" placeholder="social.example" />
+				</label>
+				<label>
+					<span>PLC directory</span>
+					<input v-model="form.atproto_plc_url" class="a-input" />
+				</label>
+			</div>
+
+			<label>
+				<span>Instance description</span>
+				<textarea v-model="form.instance_description" class="a-input" rows="3" maxlength="500" />
+			</label>
+
+			<div class="a-admin-form__grid">
+				<label class="a-admin-form__check">
+					<input v-model="form.registrations" type="checkbox" />
+					<span>Allow open registration</span>
+				</label>
+				<label class="a-admin-form__check">
+					<input v-model="form.registration_approval" type="checkbox" />
+					<span>New accounts need approval</span>
+				</label>
+				<label class="a-admin-form__check">
+					<input v-model="form.atproto_pds" type="checkbox" />
+					<span>Enable the native PDS</span>
+				</label>
+			</div>
+
+			<div class="a-admin-form__actions">
+				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
+					Save configuration
+				</button>
+				<small v-if="settings" class="a-admin-muted">
+					Env file: <code>{{ settings.core.env_file }}</code>
+				</small>
+			</div>
+		</form>
 
 		<div v-if="loading && data === null" class="a-admin-skeleton-grid a-admin-skeleton-grid--rows">
 			<span v-for="index in 4" :key="index" class="a-admin-skeleton" />

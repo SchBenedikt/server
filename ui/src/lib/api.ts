@@ -142,6 +142,7 @@ export interface Api {
 	stories(): Promise<StoriesData>;
 	createStory(content: string, background?: string): Promise<Story>;
 	deleteStory(id: string): Promise<void>;
+	markStoriesSeen(ids: string[]): Promise<number>;
 	collections(account?: string): Promise<Collection[]>;
 	collection(id: string): Promise<Collection>;
 	createCollection(title: string, description?: string, isPublic?: boolean): Promise<Collection>;
@@ -172,6 +173,7 @@ export interface Api {
 	archivePost(postId: string): Promise<ArchivedPost>;
 	unarchivePost(postId: string): Promise<void>;
 	forYou(limit?: number, offset?: number): Promise<ForYouData>;
+	trending(limit?: number, offset?: number): Promise<ForYouData>;
 	followedTags(): Promise<FollowedTag[]>;
 	followTag(tag: string): Promise<void>;
 	unfollowTag(tag: string): Promise<void>;
@@ -2091,6 +2093,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const story = (row: Record<string, unknown>): Story => ({
 				id: String(row.id ?? ''),
 				account_id: String(row.account_id ?? ''),
+				author_handle: String(row.author_handle ?? ''),
+				author_name: String(row.author_name ?? ''),
+				seen: row.seen === true,
 				content: String(row.content ?? ''),
 				background: String(row.background ?? 'ocean'),
 				created_at: String(row.created_at ?? ''),
@@ -2104,6 +2109,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				groups: Array.isArray(data?.groups)
 					? data.groups.filter(isRecord).map((group) => ({
 						account_id: String(group.account_id ?? ''),
+						handle: String(group.handle ?? ''),
+						name: String(group.name ?? ''),
+						unseen: group.unseen === true,
 						stories: Array.isArray(group.stories)
 							? group.stories.filter(isRecord).map(story).filter((item) => item.id !== '')
 							: [],
@@ -2136,6 +2144,22 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		async deleteStory(id: string): Promise<void> {
 			await request<unknown>('DELETE', `/api/v1/host/stories/${encodeURIComponent(id)}`);
+		},
+
+		async markStoriesSeen(ids: string[]): Promise<number> {
+			const unique = [...new Set(ids.filter((id) => id !== ''))].slice(0, 100);
+			if (unique.length === 0) {
+				return 0;
+			}
+
+			const data = await request<{ seen?: unknown }>(
+				'POST',
+				'/api/v1/host/stories/seen',
+				undefined,
+				{ ids: unique },
+			);
+
+			return typeof data?.seen === 'number' ? data.seen : 0;
 		},
 
 		async collections(account?: string): Promise<Collection[]> {
@@ -2438,6 +2462,36 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				next?: unknown;
 				total?: unknown;
 			}>('GET', '/api/v1/host/for-you', {
+				limit: String(limit),
+				offset: String(offset),
+			});
+
+			const reasons: Record<string, string> = {};
+			if (isRecord(data?.reasons)) {
+				for (const [key, value] of Object.entries(data.reasons)) {
+					if (typeof value === 'string') {
+						reasons[key] = value;
+					}
+				}
+			}
+
+			return {
+				posts: Array.isArray(data?.posts)
+					? data.posts.filter((id): id is string => typeof id === 'string')
+					: [],
+				reasons,
+				next: typeof data?.next === 'number' ? data.next : null,
+				total: typeof data?.total === 'number' ? data.total : 0,
+			};
+		},
+
+		async trending(limit = 20, offset = 0): Promise<ForYouData> {
+			const data = await request<{
+				posts?: unknown;
+				reasons?: unknown;
+				next?: unknown;
+				total?: unknown;
+			}>('GET', '/api/v1/host/trending', {
 				limit: String(limit),
 				offset: String(offset),
 			});

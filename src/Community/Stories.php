@@ -41,7 +41,7 @@ final class Stories
      *
      * @return array{
      *     stories: list<array<string, mixed>>,
-     *     groups: list<array{account_id: string, handle: string, name: string, stories: list<array<string, mixed>>}>
+     *     groups: list<array{account_id: string, handle: string, name: string, unseen: bool, stories: list<array<string, mixed>>}>
      * }
      */
     public function active(?string $viewerId = null, int $limit = 100): array
@@ -66,6 +66,10 @@ final class Stories
         $rows = $this->db->fetchAll($sql, $parameters);
 
         $stories = $this->withAuthors(array_map([$this, 'hydrate'], $rows));
+        if ($viewerId !== null && $viewerId !== '') {
+            $stories = $this->withSeen($stories, $viewerId);
+        }
+
         $groups = [];
         foreach ($stories as $story) {
             $accountId = (string) $story['account_id'];
@@ -73,9 +77,13 @@ final class Stories
                 'account_id' => $accountId,
                 'handle' => (string) $story['author_handle'],
                 'name' => (string) $story['author_name'],
+                'unseen' => false,
                 'stories' => [],
             ];
             $groups[$accountId]['stories'][] = $story;
+            if (($story['seen'] ?? false) === false) {
+                $groups[$accountId]['unseen'] = true;
+            }
         }
 
         // The reader's own story is the first ring, like every story UI. The
@@ -225,6 +233,102 @@ final class Stories
     }
 
     /**
+     * Marks stories as watched for one account.
+     *
+     * Only a story the account may actually see is stored, so a client cannot
+     * fill the table with arbitrary ids. Repeating the call is a no-op and
+     * reports how many markers were new.
+     *
+     * @param list<mixed> $storyIds
+     */
+    public function markSeen(string $accountId, array $storyIds): int
+    {
+        $ids = [];
+        foreach ($storyIds as $id) {
+            if (is_string($id) && $id !== '' && mb_strlen($id) <= 64) {
+                $ids[$id] = true;
+            }
+        }
+
+        $ids = array_slice(array_keys($ids), 0, 100);
+        if ($ids === []) {
+            return 0;
+        }
+
+        $placeholders = [];
+        $parameters = [
+            'account' => $accountId,
+            'now' => Time::format($this->clock->now()),
+        ];
+        foreach ($ids as $index => $id) {
+            $key = 'story_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $id;
+        }
+
+        $visible = $this->db->fetchAll(
+            'SELECT id FROM story WHERE expires_at > :now AND id IN (' . implode(', ', $placeholders) . ')'
+            . ' AND (account_id = :account OR account_id IN ('
+            . ' SELECT actor_id FROM social_following'
+            . " WHERE local_user_id = :follow_account AND state = 'accepted'"
+            . '))',
+            $parameters + ['follow_account' => $accountId],
+        );
+
+        $marked = 0;
+        foreach ($visible as $row) {
+            $marked += $this->db->execute(
+                'INSERT INTO story_seen (story_id, account_id, seen_at)'
+                . ' VALUES (:story_id, :account_id, :seen_at) ON CONFLICT DO NOTHING',
+                [
+                    'story_id' => (string) $row['id'],
+                    'account_id' => $accountId,
+                    'seen_at' => Time::format($this->clock->now()),
+                ],
+            );
+        }
+
+        return $marked;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $stories
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function withSeen(array $stories, string $viewerId): array
+    {
+        if ($stories === []) {
+            return $stories;
+        }
+
+        $placeholders = [];
+        $parameters = ['account' => $viewerId];
+        foreach ($stories as $index => $story) {
+            $key = 'seen_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = (string) $story['id'];
+        }
+
+        $rows = $this->db->fetchAll(
+            'SELECT story_id FROM story_seen WHERE account_id = :account'
+            . ' AND story_id IN (' . implode(', ', $placeholders) . ')',
+            $parameters,
+        );
+
+        $seen = [];
+        foreach ($rows as $row) {
+            $seen[(string) $row['story_id']] = true;
+        }
+
+        foreach ($stories as $position => $story) {
+            $stories[$position]['seen'] = isset($seen[(string) $story['id']]);
+        }
+
+        return $stories;
+    }
+
+    /**
      * @param array<string, mixed> $row
      *
      * @return array<string, mixed>
@@ -238,6 +342,7 @@ final class Stories
             'background' => (string) $row['background'],
             'created_at' => (string) $row['created_at'],
             'expires_at' => (string) $row['expires_at'],
+            'seen' => false,
         ];
     }
 }

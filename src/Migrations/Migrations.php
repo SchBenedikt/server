@@ -41,6 +41,7 @@ final class Migrations
             new Version202611180001CoreSchemaFingerprint(),
             new Version202611180002RemoteReplySchema(),
             new Version202611180003AtprotoSessionSchema(),
+            new Version202611180004StorySeenSchema(),
         ];
     }
 }

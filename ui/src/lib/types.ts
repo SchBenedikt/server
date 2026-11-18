@@ -465,6 +465,7 @@ export interface Story {
 	account_id: string;
 	author_handle?: string;
 	author_name?: string;
+	seen?: boolean;
 	content: string;
 	background: string;
 	created_at: string;
@@ -475,6 +476,7 @@ export interface StoryGroup {
 	account_id: string;
 	handle?: string;
 	name?: string;
+	unseen?: boolean;
 	stories: Story[];
 }
 

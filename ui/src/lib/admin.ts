@@ -310,6 +310,42 @@ export interface AdminInstance {
 	warnings: string[];
 }
 
+export interface AdminSettingsData {
+	core: {
+		installed: string;
+		channel: string;
+		version: string;
+		env_file: string;
+		apply_command: string;
+	};
+	registrations: { enabled: boolean; approval: boolean };
+	atproto: {
+		publish: boolean;
+		pds_enabled: boolean;
+		pds_url: string;
+		handle_domain: string;
+		plc_url: string;
+	};
+	instance: { name: string; description: string; contact_email: string };
+	jetstream: string;
+	restart_required: boolean;
+}
+
+export interface AdminSettingsPayload {
+	registrations?: boolean;
+	registration_approval?: boolean;
+	core_channel?: string;
+	core_version?: string;
+	atproto_pds?: boolean;
+	atproto_pds_url?: string;
+	atproto_pds_handle_domain?: string;
+	atproto_plc_url?: string;
+	instance_name?: string;
+	instance_description?: string;
+	contact_email?: string;
+	atproto_jetstream?: string;
+}
+
 export interface CreateUserPayload {
 	handle: string;
 	email: string;
@@ -345,6 +381,8 @@ export interface AdminApi {
 	federation(): Promise<FederationData>;
 	communications(limit?: number): Promise<CommunicationData>;
 	instance(): Promise<AdminInstance>;
+	settings(): Promise<AdminSettingsData>;
+	updateSettings(payload: AdminSettingsPayload): Promise<AdminSettingsData>;
 	audit(limit?: number): Promise<AuditEntry[]>;
 	createReport(payload: ReportPayload): Promise<AdminReport>;
 }
@@ -543,6 +581,14 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 
 		async instance(): Promise<AdminInstance> {
 			return request<AdminInstance>('GET', '/api/v1/host/admin/instance');
+		},
+
+		async settings(): Promise<AdminSettingsData> {
+			return request<AdminSettingsData>('GET', '/api/v1/host/admin/settings');
+		},
+
+		async updateSettings(payload: AdminSettingsPayload): Promise<AdminSettingsData> {
+			return request<AdminSettingsData>('POST', '/api/v1/host/admin/settings', undefined, payload);
 		},
 
 		async audit(limit = 100): Promise<AuditEntry[]> {

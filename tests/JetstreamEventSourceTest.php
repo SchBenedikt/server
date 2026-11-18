@@ -1,0 +1,130 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * SPDX-FileCopyrightText: 2026 Aloha Social contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace AlohaSocial\Server\Tests;
+
+use AlohaSocial\Core\Domain\Atproto\AtprotoEventKind;
+use AlohaSocial\Core\Domain\Atproto\AtprotoRecordOperation;
+use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
+use AlohaSocial\Server\Tests\Support\TestServer;
+use PHPUnit\Framework\TestCase;
+
+use function fclose;
+use function proc_close;
+use function proc_open;
+use function proc_terminate;
+use function strrpos;
+use function substr;
+use function usleep;
+
+/**
+ * The Jetstream transport against a local relay fixture.
+ *
+ * A real public relay would make the test slow and flaky, so the fixture
+ * implements the same WebSocket handshake and sends the same message shape.
+ * That still covers the socket, the frame parser and the event normalizer.
+ */
+final class JetstreamEventSourceTest extends TestCase
+{
+    public function testPullReadsFilteredRelayMessagesAndAdvancesTheCursor(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $alice = $server->createAccount('alice');
+        $now = Time::format($server->runtime->clock->now());
+
+        $database->execute(
+            'INSERT INTO social_following'
+            . ' (id, local_user_id, actor_id, inbox_url, followed_at, state, follow_activity_id)'
+            . " VALUES ('follow-1', :local, 'did:plc:followed', 'https://remote.example/inbox', :now, 'accepted', NULL)",
+            ['local' => $alice->id, 'now' => $now],
+        );
+        $database->execute(
+            'INSERT INTO social_atproto_publication (local_user_id, post_id, rkey, uri, published_at)'
+            . ' VALUES (:local, :post, :rkey, :uri, :now)',
+            [
+                'local' => $alice->id,
+                'post' => 'post-1',
+                'rkey' => '3klocal',
+                'uri' => 'at://did:plc:local/app.bsky.feed.post/3klocal',
+                'now' => $now,
+            ],
+        );
+
+        $port = $this->freePort();
+        $process = proc_open(
+            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+
+        try {
+            // Give the fixture a moment to bind its port.
+            usleep(350_000);
+
+            $source = new JetstreamEventSource(
+                'ws://127.0.0.1:' . $port . '/subscribe',
+                $database,
+                $server->runtime->clock,
+            );
+            $page = $source->pull(null, 10);
+
+            self::assertCount(3, $page->events);
+            self::assertSame('1700000000000004', $page->cursor);
+
+            $post = null;
+            $like = null;
+            $identity = null;
+            foreach ($page->events as $event) {
+                if (($event->record['text'] ?? null) === 'Hello from Jetstream') {
+                    $post = $event;
+                }
+                if ($event->collection === 'app.bsky.feed.like') {
+                    $like = $event;
+                }
+                if ($event->kind === AtprotoEventKind::Account) {
+                    $identity = $event;
+                }
+            }
+
+            self::assertNotNull($post, 'The followed post was not delivered.');
+            self::assertSame('did:plc:followed', $post->did);
+            self::assertSame(AtprotoRecordOperation::Create, $post->operation);
+            self::assertSame('bafypost', $post->cid);
+            self::assertSame('app.bsky.feed.post', $post->collection);
+
+            self::assertNotNull($like, 'The like on a local record was not delivered.');
+            self::assertSame('at://did:plc:local/app.bsky.feed.post/3klocal', $like->record['subject']['uri'] ?? null);
+
+            self::assertNotNull($identity, 'The identity event was not delivered.');
+            self::assertSame('followed.test', $identity->handle);
+
+            foreach ($page->events as $event) {
+                self::assertNotSame('Spam from a stranger', $event->record['text'] ?? null);
+            }
+        } finally {
+            proc_terminate($process);
+            @proc_close($process);
+        }
+    }
+
+    private function freePort(): int
+    {
+        $socket = @stream_socket_server('tcp://127.0.0.1:0', $errorNumber, $errorMessage);
+        self::assertIsResource($socket);
+
+        $name = stream_socket_get_name($socket, false);
+        fclose($socket);
+        self::assertIsString($name);
+
+        return (int) substr($name, (int) strrpos($name, ':') + 1);
+    }
+}
