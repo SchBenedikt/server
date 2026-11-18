@@ -23,10 +23,23 @@ function syncAtproto(Runtime $runtime): void
         return;
     }
 
+    // A relay outage backs off instead of reconnecting on every tick.
+    if ($runtime->atprotoBackoff !== null && !$runtime->atprotoBackoff->ready()) {
+        return;
+    }
+
     try {
         $runtime->app->atprotoSync->sync(100);
+        $runtime->atprotoBackoff?->recordSuccess();
     } catch (Throwable $exception) {
-        fwrite(STDERR, 'AT Protocol sync failed: ' . $exception->getMessage() . "\n");
+        $delay = $runtime->atprotoBackoff?->recordFailure() ?? 0;
+        fwrite(
+            STDERR,
+            'AT Protocol sync failed: ' . $exception->getMessage()
+            . ($delay > 0 ? ' (retrying in ' . $delay . 's)' : '') . "\n",
+        );
+
+        return;
     }
 
     try {
