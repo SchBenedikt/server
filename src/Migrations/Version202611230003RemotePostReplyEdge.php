@@ -34,6 +34,7 @@ final class Version202611230003RemotePostReplyEdge implements Migration
 			'in_reply_to_id',
 			'VARCHAR(512) NULL',
 		);
+		CoreSchemaFingerprint::store($connection);
 	}
 
 	public function down(Connection $connection): void

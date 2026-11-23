@@ -107,6 +107,12 @@ final class MigrationTest extends TestCase
 
         $columns = $database->fetchAll('PRAGMA table_info(social_remote_post)');
         self::assertContains('in_reply_to_id', array_column($columns, 'name'));
+        self::assertSame(
+            \AlohaSocial\Server\Migrations\CoreSchemaFingerprint::current(),
+            (string) $database->fetchValue(
+                "SELECT value FROM runtime_state WHERE name = 'core_schema_fingerprint'",
+            ),
+        );
         self::assertSame([], $runner->migrate());
     }
 
