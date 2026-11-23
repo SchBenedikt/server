@@ -95,6 +95,21 @@ final class MigrationTest extends TestCase
         );
     }
 
+    public function testRemoteReplyEdgeMigrationAddsTheCoreColumnToExistingInstalls(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $database->execute('ALTER TABLE social_remote_post DROP COLUMN in_reply_to_id');
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611230003'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611230003'], $runner->migrate());
+
+        $columns = $database->fetchAll('PRAGMA table_info(social_remote_post)');
+        self::assertContains('in_reply_to_id', array_column($columns, 'name'));
+        self::assertSame([], $runner->migrate());
+    }
+
     public function testCoreSchemaDriftIsReportedBeforeQueriesRun(): void
     {
         $server = new TestServer();
