@@ -205,6 +205,35 @@ final class AdminTest extends TestCase
         self::assertSame(303, $login['response']->status);
     }
 
+    public function testAdminCannotReactivateAnErasedAccount(): void
+    {
+        ['server' => $server, 'cookies' => $adminCookies, 'csrf' => $adminCsrf] = $this->admin();
+        $server->createAccount('bob', 'bob@example.test');
+        $bob = $server->signIn('bob');
+
+        $deleted = $server->json(
+            'DELETE',
+            '/api/v1/account/data',
+            [],
+            $bob['cookies'],
+            $bob['csrf'],
+        );
+        self::assertSame(200, $deleted->status, $deleted->body);
+
+        $enable = $server->json(
+            'POST',
+            '/api/v1/host/admin/users/bob/enable',
+            [],
+            $adminCookies,
+            $adminCsrf,
+        );
+
+        self::assertSame(409, $enable->status);
+        self::assertStringContainsString('cannot be reactivated', $enable->body);
+        self::assertTrue($server->runtime->accounts->find('bob')?->isDisabled());
+        self::assertSame('erased', $server->runtime->app->accountData?->deletionStatus('bob')->state);
+    }
+
     public function testSelfDisableAndDemotingTheLastAdminAreRefused(): void
     {
         ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
