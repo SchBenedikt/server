@@ -101,6 +101,11 @@ const remoteTarget = computed(() => {
 	const candidate = props.post.object_id ?? props.post.id;
 	return isRemoteId(candidate) || candidate.startsWith('at://') ? candidate : null;
 });
+const interactionId = computed(() => (
+	localId.value ?? (remoteTarget.value?.startsWith('http://') || remoteTarget.value?.startsWith('https://')
+		? remoteTarget.value
+		: null)
+));
 const detailTarget = computed(() => localId.value ?? remoteTarget.value);
 const detailHref = computed(() => detailTarget.value === null ? null : `#/p/${encodeURIComponent(detailTarget.value)}`);
 const isRemotePost = computed(() => localId.value === null);
@@ -254,11 +259,17 @@ function postDetailHref(value: string | null | undefined): string | null {
 
 const replyContext = computed(() => postDetailHref(props.post.in_reply_to_id));
 
-const interaction = computed(() => interactionFor(localId.value));
+const interaction = computed(() => interactionFor(interactionId.value));
 const liked = computed(() => interaction.value?.favourited === true);
-const likeCount = computed(() => interaction.value?.favourites_count ?? props.post.likes_count ?? 0);
-const boostCount = computed(() => interaction.value?.reblogs_count ?? props.post.boosts_count ?? 0);
-const replyCount = computed(() => interaction.value?.replies_count ?? props.post.replies_count ?? 0);
+const likeCount = computed(() => isRemotePost.value
+	? (props.post.likes_count ?? 0)
+	: (interaction.value?.favourites_count ?? props.post.likes_count ?? 0));
+const boostCount = computed(() => isRemotePost.value
+	? (props.post.boosts_count ?? 0)
+	: (interaction.value?.reblogs_count ?? props.post.boosts_count ?? 0));
+const replyCount = computed(() => isRemotePost.value
+	? (props.post.replies_count ?? 0)
+	: (interaction.value?.replies_count ?? props.post.replies_count ?? 0));
 const emojiReactions = computed(() => interaction.value?.emoji_reactions ?? []);
 
 const boosted = ref(false);
@@ -347,8 +358,11 @@ function readBoosted(): boolean {
 	}
 }
 
-watch(localId, (id) => {
+watch(localId, () => {
 	boosted.value = readBoosted();
+}, { immediate: true });
+
+watch(interactionId, (id) => {
 	ensureInteractions([id]);
 }, { immediate: true });
 
@@ -468,7 +482,8 @@ async function toggleBoost(): Promise<void> {
 }
 
 async function toggleLike(): Promise<void> {
-	if (localId.value === null || liking.value) {
+	const id = interactionId.value;
+	if (id === null || liking.value) {
 		return;
 	}
 	if (appState.session.user === null) {
@@ -476,7 +491,6 @@ async function toggleLike(): Promise<void> {
 		return;
 	}
 
-	const id = localId.value;
 	const before = interaction.value ?? {
 		favourites_count: 0,
 		favourited: false,
@@ -497,7 +511,12 @@ async function toggleLike(): Promise<void> {
 			? await getApi().likePost(id)
 			: await getApi().unlikePost(id);
 		rememberInteraction(id, saved);
-		showToast(saved.favourited ? 'Post liked.' : 'Like removed.', 'success');
+		showToast(
+			id === remoteTarget.value
+				? (saved.favourited ? 'Remote like queued.' : 'Remote unlike queued.')
+				: (saved.favourited ? 'Post liked.' : 'Like removed.'),
+			'success',
+		);
 	} catch (error) {
 		rememberInteraction(id, before);
 		showToast(error instanceof Error ? error.message : 'The like could not be saved.', 'error');
@@ -1064,7 +1083,7 @@ onUnmounted(() => {
 			</button>
 
 			<button
-				v-if="localId"
+				v-if="interactionId"
 				type="button"
 				class="a-post__action a-post__action--like"
 				:class="{ 'a-post__action--liked': liked }"
