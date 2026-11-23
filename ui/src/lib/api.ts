@@ -157,6 +157,7 @@ export interface Api {
 	helpKokua(id: string, message: string): Promise<KokuaEntry>;
 	withdrawKokuaHelp(id: string): Promise<KokuaEntry>;
 	postRevisions(id: string): Promise<PostRevisionData>;
+	deleteAccount(): Promise<{ state: string }>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
 		context?: string;
@@ -2551,6 +2552,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return response.blob();
+		},
+
+		async deleteAccount(): Promise<{ state: string }> {
+			const data = await request<{ deletion?: { state?: unknown } }>(
+				'DELETE',
+				'/api/v1/account/data',
+			);
+			return { state: typeof data?.deletion?.state === 'string' ? data.deletion.state : 'unknown' };
 		},
 
 		async atprotoIdentity(): Promise<AtprotoIdentityData> {

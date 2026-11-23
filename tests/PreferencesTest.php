@@ -139,6 +139,7 @@ final class PreferencesTest extends TestCase
         self::assertArrayHasKey('posts', $export);
         self::assertArrayHasKey('following', $export);
         self::assertArrayHasKey('drafts', $export);
+        self::assertSame('alohasocial-account-archive', $export['core_archive']['format']);
 
         $ids = array_column($export['posts'], 'id');
         self::assertContains($mine, $ids);
