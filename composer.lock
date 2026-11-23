@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "753ea8118e1e6e411f9aea26a34b326f",
+    "content-hash": "57bfb80a512e45d6bd1a706962f3ceb1",
     "packages": [
         {
             "name": "alohasocial/core",
-            "version": "dev-feat/atproto-follow-actions",
+            "version": "dev-main",
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "ff0437b9e9342fe2ddc6722c0c19817774b93142"
+                "reference": "1e5cfea16fe7de2ccf85e05bafb67a5e85b8fc56"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/ff0437b9e9342fe2ddc6722c0c19817774b93142",
-                "reference": "ff0437b9e9342fe2ddc6722c0c19817774b93142",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/1e5cfea16fe7de2ccf85e05bafb67a5e85b8fc56",
+                "reference": "1e5cfea16fe7de2ccf85e05bafb67a5e85b8fc56",
                 "shasum": ""
             },
             "require": {
@@ -33,6 +33,7 @@
                 "ext-pdo_sqlite": "*",
                 "phpunit/phpunit": "^11.5"
             },
+            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -110,7 +111,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-23T15:16:32+00:00"
+            "time": "2026-11-23T17:00:18+00:00"
         },
         {
             "name": "psr/log",
@@ -1929,14 +1930,7 @@
             "time": "2025-11-17T20:03:58+00:00"
         }
     ],
-    "aliases": [
-        {
-            "package": "alohasocial/core",
-            "version": "dev-feat/atproto-follow-actions",
-            "alias": "dev-main",
-            "alias_normalized": "dev-main"
-        }
-    ],
+    "aliases": [],
     "minimum-stability": "stable",
     "stability-flags": {
         "alohasocial/core": 20
