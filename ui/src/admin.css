@@ -63,7 +63,7 @@
 .a-admin-tab--active:hover {
 	background: var(--a-surface-raised);
 	color: var(--a-text);
-	box-shadow: var(--a-shadow-soft);
+	box-shadow: none;
 }
 
 .a-admin-tab--active .a-icon {
@@ -342,22 +342,22 @@
 	height: 8px;
 	border-radius: 50%;
 	background: var(--a-faint);
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--a-faint) 14%, transparent);
+	box-shadow: none;
 }
 
 .a-admin-dot--ok {
 	background: var(--a-success);
-	box-shadow: 0 0 0 3px var(--a-mint-soft);
+	box-shadow: none;
 }
 
 .a-admin-dot--warn {
 	background: var(--a-amber);
-	box-shadow: 0 0 0 3px var(--a-amber-soft);
+	box-shadow: none;
 }
 
 .a-admin-dot--error {
 	background: var(--a-danger);
-	box-shadow: 0 0 0 3px var(--a-danger-soft);
+	box-shadow: none;
 }
 
 /* ------------------------------------------------------------------ facts */
@@ -597,7 +597,7 @@
 	border: 2px solid var(--a-surface);
 	border-radius: 50%;
 	background: var(--a-primary);
-	box-shadow: 0 0 0 1px var(--a-primary);
+	box-shadow: none;
 }
 
 .a-admin-timeline strong {
@@ -700,7 +700,7 @@
 .a-admin-filter--active:hover {
 	background: var(--a-surface-raised);
 	color: var(--a-text);
-	box-shadow: var(--a-shadow-soft);
+	box-shadow: none;
 }
 
 .a-admin-filter__count {
