@@ -217,6 +217,24 @@ export interface NotificationPageData {
 	unread_count: number;
 }
 
+export type NotificationSenderCategory = 'mutual' | 'following' | 'follower' | 'new' | 'stranger';
+export type NotificationPolicyAction = 'allow' | 'hold' | 'drop';
+
+export interface NotificationPolicy {
+	actions: Record<NotificationSenderCategory, NotificationPolicyAction>;
+	new_account_days: number;
+}
+
+export interface NotificationSenderRequest {
+	id: string;
+	actor_id: string;
+	status: 'held' | 'allowed' | 'dismissed';
+	category: NotificationSenderCategory;
+	created_at: string;
+	reviewed_at: string | null;
+	note: string | null;
+}
+
 export interface InstanceInfo {
 	name: string;
 	description: string;
