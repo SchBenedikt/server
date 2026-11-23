@@ -382,4 +382,17 @@ final class EngagementTest extends TestCase
         self::assertSame(200, $response->status);
         self::assertNotContains($muted, $this->decoded($response)['posts']);
     }
+
+    public function testForYouRestoresAuthorsAfterTimedMuteExpires(): void
+    {
+        $post = $this->post('carol', 'Wieder sichtbar');
+        $this->server->runtime->database->execute(
+            "INSERT INTO social_mute (user_id, actor_id, notifications, created_at, expires_at)"
+            . " VALUES ('alice', 'carol', 0, '2000-01-01T00:00:00Z', '2000-01-02T00:00:00Z')",
+        );
+
+        $response = $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]);
+        self::assertSame(200, $response->status);
+        self::assertContains($post, $this->decoded($response)['posts']);
+    }
 }
