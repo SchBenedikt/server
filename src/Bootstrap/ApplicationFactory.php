@@ -27,7 +27,7 @@ use AlohaSocial\Core\Platform\Http\CurlHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClient;
 use AlohaSocial\Core\Platform\Network\DnsHostResolver;
 use AlohaSocial\Core\Platform\Network\HostResolver;
-use AlohaSocial\Core\Platform\Storage\LocalBlobStore;
+use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Protocol\ActivityPub\HttpActorResolver;
 use AlohaSocial\Core\Security\OpenSslSecretBox;
@@ -45,6 +45,7 @@ use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
+use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountProfileProvider;
 use AlohaSocial\Server\Accounts\AccountRepository;
@@ -100,6 +101,7 @@ final class ApplicationFactory
         private readonly string $root,
         private readonly ?HttpClient $httpClient = null,
         private readonly ?HostResolver $hostResolver = null,
+        private readonly ?S3CompatibleClient $s3ClientOverride = null,
     ) {
     }
 
@@ -135,10 +137,8 @@ final class ApplicationFactory
         $queue = new PdoJobQueue($database, $clock, $ids);
         $activityLog = new PdoActivityLog($database);
 
-        $blobDirectory = $this->config->blobDirectory;
-        if (!is_dir($blobDirectory) && !mkdir($blobDirectory, 0o770, true) && !is_dir($blobDirectory)) {
-            throw new RuntimeException('Cannot create the blob directory: ' . $blobDirectory);
-        }
+        $storage = StorageFactory::create($this->config, $this->s3ClientOverride);
+        $blobStore = $storage->blobStore;
 
         $blueskyAccounts = new BlueskyAccounts($database, $httpClient, $this->secretBox(), $clock, $targetGuard);
         $pdsRepository = new PdoPdsRepository($database);
@@ -151,7 +151,7 @@ final class ApplicationFactory
                 $pdsRepository,
                 $this->secretBox(),
                 $clock,
-                new LocalBlobStore($blobDirectory),
+                $blobStore,
                 $pdsDirectory,
             )
             : null;
@@ -193,7 +193,7 @@ final class ApplicationFactory
             clock: $clock,
             logger: $logger,
             debug: $this->config->debug,
-            blobStore: new LocalBlobStore($blobDirectory),
+            blobStore: $blobStore,
             hostResolver: $hostResolver,
             atprotoAccounts: $atprotoAccounts,
             atprotoPublisher: $atprotoPublisher,
@@ -260,6 +260,7 @@ final class ApplicationFactory
                 $sessions,
                 $app,
                 $this->config,
+                $storage->s3Client,
             ),
             announcements: new Announcements($database, $clock),
             featuredTags: new FeaturedTags($database, $clock),
@@ -352,4 +353,5 @@ final class ApplicationFactory
             throw new RuntimeException('The secret key file is not a valid key: ' . $file, 0, $exception);
         }
     }
+
 }

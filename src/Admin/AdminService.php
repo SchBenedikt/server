@@ -17,6 +17,7 @@ use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
@@ -87,6 +88,7 @@ final class AdminService
         private readonly SessionManager $sessions,
         private readonly Application $app,
         private readonly HostConfig $config,
+        private readonly ?S3CompatibleClient $s3Client = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
     }
@@ -185,6 +187,7 @@ final class AdminService
                 'bytes' => $this->intValue('SELECT COALESCE(SUM(byte_size), 0) FROM social_attachment'),
                 'blobs' => $this->blobCount(),
                 'blob_bytes' => $this->blobBytes(),
+                'storage_driver' => $this->config->storageDriver,
             ],
             'federation' => [
                 'remote_posts' => $this->intValue('SELECT COUNT(*) FROM social_remote_post WHERE deleted_at IS NULL'),
@@ -874,7 +877,7 @@ final class AdminService
         $core = CoreVersion::details();
         $required = [
             'database' => $this->dbReachable(),
-            'blob_directory' => is_dir($this->config->blobDirectory) && is_writable($this->config->blobDirectory),
+            'blob_directory' => $this->storageAvailable(),
             'secret_key' => $this->config->secretKey !== null || is_readable($this->config->secretKeyFile),
             'worker' => $worker['online'],
         ];
@@ -905,6 +908,7 @@ final class AdminService
                 'atproto' => $this->config->atprotoPublish,
                 'atproto_pds' => $this->config->atprotoPds,
                 'registrations' => $this->config->registrations,
+                'storage_driver' => $this->config->storageDriver,
             ],
             'limits' => [
                 'session_lifetime_seconds' => $this->config->sessionLifetimeSeconds,
@@ -914,7 +918,7 @@ final class AdminService
             ],
             'paths' => [
                 'var' => $this->config->varDirectory,
-                'blobs' => $this->config->blobDirectory,
+                'blobs' => $this->config->storageDriver === 'local' ? $this->config->blobDirectory : 's3://' . $this->config->s3Bucket,
                 'mail' => $this->config->mailLogDirectory,
                 'secret_key' => $this->config->secretKeyFile,
             ],
@@ -1457,8 +1461,10 @@ final class AdminService
         $queue = is_array($stats['queue'] ?? null) ? $stats['queue'] : [];
         $dead = (int) ($queue['dead'] ?? 0);
 
-        $storageWritable = is_dir($this->config->blobDirectory) && is_writable($this->config->blobDirectory);
-        $freeRatio = $this->freeDiskRatio($this->config->blobDirectory);
+        $storageWritable = $this->storageAvailable();
+        $freeRatio = $this->config->storageDriver === 'local'
+            ? $this->freeDiskRatio($this->config->blobDirectory)
+            : null;
 
         return [
             [
@@ -1496,8 +1502,10 @@ final class AdminService
                 'label' => 'Media storage',
                 'status' => $storageWritable ? ($freeRatio !== null && $freeRatio < 0.1 ? 'warn' : 'ok') : 'error',
                 'detail' => $storageWritable
-                    ? ($freeRatio === null ? 'Writable' : sprintf('Writable · %.0f%% free', $freeRatio * 100))
-                    : 'Not writable',
+                    ? ($this->config->storageDriver === 's3'
+                        ? 'S3-compatible bucket reachable'
+                        : ($freeRatio === null ? 'Writable' : sprintf('Writable · %.0f%% free', $freeRatio * 100)))
+                    : ($this->config->storageDriver === 's3' ? 'S3-compatible bucket unreachable' : 'Not writable'),
             ],
             [
                 'id' => 'mail',
@@ -1707,8 +1715,12 @@ final class AdminService
         return strtoupper($driver);
     }
 
-    private function blobCount(): int
+    private function blobCount(): ?int
     {
+        if ($this->config->storageDriver === 's3') {
+            return null;
+        }
+
         if (!is_dir($this->config->blobDirectory)) {
             return 0;
         }
@@ -1730,8 +1742,12 @@ final class AdminService
         }
     }
 
-    private function blobBytes(): int
+    private function blobBytes(): ?int
     {
+        if ($this->config->storageDriver === 's3') {
+            return null;
+        }
+
         if (!is_dir($this->config->blobDirectory)) {
             return 0;
         }
@@ -1762,6 +1778,28 @@ final class AdminService
         }
 
         return $free / $total;
+    }
+
+    private function storageAvailable(): bool
+    {
+        if ($this->config->storageDriver === 'local') {
+            return is_dir($this->config->blobDirectory) && is_writable($this->config->blobDirectory);
+        }
+
+        if ($this->s3Client === null || $this->config->s3Bucket === null) {
+            return false;
+        }
+
+        try {
+            $prefix = $this->config->s3Prefix === '' ? '' : $this->config->s3Prefix . '/';
+            $this->s3Client->listObjects($this->config->s3Bucket, $prefix, null, 1);
+
+            return true;
+        } catch (Throwable) {
+            // Avoid returning SDK error details which could contain endpoint or
+            // credential-provider information in an admin response.
+            return false;
+        }
     }
 
     private function httpsStatus(): string

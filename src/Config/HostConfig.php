@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Config;
 
 use AlohaSocial\Core\Platform\Config\ArrayConfig;
 use AlohaSocial\Core\Platform\Config\Config;
+use AlohaSocial\Core\Platform\Storage\BlobPath;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Http\TrustedProxyClientAddress;
 use RuntimeException;
@@ -37,6 +38,18 @@ final readonly class HostConfig
         public ?string $databasePassword,
         public string $varDirectory,
         public string $blobDirectory,
+        public string $storageDriver,
+        public ?string $s3Endpoint,
+        public string $s3Region,
+        public ?string $s3Bucket,
+        public string $s3Prefix,
+        public ?string $s3AccessKey,
+        public ?string $s3SecretKey,
+        public bool $s3PathStyle,
+        public ?string $s3ServerSideEncryption,
+        public ?string $s3KmsKeyId,
+        public int $s3TimeoutSeconds,
+        public int $s3MaxObjectBytes,
         public string $secretKeyFile,
         public ?string $secretKey,
         public bool $debug,
@@ -220,6 +233,94 @@ final readonly class HostConfig
             }
         }
 
+        $storageDriver = strtolower(trim((string) $pick('storage_driver', 'ALOHASOCIAL_STORAGE_DRIVER', 'local')));
+        if (!in_array($storageDriver, ['local', 's3'], true)) {
+            throw new RuntimeException('storage_driver must be local or s3.');
+        }
+
+        $s3Endpoint = self::nullable($pick('s3_endpoint', 'ALOHASOCIAL_S3_ENDPOINT', null));
+        if ($s3Endpoint !== null) {
+            $endpoint = parse_url($s3Endpoint);
+            if (!is_array($endpoint)
+                || !in_array(strtolower((string) ($endpoint['scheme'] ?? '')), ['http', 'https'], true)
+                || trim((string) ($endpoint['host'] ?? '')) === ''
+                || isset($endpoint['user'])
+                || isset($endpoint['pass'])
+                || isset($endpoint['query'])
+                || isset($endpoint['fragment'])
+            ) {
+                throw new RuntimeException('ALOHASOCIAL_S3_ENDPOINT must be an http(s) URL without credentials, query or fragment.');
+            }
+            if (strtolower((string) $endpoint['scheme']) !== 'https' && !$debug) {
+                throw new RuntimeException('An S3 endpoint must use HTTPS outside debug mode.');
+            }
+        }
+
+        $s3Region = trim((string) $pick('s3_region', 'ALOHASOCIAL_S3_REGION', 'us-east-1'));
+        if (preg_match('/^[a-z0-9][a-z0-9-]{0,62}$/', $s3Region) !== 1) {
+            throw new RuntimeException('ALOHASOCIAL_S3_REGION is invalid.');
+        }
+
+        $s3Bucket = self::nullable($pick('s3_bucket', 'ALOHASOCIAL_S3_BUCKET', null));
+        if ($storageDriver === 's3') {
+            if ($s3Bucket === null
+                || preg_match('/^(?=.{3,63}$)[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$/', $s3Bucket) !== 1
+                || str_contains($s3Bucket, '..')
+                || str_contains($s3Bucket, '.-')
+                || str_contains($s3Bucket, '-.')
+                || filter_var($s3Bucket, FILTER_VALIDATE_IP) !== false
+            ) {
+                throw new RuntimeException('ALOHASOCIAL_S3_BUCKET must be a valid S3 bucket name.');
+            }
+        }
+
+        $s3Prefix = trim((string) $pick('s3_prefix', 'ALOHASOCIAL_S3_PREFIX', ''));
+        if ($s3Prefix !== '') {
+            try {
+                BlobPath::normalize($s3Prefix);
+            } catch (\Throwable $exception) {
+                throw new RuntimeException('ALOHASOCIAL_S3_PREFIX must be a safe relative key prefix.', 0, $exception);
+            }
+        }
+
+        $s3AccessKey = self::nullable($pick('s3_access_key', 'ALOHASOCIAL_S3_ACCESS_KEY', null));
+        $s3SecretKey = self::nullable($pick('s3_secret_key', 'ALOHASOCIAL_S3_SECRET_KEY', null));
+        if (($s3AccessKey === null) !== ($s3SecretKey === null)) {
+            throw new RuntimeException('ALOHASOCIAL_S3_ACCESS_KEY and ALOHASOCIAL_S3_SECRET_KEY must be set together.');
+        }
+        foreach ([$s3AccessKey, $s3SecretKey] as $credential) {
+            if ($credential !== null
+                && (strlen($credential) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $credential) === 1)
+            ) {
+                throw new RuntimeException('S3 credentials contain invalid characters or exceed the supported length.');
+            }
+        }
+
+        $s3EncryptionValue = strtolower(trim((string) $pick(
+            's3_server_side_encryption',
+            'ALOHASOCIAL_S3_SERVER_SIDE_ENCRYPTION',
+            'AES256',
+        )));
+        $s3Encryption = match ($s3EncryptionValue) {
+            '', 'none' => null,
+            'aes256' => 'AES256',
+            'aws:kms' => 'aws:kms',
+            default => throw new RuntimeException('ALOHASOCIAL_S3_SERVER_SIDE_ENCRYPTION must be AES256, aws:kms or none.'),
+        };
+        $s3KmsKeyId = self::nullable($pick('s3_kms_key_id', 'ALOHASOCIAL_S3_KMS_KEY_ID', null));
+        if ($s3KmsKeyId !== null && $s3Encryption !== 'aws:kms') {
+            throw new RuntimeException('ALOHASOCIAL_S3_KMS_KEY_ID requires aws:kms encryption.');
+        }
+
+        $s3Timeout = (int) $pick('s3_timeout', 'ALOHASOCIAL_S3_TIMEOUT', 30);
+        if ($s3Timeout < 1 || $s3Timeout > 120) {
+            throw new RuntimeException('ALOHASOCIAL_S3_TIMEOUT must be between 1 and 120 seconds.');
+        }
+        $s3MaxObjectBytes = (int) $pick('s3_max_object_bytes', 'ALOHASOCIAL_S3_MAX_OBJECT_BYTES', 268435456);
+        if ($s3MaxObjectBytes < 1 || $s3MaxObjectBytes > 5368709120) {
+            throw new RuntimeException('ALOHASOCIAL_S3_MAX_OBJECT_BYTES must be between 1 byte and 5 GiB.');
+        }
+
         return new self(
             instanceUrl: $instanceUrl,
             instanceName: trim((string) $pick('instance_name', 'ALOHASOCIAL_INSTANCE_NAME', 'Aloha Social')),
@@ -230,6 +331,18 @@ final readonly class HostConfig
             databasePassword: self::nullable($pick('database_password', 'ALOHASOCIAL_DB_PASSWORD', null)),
             varDirectory: $varDirectory,
             blobDirectory: self::resolvePath((string) $pick('blob_directory', 'ALOHASOCIAL_BLOB_DIRECTORY', $varDirectory . '/blobs'), $root),
+            storageDriver: $storageDriver,
+            s3Endpoint: $s3Endpoint,
+            s3Region: $s3Region,
+            s3Bucket: $s3Bucket,
+            s3Prefix: $s3Prefix,
+            s3AccessKey: $s3AccessKey,
+            s3SecretKey: $s3SecretKey,
+            s3PathStyle: $bool($pick('s3_path_style', 'ALOHASOCIAL_S3_PATH_STYLE', false)),
+            s3ServerSideEncryption: $s3Encryption,
+            s3KmsKeyId: $s3KmsKeyId,
+            s3TimeoutSeconds: $s3Timeout,
+            s3MaxObjectBytes: $s3MaxObjectBytes,
             secretKeyFile: self::resolvePath((string) $pick('secret_key_file', 'ALOHASOCIAL_SECRET_KEY_FILE', $varDirectory . '/secret.key'), $root),
             secretKey: self::nullable($secret),
             debug: $debug,

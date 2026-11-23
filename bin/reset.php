@@ -15,6 +15,7 @@ use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Setup\SetupToken;
 use AlohaSocial\Server\Support\DatabaseBackup;
 use AlohaSocial\Server\Support\InstallationReset;
+use AlohaSocial\Server\Storage\StorageFactory;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -127,7 +128,16 @@ try {
     fwrite(STDOUT, 'Created ' . count($done) . " migration(s); schema is empty.\n");
 
     if (!$keepMedia) {
-        $blobs = InstallationReset::clearDirectory($config->blobDirectory);
+        if ($config->storageDriver === 'local') {
+            $blobs = InstallationReset::clearDirectory($config->blobDirectory);
+        } else {
+            $store = StorageFactory::create($config)->blobStore;
+            $blobPaths = $store->list();
+            foreach ($blobPaths as $blobPath) {
+                $store->delete($blobPath);
+            }
+            $blobs = count($blobPaths);
+        }
         $mail = InstallationReset::clearDirectory($config->mailLogDirectory);
         fwrite(STDOUT, 'Removed ' . $blobs . ' media file(s) and ' . $mail . " mail file(s).\n");
     }
