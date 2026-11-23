@@ -77,33 +77,35 @@ export function useTimeline(source: () => TimelineSource) {
 		return merged;
 	};
 
-	async function fetchPage(before: string | null): Promise<TimelineItem[]> {
+	async function fetchPage(before: string | null): Promise<{ posts: TimelineItem[]; consumed: number }> {
 		const current = source();
 		const api = getApi();
 
 		switch (current.kind) {
 			case 'home':
-				return api.homeTimeline(PAGE_SIZE, before);
+				return api.homeTimeline(PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
 			case 'for-you':
 				return api.forYou(PAGE_SIZE, offset).then(async (data) => {
 					const loaded = await api.posts(data.posts);
-					return data.posts
+					const posts = data.posts
 						.map((id) => loaded[id])
 						.filter((post): post is TimelineItem => post !== undefined);
+					return { posts, consumed: data.posts.length };
 				});
 			case 'trending':
 				return api.trending(PAGE_SIZE, offset).then(async (data) => {
 					const loaded = await api.posts(data.posts);
-					return data.posts
+					const posts = data.posts
 						.map((id) => loaded[id])
 						.filter((post): post is TimelineItem => post !== undefined);
+					return { posts, consumed: data.posts.length };
 				});
 			case 'tag':
-				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, before);
+				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
 			case 'followed':
-				return api.followedTimeline(PAGE_SIZE, before);
+				return api.followedTimeline(PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
 			default:
-				return api.publicTimeline(PAGE_SIZE, before);
+				return api.publicTimeline(PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
 		}
 	}
 
@@ -121,17 +123,18 @@ export function useTimeline(source: () => TimelineSource) {
 		error.value = '';
 
 		try {
-			const batch = await hydrateTimelineBoosts(await fetchPage(before));
+			const page = await fetchPage(before);
+			const batch = await hydrateTimelineBoosts(page.posts);
 			if (currentGeneration !== generation) {
 				return;
 			}
 
 			posts.value = reset ? merge([], batch) : merge(posts.value, batch);
 			if (isRanked) {
-				offset = (reset ? 0 : offset) + batch.length;
-				hasMore.value = batch.length >= PAGE_SIZE;
+				offset = (reset ? 0 : offset) + page.consumed;
+				hasMore.value = page.consumed >= PAGE_SIZE;
 			} else {
-				cursor = batch.length > 0 ? batch[batch.length - 1].id : cursor;
+				cursor = batch.length > 0 ? batch[batch.length - 1].published_at : cursor;
 				hasMore.value = batch.length >= PAGE_SIZE;
 			}
 			loaded.value = true;
