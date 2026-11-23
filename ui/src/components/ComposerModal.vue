@@ -51,6 +51,9 @@ const hostBridge = useHostBridge();
 const canUploadMedia = computed(() => (
 	appState.session.user !== null && hostBridge.capabilities().media
 ));
+const blueskyStatusChecked = ref(false);
+const blueskyConnected = ref(false);
+const crossPostBluesky = ref(false);
 
 const content = ref('');
 const contentWarning = ref('');
@@ -81,6 +84,29 @@ const isQuote = computed(() => quoteTo.value !== null);
 const preloadedDraft = computed<Draft | null>(() => appState.composer.draft);
 const directTo = computed(() => appState.composer.directTo);
 const isDirect = computed(() => directTo.value !== null);
+const canCrossPostBluesky = computed(() => (
+	!isEdit.value
+	&& !isReply.value
+	&& !isQuote.value
+	&& !isDirect.value
+	&& !showPoll.value
+	&& scheduledAt.value === ''
+	&& visibility.value === 'public'
+));
+const showBlueskyCrossPost = computed(() => (
+	appState.session.user !== null
+	&& hostBridge.capabilities().atproto
+	&& blueskyStatusChecked.value
+	&& blueskyConnected.value
+	&& canCrossPostBluesky.value
+));
+const showBlueskyConnectionHint = computed(() => (
+	appState.session.user !== null
+	&& hostBridge.capabilities().atproto
+	&& blueskyStatusChecked.value
+	&& !blueskyConnected.value
+	&& canCrossPostBluesky.value
+));
 const hasMediaAttachments = computed(() => (
 	images.value.length > 0 || existing.value.length > 0 || restoredAttachmentIds.value.length > 0
 ));
@@ -108,6 +134,9 @@ const title = computed(() => (
 const submitLabel = computed(() => {
 	if (submitting.value) {
 		return isEdit.value ? 'Saving…' : 'Sending…';
+	}
+	if (crossPostBluesky.value) {
+		return 'Post & Bluesky';
 	}
 
 	if (scheduledAt.value !== '') {
@@ -297,7 +326,38 @@ function resetExtras(): void {
 	pollMultiple.value = false;
 	pollHideTotals.value = false;
 	pollExpiresIn.value = '86400';
+	crossPostBluesky.value = false;
 }
+
+let blueskyStatusRequest = 0;
+watch(() => appState.composer.open, (open) => {
+	const request = ++blueskyStatusRequest;
+	blueskyStatusChecked.value = false;
+	blueskyConnected.value = false;
+	crossPostBluesky.value = false;
+	if (!open || appState.session.user === null || !hostBridge.capabilities().atproto) {
+		return;
+	}
+
+	void getApi().blueskyAccount().then((status) => {
+		if (request !== blueskyStatusRequest) {
+			return;
+		}
+		blueskyConnected.value = status.publish_enabled && status.account.connected;
+		blueskyStatusChecked.value = true;
+	}).catch(() => {
+		if (request === blueskyStatusRequest) {
+			blueskyConnected.value = false;
+			blueskyStatusChecked.value = true;
+		}
+	});
+});
+
+watch(canCrossPostBluesky, (eligible) => {
+	if (!eligible) {
+		crossPostBluesky.value = false;
+	}
+});
 
 function addPollOption(): void {
 	if (pollOptions.value.length < 4) {
@@ -613,6 +673,7 @@ async function submit(): Promise<void> {
 		}
 
 		const direct = isDirect.value && directTo.value !== null;
+		const quoting = isQuote.value;
 		const post = await getApi().createPost({
 			content: content.value,
 			visibility: direct ? 'direct' : visibility.value,
@@ -622,6 +683,7 @@ async function submit(): Promise<void> {
 			attachment_ids: attachmentIds,
 			recipient_ids: direct && directTo.value !== null ? [directTo.value.id] : [],
 		});
+		const publishOnBluesky = crossPostBluesky.value;
 
 		announcePostCreated(post);
 		clearDraft();
@@ -634,16 +696,26 @@ async function submit(): Promise<void> {
 		visibility.value = 'public';
 		resetExtras();
 		closeComposer();
-		showToast(
-			direct
-				? 'Message saved. Delivery to the recipient’s server runs in the background.'
-				: replying
-					? 'Reply saved. Delivery to other servers runs in the background.'
-					: isQuote.value
-						? 'Quote saved. Delivery to other servers runs in the background.'
-						: 'Post saved. Delivery to other servers runs in the background.',
-			'success',
-		);
+		if (publishOnBluesky) {
+			try {
+				await getApi().publishToBluesky(post.id);
+				showToast('Post saved here and published to Bluesky.', 'success');
+			} catch (caught) {
+				const reason = caught instanceof Error ? ` ${caught.message}` : '';
+				showToast(`Post saved here, but Bluesky publishing failed.${reason} Retry from the post menu.`, 'error');
+			}
+		} else {
+			showToast(
+				direct
+					? 'Message saved. Delivery to the recipient’s server runs in the background.'
+					: replying
+						? 'Reply saved. Delivery to other servers runs in the background.'
+						: quoting
+							? 'Quote saved. Delivery to other servers runs in the background.'
+							: 'Post saved. Delivery to other servers runs in the background.',
+				'success',
+			);
+		}
 	} catch (caught) {
 		error.value = caught instanceof Error
 			? caught.message
@@ -925,6 +997,13 @@ async function submit(): Promise<void> {
 							<option value="followers">Followers only</option>
 						</select>
 					</label>
+					<label v-if="showBlueskyCrossPost" class="a-composer__visibility a-composer__cross-post">
+						<input v-model="crossPostBluesky" type="checkbox" :disabled="submitting" />
+						<span>Also publish to Bluesky</span>
+					</label>
+					<p v-else-if="showBlueskyConnectionHint" class="a-composer__hint" role="status">
+						Connect a Bluesky account in Settings to publish to both networks.
+					</p>
 					<span class="a-composer__count" :class="{ 'a-count--over': overLimit }">
 						{{ length }} / {{ MAX_LENGTH }}
 					</span>
