@@ -101,6 +101,13 @@ account. Public instances require secure cookies unless debug mode is enabled;
 the browser-facing scheme controls this setting, including when a reverse proxy
 terminates TLS and forwards to the app over HTTP.
 
+If the app is behind a reverse proxy, set `ALOHASOCIAL_TRUSTED_PROXIES` to a
+comma-separated list of that proxy's IP addresses or CIDR ranges. Only then
+will the server use `X-Forwarded-For` for login, AT Protocol login, and API throttling;
+the header is ignored when the connecting peer is not on this list. Configure
+the proxy to replace or append this header correctly, and never trust a broad
+public range. The default is empty, which uses the direct peer address.
+
 ## Uploads and federation
 
 | Variable | Config file key | Default | Meaning |
@@ -288,6 +295,7 @@ ALOHASOCIAL_BLOB_DIRECTORY=var/blobs
 ALOHASOCIAL_SECRET_KEY_FILE=var/secret.key
 ALOHASOCIAL_SECURE_COOKIES=true
 ALOHASOCIAL_SESSION_LIFETIME=604800
+ALOHASOCIAL_TRUSTED_PROXIES=127.0.0.1,10.20.0.0/16
 
 ALOHASOCIAL_MAIL_TRANSPORT=smtp
 ALOHASOCIAL_MAIL_FROM=no-reply@social.example

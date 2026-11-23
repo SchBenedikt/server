@@ -12,6 +12,7 @@ use AlohaSocial\Server\Bootstrap\ApplicationFactory;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Http\FrontController;
 use AlohaSocial\Server\Http\GlobalsRequestFactory;
+use AlohaSocial\Server\Http\TrustedProxyClientAddress;
 
 $root = dirname(__DIR__);
 
@@ -37,12 +38,17 @@ try {
 
     $runtime = (new ApplicationFactory($config, $root))->boot();
 
-    $request = GlobalsRequestFactory::create();
+    $clientAddress = TrustedProxyClientAddress::resolve(
+        isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : null,
+        isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? (string) $_SERVER['HTTP_X_FORWARDED_FOR'] : null,
+        $config->trustedProxies,
+    );
+    $request = GlobalsRequestFactory::create($clientAddress);
     $response = (new FrontController($runtime))->handle(
         $request,
         $_COOKIE,
         isset($_SERVER['HTTP_USER_AGENT']) ? (string) $_SERVER['HTTP_USER_AGENT'] : null,
-        isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : null,
+        $clientAddress,
     );
 } catch (Throwable $exception) {
     error_log('alohasocial/server boot failed: ' . $exception->getMessage());
