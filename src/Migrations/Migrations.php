@@ -43,6 +43,7 @@ final class Migrations
             new Version202611180003AtprotoSessionSchema(),
             new Version202611180004StorySeenSchema(),
             new Version202611230001AtprotoFollowSchema(),
+            new Version202611230002InboundBlocks(),
         ];
     }
 }
