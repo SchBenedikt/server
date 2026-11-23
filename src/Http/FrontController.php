@@ -1183,7 +1183,10 @@ final class FrontController
             'displayName' => $account?->name() ?? '',
             'isAdmin' => $account?->isAdmin() === true,
             'media' => $this->runtime->app->media !== null,
-            'atproto' => $this->runtime->config->atprotoPublish || $this->runtime->config->atprotoPds,
+            // This UI capability currently gates the manual Bluesky publish
+            // action, whose API is controlled by atprotoPublish. A native
+            // PDS alone does not make that outbound action available.
+            'atproto' => $this->runtime->config->atprotoPublish,
             'appShell' => true,
         ], 'App', 200, null, [
             'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",

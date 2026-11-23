@@ -45,6 +45,19 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('data-csrf="' . $session['csrf'] . '"', $response->body);
     }
 
+    public function testNativePdsDoesNotAdvertiseTheSeparateBlueskyPublishAction(): void
+    {
+        $server = new TestServer([
+            'atproto_publish' => false,
+            'atproto_pds' => true,
+        ]);
+
+        $response = $server->send('GET', '/app');
+
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('data-atproto="0"', $response->body);
+    }
+
     public function testTheBuiltSharedBundleIsInTheRepository(): void
     {
         $root = dirname(__DIR__);
@@ -69,6 +82,8 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('/api/v1/host/kokua', $script);
         self::assertStringContainsString('/api/v1/host/admin/communications', $script);
         self::assertStringContainsString('Delivery, federation and background errors', $script);
+        self::assertStringContainsString('Connect a Bluesky account in Settings before publishing.', $script);
+        self::assertStringContainsString('Post saved. Delivery to other servers runs in the background.', $script);
 
         $style = (string) file_get_contents($root . '/public/ui/app.css');
         self::assertStringContainsString('.a-sidebar__more-menu', $style);
