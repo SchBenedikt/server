@@ -64,4 +64,38 @@ final class MultipartGlobalsTest extends TestCase
     {
         self::assertNull(GlobalsRequestFactory::multipartBody([], []));
     }
+
+    public function testDeclaredOversizeBodyIsRejectedBeforeReadingInput(): void
+    {
+        $original = $_SERVER;
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_SERVER['REQUEST_URI'] = '/api/v1/posts?draft=1';
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
+        $_SERVER['CONTENT_LENGTH'] = (string) (GlobalsRequestFactory::MAX_BODY_BYTES + 1);
+
+        try {
+            $request = GlobalsRequestFactory::create();
+        } finally {
+            $_SERVER = $original;
+        }
+
+        self::assertSame('/api/v1/posts', $request->path);
+        self::assertSame('', $request->body);
+        self::assertTrue($request->attributes['request_body_too_large']);
+    }
+
+    public function testAnOversizeBodyGetsA413BeforeRoutingOrAuthentication(): void
+    {
+        $server = new \AlohaSocial\Server\Tests\Support\TestServer();
+        $request = new Request(
+            'POST',
+            '/api/v1/posts',
+            attributes: ['request_body_too_large' => true],
+        );
+
+        $response = (new \AlohaSocial\Server\Http\FrontController($server->runtime))->handle($request);
+
+        self::assertSame(413, $response->status);
+        self::assertSame('payload_too_large', $response->decodedBody()['error']['code']);
+    }
 }
