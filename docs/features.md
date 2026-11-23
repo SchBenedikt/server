@@ -138,10 +138,13 @@ a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
   `false`).
 - **Bluesky**: the unauthenticated public AppView supplies the profile and the
   author feed. Remote profiles remain read-only. A signed-in member can link a
-  Bluesky account from Settings with an app password and explicitly mirror
-  supported public text posts; this uses the account's discovered PDS and does
-  not require the instance to run its optional native PDS. Likes and follows
-  from local accounts are not yet mirrored.
+  Bluesky account from Settings with an app password and opt into publishing
+  eligible public top-level posts from the composer. The action is offered
+  only while the linked account and instance publishing setting are available.
+  A local post is saved first; Bluesky failures are reported separately and
+  can be retried from the post menu. This uses the account's discovered PDS and
+  does not require the instance to run its optional native PDS. Local likes
+  and reposts are mirrored when an account is linked.
 
 A remote post opens in the same detail view as a local post. The canonical
 ActivityPub object id or AT Protocol URI is encoded into `#/p/…`; the host
@@ -153,8 +156,9 @@ alongside a link to the original. Opening a remote profile's follower or
 following count loads that list page by page: the Mastodon API when available,
 otherwise the actor's ActivityPub collection, or `app.bsky.graph.getFollowers`
 and `getFollows` for Bluesky. Remote profile and post counts are shown exactly
-as the origin reports them, and replies, followers and following remain
-read-only because acting on them needs a local federation or ATProto identity.
+as the origin reports them. Remote profiles, follows and replies remain
+read-only; supported Mastodon-compatible likes on cached remote posts use the
+local account's ActivityPub identity.
 
 Every remote document is checked by `FederationTargetGuard` (SSRF, redirects,
 DNS) and fetched with a byte limit; remote HTML is converted to plain text
