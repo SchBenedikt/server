@@ -17,6 +17,7 @@ use AlohaSocial\Core\Domain\Timeline\TimelineEntry;
 use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
+use AlohaSocial\Core\Service\ReactionException;
 use AlohaSocial\Server\Accounts\RegistrationException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Auth\PasswordResetException;
@@ -381,9 +382,26 @@ final class FrontController
         if ($request->method === 'GET' && $request->path === '/api/v1/host/interactions') {
             $ids = array_slice(explode(',', (string) ($request->queryParam('ids') ?? '')), 0, 80);
             $visible = [];
+            $remote = [];
+            $viewerId = $session?->userId();
             foreach ($ids as $id) {
                 $id = trim($id);
                 if ($id === '') {
+                    continue;
+                }
+
+                if ($this->isRemoteObjectTarget($id)) {
+                    $reactions = $this->runtime->app->reactions;
+                    if ($viewerId !== null && mb_strlen($id) <= 2048 && $reactions !== null) {
+                        try {
+                            $post = $reactions->remotePostFor($viewerId, $id);
+                            $remote[$id] = $this->remoteInteraction(
+                                $reactions->remoteInteractionsFor($viewerId, $post),
+                            );
+                        } catch (ReactionException) {
+                            // Core applies follow, visibility and block policy; unavailable items are omitted.
+                        }
+                    }
                     continue;
                 }
 
@@ -399,7 +417,10 @@ final class FrontController
             }
 
             return Response::json([
-                'interactions' => $this->runtime->interactions->forPosts($visible, $session?->userId()),
+                'interactions' => array_replace(
+                    $this->runtime->interactions->forPosts($visible, $viewerId),
+                    $remote,
+                ),
             ]);
         }
 
@@ -600,6 +621,29 @@ final class FrontController
             }
 
             $postId = rawurldecode($matches[1]);
+            if ($this->isRemoteObjectTarget($postId)) {
+                $reactions = $this->runtime->app->reactions;
+                if ($reactions === null) {
+                    return $this->apiError(503, 'remote_reactions_not_configured', 'Remote post reactions are not available.');
+                }
+
+                try {
+                    $interaction = $request->method === 'POST'
+                        ? $reactions->likeRemote($userId, $postId)
+                        : $reactions->unlikeRemote($userId, $postId);
+
+                    return Response::json(['interaction' => $this->remoteInteraction($interaction)]);
+                } catch (ReactionException $exception) {
+                    [$status, $code, $message] = match ($exception->reason) {
+                        'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
+                        'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                        default => [422, $exception->reason, $exception->getMessage()],
+                    };
+
+                    return $this->apiError($status, $code, $message);
+                }
+            }
+
             try {
                 $interaction = $request->method === 'POST'
                     ? $this->runtime->interactions->like($userId, $postId)
@@ -683,6 +727,37 @@ final class FrontController
         $presented['is_remote'] = true;
 
         return $presented;
+    }
+
+    private function isRemoteObjectTarget(string $id): bool
+    {
+        if ($id === '' || mb_strlen($id) > 2048) {
+            return false;
+        }
+
+        $parts = parse_url($id);
+
+        return is_array($parts)
+            && in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
+            && isset($parts['host']);
+    }
+
+    /**
+     * @param array<string, mixed> $status
+     * @return array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int, emoji_reactions: list<array{emoji: string, count: int}>}
+     */
+    private function remoteInteraction(array $status): array
+    {
+        $viewer = is_array($status['viewer'] ?? null) ? $status['viewer'] : [];
+
+        return [
+            'favourites_count' => 0,
+            'favourited' => ($viewer['favourited'] ?? false) === true,
+            'reblogs_count' => 0,
+            'reblogged' => false,
+            'replies_count' => 0,
+            'emoji_reactions' => [],
+        ];
     }
 
     private function enforceRateLimit(Request $request, ?string $userId): ?Response
