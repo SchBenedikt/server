@@ -676,14 +676,56 @@ final class CommunityApiController
                 $stamp = $this->runtime->clock->now()->format('Ymd-His');
                 $filename = 'aloha-export-' . preg_replace('/[^a-z0-9_-]+/i', '-', $account->handle) . '-' . $stamp . '.json';
 
+                $export = $this->runtime->exports->build($account);
+                $export['core_archive'] = $this->runtime->app->accountData?->export($userId);
+                $export['linked_bluesky_account'] = $this->runtime->blueskyAccounts->status($userId);
+
                 return Response::text(
-                    Exports::toJson($this->runtime->exports->build($account)),
+                    Exports::toJson($export),
                     200,
                     [
                         'Content-Type' => 'application/json; charset=utf-8',
                         'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                     ],
                 );
+            }
+
+            if ($method === 'DELETE' && $path === '/api/v1/account/data') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to delete your account.');
+                }
+
+                $account = $this->runtime->accounts->find($userId);
+                if ($account === null) {
+                    return $this->error(404, 'not_found', 'This account no longer exists.');
+                }
+
+                if ($account->isAdmin() && $this->runtime->accounts->activeAdminCount() <= 1) {
+                    return $this->error(409, 'last_active_administrator', 'Promote another administrator before deleting this account.');
+                }
+
+                if ($this->runtime->app->accountData === null) {
+                    return $this->error(503, 'account_data_unavailable', 'Account deletion is unavailable on this instance.');
+                }
+
+                $report = $this->runtime->app->accountData->erase($userId);
+                // Core freezes writes before returning either an in-progress
+                // or completed report. Retire host credentials in both cases
+                // so a concurrent deletion cannot keep using host-only APIs.
+                // Preserve the disabled identity as the host-side tombstone.
+                $this->runtime->sessions->revokeAccount($userId);
+                $this->runtime->database->execute(
+                    'DELETE FROM atproto_session WHERE account_id = :account_id',
+                    ['account_id' => $userId],
+                );
+                $this->runtime->blueskyAccounts->disconnect($userId);
+                $this->runtime->accounts->disable($userId);
+
+                return Response::json([
+                    'deletion' => $report->toArray(),
+                    'account_disabled' => true,
+                    'remote_deletion' => 'ActivityPub and Bluesky data at remote servers may persist.',
+                ], $report->inProgress() ? 202 : 200, ['Cache-Control' => 'private, no-store']);
             }
 
             if ($method === 'POST' && $path === '/api/v1/host/for-you/feedback') {

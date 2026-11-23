@@ -218,3 +218,11 @@ remote profile. The list is read from
 `/api/mastodon/v1/accounts/{handle}/followers|following`; remote profiles keep
 their existing public ActivityPub/Bluesky lookup.
 
+## Account export and deletion
+
+Account export and deletion are available in Settings. Export combines
+host-owned account data with the Core archive, including available media
+blobs. Deletion asks for a second confirmation, revokes local and AT Protocol
+credentials, preserves a disabled identity as a tombstone, and refuses to
+remove the last active administrator. Remote copies and remote AT Protocol
+data are outside this instance's control and may remain on peer servers.
