@@ -202,7 +202,7 @@ final class ForYouFeed
             . ' (SELECT COUNT(*) FROM social_boost b WHERE b.post_id = p.id) AS boosts,'
             . ' (SELECT COUNT(*) FROM social_post r WHERE r.in_reply_to_id = p.id AND r.deleted_at IS NULL) AS replies'
             . ' FROM social_post p'
-            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.published_at >= :since"
+            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.in_reply_to_id IS NULL AND p.published_at >= :since"
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             ['since' => $since],
         );
@@ -211,7 +211,7 @@ final class ForYouFeed
             'SELECT r.activity_id AS id, r.actor_id AS author_id, r.content, r.published_at,'
             . ' 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
             . ' FROM social_remote_post r'
-            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.published_at >= :since"
+            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.in_reply_to_id IS NULL AND r.published_at >= :since"
             . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             ['since' => $since],
         );
@@ -286,7 +286,7 @@ final class ForYouFeed
             . ' (SELECT COUNT(*) FROM social_boost b WHERE b.post_id = p.id) AS boosts,'
             . ' (SELECT COUNT(*) FROM social_post r WHERE r.in_reply_to_id = p.id AND r.deleted_at IS NULL) AS replies'
             . ' FROM social_post p'
-            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public'"
+            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.in_reply_to_id IS NULL"
             // Own posts stay in the feed. A single-author instance would
             // otherwise always see an empty feed even though posts exist.
             // No age window here: the 500 newest posts are candidates and the
@@ -305,7 +305,7 @@ final class ForYouFeed
             'SELECT r.activity_id AS id, r.actor_id AS author_id, r.object_author_id,'
             . ' r.content, r.published_at, 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
             . ' FROM social_remote_post r'
-            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.published_at >= :since"
+            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.in_reply_to_id IS NULL AND r.published_at >= :since"
             . ' AND r.actor_id IN ('
             . " SELECT f.actor_id FROM social_following f WHERE f.local_user_id = :remote_viewer AND f.state = 'accepted'"
             . ')'
