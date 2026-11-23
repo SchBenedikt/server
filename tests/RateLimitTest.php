@@ -63,4 +63,38 @@ final class RateLimitTest extends TestCase
 
         self::assertSame(201, $created->status);
     }
+
+    public function testPostBoostAndLikeActionsEnforceIndependentBudgets(): void
+    {
+        $server = new TestServer();
+        $server->createAccount();
+        $session = $server->signIn();
+        $created = $server->json('POST', '/api/v1/posts', [
+            'content' => 'Interaction rate limit target',
+            'visibility' => 'public',
+        ], $session['cookies'], $session['csrf']);
+        /** @var array{post: array{id: string}} $createdBody */
+        $createdBody = json_decode($created->body, true, 512, JSON_THROW_ON_ERROR);
+        $postId = $createdBody['post']['id'];
+        $now = gmdate('Y-m-d\\TH:i:s\\Z');
+
+        $server->runtime->database->execute(
+            'INSERT INTO rate_limit (bucket, hits, window_started_at) VALUES (:bucket, 60, :now)',
+            ['bucket' => RateLimiter::bucket('host.post_boost', 'alice'), 'now' => $now],
+        );
+        $blockedBoost = $server->json('POST', '/api/v1/posts/' . $postId . '/boost', [], $session['cookies'], $session['csrf']);
+        self::assertSame(429, $blockedBoost->status);
+        self::assertStringContainsString('rate_limited', $blockedBoost->body);
+        self::assertNotNull($blockedBoost->header('Retry-After'));
+
+        $likeStillAvailable = $server->json('POST', '/api/v1/posts/' . $postId . '/like', [], $session['cookies'], $session['csrf']);
+        self::assertSame(200, $likeStillAvailable->status);
+
+        $server->runtime->database->execute(
+            'UPDATE rate_limit SET hits = 60, window_started_at = :now WHERE bucket = :bucket',
+            ['bucket' => RateLimiter::bucket('host.post_like', 'alice'), 'now' => $now],
+        );
+        $blockedLike = $server->json('POST', '/api/v1/posts/' . $postId . '/like', [], $session['cookies'], $session['csrf']);
+        self::assertSame(429, $blockedLike->status);
+    }
 }
