@@ -508,7 +508,7 @@ body.app-shell {
 	margin-bottom: 18px;
 	padding: 28px;
 	border-color: transparent;
-	border-radius: 18px;
+	border-radius: 14px;
 	background: var(--a-deepsea);
 	color: var(--a-sand);
 }
@@ -1304,6 +1304,15 @@ body.app-shell {
 	.a-post {
 		border-radius: 14px;
 	}
+}
+
+/* Keep the visual system flat across both host and shared UI components. */
+.aloha-root,
+.aloha-root *,
+.aloha-root *::before,
+.aloha-root *::after {
+	box-shadow: none !important;
+	text-shadow: none !important;
 }
 
 /* ------------------------------------------------------- post interactions */
