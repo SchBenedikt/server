@@ -103,6 +103,87 @@ final class HostExtensionTest extends TestCase
         self::assertStringContainsString('csrf_token_invalid', $withoutCsrf->body);
     }
 
+    public function testCachedRemotePostLikeUsesCoreFollowAndBlockPolicy(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+        $alice = $server->signIn('alice');
+        $actor = 'https://remote.example/users/carol';
+        $objectId = 'https://remote.example/objects/post-1';
+
+        $server->runtime->database->execute(
+            'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
+            . " VALUES ('f-remote-like', 'alice', :actor, 'https://remote.example/inbox', '2026-11-22T10:00:00Z', 'accepted')",
+            ['actor' => $actor],
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
+            . " VALUES ('https://remote.example/activities/post-1', :object_id, :actor, :actor, 'post', 'Remote post', '2026-11-22T10:00:00Z')",
+            ['object_id' => $objectId, 'actor' => $actor],
+        );
+
+        $path = '/api/v1/posts/' . rawurlencode($objectId) . '/like';
+        $liked = $server->json('POST', $path, [], $alice['cookies'], $alice['csrf']);
+        self::assertSame(200, $liked->status, $liked->body);
+        /** @var array{interaction: array{favourited: bool, favourites_count: int}} $likedBody */
+        $likedBody = json_decode($liked->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($likedBody['interaction']['favourited']);
+        self::assertSame(0, $likedBody['interaction']['favourites_count'], 'Remote totals are not represented as trusted counts.');
+
+        $queuedAfterLike = $server->runtime->app->queue->pendingCount();
+        $repeated = $server->json('POST', $path, [], $alice['cookies'], $alice['csrf']);
+        self::assertSame(200, $repeated->status, $repeated->body);
+        self::assertSame($queuedAfterLike, $server->runtime->app->queue->pendingCount(), 'Repeating a remote like does not enqueue another activity.');
+
+        $state = $server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $alice['cookies'],
+            'query' => ['ids' => $objectId],
+        ]);
+        self::assertSame(200, $state->status);
+        /** @var array{interactions: array<string, array{favourited: bool}>} $stateBody */
+        $stateBody = json_decode($state->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($stateBody['interactions'][$objectId]['favourited']);
+
+        $unliked = $server->json('DELETE', $path, [], $alice['cookies'], $alice['csrf']);
+        self::assertSame(200, $unliked->status, $unliked->body);
+        /** @var array{interaction: array{favourited: bool}} $unlikedBody */
+        $unlikedBody = json_decode($unliked->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertFalse($unlikedBody['interaction']['favourited']);
+    }
+
+    public function testCachedRemotePostLikeRequiresAcceptedFollow(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+        $alice = $server->signIn('alice');
+        $objectId = 'https://remote.example/objects/post-unfollowed';
+        $server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
+            . " VALUES ('https://remote.example/activities/post-unfollowed', :object_id, 'https://remote.example/users/carol', 'https://remote.example/users/carol', 'post', 'Remote post', '2026-11-22T10:00:00Z')",
+            ['object_id' => $objectId],
+        );
+
+        $response = $server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($objectId) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(404, $response->status);
+        self::assertSame('not_found', json_decode($response->body, true, 512, JSON_THROW_ON_ERROR)['error']['code']);
+
+        $state = $server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $alice['cookies'],
+            'query' => ['ids' => $objectId],
+        ]);
+        self::assertSame(200, $state->status);
+        $stateBody = json_decode($state->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayNotHasKey($objectId, $stateBody['interactions']);
+    }
+
     public function testBatchPostHydrationReturnsFullPostsAndIgnoresMissingIds(): void
     {
         $response = $this->server->send('GET', '/api/v1/host/posts', [
