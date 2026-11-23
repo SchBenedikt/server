@@ -44,6 +44,7 @@ final class Migrations
             new Version202611180004StorySeenSchema(),
             new Version202611230001AtprotoFollowSchema(),
             new Version202611230002InboundBlocks(),
+            new Version202611230003RemotePostReplyEdge(),
         ];
     }
 }
