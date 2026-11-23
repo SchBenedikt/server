@@ -110,10 +110,10 @@ export interface AccountMoveStatus {
 
 export interface Api {
 	instance(): Promise<InstanceInfo>;
-	publicTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
-	homeTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
-	tagTimeline(tag: string, limit?: number, before?: string | null): Promise<TimelineItem[]>;
-	followedTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
+	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	homeTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	tagTimeline(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	followedTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
 	post(id: string): Promise<TimelineItem>;
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
@@ -984,10 +984,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		path: string,
 		limit: number,
 		before?: string | null,
+		beforeId?: string | null,
 	): Promise<TimelineItem[]> {
 		const query: Record<string, string> = { limit: String(limit) };
 		if (before !== undefined && before !== null && before !== '') {
 			query.before = before;
+		}
+		if (beforeId !== undefined && beforeId !== null && beforeId !== '') {
+			query.before_id = beforeId;
 		}
 
 		const data = await request<{ posts?: unknown }>('GET', path, query);
@@ -1004,8 +1008,8 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return data.instance as unknown as InstanceInfo;
 		},
 
-		publicTimeline(limit = 20, before = null): Promise<TimelineItem[]> {
-			return timeline('/api/v1/timelines/public', limit, before);
+		publicTimeline(limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
+			return timeline('/api/v1/timelines/public', limit, before, beforeId);
 		},
 
 		async accountStatuses(id: string, limit = 20, before: string | null = null): Promise<AccountStatusesData> {
@@ -1026,16 +1030,16 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			};
 		},
 
-		homeTimeline(limit = 20, before = null): Promise<TimelineItem[]> {
-			return timeline('/api/v1/timelines/home', limit, before);
+		homeTimeline(limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
+			return timeline('/api/v1/timelines/home', limit, before, beforeId);
 		},
 
-		tagTimeline(tag: string, limit = 20, before = null): Promise<TimelineItem[]> {
-			return timeline(`/api/v1/timelines/tag/${encodeURIComponent(tag)}`, limit, before);
+		tagTimeline(tag: string, limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
+			return timeline(`/api/v1/timelines/tag/${encodeURIComponent(tag)}`, limit, before, beforeId);
 		},
 
-		followedTimeline(limit = 20, before = null): Promise<TimelineItem[]> {
-			return timeline('/api/v1/timelines/followed_tags', limit, before);
+		followedTimeline(limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
+			return timeline('/api/v1/timelines/followed_tags', limit, before, beforeId);
 		},
 
 		async listTimeline(id: string, limit = 20, maxId: string | null = null): Promise<TimelineItem[]> {
