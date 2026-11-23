@@ -2912,6 +2912,50 @@ dialog.a-lightbox::backdrop {
 	gap: 7px;
 }
 
+.a-notification-requests {
+	margin-bottom: 18px;
+	padding: 14px;
+	border: 1px solid var(--a-border);
+	border-radius: 16px;
+	background: var(--a-surface);
+}
+
+.a-notification-requests .a-section-head > div {
+	display: grid;
+	gap: 3px;
+}
+
+.a-notification-requests .a-section-head p {
+	color: var(--a-muted);
+	font-size: 12px;
+}
+
+.a-notification-request {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 10px 0;
+	border-top: 1px solid var(--a-border);
+}
+
+.a-notification-request > div:first-child {
+	display: grid;
+	gap: 3px;
+	min-width: 0;
+}
+
+.a-notification-request small {
+	color: var(--a-muted);
+	font-size: 11px;
+}
+
+.a-notification-request__actions {
+	display: flex;
+	gap: 7px;
+	flex: none;
+}
+
 .a-notification {
 	position: relative;
 	display: flex;
@@ -5930,6 +5974,34 @@ dialog.a-modal::backdrop {
 	height: 20px;
 	flex: none;
 	accent-color: var(--a-accent);
+}
+
+.a-settings__sender-policy {
+	margin-top: 20px;
+	padding-top: 16px;
+	border-top: 1px solid var(--a-border);
+}
+
+.a-settings__sender-policy h3 {
+	margin-bottom: 5px;
+	font-size: 14px;
+}
+
+.a-settings__inline-field {
+	display: flex !important;
+	align-items: center;
+	gap: 8px !important;
+}
+
+.a-settings__inline-field input {
+	width: 90px;
+}
+
+@media (max-width: 560px) {
+	.a-notification-request {
+		align-items: flex-start;
+		flex-direction: column;
+	}
 }
 
 .a-follow--requested {
