@@ -119,8 +119,11 @@ a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
   back to that instance's public Mastodon-compatible API (`can_follow` stays
   `false`).
 - **Bluesky**: the unauthenticated public AppView supplies the profile and the
-  author feed. Posting, liking and following would need ATProto OAuth, so the
-  profile view links out to Bluesky instead.
+  author feed. Remote profiles remain read-only. A signed-in member can link a
+  Bluesky account from Settings with an app password and explicitly mirror
+  supported public text posts; this uses the account's discovered PDS and does
+  not require the instance to run its optional native PDS. Likes and follows
+  from local accounts are not yet mirrored.
 
 A remote post opens in the same detail view as a local post. The canonical
 ActivityPub object id or AT Protocol URI is encoded into `#/p/…`; the host
