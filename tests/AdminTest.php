@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
+use AlohaSocial\Core\Platform\Storage\S3ObjectPage;
 use AlohaSocial\Server\Support\RuntimeLogger;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
@@ -165,6 +167,57 @@ final class AdminTest extends TestCase
         self::assertTrue($overview['worker']['online']);
         self::assertNotNull($overview['worker']['last_beat']);
         self::assertNotNull($overview['worker']['updated_at']);
+    }
+
+    public function testS3StorageIsUsedAndReportedWithoutLeakingCredentials(): void
+    {
+        $s3 = new class implements S3CompatibleClient {
+            public function putObject(string $bucket, string $key, mixed $body, int $contentLength, ?string $serverSideEncryption, ?string $kmsKeyId): void
+            {
+            }
+
+            public function getObject(string $bucket, string $key, int $maxBytes): mixed
+            {
+                return null;
+            }
+
+            public function headObject(string $bucket, string $key): ?int
+            {
+                return null;
+            }
+
+            public function deleteObject(string $bucket, string $key): void
+            {
+            }
+
+            public function listObjects(string $bucket, string $prefix, ?string $continuationToken, int $maxKeys): S3ObjectPage
+            {
+                return new S3ObjectPage([], null);
+            }
+        };
+        $server = new TestServer([
+            'storage_driver' => 's3',
+            's3_bucket' => 'aloha-media-test',
+            's3_endpoint' => 'https://objects.example.test',
+            's3_access_key' => 'access-key-secret',
+            's3_secret_key' => 'private-key-secret',
+        ], null, null, $s3);
+
+        $overview = $server->runtime->admin->overview();
+        $instance = $server->runtime->admin->instance();
+        $storageHealth = array_values(array_filter(
+            $overview['health'],
+            static fn (array $check): bool => $check['id'] === 'storage',
+        ))[0];
+
+        self::assertSame('s3', $overview['stats']['media']['storage_driver']);
+        self::assertNull($overview['stats']['media']['blobs']);
+        self::assertNull($overview['stats']['media']['blob_bytes']);
+        self::assertSame('ok', $storageHealth['status']);
+        self::assertSame('s3://aloha-media-test', $instance['paths']['blobs']);
+        self::assertSame('s3', $instance['features']['storage_driver']);
+        self::assertFalse(str_contains(json_encode($instance, JSON_THROW_ON_ERROR), 'private-key-secret'));
+        self::assertFalse(str_contains(json_encode($instance, JSON_THROW_ON_ERROR), 'access-key-secret'));
     }
 
     public function testAdminCanCreateDisableEnableAndResetAnAccount(): void

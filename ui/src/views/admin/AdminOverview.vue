@@ -145,9 +145,10 @@ onBeforeUnmount(() => {
 					<span class="a-admin-stat__icon"><AppIcon name="image" :size="19" /></span>
 					<div>
 						<p class="a-admin-stat__label">Media storage</p>
-						<strong class="a-admin-stat__value">{{ bytesLabel(overview.stats.media.blob_bytes) }}</strong>
+						<strong class="a-admin-stat__value">{{ overview.stats.media.blob_bytes === null ? 'S3 / MinIO' : bytesLabel(overview.stats.media.blob_bytes) }}</strong>
 						<p class="a-admin-stat__meta">
-							{{ overview.stats.media.blobs }} files · {{ overview.stats.media.attachments }} Attachments
+							<template v-if="overview.stats.media.blobs === null">{{ overview.stats.media.attachments }} Attachments · remote storage</template>
+							<template v-else>{{ overview.stats.media.blobs }} files · {{ overview.stats.media.attachments }} Attachments</template>
 						</p>
 					</div>
 				</article>

@@ -95,8 +95,9 @@ export interface AdminStats {
 	media: {
 		attachments: number;
 		bytes: number;
-		blobs: number;
-		blob_bytes: number;
+		blobs: number | null;
+		blob_bytes: number | null;
+		storage_driver: 'local' | 's3' | string;
 	};
 	federation: {
 		remote_posts: number;

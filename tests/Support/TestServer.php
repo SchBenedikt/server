@@ -14,6 +14,7 @@ use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Http\HttpClient;
 use AlohaSocial\Core\Platform\Network\HostResolver;
+use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Bootstrap\ApplicationFactory;
@@ -51,6 +52,7 @@ final class TestServer
         array $overrides = [],
         ?HttpClient $httpClient = null,
         ?HostResolver $hostResolver = null,
+        ?S3CompatibleClient $s3Client = null,
     )
     {
         $root = dirname(__DIR__, 2);
@@ -88,7 +90,7 @@ final class TestServer
         $database = PdoFactory::connect($this->config);
         (new MigrationRunner($database, new SystemClock(), Migrations::all()))->migrate();
 
-        $this->runtime = (new ApplicationFactory($this->config, $root, $httpClient, $hostResolver))->boot();
+        $this->runtime = (new ApplicationFactory($this->config, $root, $httpClient, $hostResolver, $s3Client))->boot();
     }
 
     public function createAccount(
