@@ -67,6 +67,15 @@ outbound move status at `GET /api/v1/accounts/me/move` and start it with
 the destination cannot be changed and new posts are blocked once the move is
 announced. Follower migration continues through the background worker.
 
+## Notification controls
+
+Settings let each account choose whether events from mutuals, followed accounts,
+followers, new accounts and other senders are allowed, held for review or
+dropped. Held senders appear at the top of Notifications, where accepting
+releases their events and dismissing suppresses them. A notification with a
+post can also mute or resume alerts for its whole thread; the posts remain
+visible.
+
 ## Kokua board
 
 Kokua is the Hawaiian word for help, and the board is deliberately not another

@@ -12,7 +12,7 @@ import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { accountName, handleLabel, postHref, relativeTime, truncate } from '../lib/format';
 import { getApi } from '../lib/api';
 import { appState, setUnread, showToast } from '../lib/state';
-import type { NotificationItem } from '../lib/types';
+import type { NotificationItem, NotificationSenderRequest } from '../lib/types';
 
 const signedIn = computed(() => appState.session.user !== null);
 const items = ref<NotificationItem[]>([]);
@@ -23,6 +23,9 @@ const cursor = ref<string | null>(null);
 const hasMore = ref(true);
 const mutating = ref('');
 const confirmClear = ref(false);
+const senderRequests = ref<NotificationSenderRequest[]>([]);
+const requestsError = ref('');
+const mutatingSender = ref('');
 
 const typeMeta: Record<string, { icon: string; label: string; tone: string }> = {
 	favourite: { icon: 'heart', label: 'liked your post', tone: 'rose' },
@@ -76,6 +79,66 @@ async function load(reset: boolean): Promise<void> {
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
+	}
+
+	if (reset) {
+		try {
+			senderRequests.value = await getApi().notificationRequests();
+			requestsError.value = '';
+		} catch (caught) {
+			requestsError.value = caught instanceof Error ? caught.message : 'Notification requests could not be loaded.';
+		}
+	}
+}
+
+async function reviewSender(id: string, decision: 'accept' | 'dismiss'): Promise<void> {
+	if (mutatingSender.value !== '') {
+		return;
+	}
+	mutatingSender.value = id;
+	try {
+		const count = decision === 'accept'
+			? await getApi().acceptNotificationSender(id)
+			: await getApi().dismissNotificationSender(id);
+		senderRequests.value = senderRequests.value.filter((request) => request.id !== id);
+		showToast(
+			decision === 'accept'
+				? `Sender accepted; ${count} held ${count === 1 ? 'notification was' : 'notifications were'} released.`
+				: `Sender dismissed; ${count} held ${count === 1 ? 'notification was' : 'notifications were'} suppressed.`,
+			'success',
+		);
+		await load(true);
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The sender request could not be updated.', 'error');
+	} finally {
+		mutatingSender.value = '';
+	}
+}
+
+function conversationPostId(item: NotificationItem): string | null {
+	return item.status?.id ?? item.post_id;
+}
+
+async function toggleNotificationConversation(item: NotificationItem): Promise<void> {
+	const postId = conversationPostId(item);
+	if (postId !== null) {
+		await toggleConversationMute(postId);
+	}
+}
+
+async function toggleConversationMute(postId: string): Promise<void> {
+	const key = `mute:${postId}`;
+	if (mutating.value !== '') {
+		return;
+	}
+	mutating.value = key;
+	try {
+		const isMuted = await getApi().toggleConversationMute(postId);
+		showToast(isMuted ? 'Conversation notifications muted.' : 'Conversation notifications resumed.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The conversation setting could not be updated.', 'error');
+	} finally {
+		mutating.value = '';
 	}
 }
 
@@ -179,6 +242,24 @@ function statusPreview(item: NotificationItem): string {
 			</template>
 		</PageHeader>
 
+		<section v-if="signedIn && (senderRequests.length > 0 || requestsError !== '')" class="a-notification-requests">
+			<div class="a-section-head">
+				<div><h2>Notification requests</h2><p>Review senders whose notifications are held by your policy.</p></div>
+				<span>{{ senderRequests.length }}</span>
+			</div>
+			<p v-if="requestsError !== ''" class="a-form-error" role="alert">{{ requestsError }}</p>
+			<article v-for="request in senderRequests" :key="request.id" class="a-notification-request">
+				<div>
+					<strong>{{ handleLabel(request.actor_id) }}</strong>
+					<small>{{ request.category }} · {{ relativeTime(request.created_at) }}</small>
+				</div>
+				<div class="a-notification-request__actions">
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="mutatingSender !== ''" @click="reviewSender(request.id, 'dismiss')">Dismiss</button>
+					<button type="button" class="a-btn a-btn--primary a-btn--small" :disabled="mutatingSender !== ''" @click="reviewSender(request.id, 'accept')">Accept</button>
+				</div>
+			</article>
+		</section>
+
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="bell" :size="26" /></span>
 			<h2>Don't miss a thing</h2>
@@ -243,6 +324,15 @@ function statusPreview(item: NotificationItem): string {
 					>
 						View post <AppIcon name="arrowLeft" :size="13" />
 					</a>
+					<button
+						v-if="conversationPostId(item)"
+						type="button"
+						class="a-btn a-btn--ghost a-btn--small"
+						:disabled="mutating !== ''"
+						@click="toggleNotificationConversation(item)"
+					>
+		Toggle conversation alerts
+					</button>
 				</div>
 				<button
 					type="button"
