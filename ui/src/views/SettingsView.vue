@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AtprotoIdentityData } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData } from '../lib/api';
 import { appState, setSession, showToast } from '../lib/state';
 import type { AccountPreferences, BlueskyAccountStatus } from '../lib/types';
 
@@ -27,6 +27,10 @@ const blueskyBusy = ref(false);
 const atproto = ref<AtprotoIdentityData | null>(null);
 const atprotoHandle = ref('');
 const atprotoBusy = ref(false);
+const accountMove = ref<AccountMoveStatus | null>(null);
+const moveTarget = ref('');
+const moveBusy = ref(false);
+const confirmMove = ref(false);
 
 const visibilityOptions = [
 	{ value: 'public', label: 'Public', hint: 'Everyone can see the post.' },
@@ -73,6 +77,12 @@ async function load(): Promise<void> {
 			atproto.value = await getApi().atprotoIdentity();
 		} catch {
 			atproto.value = null;
+		}
+		try {
+			accountMove.value = await getApi().accountMove();
+			moveTarget.value = accountMove.value?.target_actor_id ?? '';
+		} catch {
+			accountMove.value = null;
 		}
 	} catch (caught) {
 		error.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
@@ -248,6 +258,28 @@ async function deleteAccount(): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'The account could not be deleted.', 'error');
 	} finally {
 		deleting.value = false;
+	}
+}
+
+async function startAccountMove(): Promise<void> {
+	if (moveBusy.value || accountMove.value !== null) {
+		return;
+	}
+	if (!confirmMove.value) {
+		confirmMove.value = true;
+		return;
+	}
+
+	moveBusy.value = true;
+	try {
+		accountMove.value = await getApi().startAccountMove(moveTarget.value.trim());
+		confirmMove.value = false;
+		showToast('The account move was announced. Follower migration will continue in the background.', 'success');
+	} catch (caught) {
+		confirmMove.value = false;
+		showToast(caught instanceof Error ? caught.message : 'The account move could not be started.', 'error');
+	} finally {
+		moveBusy.value = false;
 	}
 }
 
@@ -510,6 +542,33 @@ watch(signedIn, (value) => {
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="blueskyBusy">
 						<AppIcon :name="blueskyBusy ? 'refresh' : 'plus'" :size="15" :class="{ 'a-spin': blueskyBusy }" />
 						{{ blueskyBusy ? 'Connecting…' : 'Connect Bluesky' }}
+					</button>
+				</form>
+			</section>
+
+			<section class="a-settings__section">
+				<h2>Move your account</h2>
+				<p class="a-settings__hint">
+					Move your followers to another ActivityPub account. The destination must already point back to this account
+					as its alias. This cannot be undone, and new posts on this account will be disabled once announced.
+				</p>
+				<div v-if="accountMove" class="a-settings__bluesky">
+					<strong>Move announced</strong>
+					<a :href="accountMove.target_actor_id" target="_blank" rel="noopener noreferrer">{{ accountMove.target_actor_id }}</a>
+					<small>Follower migration is processed in the background. {{ accountMove.processed_followers }} followers processed so far.</small>
+				</div>
+				<form v-else class="a-settings__bluesky" @submit.prevent="startAccountMove">
+					<label class="a-settings__field">
+						<span>Destination account actor URL</span>
+						<input v-model="moveTarget" type="url" placeholder="https://social.example/@you" required :disabled="moveBusy">
+						<small>First add this account as an alias on the destination profile.</small>
+					</label>
+					<p v-if="confirmMove" class="a-settings__hint" role="alert">
+						Confirm to announce the move. New posts will be blocked immediately; the destination cannot be changed.
+					</p>
+					<button type="submit" class="a-btn a-btn--danger a-btn--small" :disabled="moveBusy">
+						<AppIcon :name="moveBusy ? 'refresh' : 'arrowRight'" :size="15" :class="{ 'a-spin': moveBusy }" />
+						{{ moveBusy ? 'Announcing…' : confirmMove ? 'Confirm account move' : 'Move account' }}
 					</button>
 				</form>
 			</section>

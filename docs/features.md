@@ -58,6 +58,15 @@ posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
 `FrontController`.
 
+## Account moves
+
+Settings can announce an ActivityPub move to a destination account after that
+account lists the current profile as an alias. The owner can inspect the
+outbound move status at `GET /api/v1/accounts/me/move` and start it with
+`POST /api/v1/accounts/me/move`. The UI requires a second confirmation because
+the destination cannot be changed and new posts are blocked once the move is
+announced. Follower migration continues through the background worker.
+
 ## Kokua board
 
 Kokua is the Hawaiian word for help, and the board is deliberately not another
