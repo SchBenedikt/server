@@ -761,7 +761,7 @@ onMounted(() => {
 	border: 1px solid var(--a-border);
 	border-radius: 17px;
 	background: var(--a-surface);
-	box-shadow: var(--a-shadow-soft);
+	box-shadow: none;
 }
 
 .a-kokua-card--done {
