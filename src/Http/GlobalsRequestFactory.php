@@ -38,36 +38,87 @@ use function trim;
  */
 final class GlobalsRequestFactory
 {
+    public const MAX_BODY_BYTES = 64 * 1024 * 1024;
+
     private const EOL = "\r\n";
 
     public static function create(): Request
     {
-        $request = Request::fromGlobals();
-
-        $contentType = $request->header('content-type');
+        $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
+        $path = (string) (parse_url($uri, PHP_URL_PATH) ?? '/');
+        $method = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
+        $headers = self::requestHeaders();
+        $remoteAddress = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : null;
+        $declaredLength = $_SERVER['CONTENT_LENGTH'] ?? null;
         if (
-            $request->method !== 'POST'
+            (is_string($declaredLength) || is_int($declaredLength))
+            && ctype_digit((string) $declaredLength)
+            && (float) $declaredLength > self::MAX_BODY_BYTES
+        ) {
+            return self::tooLargeRequest($method, $path, $headers, $remoteAddress);
+        }
+
+        $contentType = self::header($headers, 'content-type');
+        if (
+            strtoupper($method) !== 'POST'
             || $contentType === null
             || !str_starts_with(strtolower(trim($contentType)), 'multipart/form-data')
-            || $request->body !== ''
         ) {
-            return $request;
+            $body = file_get_contents('php://input', false, null, 0, self::MAX_BODY_BYTES + 1);
+            return self::fromParts($method, $uri, $headers, $body === false ? '' : $body, $remoteAddress);
         }
 
         $rebuilt = self::multipartBody($_POST, $_FILES);
         if ($rebuilt === null) {
-            return $request;
+            return self::fromParts($method, $uri, $headers, '', $remoteAddress);
+        }
+
+        return self::fromParts(
+            $method,
+            $uri,
+            array_merge($headers, ['Content-Type' => $rebuilt['contentType']]),
+            $rebuilt['body'],
+            $remoteAddress,
+        );
+    }
+
+    /** @param array<string, string> $headers */
+    private static function fromParts(string $method, string $uri, array $headers, string $body, ?string $remoteAddress): Request
+    {
+        $tooLarge = strlen($body) > self::MAX_BODY_BYTES;
+        $queryString = (string) (parse_url($uri, PHP_URL_QUERY) ?? '');
+        $query = [];
+        if ($queryString !== '') {
+            parse_str($queryString, $query);
         }
 
         return new Request(
-            $request->method,
-            $request->path,
-            $request->query,
-            array_merge(self::requestHeaders(), ['Content-Type' => $rebuilt['contentType']]),
-            $rebuilt['body'],
-            [],
-            $request->remoteAddress,
+            $method,
+            (string) (parse_url($uri, PHP_URL_PATH) ?? '/'),
+            $query,
+            $headers,
+            $tooLarge ? '' : $body,
+            $tooLarge ? ['request_body_too_large' => true] : [],
+            $remoteAddress,
         );
+    }
+
+    /** @param array<string, string> $headers */
+    private static function tooLargeRequest(string $method, string $path, array $headers, ?string $remoteAddress): Request
+    {
+        return new Request($method, $path, [], $headers, '', ['request_body_too_large' => true], $remoteAddress);
+    }
+
+    /** @param array<string, string> $headers */
+    private static function header(array $headers, string $name): ?string
+    {
+        foreach ($headers as $key => $value) {
+            if (strtolower($key) === $name) {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**
