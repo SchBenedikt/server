@@ -81,6 +81,7 @@ use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Setup\SetupService;
 use AlohaSocial\Server\Support\RuntimeLogger;
+use AlohaSocial\Server\Support\SecretKeyFile;
 use RuntimeException;
 use Throwable;
 
@@ -343,24 +344,7 @@ final class ApplicationFactory
         }
 
         $file = $this->config->secretKeyFile;
-        if (!is_file($file)) {
-            $directory = dirname($file);
-            if (!is_dir($directory) && !mkdir($directory, 0o770, true) && !is_dir($directory)) {
-                throw new RuntimeException('Cannot create the key directory: ' . $directory);
-            }
-
-            $key = OpenSslSecretBox::generateKey();
-            if (file_put_contents($file, $key . "\n") === false) {
-                throw new RuntimeException('Cannot write the secret key file: ' . $file);
-            }
-
-            @chmod($file, 0o600);
-        }
-
-        $value = file_get_contents($file);
-        if ($value === false || trim($value) === '') {
-            throw new RuntimeException('The secret key file is empty: ' . $file);
-        }
+        $value = SecretKeyFile::readOrCreate($file);
 
         try {
             return OpenSslSecretBox::fromBase64Key(trim($value));
