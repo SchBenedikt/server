@@ -17,7 +17,7 @@
         "ext-mbstring": "*",
         "ext-openssl": "*",
         "ext-pdo": "*",
-        "alohasocial/core": "dev-feat/inbound-activitypub-blocks"
+        "alohasocial/core": "dev-feat/atproto-stored-media"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.5"
