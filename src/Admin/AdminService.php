@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Admin;
 
 use AlohaSocial\Core\Application;
+use AlohaSocial\Core\Domain\Account\AccountDeletion;
 use AlohaSocial\Core\Domain\Moderation\ModerationAction;
 use AlohaSocial\Core\Domain\Moderation\ModerationActionKind;
 use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
@@ -393,6 +394,11 @@ final class AdminService
     public function enableUser(string $adminId, string $id): array
     {
         $this->requireUser($id);
+        $deletion = $this->app->accountData?->deletionStatus($id);
+        if ($deletion !== null && $deletion->state !== AccountDeletion::ACTIVE) {
+            throw AdminException::conflict('An account with an active or completed deletion cannot be reactivated.');
+        }
+
         $this->accounts->enable($id);
         $this->record($adminId, 'user.enable', 'account', $id, []);
 
