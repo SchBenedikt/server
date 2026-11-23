@@ -7,13 +7,15 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi, type AtprotoIdentityData } from '../lib/api';
-import { appState, showToast } from '../lib/state';
+import { appState, setSession, showToast } from '../lib/state';
 import type { AccountPreferences, BlueskyAccountStatus } from '../lib/types';
 
 const signedIn = computed(() => appState.session.user !== null);
 const loading = ref(false);
 const saving = ref(false);
 const exporting = ref(false);
+const deleting = ref(false);
+const confirmDeletion = ref(false);
 const error = ref('');
 const preferences = ref<AccountPreferences | null>(null);
 
@@ -224,6 +226,28 @@ async function exportAccount(): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'The export could not be created.', 'error');
 	} finally {
 		exporting.value = false;
+	}
+}
+
+async function deleteAccount(): Promise<void> {
+	if (deleting.value) {
+		return;
+	}
+	if (!confirmDeletion.value) {
+		confirmDeletion.value = true;
+		return;
+	}
+
+	deleting.value = true;
+	try {
+		await getApi().deleteAccount();
+		setSession(null);
+		window.location.assign('/login');
+	} catch (caught) {
+		confirmDeletion.value = false;
+		showToast(caught instanceof Error ? caught.message : 'The account could not be deleted.', 'error');
+	} finally {
+		deleting.value = false;
 	}
 }
 
@@ -499,6 +523,19 @@ watch(signedIn, (value) => {
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="exporting" @click="exportAccount">
 					<AppIcon :name="exporting ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': exporting }" />
 					{{ exporting ? 'Creating…' : 'Data export' }}
+				</button>
+				<p class="a-settings__hint">
+					Deleting your account permanently removes its local posts, follows, media and credentials.
+					Remote copies may remain on other servers.
+				</p>
+				<button
+					type="button"
+					class="a-btn a-btn--danger a-btn--small"
+					:disabled="deleting"
+					@click="deleteAccount"
+				>
+					<AppIcon :name="deleting ? 'refresh' : 'trash'" :size="15" :class="{ 'a-spin': deleting }" />
+					{{ deleting ? 'Deleting…' : confirmDeletion ? 'Confirm permanent deletion' : 'Delete my account' }}
 				</button>
 			</section>
 		</div>

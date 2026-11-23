@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Http;
 
 use AlohaSocial\Core\Domain\Atproto\AtprotoPublishFailedException;
+use AlohaSocial\Core\Service\Atproto\AtprotoFollowException;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
@@ -576,6 +577,61 @@ final class CommunityApiController
                 ]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/bluesky/follows') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your Bluesky follows.');
+                }
+
+                $subjectDid = trim((string) ($request->queryParam('did') ?? ''));
+                $service = $this->runtime->app->atprotoFollows;
+                if ($service === null) {
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky follows are not configured.');
+                }
+
+                $follow = $subjectDid === '' ? null : $service->find($userId, $subjectDid);
+                return Response::json([
+                    'follow' => $follow?->toArray(),
+                    'available' => $service->isAvailable($userId),
+                ]);
+            }
+
+            if (in_array($method, ['POST', 'DELETE'], true) && $path === '/api/v1/host/bluesky/follows') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to change Bluesky follows.');
+                }
+
+                $service = $this->runtime->app->atprotoFollows;
+                if ($service === null) {
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky follows are not configured.');
+                }
+
+                $body = $this->jsonBody($request);
+                $subjectDid = is_string($body['subject_did'] ?? null) ? trim($body['subject_did']) : '';
+                try {
+                    if ($method === 'POST') {
+                        return Response::json(['follow' => $service->follow($userId, $subjectDid)->toArray()], 201);
+                    }
+
+                    $service->unfollow($userId, $subjectDid);
+                    return Response::json(['unfollowed' => true]);
+                } catch (AtprotoFollowException $exception) {
+                    $status = match ($exception->reason) {
+                        AtprotoFollowException::SUBJECT_INVALID => 422,
+                        AtprotoFollowException::ACCOUNT_CHANGED => 409,
+                        default => 502,
+                    };
+                    return $this->error($status, $exception->reason, $exception->getMessage());
+                } catch (AtprotoPublishDisabledException) {
+                    return $this->error(503, 'atproto_publish_disabled', 'Bluesky publishing is disabled.');
+                } catch (AtprotoNotConfiguredException) {
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky is not configured.');
+                } catch (AtprotoAccountNotConnectedException) {
+                    return $this->error(409, 'atproto_account_not_connected', 'Connect your Bluesky account first.');
+                } catch (AtprotoPublishFailedException) {
+                    return $this->error(502, 'atproto_publish_failed', 'The Bluesky follow action could not be completed. Retry the action.');
+                }
+            }
+
             if ($method === 'POST' && $path === '/api/v1/host/bluesky/connect') {
                 if ($userId === null) {
                     return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
@@ -676,14 +732,56 @@ final class CommunityApiController
                 $stamp = $this->runtime->clock->now()->format('Ymd-His');
                 $filename = 'aloha-export-' . preg_replace('/[^a-z0-9_-]+/i', '-', $account->handle) . '-' . $stamp . '.json';
 
+                $export = $this->runtime->exports->build($account);
+                $export['core_archive'] = $this->runtime->app->accountData?->export($userId);
+                $export['linked_bluesky_account'] = $this->runtime->blueskyAccounts->status($userId);
+
                 return Response::text(
-                    Exports::toJson($this->runtime->exports->build($account)),
+                    Exports::toJson($export),
                     200,
                     [
                         'Content-Type' => 'application/json; charset=utf-8',
                         'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                     ],
                 );
+            }
+
+            if ($method === 'DELETE' && $path === '/api/v1/account/data') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to delete your account.');
+                }
+
+                $account = $this->runtime->accounts->find($userId);
+                if ($account === null) {
+                    return $this->error(404, 'not_found', 'This account no longer exists.');
+                }
+
+                if ($account->isAdmin() && $this->runtime->accounts->activeAdminCount() <= 1) {
+                    return $this->error(409, 'last_active_administrator', 'Promote another administrator before deleting this account.');
+                }
+
+                if ($this->runtime->app->accountData === null) {
+                    return $this->error(503, 'account_data_unavailable', 'Account deletion is unavailable on this instance.');
+                }
+
+                $report = $this->runtime->app->accountData->erase($userId);
+                // Core freezes writes before returning either an in-progress
+                // or completed report. Retire host credentials in both cases
+                // so a concurrent deletion cannot keep using host-only APIs.
+                // Preserve the disabled identity as the host-side tombstone.
+                $this->runtime->sessions->revokeAccount($userId);
+                $this->runtime->database->execute(
+                    'DELETE FROM atproto_session WHERE account_id = :account_id',
+                    ['account_id' => $userId],
+                );
+                $this->runtime->blueskyAccounts->disconnect($userId);
+                $this->runtime->accounts->disable($userId);
+
+                return Response::json([
+                    'deletion' => $report->toArray(),
+                    'account_disabled' => true,
+                    'remote_deletion' => 'ActivityPub and Bluesky data at remote servers may persist.',
+                ], $report->inProgress() ? 202 : 200, ['Cache-Control' => 'private, no-store']);
             }
 
             if ($method === 'POST' && $path === '/api/v1/host/for-you/feedback') {

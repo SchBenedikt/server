@@ -174,6 +174,15 @@ export interface RemoteFollowingEntry {
 	followed_at: string;
 }
 
+export interface AtprotoFollowEntry {
+	did: string;
+	uri: string;
+	cid: string;
+	rkey: string;
+	state: 'pending' | 'active';
+	followed_at: string;
+}
+
 export interface RemoteEngagementData {
 	network: 'activitypub' | 'bluesky';
 	type: 'likes' | 'reposts';

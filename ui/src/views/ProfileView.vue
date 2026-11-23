@@ -18,7 +18,7 @@ import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { accountName, absoluteTime, avatarStyle, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
 import { appState, openComposer, showToast } from '../lib/state';
-import type { Account, FeaturedTag, RemoteFollowingEntry, RemoteProfileData, TimelineItem } from '../lib/types';
+import type { Account, AtprotoFollowEntry, FeaturedTag, RemoteFollowingEntry, RemoteProfileData, TimelineItem } from '../lib/types';
 
 const PAGE_SIZE = 40;
 
@@ -56,6 +56,8 @@ const account = ref<Account | null>(null);
 const remoteKind = ref<'activitypub' | 'bluesky' | null>(null);
 const remoteFollowState = ref<'idle' | 'sending' | 'sent'>('idle');
 const remoteFollowingList = ref<RemoteFollowingEntry[]>([]);
+const atprotoFollow = ref<AtprotoFollowEntry | null>(null);
+const atprotoFollowAvailable = ref(false);
 const loading = ref(false);
 const error = ref('');
 const tab = ref<'posts' | 'media'>('posts');
@@ -255,12 +257,15 @@ const remoteRelationship = computed<RemoteFollowingEntry | null>(() => (
 const canRemoteFollow = computed(() => (
 	isRemoteProfile.value
 	&& signedIn.value
-	&& remoteRelationship.value === null
-	&& account.value?.can_follow === true
-	&& typeof account.value?.inbox === 'string'
-	&& account.value.inbox !== ''
+	&& (remoteKind.value === 'bluesky'
+		? atprotoFollowAvailable.value && account.value?.did !== undefined && account.value.did !== null && atprotoFollow.value === null
+		: remoteRelationship.value === null && account.value?.can_follow === true
+			&& typeof account.value?.inbox === 'string' && account.value.inbox !== '')
 ));
 const remoteFollowLabel = computed(() => {
+	if (remoteKind.value === 'bluesky' && atprotoFollow.value !== null) {
+		return atprotoFollow.value.state === 'pending' ? 'Retry follow' : 'Following';
+	}
 	const relationship = remoteRelationship.value;
 	if (relationship !== null) {
 		return relationship.state === 'accepted' ? 'Following' : 'Requested';
@@ -309,6 +314,8 @@ let generation = 0;
 watch(handle, () => {
 	remoteFollowState.value = 'idle';
 	remoteFollowingList.value = [];
+	atprotoFollow.value = null;
+	atprotoFollowAvailable.value = false;
 	void loadProfile();
 }, { immediate: true });
 
@@ -654,12 +661,29 @@ function connectionProfileHref(profile: Account): string {
 	return `#/u/${encodeURIComponent(profile.handle)}`;
 }
 
+function toggleRemoteFollow(): void {
+	const followed = remoteKind.value === 'bluesky'
+		? atprotoFollow.value?.state === 'active'
+		: remoteRelationship.value !== null;
+	if (followed) {
+		void unfollowRemote();
+	} else {
+		void followRemote();
+	}
+}
+
 async function loadRemoteFollowing(): Promise<void> {
 	if (!signedIn.value || !isRemoteProfile.value) {
 		return;
 	}
 
 	try {
+		if (remoteKind.value === 'bluesky' && account.value?.did) {
+			const status = await getApi().atprotoFollowStatus(account.value.did);
+			atprotoFollow.value = status.follow;
+			atprotoFollowAvailable.value = status.available;
+			return;
+		}
 		remoteFollowingList.value = await getApi().remoteFollowing();
 	} catch {
 		// The public profile stays readable even when the follow list is unavailable.
@@ -668,12 +692,19 @@ async function loadRemoteFollowing(): Promise<void> {
 
 async function followRemote(): Promise<void> {
 	const profile = account.value;
-	if (profile === null || !canRemoteFollow.value || remoteFollowState.value === 'sending') {
+	const canRetryAtproto = remoteKind.value === 'bluesky' && atprotoFollow.value?.state === 'pending';
+	if (profile === null || (!canRemoteFollow.value && !canRetryAtproto) || remoteFollowState.value === 'sending') {
 		return;
 	}
 
 	remoteFollowState.value = 'sending';
 	try {
+		if (remoteKind.value === 'bluesky' && profile.did) {
+			atprotoFollow.value = await getApi().followAtproto(profile.did);
+			remoteFollowState.value = 'sent';
+			showToast(`You now follow ${profile.handle} on Bluesky.`, 'success');
+			return;
+		}
 		const entry = await getApi().followRemote(profile.id, profile.inbox as string);
 		remoteFollowingList.value = [
 			...remoteFollowingList.value.filter((item) => item.actor !== entry.actor),
@@ -688,6 +719,19 @@ async function followRemote(): Promise<void> {
 }
 
 async function unfollowRemote(): Promise<void> {
+	if (remoteKind.value === 'bluesky' && atprotoFollow.value !== null && account.value?.did) {
+		remoteFollowState.value = 'sending';
+		try {
+			await getApi().unfollowAtproto(account.value.did);
+			atprotoFollow.value = null;
+			remoteFollowState.value = 'idle';
+			showToast(`You no longer follow ${account.value.handle} on Bluesky.`, 'success');
+		} catch (caught) {
+			remoteFollowState.value = 'idle';
+			showToast(caught instanceof Error ? caught.message : 'The unfollow failed.', 'error');
+		}
+		return;
+	}
 	const relationship = remoteRelationship.value;
 	if (relationship === null || remoteFollowState.value === 'sending') {
 		return;
@@ -878,15 +922,15 @@ onUnmounted(() => {
 
 							<template v-else-if="isRemoteProfile">
 								<button
-									v-if="canRemoteFollow || remoteRelationship !== null"
+									v-if="canRemoteFollow || remoteRelationship !== null || atprotoFollow !== null"
 									type="button"
 									class="a-btn a-btn--primary a-btn--small"
-									:class="{ 'a-btn--ghost': remoteRelationship?.state === 'accepted' }"
+									:class="{ 'a-btn--ghost': remoteRelationship?.state === 'accepted' || atprotoFollow?.state === 'active' }"
 									:disabled="remoteFollowState === 'sending'"
-									@click="remoteRelationship !== null ? unfollowRemote() : followRemote()"
+									@click="toggleRemoteFollow"
 								>
 									<AppIcon
-										:name="remoteRelationship?.state === 'accepted' ? 'check' : remoteRelationship !== null ? 'clock' : 'plus'"
+										:name="atprotoFollow?.state === 'active' || remoteRelationship?.state === 'accepted' ? 'check' : atprotoFollow?.state === 'pending' || remoteRelationship !== null ? 'clock' : 'plus'"
 										:size="15"
 									/>
 									{{ remoteFollowLabel }}
