@@ -25,6 +25,7 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('/ui/app.js', $response->body);
         self::assertStringContainsString('/ui/app.css', $response->body);
         self::assertStringContainsString('data-signed-in="0"', $response->body);
+        self::assertStringContainsString('data-media="1"', $response->body);
         self::assertStringContainsString('class="app-shell"', $response->body);
         self::assertStringContainsString("script-src 'self'", (string) $response->header('Content-Security-Policy'));
     }
@@ -40,6 +41,7 @@ final class UiMountTest extends TestCase
         self::assertSame(200, $response->status);
         self::assertStringContainsString('data-user="alice"', $response->body);
         self::assertStringContainsString('data-signed-in="1"', $response->body);
+        self::assertStringContainsString('data-media="1"', $response->body);
         self::assertStringContainsString('data-csrf="' . $session['csrf'] . '"', $response->body);
     }
 

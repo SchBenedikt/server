@@ -12,6 +12,7 @@ const csrf = mount?.dataset.csrf ?? '';
 const instance = mount?.dataset.instance ?? 'Aloha Social';
 const isAdmin = mount?.dataset.isAdmin === '1';
 const atproto = mount?.dataset.atproto === '1';
+const media = mount?.dataset.media === '1';
 
 function apiUrl(path: string, query?: Record<string, string>): string {
 	const url = new URL(path, window.location.origin);
@@ -95,7 +96,8 @@ export const bridge: AlohaHostBridge = {
 		window.location.assign(path);
 	},
 
-	capabilities() {        return { media: true, atproto };
+	capabilities() {
+		return { media: signedIn && media, atproto: signedIn && atproto };
 	},
 
 	async uploadMedia(file: File, altText: string): Promise<Attachment> {
