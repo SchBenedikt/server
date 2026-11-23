@@ -66,6 +66,13 @@ final class FrontController
      */
     public function handle(Request $request, array $cookies = [], ?string $userAgent = null, ?string $ip = null): Response
     {
+        if (($request->attributes['request_body_too_large'] ?? false) === true) {
+            return $this->withDynamicCachePolicy(Response::json(
+                ['error' => ['code' => 'payload_too_large', 'message' => 'The request body exceeds the 64 MiB limit.']],
+                413,
+            ));
+        }
+
         return $this->withDynamicCachePolicy(
             $this->dispatch($request, $cookies, $userAgent, $ip),
         );
