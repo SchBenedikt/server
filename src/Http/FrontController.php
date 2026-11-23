@@ -1182,6 +1182,7 @@ final class FrontController
             'handle' => $account?->handle ?? '',
             'displayName' => $account?->name() ?? '',
             'isAdmin' => $account?->isAdmin() === true,
+            'media' => $this->runtime->app->media !== null,
             'atproto' => $this->runtime->config->atprotoPublish || $this->runtime->config->atprotoPds,
             'appShell' => true,
         ], 'App', 200, null, [
