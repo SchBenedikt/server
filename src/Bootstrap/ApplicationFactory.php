@@ -158,7 +158,7 @@ final class ApplicationFactory
         $atprotoAccounts = $nativePds === null
             ? $blueskyAccounts
             : new CompositeAtprotoAccounts(
-                new NativePdsAccountResolver($this->config, $pdsRepository),
+                new NativePdsAccountResolver($this->config, $pdsRepository, $database),
                 $blueskyAccounts,
             );
         $externalAtprotoPublisher = new XrpcAtprotoPublisher($httpClient);

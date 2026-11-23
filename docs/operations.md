@@ -93,6 +93,12 @@ but the UI is the normal path because it writes an audit entry. Every mutation
 is recorded in `admin_audit` with actor, action, target, details and time; the
 **Audit log** section reads that table.
 
+Disabling a member revokes browser and native PDS sessions, cancels that
+account's queued or reserved background jobs, and prevents linked Bluesky or
+native PDS identities from resolving for publication. Re-enabling restores
+the stored linked account, but does not recreate deliveries cancelled during
+the disabled period.
+
 ### Communication and runtime errors
 
 The **Errors** tab lists warnings and failures recorded by the worker and the
