@@ -352,6 +352,24 @@ final class AtprotoReconciler
             }
         }
 
+        // AT Protocol follows are stored separately from ActivityPub follows.
+        // Include active graph edges so Jetstream records from a Bluesky
+        // follow can be projected into the shared remote-post cache.
+        try {
+            $rows = $this->db->fetchAll(
+                "SELECT DISTINCT subject_did FROM social_atproto_follow WHERE state = 'active'",
+            );
+        } catch (Throwable) {
+            return $result;
+        }
+
+        foreach ($rows as $row) {
+            $actor = is_string($row['subject_did'] ?? null) ? trim($row['subject_did']) : '';
+            if ($actor !== '') {
+                $result[$actor] = true;
+            }
+        }
+
         return $result;
     }
 
