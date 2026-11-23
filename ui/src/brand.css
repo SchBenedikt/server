@@ -94,14 +94,14 @@
 	--a-danger: #a53232;
 	--a-danger-soft: #f8e3df;
 	--a-success: #1d6b55;
-	--a-shadow: 0 24px 60px -34px rgb(15 76 92 / 0.35);
-	--a-shadow-soft: 0 1px 2px rgb(15 76 92 / 0.06), 0 18px 40px -28px rgb(15 76 92 / 0.25);
+	--a-shadow: none;
+	--a-shadow-soft: none;
 	--a-glow-one: rgb(232 96 76 / 0.08);
 	--a-glow-two: rgb(15 76 92 / 0.06);
 	--a-cover-overlay: rgb(15 76 92 / 0.2);
 	--a-dialog-backdrop: rgb(15 32 38 / 0.55);
 	--a-font-sans: 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--a-font-brand: 'Fredoka', 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+	--a-font-brand: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
 	--a-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -140,8 +140,8 @@
 	--a-danger: #ff9b8c;
 	--a-danger-soft: rgb(255 155 140 / 0.14);
 	--a-success: #8ad5bd;
-	--a-shadow: 0 28px 64px -30px rgb(0 0 0 / 0.8);
-	--a-shadow-soft: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 24px 60px -34px rgb(0 0 0 / 0.85);
+	--a-shadow: none;
+	--a-shadow-soft: none;
 	--a-glow-one: rgb(239 122 102 / 0.08);
 	--a-glow-two: rgb(158 212 230 / 0.06);
 	--a-cover-overlay: rgb(13 32 41 / 0.3);
@@ -378,7 +378,7 @@ body.app-shell {
 
 .a-btn {
 	border-color: var(--a-border);
-	border-radius: 999px;
+	border-radius: 12px;
 	background: var(--a-surface);
 	font-weight: 600;
 	letter-spacing: -0.005em;
@@ -469,7 +469,7 @@ body.app-shell {
 
 .a-search:focus-within {
 	border-color: var(--a-primary);
-	box-shadow: 0 0 0 3px var(--a-primary-soft);
+	box-shadow: none;
 }
 
 .a-search input {
@@ -514,6 +514,7 @@ body.app-shell {
 }
 
 .a-welcome__glow {
+	display: none;
 	top: -58px;
 	right: -34px;
 	width: 270px;
@@ -650,7 +651,7 @@ body.app-shell {
 .a-tabs__item--active {
 	background: var(--a-surface);
 	color: var(--a-text);
-	box-shadow: 0 1px 2px rgb(15 76 92 / 0.12);
+	box-shadow: none;
 }
 
 .a-tabs__item--active:hover {
@@ -1155,7 +1156,7 @@ body.app-shell {
 	border-color: var(--a-border-strong);
 	border-radius: 20px;
 	background: var(--a-surface);
-	box-shadow: 0 34px 90px rgb(15 32 38 / 0.32);
+	box-shadow: none;
 }
 
 .a-modal__head h2 {
@@ -1203,7 +1204,7 @@ body.app-shell {
 	border-radius: 0;
 	background: none;
 	box-shadow: none;
-	animation: a-breathe 2.4s ease-in-out infinite;
+	animation: none;
 }
 
 .a-boot__text,
@@ -1296,7 +1297,7 @@ body.app-shell {
 
 	.a-mobile-fab {
 		background: var(--a-primary);
-		box-shadow: 0 10px 24px rgb(15 76 92 / 0.22);
+		box-shadow: none;
 		color: var(--a-primary-ink);
 	}
 
@@ -1351,7 +1352,7 @@ body.app-shell {
 	border: 1px solid var(--a-border-strong);
 	border-radius: 18px;
 	background: var(--a-surface-raised);
-	box-shadow: 0 28px 70px rgb(0 0 0 / 0.28);
+	box-shadow: none;
 }
 
 .a-profile-edit__head {
@@ -1457,30 +1458,22 @@ body.app-shell {
 
 .a-post {
 	--a-post-gutter: 56px;
-	border-radius: 20px;
+	border-radius: 14px;
 	border-color: color-mix(in srgb, var(--a-border) 78%, var(--a-primary) 22%);
-	background:
-		linear-gradient(145deg, color-mix(in srgb, var(--a-primary) 4%, transparent), transparent 46%),
-		var(--a-surface);
-	box-shadow:
-		0 1px 0 rgb(255 255 255 / 0.025),
-		0 8px 24px rgb(0 0 0 / 0.05);
-	transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+	background: var(--a-surface);
+	box-shadow: none;
+	transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
 .a-post:hover {
 	border-color: color-mix(in srgb, var(--a-primary) 42%, var(--a-border));
-	background:
-		linear-gradient(145deg, color-mix(in srgb, var(--a-primary) 6%, transparent), transparent 48%),
-		var(--a-surface);
+	background: var(--a-surface-hover);
 }
 
 @media (hover: hover) and (pointer: fine) {
 	.a-post:hover {
-		transform: translateY(-1px);
-		box-shadow:
-			0 1px 0 rgb(255 255 255 / 0.035),
-			0 14px 34px rgb(0 0 0 / 0.09);
+		transform: none;
+		box-shadow: none;
 	}
 
 	.a-post--detail:hover {
@@ -1490,9 +1483,7 @@ body.app-shell {
 
 .a-post--boost {
 	border-left: 3px solid var(--a-mint);
-	background:
-		linear-gradient(90deg, var(--a-mint-soft), transparent 38%),
-		var(--a-surface);
+	background: var(--a-surface);
 }
 
 .a-post--detail {
@@ -1501,7 +1492,7 @@ body.app-shell {
 	background:
 		linear-gradient(150deg, color-mix(in srgb, var(--a-primary) 5%, transparent), transparent 52%),
 		var(--a-surface);
-	box-shadow: var(--a-shadow-soft);
+	box-shadow: none;
 }
 
 .a-post__boosted-by {
@@ -1518,7 +1509,7 @@ body.app-shell {
 }
 
 .a-post__avatar-link {
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--a-border-strong) 72%, transparent);
+	box-shadow: none;
 }
 
 .a-post__identity {
