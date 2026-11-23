@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "49543ac89258445f5787f25255c45656150eecbd"
+                "reference": "5ffae0dee89e41d78cf31c862235de6e39db7a4b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/49543ac89258445f5787f25255c45656150eecbd",
-                "reference": "49543ac89258445f5787f25255c45656150eecbd",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/5ffae0dee89e41d78cf31c862235de6e39db7a4b",
+                "reference": "5ffae0dee89e41d78cf31c862235de6e39db7a4b",
                 "shasum": ""
             },
             "require": {
@@ -111,7 +111,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-23T21:17:29+00:00"
+            "time": "2026-11-23T21:59:08+00:00"
         },
         {
             "name": "aws/aws-crt-php",
