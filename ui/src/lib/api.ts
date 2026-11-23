@@ -93,6 +93,17 @@ export interface AtprotoIdentityData {
 	external: BlueskyAccountStatus;
 }
 
+export interface AccountMoveStatus {
+	event_id: string;
+	target_actor_id: string;
+	direction: 'inbound' | 'outbound';
+	state: 'pending' | 'completed';
+	processed_outgoing: number;
+	processed_followers: number;
+	created_at: string;
+	updated_at: string;
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null): Promise<TimelineItem[]>;
@@ -162,6 +173,8 @@ export interface Api {
 	withdrawKokuaHelp(id: string): Promise<KokuaEntry>;
 	postRevisions(id: string): Promise<PostRevisionData>;
 	deleteAccount(): Promise<{ state: string }>;
+	accountMove(): Promise<AccountMoveStatus | null>;
+	startAccountMove(targetActorId: string): Promise<AccountMoveStatus>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
 		context?: string;
@@ -2585,6 +2598,24 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				'/api/v1/account/data',
 			);
 			return { state: typeof data?.deletion?.state === 'string' ? data.deletion.state : 'unknown' };
+		},
+
+		async accountMove(): Promise<AccountMoveStatus | null> {
+			const data = await request<{ move?: AccountMoveStatus | null }>('GET', '/api/v1/accounts/me/move');
+			return data?.move ?? null;
+		},
+
+		async startAccountMove(targetActorId: string): Promise<AccountMoveStatus> {
+			const data = await request<{ move?: AccountMoveStatus }>(
+				'POST',
+				'/api/v1/accounts/me/move',
+				undefined,
+				{ target_actor_id: targetActorId },
+			);
+			if (data?.move === undefined) {
+				throw new ApiError(502, 'invalid_response', 'The account move could not be confirmed.');
+			}
+			return data.move;
 		},
 
 		async atprotoIdentity(): Promise<AtprotoIdentityData> {
