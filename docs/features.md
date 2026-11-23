@@ -32,7 +32,9 @@ the core route contract:
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and the viewer's own like/boost state. |
+| `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and viewer state for local posts and cached remote posts. |
+| `POST` / `DELETE /api/v1/posts/{id}/boost` | Add or remove a local boost, or queue an ActivityPub Announce/Undo for a cached remote post from an accepted follow. |
+| `POST` / `DELETE /api/v1/posts/{id}/like` | Add or remove a local favourite, or queue an ActivityPub Like/Undo for a cached remote post from an accepted follow. |
 | `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
 | `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
 | `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. |
@@ -157,8 +159,10 @@ following count loads that list page by page: the Mastodon API when available,
 otherwise the actor's ActivityPub collection, or `app.bsky.graph.getFollowers`
 and `getFollows` for Bluesky. Remote profile and post counts are shown exactly
 as the origin reports them. Remote profiles, follows and replies remain
-read-only; supported Mastodon-compatible likes on cached remote posts use the
-local account's ActivityPub identity.
+read-only; cached posts from followed ActivityPub accounts support local likes
+and boosts using the local account's ActivityPub identity. These operations
+queue signed Like/Undo(Like) and Announce/Undo(Announce) deliveries; remote
+engagement totals remain as reported by the origin.
 
 Every remote document is checked by `FederationTargetGuard` (SSRF, redirects,
 DNS) and fetched with a byte limit; remote HTML is converted to plain text
