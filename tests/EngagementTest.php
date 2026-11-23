@@ -276,6 +276,56 @@ final class EngagementTest extends TestCase
         self::assertNull($secondBody['next']);
     }
 
+    public function testRankedFeedsExcludeLocalAndRemoteReplies(): void
+    {
+        $localParent = $this->post('bob', 'Lokaler Hauptbeitrag');
+        $localReply = $this->server->runtime->app->posts->create(
+            new CreatePost('bob', 'Lokale Antwort', Visibility::Public, inReplyToId: $localParent),
+        )->id;
+
+        $remoteActor = 'https://remote.test/users/carol';
+        $remoteParent = 'https://remote.test/activities/root';
+        $remoteReply = 'https://remote.test/activities/reply';
+        foreach ([[$remoteParent, null], [$remoteReply, $remoteParent]] as [$activityId, $replyTo]) {
+            $this->server->runtime->database->execute(
+                'INSERT INTO social_remote_post'
+                . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, in_reply_to_id)'
+                . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content, :published_at, :in_reply_to_id)',
+                [
+                    'activity_id' => $activityId,
+                    'object_id' => str_replace('/activities/', '/objects/', $activityId),
+                    'object_author_id' => $remoteActor,
+                    'actor_id' => $remoteActor,
+                    'kind' => 'post',
+                    'content' => $replyTo === null ? 'Remote root' : 'Remote reply',
+                    'published_at' => '2026-11-22T10:00:00Z',
+                    'in_reply_to_id' => $replyTo,
+                ],
+            );
+        }
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
+            . " VALUES ('f-ranked-remote', 'alice', :actor_id, 'https://remote.test/inbox', '2026-11-22T10:00:00Z', 'accepted')",
+            ['actor_id' => $remoteActor],
+        );
+
+        $forYou = $this->decoded($this->server->send(
+            'GET',
+            '/api/v1/host/for-you',
+            ['cookies' => $this->aliceCookies],
+        ));
+        self::assertContains($localParent, $forYou['posts']);
+        self::assertContains($remoteParent, $forYou['posts']);
+        self::assertNotContains($localReply, $forYou['posts']);
+        self::assertNotContains($remoteReply, $forYou['posts']);
+
+        $trending = $this->decoded($this->server->send('GET', '/api/v1/host/trending'));
+        self::assertContains($localParent, $trending['posts']);
+        self::assertContains($remoteParent, $trending['posts']);
+        self::assertNotContains($localReply, $trending['posts']);
+        self::assertNotContains($remoteReply, $trending['posts']);
+    }
+
     public function testForYouIncludesFollowedFediversePostsAndHydratesThem(): void
     {
         $remoteId = 'https://remote.test/activities/111';
