@@ -52,6 +52,7 @@ final class AccountLifecycleTest extends TestCase
             '/api/v1/host/preferences',
             ['cookies' => $login['cookies']],
         )->status);
+        self::assertSame(404, $server->send('GET', '/@alice')->status);
         self::assertSame('erased', $server->runtime->app->accountData?->deletionStatus('alice')->state);
     }
 
