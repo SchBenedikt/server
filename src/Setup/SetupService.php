@@ -79,6 +79,7 @@ final class SetupService
         return $this->token->verify($candidate);
     }
 
+
     /**
      * @param array<string, mixed> $input
      *
@@ -87,6 +88,16 @@ final class SetupService
      * @throws SetupException
      */
     public function install(array $input): array
+    {
+        return $this->token->synchronized(fn (): array => $this->installWhileLocked($input));
+    }
+
+    /**
+     * @param array<string, mixed> $input
+     * @return array{url: string, handle: string}
+     * @throws SetupException
+     */
+    private function installWhileLocked(array $input): array
     {
         $token = $this->text($input, 'token');
         if (!$this->token->verify($token)) {
