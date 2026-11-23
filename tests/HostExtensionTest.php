@@ -101,6 +101,39 @@ final class HostExtensionTest extends TestCase
         ]);
         self::assertSame(403, $withoutCsrf->status);
         self::assertStringContainsString('csrf_token_invalid', $withoutCsrf->body);
+
+        self::assertSame(401, $this->server->send('POST', '/api/v1/posts/' . $this->postId . '/boost')->status);
+        $boostWithoutCsrf = $this->server->send('POST', '/api/v1/posts/' . $this->postId . '/boost', [
+            'cookies' => $this->bobCookies,
+        ]);
+        self::assertSame(403, $boostWithoutCsrf->status);
+    }
+
+    public function testBoostCanBeToggledAndProjectsViewerState(): void
+    {
+        $boost = '/api/v1/posts/' . $this->postId . '/boost';
+        $response = $this->server->json('POST', $boost, [], $this->bobCookies, $this->bobCsrf);
+        self::assertSame(200, $response->status, $response->body);
+
+        $state = $this->server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $this->bobCookies,
+            'query' => ['ids' => $this->postId],
+        ]);
+        /** @var array{interactions: array<string, array{reblogs_count: int, reblogged: bool}>} $stateBody */
+        $stateBody = json_decode($state->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($stateBody['interactions'][$this->postId]['reblogged']);
+        self::assertSame(1, $stateBody['interactions'][$this->postId]['reblogs_count']);
+
+        $removed = $this->server->json('DELETE', $boost, [], $this->bobCookies, $this->bobCsrf);
+        self::assertSame(200, $removed->status, $removed->body);
+        $after = $this->server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $this->bobCookies,
+            'query' => ['ids' => $this->postId],
+        ]);
+        /** @var array{interactions: array<string, array{reblogs_count: int, reblogged: bool}>} $afterBody */
+        $afterBody = json_decode($after->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertFalse($afterBody['interactions'][$this->postId]['reblogged']);
+        self::assertSame(0, $afterBody['interactions'][$this->postId]['reblogs_count']);
     }
 
     public function testCachedRemotePostLikeUsesCoreFollowAndBlockPolicy(): void
@@ -150,6 +183,32 @@ final class HostExtensionTest extends TestCase
         /** @var array{interaction: array{favourited: bool}} $unlikedBody */
         $unlikedBody = json_decode($unliked->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertFalse($unlikedBody['interaction']['favourited']);
+
+        $boostPath = '/api/v1/posts/' . rawurlencode($objectId) . '/boost';
+        $boosted = $server->json('POST', $boostPath, [], $alice['cookies'], $alice['csrf']);
+        self::assertSame(200, $boosted->status, $boosted->body);
+        /** @var array{interaction: array{reblogged: bool, reblogs_count: int}} $boostedBody */
+        $boostedBody = json_decode($boosted->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($boostedBody['interaction']['reblogged']);
+        self::assertSame(0, $boostedBody['interaction']['reblogs_count'], 'Remote boost totals are not represented as trusted counts.');
+        $queuedAfterBoost = $server->runtime->app->queue->pendingCount();
+        $repeatedBoost = $server->json('POST', $boostPath, [], $alice['cookies'], $alice['csrf']);
+        self::assertSame(200, $repeatedBoost->status, $repeatedBoost->body);
+        self::assertSame($queuedAfterBoost, $server->runtime->app->queue->pendingCount(), 'Repeating a remote boost does not enqueue another Announce.');
+
+        $boostState = $server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $alice['cookies'],
+            'query' => ['ids' => $objectId],
+        ]);
+        /** @var array{interactions: array<string, array{reblogged: bool}>} $boostStateBody */
+        $boostStateBody = json_decode($boostState->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($boostStateBody['interactions'][$objectId]['reblogged']);
+
+        $unboosted = $server->json('DELETE', $boostPath, [], $alice['cookies'], $alice['csrf']);
+        self::assertSame(200, $unboosted->status, $unboosted->body);
+        /** @var array{interaction: array{reblogged: bool}} $unboostedBody */
+        $unboostedBody = json_decode($unboosted->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertFalse($unboostedBody['interaction']['reblogged']);
     }
 
     public function testCachedRemotePostLikeRequiresAcceptedFollow(): void
@@ -174,6 +233,16 @@ final class HostExtensionTest extends TestCase
         );
         self::assertSame(404, $response->status);
         self::assertSame('not_found', json_decode($response->body, true, 512, JSON_THROW_ON_ERROR)['error']['code']);
+
+        $boost = $server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($objectId) . '/boost',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(404, $boost->status);
+        self::assertSame('not_found', json_decode($boost->body, true, 512, JSON_THROW_ON_ERROR)['error']['code']);
 
         $state = $server->send('GET', '/api/v1/host/interactions', [
             'cookies' => $alice['cookies'],
