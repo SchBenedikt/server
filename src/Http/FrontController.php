@@ -18,6 +18,7 @@ use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Service\ReactionException;
+use AlohaSocial\Core\Service\ValidationException;
 use AlohaSocial\Server\Accounts\RegistrationException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Auth\PasswordResetException;
@@ -613,6 +614,57 @@ final class FrontController
             ]);
         }
 
+        if (preg_match('#^/api/v1/posts/([^/]+)/boost$#', $request->path, $matches) === 1
+            && in_array($request->method, ['POST', 'DELETE'], true)
+        ) {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $postId = rawurldecode($matches[1]);
+            if ($this->isRemoteObjectTarget($postId)) {
+                $reactions = $this->runtime->app->reactions;
+                if ($reactions === null) {
+                    return $this->apiError(503, 'remote_reactions_not_configured', 'Remote post interactions are not available.');
+                }
+
+                try {
+                    $interaction = $request->method === 'POST'
+                        ? $reactions->boostRemote($userId, $postId)
+                        : $reactions->unboostRemote($userId, $postId);
+
+                    return Response::json(['interaction' => $this->remoteInteraction($interaction)]);
+                } catch (ReactionException $exception) {
+                    [$status, $code, $message] = match ($exception->reason) {
+                        'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
+                        'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                        default => [422, $exception->reason, $exception->getMessage()],
+                    };
+
+                    return $this->apiError($status, $code, $message);
+                }
+            }
+
+            $boosts = $this->runtime->app->boosts;
+            if ($boosts === null) {
+                return $this->apiError(503, 'boosts_not_configured', 'Post boosts are not available.');
+            }
+
+            try {
+                if ($request->method === 'POST') {
+                    $boosts->boost($userId, $postId);
+                } else {
+                    $boosts->unboost($userId, $postId);
+                }
+            } catch (PostNotFoundException) {
+                return $this->apiError(404, 'post_not_found', 'This post is not available.');
+            } catch (ValidationException $exception) {
+                return $this->apiError(422, 'validation_failed', $exception->getMessage());
+            }
+
+            return Response::json(['ok' => true]);
+        }
+
         if (preg_match('#^/api/v1/posts/([^/]+)/like$#', $request->path, $matches) === 1
             && in_array($request->method, ['POST', 'DELETE'], true)
         ) {
@@ -754,7 +806,7 @@ final class FrontController
             'favourites_count' => 0,
             'favourited' => ($viewer['favourited'] ?? false) === true,
             'reblogs_count' => 0,
-            'reblogged' => false,
+            'reblogged' => ($viewer['reblogged'] ?? false) === true,
             'replies_count' => 0,
             'emoji_reactions' => [],
         ];

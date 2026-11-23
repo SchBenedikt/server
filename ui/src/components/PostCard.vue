@@ -16,7 +16,7 @@ import { accountName, handleLabel, isLocalPostId, isRemoteId, postRouteId, relat
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
-import { ensureInteractions, interactionFor, patchInteraction, rememberInteraction } from '../lib/interactions';
+import { ensureInteractions, interactionFor, rememberInteraction } from '../lib/interactions';
 import { cachedQuote, loadQuote } from '../lib/quotes';
 import { appState, openComposer, openEditor, openQuote, showToast } from '../lib/state';
 import type { Attachment, Poll, TimelineItem } from '../lib/types';
@@ -265,7 +265,7 @@ const likeCount = computed(() => isRemotePost.value
 	? (props.post.likes_count ?? 0)
 	: (interaction.value?.favourites_count ?? props.post.likes_count ?? 0));
 const boostCount = computed(() => isRemotePost.value
-	? (props.post.boosts_count ?? 0)
+	? Math.max(props.post.boosts_count ?? 0, interaction.value?.reblogged === true ? 1 : 0)
 	: (interaction.value?.reblogs_count ?? props.post.boosts_count ?? 0));
 const replyCount = computed(() => isRemotePost.value
 	? (props.post.replies_count ?? 0)
@@ -363,6 +363,9 @@ watch(localId, () => {
 }, { immediate: true });
 
 watch(interactionId, (id) => {
+	if (id !== null && (id.startsWith('http://') || id.startsWith('https://'))) {
+		boosted.value = false;
+	}
 	ensureInteractions([id]);
 }, { immediate: true });
 
@@ -442,7 +445,8 @@ function reply(): void {
 }
 
 async function toggleBoost(): Promise<void> {
-	if (localId.value === null || boosting.value) {
+	const id = interactionId.value;
+	if (id === null || boosting.value) {
 		return;
 	}
 	if (appState.session.user === null) {
@@ -451,30 +455,41 @@ async function toggleBoost(): Promise<void> {
 	}
 
 	boosting.value = true;
+	const before = interaction.value ?? {
+		favourites_count: 0,
+		favourited: false,
+		reblogs_count: 0,
+		reblogged: false,
+		replies_count: 0,
+	};
 	try {
-		if (boosted.value) {
-			await getApi().unboostPost(localId.value);
-			boosted.value = false;
-			patchInteraction(localId.value, {
-				reblogged: false,
-				reblogs_count: Math.max(0, boostCount.value - 1),
-			});
-			showToast('Boost removed.', 'success');
+		const nextBoosted = !boosted.value;
+		const next = {
+			...before,
+			reblogged: nextBoosted,
+			reblogs_count: Math.max(0, before.reblogs_count + (nextBoosted ? 1 : -1)),
+		};
+		if (nextBoosted) {
+			await getApi().boostPost(id);
 		} else {
-			await getApi().boostPost(localId.value);
-			boosted.value = true;
-			patchInteraction(localId.value, {
-				reblogged: true,
-				reblogs_count: boostCount.value + 1,
-			});
-			showToast('Post boosted.', 'success');
+			await getApi().unboostPost(id);
 		}
+		boosted.value = nextBoosted;
+		rememberInteraction(id, next);
+		showToast(
+			localId.value === null
+				? (nextBoosted ? 'Remote boost queued.' : 'Remote boost removal queued.')
+				: (nextBoosted ? 'Post boosted.' : 'Boost removed.'),
+			'success',
+		);
 		try {
 			sessionStorage.setItem(storageKey(), boosted.value ? '1' : '0');
 		} catch {
 			// The in-memory state is enough when storage is unavailable.
 		}
 	} catch (error) {
+		boosted.value = before.reblogged;
+		rememberInteraction(id, before);
 		showToast(error instanceof Error ? error.message : 'The post could not be boosted.', 'error');
 	} finally {
 		boosting.value = false;
@@ -1050,7 +1065,7 @@ onUnmounted(() => {
 			</span>
 
 			<button
-				v-if="localId"
+				v-if="interactionId"
 				type="button"
 				class="a-post__action"
 				:class="{ 'a-post__action--active': boosted }"
