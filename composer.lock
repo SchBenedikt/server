@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "57bfb80a512e45d6bd1a706962f3ceb1",
+    "content-hash": "caa8f9aec755ff5fe785024cc4c33634",
     "packages": [
         {
             "name": "alohasocial/core",
-            "version": "dev-main",
+            "version": "dev-feat/inbound-activitypub-blocks",
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "c9a5f91dd88ce9b27766725f2492aea18ccaaa22"
+                "reference": "857913a8b7718f4100f5ecaf9084925bd08b2370"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/c9a5f91dd88ce9b27766725f2492aea18ccaaa22",
-                "reference": "c9a5f91dd88ce9b27766725f2492aea18ccaaa22",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/857913a8b7718f4100f5ecaf9084925bd08b2370",
+                "reference": "857913a8b7718f4100f5ecaf9084925bd08b2370",
                 "shasum": ""
             },
             "require": {
@@ -33,7 +33,6 @@
                 "ext-pdo_sqlite": "*",
                 "phpunit/phpunit": "^11.5"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -111,7 +110,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-18T09:46:32+00:00"
+            "time": "2026-11-23T15:41:54+00:00"
         },
         {
             "name": "psr/log",
