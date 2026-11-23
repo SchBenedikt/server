@@ -298,6 +298,7 @@ export interface AdminInstance {
 	};
 	versions: {
 		application: string;
+		core_reference?: string | null;
 		php: string;
 		database: string;
 		environment: string;
@@ -313,6 +314,7 @@ export interface AdminInstance {
 export interface AdminSettingsData {
 	core: {
 		installed: string;
+		reference?: string | null;
 		channel: string;
 		version: string;
 		env_file: string;

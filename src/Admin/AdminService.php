@@ -865,6 +865,7 @@ final class AdminService
     public function instance(): array
     {
         $worker = $this->workerStatus();
+        $core = CoreVersion::details();
         $required = [
             'database' => $this->dbReachable(),
             'blob_directory' => is_dir($this->config->blobDirectory) && is_writable($this->config->blobDirectory),
@@ -883,6 +884,7 @@ final class AdminService
             'versions' => [
                 'application' => CoreVersion::current(),
                 'core' => CoreVersion::current(),
+                'core_reference' => $core['reference'],
                 'php' => PHP_VERSION,
                 'database' => $this->databaseDriver(),
                 'environment' => $this->config->debug ? 'development' : 'production',
@@ -928,6 +930,7 @@ final class AdminService
         return [
             'core' => [
                 'installed' => CoreVersion::current(),
+                'reference' => CoreVersion::details()['reference'],
                 'channel' => $this->config->coreChannel,
                 'version' => $this->config->coreVersion,
                 'env_file' => $this->config->envFile,
