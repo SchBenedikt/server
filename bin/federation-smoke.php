@@ -223,7 +223,10 @@ function instanceEnvironment(string $directory, int $port, string $host): array
         'ALOHASOCIAL_MAIL_TRANSPORT' => 'log',
         'ALOHASOCIAL_MAIL_FROM' => 'no-reply@example.test',
         'ALOHASOCIAL_MAIL_LOG_DIR' => $directory . '/mail',
-        'ALOHASOCIAL_DEBUG' => 'false',
+        // The smoke uses plain HTTP on a globally routable test address; the
+        // public-origin HTTPS requirement is intentionally enforced only in
+        // non-debug production configuration.
+        'ALOHASOCIAL_DEBUG' => 'true',
         // The built-in server is single-threaded by default; a signed Follow
         // makes A fetch B's actor document while B waits for A's inbox answer.
         'PHP_CLI_SERVER_WORKERS' => '4',

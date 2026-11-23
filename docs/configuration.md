@@ -41,7 +41,7 @@ writes the file agree on the path.
 
 | Variable | Config file key | Default | Meaning |
 | --- | --- | --- | --- |
-| `ALOHASOCIAL_INSTANCE_URL` | `instance_url` | `http://localhost:3000` | Public origin. Must be an absolute `http://` or `https://` URL. Actor IDs, WebFinger, media URLs, and cookies derive from it. |
+| `ALOHASOCIAL_INSTANCE_URL` | `instance_url` | `http://localhost:3000` | Public origin. Must be an absolute URL. Public origins require `https://` outside debug mode; loopback URLs may use HTTP. Actor IDs, WebFinger, media URLs, and cookies derive from it. |
 | `ALOHASOCIAL_INSTANCE_NAME` | `instance_name` | `Aloha Social` | Display name in the UI and instance API. |
 | `ALOHASOCIAL_INSTANCE_DESCRIPTION` | `instance_description` | empty | Public instance description. |
 | `ALOHASOCIAL_CONTACT_EMAIL` | `contact_email` | empty | Public admin contact. |
@@ -97,7 +97,9 @@ writes this configuration.
 Cookies are `HttpOnly` and `SameSite=Lax`. Use HTTPS in production and keep the
 instance URL in sync with the origin users open, otherwise secure cookies can
 make login appear to fail. Changing a password revokes all sessions for that
-account.
+account. Public instances require secure cookies unless debug mode is enabled;
+the browser-facing scheme controls this setting, including when a reverse proxy
+terminates TLS and forwards to the app over HTTP.
 
 ## Uploads and federation
 
@@ -144,7 +146,7 @@ reset messages are delivered. A message that cannot be handed off returns
 
 | Variable | Config file key | Default | Meaning |
 | --- | --- | --- | --- |
-| `ALOHASOCIAL_DEBUG` | `debug` | `false` | Adds exception details to error responses. Never enable in production. |
+| `ALOHASOCIAL_DEBUG` | `debug` | `false` | Adds exception details and allows non-loopback HTTP origins for development. Never enable in production. |
 | `ALOHASOCIAL_ENV_FILE` | `env_file` | `.env` | File the web setup reads and rewrites. Usually left at the default; useful for tests or a container-managed environment file. |
 
 Logs go to PHP's configured `error_log` (PHP-FPM, the built-in server's

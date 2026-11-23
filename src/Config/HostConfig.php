@@ -147,6 +147,12 @@ final readonly class HostConfig
             throw new RuntimeException('The instance URL must be an absolute http(s) URL, got: ' . $instanceUrl);
         }
 
+        $debug = $bool($pick('debug', 'ALOHASOCIAL_DEBUG', false));
+        $localInstance = self::isLoopbackUrl($instanceUrl);
+        if (!$debug && !$localInstance && !str_starts_with(strtolower($instanceUrl), 'https://')) {
+            throw new RuntimeException('A public instance URL must use HTTPS.');
+        }
+
         // Relative paths resolve against the project root, not the process
         // working directory: PHP-FPM starts in public/, the CLI in the root.
         $varDirectory = self::resolvePath((string) $pick('var_directory', 'ALOHASOCIAL_VAR_DIRECTORY', $root . '/var'), $root);
@@ -155,6 +161,9 @@ final readonly class HostConfig
         $secureValue = $pick('secure_cookies', 'ALOHASOCIAL_SECURE_COOKIES', null);
         if ($secureValue !== null) {
             $secure = $bool($secureValue);
+        }
+        if (!$debug && !$localInstance && !$secure) {
+            throw new RuntimeException('Secure session cookies are required for public instances.');
         }
 
         $lifetime = (int) $pick('session_lifetime', 'ALOHASOCIAL_SESSION_LIFETIME', 604800);
@@ -210,7 +219,7 @@ final readonly class HostConfig
             blobDirectory: self::resolvePath((string) $pick('blob_directory', 'ALOHASOCIAL_BLOB_DIRECTORY', $varDirectory . '/blobs'), $root),
             secretKeyFile: self::resolvePath((string) $pick('secret_key_file', 'ALOHASOCIAL_SECRET_KEY_FILE', $varDirectory . '/secret.key'), $root),
             secretKey: self::nullable($secret),
-            debug: $bool($pick('debug', 'ALOHASOCIAL_DEBUG', false)),
+            debug: $debug,
             secureCookies: $secure,
             sessionCookieName: (string) $pick('session_cookie_name', 'ALOHASOCIAL_SESSION_COOKIE_NAME', 'alohasocial_session'),
             sessionLifetimeSeconds: $lifetime,
