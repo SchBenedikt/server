@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "1e5cfea16fe7de2ccf85e05bafb67a5e85b8fc56"
+                "reference": "d443c7006246be358637d8a84649f89ba28908bf"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/1e5cfea16fe7de2ccf85e05bafb67a5e85b8fc56",
-                "reference": "1e5cfea16fe7de2ccf85e05bafb67a5e85b8fc56",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/d443c7006246be358637d8a84649f89ba28908bf",
+                "reference": "d443c7006246be358637d8a84649f89ba28908bf",
                 "shasum": ""
             },
             "require": {
@@ -111,7 +111,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-23T17:00:18+00:00"
+            "time": "2026-11-23T17:16:22+00:00"
         },
         {
             "name": "psr/log",
