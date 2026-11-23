@@ -621,6 +621,11 @@ final class FrontController
                 return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
             }
 
+            $rateLimited = $this->enforceIdentityRateLimit('host.post_boost', $userId, 60, 60);
+            if ($rateLimited !== null) {
+                return $rateLimited;
+            }
+
             $postId = rawurldecode($matches[1]);
             if ($this->isRemoteObjectTarget($postId)) {
                 $reactions = $this->runtime->app->reactions;
@@ -670,6 +675,11 @@ final class FrontController
         ) {
             if ($userId === null) {
                 return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $rateLimited = $this->enforceIdentityRateLimit('host.post_like', $userId, 60, 60);
+            if ($rateLimited !== null) {
+                return $rateLimited;
             }
 
             $postId = rawurldecode($matches[1]);
@@ -834,7 +844,13 @@ final class FrontController
         }
 
         $identity = $userId ?? $request->remoteAddress ?? 'unknown';
-        $retryAfter = $this->runtime->rateLimiter->attempt($match->route->name, $identity, $limit, $window);
+
+        return $this->enforceIdentityRateLimit($match->route->name, $identity, $limit, $window);
+    }
+
+    private function enforceIdentityRateLimit(string $route, string $identity, int $limit, int $window): ?Response
+    {
+        $retryAfter = $this->runtime->rateLimiter->attempt($route, $identity, $limit, $window);
 
         if ($retryAfter === null) {
             return null;

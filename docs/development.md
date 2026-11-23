@@ -97,7 +97,9 @@ commit it expects.
   no session and are authenticated by HTTP signatures instead.
 - **Rate limits** are the ones the core declares per route (`30/900` and so
   on). The host enforces them per account, or per client address for anonymous
-  requests, and answers `429` with `Retry-After`.
+  requests, and answers `429` with `Retry-After`. The host's direct post
+  interaction routes also enforce separate 60-per-minute account budgets for
+  likes and boosts, including actions on cached remote posts.
 - **Migrations** record version, timestamp and checksum. Editing an applied
   migration is refused; add a new one. The server refuses to boot with a
   pending migration instead of failing on the first request that needs it.
