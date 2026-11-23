@@ -154,6 +154,11 @@ post_max_size = 64M
 max_execution_time = 60
 ```
 
+The application also caps every request body at 64 MiB and returns
+`413 payload_too_large` above that limit. Keep the PHP `post_max_size` and reverse
+proxy body limits at or below the application cap; the example Nginx limit is
+intentionally smaller for installations that do not need large video posts.
+
 If video is not needed, the smaller image limits (`6M` / `8M`) are enough. The
 web server's request-body limit must also match the chosen value (see the Nginx
 `client_max_body_size` example below).
