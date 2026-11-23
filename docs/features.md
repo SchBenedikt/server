@@ -97,7 +97,7 @@ Mastodon clients expect instead of duplicating federation logic in the host:
 | Screen | Route | What it uses |
 | --- | --- | --- |
 | Lesezeichen | `#/bookmarks` | `GET /bookmarks`, `POST /statuses/{id}/bookmark` and `/unbookmark`. Bookmark state is also rendered on every post. |
-| Suchen | `#/search` | `GET /search` for local accounts, statuses and hashtags; an `@handle` additionally resolves through the remote profile lookup. |
+| Suchen | `#/search` | `GET /search` for signed-in local accounts, statuses and hashtags; an exact remote address resolves independently, including when signed out. Lookup failures and rate limits are shown without hiding local results. |
 | Listen | `#/lists`, `#/l/<id>` | List CRUD and membership through `/lists`, and the list timeline through `/timelines/list/{id}`. Only local accounts can be members. |
 | Stummgeschaltet | `#/muted` | `GET /mutes`, mute/unmute per account. Profiles can mute and unmute directly. |
 | Blockiert | `#/blocked` | `GET /api/v1/blocks` and block/unblock per actor URL. Profiles can block and unblock directly. |
