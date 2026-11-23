@@ -163,7 +163,7 @@ public range. The default is empty, which uses the direct peer address.
 | `ALOHASOCIAL_MASTODON_API` | `mastodon_api` | `true` | Enables the Mastodon-compatible prefix. |
 | `ALOHASOCIAL_DISCOVERY_INSTANCE` | `discovery_instance` | `mastodon.social` | Public Mastodon-compatible instance used for federated keyword and hashtag search. Empty disables it; Bluesky search keeps working. |
 | `ALOHASOCIAL_MASTODON_PREFIX` | `mastodon_prefix` | `/api/mastodon/v1` | Compatibility route prefix. |
-| `ALOHASOCIAL_ATPROTO_PUBLISH` | `atproto_publish` | `true` | Allows members to explicitly mirror supported public text posts to a linked AT Protocol account. The instance's native PDS is not required. |
+| `ALOHASOCIAL_ATPROTO_PUBLISH` | `atproto_publish` | `true` | Allows members to publish supported public posts to a linked AT Protocol account. The instance's native PDS is not required. |
 | `ALOHASOCIAL_ATPROTO_PDS` | `atproto_pds` | `false` | Enables the optional native AT Protocol PDS hosted by this instance. |
 
 The application accepts images (JPEG, PNG, WebP, GIF) up to 5 MiB, video

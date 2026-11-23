@@ -83,6 +83,8 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('/api/v1/host/admin/communications', $script);
         self::assertStringContainsString('Delivery, federation and background errors', $script);
         self::assertStringContainsString('Connect a Bluesky account in Settings before publishing.', $script);
+        self::assertStringContainsString('Also publish to Bluesky', $script);
+        self::assertStringContainsString('Retry from the post menu.', $script);
         self::assertStringContainsString('Post saved. Delivery to other servers runs in the background.', $script);
 
         $style = (string) file_get_contents($root . '/public/ui/app.css');
