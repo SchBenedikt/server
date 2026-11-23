@@ -12,6 +12,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
+use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Support\DatabaseBackup;
 use AlohaSocial\Server\Support\CoreVersion;
 
@@ -48,6 +49,18 @@ try {
         || $databaseFile === ':memory:'
         || (is_file($databaseFile) ? is_writable($databaseFile) : writableDirectory(dirname($databaseFile)));
     $mailWritable = $config->mailTransport !== 'log' || writableDirectory($config->mailLogDirectory);
+    $storageAvailable = $config->storageDriver === 'local'
+        ? writableDirectory($config->blobDirectory)
+        : false;
+    if ($config->storageDriver === 's3') {
+        try {
+            $s3 = StorageFactory::s3Client($config);
+            $s3->listObjects((string) $config->s3Bucket, $config->s3Prefix === '' ? '' : $config->s3Prefix . '/', null, 1);
+            $storageAvailable = true;
+        } catch (Throwable) {
+            $storageAvailable = false;
+        }
+    }
 
     $report = [
         'root' => $root,
@@ -63,7 +76,9 @@ try {
         'var_directory' => $config->varDirectory,
         'var_writable' => writableDirectory($config->varDirectory),
         'blob_directory' => $config->blobDirectory,
-        'blob_writable' => writableDirectory($config->blobDirectory),
+        'storage_driver' => $config->storageDriver,
+        'storage_bucket' => $config->storageDriver === 's3' ? $config->s3Bucket : null,
+        'blob_writable' => $storageAvailable,
         'secret_key' => $config->secretKey !== null ? 'environment' : $config->secretKeyFile,
         'secret_key_present' => $keyExists,
         'secret_key_valid' => $keyValid,
@@ -92,8 +107,10 @@ try {
     if (!writableDirectory($config->varDirectory)) {
         $problems[] = 'The var directory is not writable: ' . $config->varDirectory;
     }
-    if (!writableDirectory($config->blobDirectory)) {
-        $problems[] = 'The blob directory is not writable: ' . $config->blobDirectory;
+    if (!$storageAvailable) {
+        $problems[] = $config->storageDriver === 's3'
+            ? 'The configured S3-compatible bucket is not reachable.'
+            : 'The blob directory is not writable: ' . $config->blobDirectory;
     }
     if (!$databaseWritable) {
         $problems[] = 'The SQLite database is not writable: ' . (string) $databaseFile;
@@ -119,7 +136,10 @@ try {
     fwrite(STDOUT, "  Pending:        " . ($pending === [] ? 'none' : implode(', ', $pending)) . "\n");
     fwrite(STDOUT, "  Accounts:       " . ($accounts ?? 'unknown') . "\n");
     fwrite(STDOUT, "  Data directory: " . $config->varDirectory . (writableDirectory($config->varDirectory) ? ' (writable)' : ' (NOT writable)') . "\n");
-    fwrite(STDOUT, "  Blobs:          " . $config->blobDirectory . (writableDirectory($config->blobDirectory) ? ' (writable)' : ' (NOT writable)') . "\n");
+    $storageLabel = $config->storageDriver === 's3'
+        ? 's3://' . $config->s3Bucket
+        : $config->blobDirectory;
+    fwrite(STDOUT, '  Blobs:          ' . $storageLabel . ($storageAvailable ? ' (available)' : ' (UNAVAILABLE)') . "\n");
     fwrite(STDOUT, "  Secret key:     " . ($config->secretKey !== null ? 'from environment' : $config->secretKeyFile) . ($keyExists ? ($keyValid ? ' (present)' : ' (INVALID)') : ' (MISSING)') . "\n");
     fwrite(STDOUT, "  Database file:  " . ($databaseFile ?? 'server-managed') . ($databaseWritable ? ' (writable)' : ' (NOT writable)') . "\n");
     fwrite(STDOUT, "  Mail:           " . $config->mailTransport . ' -> ' . $config->mailLogDirectory . ($mailWritable ? ' (writable)' : ' (NOT writable)') . "\n");

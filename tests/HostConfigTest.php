@@ -22,6 +22,18 @@ final class HostConfigTest extends TestCase
         'ALOHASOCIAL_DB_DSN',
         'ALOHASOCIAL_VAR_DIRECTORY',
         'ALOHASOCIAL_BLOB_DIRECTORY',
+        'ALOHASOCIAL_STORAGE_DRIVER',
+        'ALOHASOCIAL_S3_ENDPOINT',
+        'ALOHASOCIAL_S3_REGION',
+        'ALOHASOCIAL_S3_BUCKET',
+        'ALOHASOCIAL_S3_PREFIX',
+        'ALOHASOCIAL_S3_ACCESS_KEY',
+        'ALOHASOCIAL_S3_SECRET_KEY',
+        'ALOHASOCIAL_S3_PATH_STYLE',
+        'ALOHASOCIAL_S3_SERVER_SIDE_ENCRYPTION',
+        'ALOHASOCIAL_S3_KMS_KEY_ID',
+        'ALOHASOCIAL_S3_TIMEOUT',
+        'ALOHASOCIAL_S3_MAX_OBJECT_BYTES',
         'ALOHASOCIAL_SECRET_KEY_FILE',
         'ALOHASOCIAL_MAIL_FROM',
         'ALOHASOCIAL_DEBUG',
@@ -195,6 +207,90 @@ final class HostConfigTest extends TestCase
 
         self::assertSame('http://social.example', $config->instanceUrl);
         self::assertFalse($config->secureCookies);
+    }
+
+    public function testLocalStorageRemainsTheDefault(): void
+    {
+        $config = HostConfig::load($this->root);
+
+        self::assertSame('local', $config->storageDriver);
+        self::assertNull($config->s3Bucket);
+        self::assertSame('AES256', $config->s3ServerSideEncryption);
+    }
+
+    public function testS3StorageAcceptsValidatedRuntimeConfiguration(): void
+    {
+        $config = HostConfig::load($this->root, [
+            'instance_url' => 'https://social.example',
+            'storage_driver' => 's3',
+            's3_endpoint' => 'https://objects.example.test',
+            's3_region' => 'eu-central-1',
+            's3_bucket' => 'aloha-media-prod',
+            's3_prefix' => 'aloha/social',
+            's3_access_key' => 'access-secret-id',
+            's3_secret_key' => 'private-secret-value',
+            's3_path_style' => true,
+            's3_server_side_encryption' => 'aws:kms',
+            's3_kms_key_id' => 'alias/aloha-media',
+            's3_timeout' => 15,
+            's3_max_object_bytes' => 104857600,
+        ]);
+
+        self::assertSame('s3', $config->storageDriver);
+        self::assertSame('https://objects.example.test', $config->s3Endpoint);
+        self::assertSame('eu-central-1', $config->s3Region);
+        self::assertSame('aloha-media-prod', $config->s3Bucket);
+        self::assertSame('aloha/social', $config->s3Prefix);
+        self::assertSame('access-secret-id', $config->s3AccessKey);
+        self::assertSame('private-secret-value', $config->s3SecretKey);
+        self::assertTrue($config->s3PathStyle);
+        self::assertSame('aws:kms', $config->s3ServerSideEncryption);
+        self::assertSame('alias/aloha-media', $config->s3KmsKeyId);
+        self::assertSame(15, $config->s3TimeoutSeconds);
+        self::assertSame(104857600, $config->s3MaxObjectBytes);
+    }
+
+    public function testS3StorageRequiresABucket(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('ALOHASOCIAL_S3_BUCKET');
+        HostConfig::load($this->root, [
+            'storage_driver' => 's3',
+        ]);
+    }
+
+    public function testS3StorageRejectsInsecureProductionEndpoint(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('must use HTTPS');
+        HostConfig::load($this->root, [
+            'instance_url' => 'https://social.example',
+            'storage_driver' => 's3',
+            's3_endpoint' => 'http://minio:9000',
+            's3_bucket' => 'aloha-media-prod',
+        ]);
+    }
+
+    public function testS3StorageRejectsCredentialPairAndUnsafePrefixErrors(): void
+    {
+        try {
+            HostConfig::load($this->root, [
+                'storage_driver' => 's3',
+                's3_bucket' => 'aloha-media-prod',
+                's3_access_key' => 'access-only',
+            ]);
+            self::fail('An incomplete credential pair must be rejected.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('must be set together', $exception->getMessage());
+        }
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('safe relative key prefix');
+        HostConfig::load($this->root, [
+            'storage_driver' => 's3',
+            's3_bucket' => 'aloha-media-prod',
+            's3_prefix' => '../shared',
+        ]);
     }
 
     private static function removeDirectory(string $directory): void

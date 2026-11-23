@@ -67,7 +67,7 @@ migration and normal read/write rights afterwards.
 | Variable | Config file key | Default | Meaning |
 | --- | --- | --- | --- |
 | `ALOHASOCIAL_VAR_DIRECTORY` | `var_directory` | `var` | Runtime state: SQLite file, key, logs and local mail. |
-| `ALOHASOCIAL_BLOB_DIRECTORY` | `blob_directory` | `var/blobs` | Original images and generated thumbnails. |
+| `ALOHASOCIAL_BLOB_DIRECTORY` | `blob_directory` | `var/blobs` | Local storage path, used when `ALOHASOCIAL_STORAGE_DRIVER=local`. |
 | `ALOHASOCIAL_SECRET_KEY` | `secret_key` | empty | Base64 32-byte key for the secret box. If set, no key file is used. |
 | `ALOHASOCIAL_SECRET_KEY_FILE` | `secret_key_file` | `var/secret.key` | Key file generated on first boot when no key is provided. |
 
@@ -76,8 +76,9 @@ Losing the key makes that stored key unreadable, so **back up the key and the
 database together**. The key file must be `0600` and owned by the application
 user.
 
-`ALOHASOCIAL_VAR_DIRECTORY` and `ALOHASOCIAL_BLOB_DIRECTORY` are created if
-needed. The PHP user must be able to write them.
+`ALOHASOCIAL_VAR_DIRECTORY` is always created if needed. The PHP user must be
+able to write it. The local blob directory is created only when the local
+storage driver is active.
 
 On a host that updates the checkout in place, use an absolute data directory
 outside the release, for example `/srv/aloha-data`, and point all four paths
@@ -85,6 +86,52 @@ outside the release, for example `/srv/aloha-data`, and point all four paths
 a release swap or `git clean -fdx` can remove the SQLite database, the secret
 key and uploaded media without any warning. `scripts/install.sh --data-dir=DIR`
 writes this configuration.
+
+## Object storage
+
+Local filesystem storage remains the default. To use S3 or MinIO, set
+`ALOHASOCIAL_STORAGE_DRIVER=s3`, provide a private bucket, and restart both the
+web process and worker with the same configuration. The AWS SDK uses its
+standard credential provider chain when both explicit credentials are empty,
+so AWS deployments can use workload identity. For MinIO, set an endpoint and
+usually enable path-style addressing.
+
+| Variable | Config file key | Default | Meaning |
+| --- | --- | --- | --- |
+| `ALOHASOCIAL_STORAGE_DRIVER` | `storage_driver` | `local` | `local` or `s3`. |
+| `ALOHASOCIAL_S3_ENDPOINT` | `s3_endpoint` | AWS default | S3-compatible endpoint URL; no user information, query or fragment. Must use HTTPS outside debug mode. |
+| `ALOHASOCIAL_S3_REGION` | `s3_region` | `us-east-1` | AWS signing region. |
+| `ALOHASOCIAL_S3_BUCKET` | `s3_bucket` | empty | Required bucket name when the S3 driver is active. |
+| `ALOHASOCIAL_S3_PREFIX` | `s3_prefix` | empty | Optional isolated key prefix; relative path segments only. |
+| `ALOHASOCIAL_S3_ACCESS_KEY` | `s3_access_key` | empty | Optional access key. Set together with the secret key; prefer deployment secrets. |
+| `ALOHASOCIAL_S3_SECRET_KEY` | `s3_secret_key` | empty | Optional secret key; never returned in diagnostics. |
+| `ALOHASOCIAL_S3_PATH_STYLE` | `s3_path_style` | `false` | Use path-style bucket addressing, commonly required by MinIO. |
+| `ALOHASOCIAL_S3_SERVER_SIDE_ENCRYPTION` | `s3_server_side_encryption` | `AES256` for S3 | `AES256`, `aws:kms`, or `none`; encryption is set on each upload. |
+| `ALOHASOCIAL_S3_KMS_KEY_ID` | `s3_kms_key_id` | empty | Optional KMS key identifier, only with `aws:kms`. |
+| `ALOHASOCIAL_S3_TIMEOUT` | `s3_timeout` | `30` | Per-request timeout in seconds, from 1 to 120. |
+| `ALOHASOCIAL_S3_MAX_OBJECT_BYTES` | `s3_max_object_bytes` | `268435456` | Maximum object size accepted by the S3 adapter, from 1 byte to 5 GiB. |
+
+Keep the bucket private and grant the application only the required object
+read, write, delete, list and metadata permissions. The host never sets a
+public object ACL. Core media URLs remain same-origin `/api/v1/media/{id}`
+routes; public/unlisted reads and authorized local followers/direct recipients
+are checked before the object is read. S3 object URLs are not exposed to
+clients. Remote followers-only delivery still requires authenticated remote
+fetch support and is not enabled by choosing S3 storage.
+
+To exercise the actual S3 request path against a disposable MinIO bucket, set
+`ALOHASOCIAL_S3_TEST_ENDPOINT`, `ALOHASOCIAL_S3_TEST_BUCKET`,
+`ALOHASOCIAL_S3_TEST_ACCESS_KEY`, and `ALOHASOCIAL_S3_TEST_SECRET_KEY` in the
+test process (optionally `ALOHASOCIAL_S3_TEST_REGION`), then run
+`vendor/bin/phpunit tests/Storage/MinioMediaIntegrationTest.php`. The test uses
+a random object prefix and removes its objects when it finishes. Use a bucket
+reserved for integration tests; the test does not alter normal storage
+configuration.
+
+The admin health view checks whether the configured bucket can be listed and
+does not include endpoint credentials. For local storage it reports directory
+writability and disk space; S3 usage totals are not reported as local disk
+usage.
 
 ## Sessions and cookies
 

@@ -72,7 +72,7 @@ function checkLabel(id: string): string {
 		case 'database':
 			return 'Database reachable';
 		case 'blob_directory':
-			return 'Media storage writable';
+			return data.value?.features.storage_driver === 's3' ? 'S3 bucket reachable' : 'Media storage writable';
 		case 'secret_key':
 			return 'Encryption key';
 		case 'worker':
