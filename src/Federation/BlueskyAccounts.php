@@ -210,7 +210,9 @@ final class BlueskyAccounts implements AtprotoAccountResolver
     private function row(string $localUserId): ?array
     {
         return $this->db->fetchOne(
-            'SELECT * FROM atproto_account WHERE account_id = :account_id',
+            'SELECT connected.* FROM atproto_account AS connected'
+            . ' INNER JOIN account AS host_account ON host_account.id = connected.account_id'
+            . ' WHERE connected.account_id = :account_id AND host_account.disabled_at IS NULL',
             ['account_id' => $localUserId],
         );
     }

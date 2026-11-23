@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Core\Platform\Storage\S3ObjectPage;
+use AlohaSocial\Core\Jobs\JobSubject;
 use AlohaSocial\Server\Support\RuntimeLogger;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
@@ -238,9 +239,25 @@ final class AdminTest extends TestCase
         self::assertSame('user', $bob['role']);
         self::assertSame('Bob', $bob['display_name']);
 
+        $server->runtime->app->queue->push(
+            'test.account-work',
+            [],
+            $server->runtime->clock->now()->modify('-1 minute'),
+            JobSubject::account('bob'),
+        );
+        $server->runtime->app->queue->push('test.global-work', []);
+        self::assertSame(2, $server->runtime->app->queue->pendingCount());
+        $reserved = $server->runtime->app->queue->reserve(1, $server->runtime->clock->now());
+        self::assertCount(1, $reserved);
+        self::assertSame('bob', $reserved[0]->subject?->id);
+
         $disabled = $server->json('POST', '/api/v1/host/admin/users/bob/disable', [], $cookies, $csrf);
         self::assertSame(200, $disabled->status);
         self::assertNotNull($this->decoded($disabled)['user']['disabled_at']);
+        self::assertSame(1, $server->runtime->app->queue->pendingCount());
+        $remaining = $server->runtime->app->queue->reserve(10, $server->runtime->clock->now());
+        self::assertCount(1, $remaining);
+        self::assertSame('test.global-work', $remaining[0]->type);
 
         $login = $server->login('bob', 'correct-horse-battery-staple');
         self::assertNotSame(303, $login['response']->status);
