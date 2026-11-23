@@ -9,10 +9,12 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
-use AlohaSocial\Core\Platform\Http\HttpClient;
+use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClientException;
+use AlohaSocial\Core\Platform\Http\ResponseLimitExceededException;
+use AlohaSocial\Core\Platform\Network\HostResolver;
 use AlohaSocial\Core\Platform\Http\HttpResponse;
-use AlohaSocial\Core\Security\OpenSslSecretBox;
+use AlohaSocial\Core\Service\CreatePost;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\BlueskyException;
 use AlohaSocial\Server\Tests\Support\TestServer;
@@ -25,9 +27,9 @@ use PHPUnit\Framework\TestCase;
  * including handle resolution, PDS discovery, session creation, token
  * sealing and refresh, without a network.
  */
-final class FakeBlueskyHttpClient implements HttpClient
+final class FakeBlueskyHttpClient implements BoundedHttpClient
 {
-    /** @var list<array{method: string, url: string, body: string}> */
+    /** @var list<array{method: string, url: string, headers: array<string, string>, body: string}> */
     public array $requests = [];
 
     public int $expiresIn = 3600;
@@ -47,7 +49,7 @@ final class FakeBlueskyHttpClient implements HttpClient
         string $body = '',
         int $timeoutSeconds = 10,
     ): HttpResponse {
-        $this->requests[] = ['method' => $method, 'url' => $url, 'body' => $body];
+        $this->requests[] = ['method' => $method, 'url' => $url, 'headers' => $headers, 'body' => $body];
 
         if (str_contains($url, 'com.atproto.identity.resolveHandle')) {
             return new HttpResponse(200, [], json_encode(['did' => 'did:plc:alice123'], JSON_THROW_ON_ERROR));
@@ -84,7 +86,33 @@ final class FakeBlueskyHttpClient implements HttpClient
             return new HttpResponse(200, [], json_encode($this->session('access-2', 'refresh-2'), JSON_THROW_ON_ERROR));
         }
 
+        if (str_contains($url, 'com.atproto.repo.putRecord')) {
+            $record = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+
+            return new HttpResponse(200, [], json_encode([
+                'uri' => 'at://' . $record['repo'] . '/' . $record['collection'] . '/' . $record['rkey'],
+                'cid' => 'bafybeigdyrzt5sfp7udm7hu76uh72fbac7e4j4z3xq',
+            ], JSON_THROW_ON_ERROR));
+        }
+
         throw new HttpClientException('Unexpected URL: ' . $url);
+    }
+
+    public function requestBounded(
+        string $method,
+        string $url,
+        array $headers = [],
+        string $body = '',
+        int $timeoutSeconds = 10,
+        int $maxBytes = 1_048_576,
+        array $resolvedIps = [],
+    ): HttpResponse {
+        $response = $this->request($method, $url, $headers, $body, $timeoutSeconds);
+        if (strlen($response->body) > $maxBytes) {
+            throw new ResponseLimitExceededException('The fake response exceeded the test limit.');
+        }
+
+        return $response;
     }
 
     /**
@@ -120,17 +148,22 @@ final class BlueskyAccountTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->server = new TestServer();
+        $this->http = new FakeBlueskyHttpClient();
+        $this->server = new TestServer([], $this->http, new class implements HostResolver {
+            public function resolve(string $host): array
+            {
+                return match ($host) {
+                    'public.api.bsky.app' => ['8.8.8.8'],
+                    'plc.directory' => ['1.1.1.1'],
+                    'pds.example.test' => ['9.9.9.9'],
+                    default => [],
+                };
+            }
+        });
         $this->server->createAccount('alice', 'alice@example.test');
         $this->server->createAccount('bob', 'bob@example.test');
 
-        $this->http = new FakeBlueskyHttpClient();
-        $this->bluesky = new BlueskyAccounts(
-            $this->server->runtime->database,
-            $this->http,
-            OpenSslSecretBox::fromBase64Key(OpenSslSecretBox::generateKey()),
-            $this->server->runtime->clock,
-        );
+        $this->bluesky = $this->server->runtime->blueskyAccounts;
     }
 
     public function testConnectDiscoversThePdsAndKeepsTokensSealed(): void
@@ -228,6 +261,36 @@ final class BlueskyAccountTest extends TestCase
         self::assertFalse($this->bluesky->disconnect('alice'));
         self::assertNull($this->bluesky->resolve('alice'));
         self::assertSame(['connected' => false], $this->bluesky->status('alice'));
+    }
+
+    public function testExternalPdsPublishesWithoutTheOptionalNativePds(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $post = $this->server->runtime->app->posts->create(new CreatePost('alice', 'published from standalone'));
+        $auth = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/host/bluesky/publish',
+            ['post_id' => $post->id],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+
+        self::assertSame(201, $response->status, $response->body);
+        $request = array_values(array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.putRecord'),
+        ))[0] ?? null;
+        self::assertNotNull($request, 'The connected account must write through its discovered external PDS.');
+        self::assertSame('https://pds.example.test/xrpc/com.atproto.repo.putRecord', $request['url']);
+        self::assertSame(
+            'Bearer ' . $this->http->session('access-1', 'refresh-1')['accessJwt'],
+            $request['headers']['Authorization'] ?? null,
+        );
+        $payload = json_decode($request['body'], true, 64, JSON_THROW_ON_ERROR);
+        self::assertSame('did:plc:alice123', $payload['repo']);
+        self::assertSame('published from standalone', $payload['record']['text']);
     }
 
     public function testInvalidInputsAndCredentialsAreRejected(): void

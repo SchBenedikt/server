@@ -12,6 +12,8 @@ namespace AlohaSocial\Server\Tests\Support;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
+use AlohaSocial\Core\Platform\Http\HttpClient;
+use AlohaSocial\Core\Platform\Network\HostResolver;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Bootstrap\ApplicationFactory;
@@ -45,7 +47,11 @@ final class TestServer
     /**
      * @param array<string, mixed> $overrides
      */
-    public function __construct(array $overrides = [])
+    public function __construct(
+        array $overrides = [],
+        ?HttpClient $httpClient = null,
+        ?HostResolver $hostResolver = null,
+    )
     {
         $root = dirname(__DIR__, 2);
         $this->directory = sys_get_temp_dir() . '/alohasocial-server-' . bin2hex(random_bytes(8));
@@ -82,7 +88,7 @@ final class TestServer
         $database = PdoFactory::connect($this->config);
         (new MigrationRunner($database, new SystemClock(), Migrations::all()))->migrate();
 
-        $this->runtime = (new ApplicationFactory($this->config, $root))->boot();
+        $this->runtime = (new ApplicationFactory($this->config, $root, $httpClient, $hostResolver))->boot();
     }
 
     public function createAccount(
