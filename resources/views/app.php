@@ -35,6 +35,7 @@ $assetVersion = static function (string $file): string {
     data-signed-in="<?= $handle !== '' ? '1' : '0' ?>"
     data-is-admin="<?= ($isAdmin ?? false) ? '1' : '0' ?>"
     data-atproto="<?= ($atproto ?? false) ? '1' : '0' ?>"
+    data-media="<?= ($media ?? false) ? '1' : '0' ?>"
 >
     <div class="aloha-boot" aria-hidden="true">
         <span class="aloha-boot__mark"><img src="/ui/brand/aloha-mark.svg" alt=""></span>
