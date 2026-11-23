@@ -608,7 +608,7 @@ async function submit(): Promise<void> {
 			showWarning.value = false;
 			resetExtras();
 			closeComposer();
-			showToast('Post with poll published.', 'success');
+			showToast('Post saved. Delivery to other servers runs in the background.', 'success');
 			return;
 		}
 
@@ -636,8 +636,12 @@ async function submit(): Promise<void> {
 		closeComposer();
 		showToast(
 			direct
-				? 'Message sent.'
-				: replying ? 'Reply published.' : isQuote.value ? 'Quote published.' : 'Post published.',
+				? 'Message saved. Delivery to the recipient’s server runs in the background.'
+				: replying
+					? 'Reply saved. Delivery to other servers runs in the background.'
+					: isQuote.value
+						? 'Quote saved. Delivery to other servers runs in the background.'
+						: 'Post saved. Delivery to other servers runs in the background.',
 			'success',
 		);
 	} catch (caught) {
