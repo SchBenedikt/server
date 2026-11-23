@@ -292,11 +292,14 @@ final class ForYouFeed
             // No age window here: the 500 newest posts are candidates and the
             // score already damps older ones, so a quiet instance still has a
             // feed instead of an empty page after seven days.
-            . ' AND p.author_id NOT IN (SELECT actor_id FROM social_mute WHERE user_id = :muted_viewer)'
+            . ' AND p.author_id NOT IN ('
+            . 'SELECT actor_id FROM social_mute WHERE user_id = :muted_viewer'
+            . ' AND (expires_at IS NULL OR expires_at > :local_mute_now))'
             . ' AND p.author_id NOT IN (SELECT actor_id FROM social_block WHERE local_user_id = :blocked_viewer)'
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             [
                 'muted_viewer' => $accountId,
+                'local_mute_now' => Time::format($now),
                 'blocked_viewer' => $accountId,
             ],
         );
