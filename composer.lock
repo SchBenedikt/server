@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "caa8f9aec755ff5fe785024cc4c33634",
+    "content-hash": "0c0123f94a383a5ba5efce3a14c0b50d",
     "packages": [
         {
             "name": "alohasocial/core",
-            "version": "dev-feat/inbound-activitypub-blocks",
+            "version": "dev-feat/atproto-stored-media",
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "c390d7bddd49d9ed6eac3fcfe46a574dada93fbd"
+                "reference": "19d8b4ba3bbccbe780e4003c2a125a39b3deb608"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/c390d7bddd49d9ed6eac3fcfe46a574dada93fbd",
-                "reference": "c390d7bddd49d9ed6eac3fcfe46a574dada93fbd",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/19d8b4ba3bbccbe780e4003c2a125a39b3deb608",
+                "reference": "19d8b4ba3bbccbe780e4003c2a125a39b3deb608",
                 "shasum": ""
             },
             "require": {
@@ -110,7 +110,7 @@
                 "at-protocol",
                 "fediverse"
             ],
-            "time": "2026-11-23T16:14:30+00:00"
+            "time": "2026-11-23T16:38:50+00:00"
         },
         {
             "name": "psr/log",
