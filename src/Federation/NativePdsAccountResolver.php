@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Federation;
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccount;
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdsRepository;
+use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Server\Config\HostConfig;
 
 /**
@@ -28,12 +29,20 @@ final class NativePdsAccountResolver implements AtprotoAccountResolver
     public function __construct(
         private readonly HostConfig $config,
         private readonly PdsRepository $identities,
+        private readonly Connection $database,
     ) {
     }
 
     public function resolve(string $localUserId): ?AtprotoAccount
     {
         if (!$this->config->atprotoPds) {
+            return null;
+        }
+
+        if ($this->database->fetchValue(
+            'SELECT 1 FROM account WHERE id = :account AND disabled_at IS NULL',
+            ['account' => trim($localUserId)],
+        ) === null) {
             return null;
         }
 

@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Admin;
 
 use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Account\AccountDeletion;
+use AlohaSocial\Core\Jobs\JobSubject;
 use AlohaSocial\Core\Domain\Moderation\ModerationAction;
 use AlohaSocial\Core\Domain\Moderation\ModerationActionKind;
 use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
@@ -384,9 +385,13 @@ final class AdminService
         }
 
         $this->accounts->disable($id);
+        $cancelled = $this->app->queue->cancelBySubject(JobSubject::account($id));
         $revoked = $this->sessions->revokeAccount($id);
         $revoked += $this->atprotoSessions->deleteForAccount($id);
-        $this->record($adminId, 'user.disable', 'account', $id, ['sessions_revoked' => $revoked]);
+        $this->record($adminId, 'user.disable', 'account', $id, [
+            'sessions_revoked' => $revoked,
+            'jobs_cancelled' => $cancelled,
+        ]);
 
         return $this->user($id);
     }

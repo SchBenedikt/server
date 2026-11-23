@@ -10,8 +10,11 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Domain\Atproto\Pds\NativePdsService;
+use AlohaSocial\Core\Domain\Atproto\Pds\PdsIdentity;
+use AlohaSocial\Core\Domain\Atproto\Pds\PdsRepository;
 use AlohaSocial\Core\Platform\Storage\LocalBlobStore;
 use AlohaSocial\Core\Security\OpenSslSecretBox;
+use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -129,5 +132,38 @@ final class NativePdsTest extends TestCase
         );
         self::assertNotNull($publication);
         self::assertStringStartsWith('at://' . $identity['did'] . '/', (string) $publication['uri']);
+    }
+
+    public function testDisabledHostAccountCannotResolveItsNativePdsIdentity(): void
+    {
+        $server = new TestServer([
+            'atproto_pds' => true,
+            'atproto_pds_url' => 'https://social.example',
+            'atproto_pds_handle_domain' => 'social.example',
+            'atproto_plc_url' => 'https://plc.directory',
+        ]);
+        $server->createAccount('alice', 'alice@example.test');
+        $identities = $this->createMock(PdsRepository::class);
+        $identities->expects(self::once())->method('identityForUser')->with('alice')->willReturn(new PdsIdentity(
+            'alice',
+            'did:plc:alice123',
+            'alice.social.example',
+            'signing-key',
+            'rotation-key',
+            null,
+            null,
+            0,
+            '2026-11-23T00:00:00Z',
+            '2026-11-23T00:00:00Z',
+        ));
+        $resolver = new NativePdsAccountResolver(
+            $server->config,
+            $identities,
+            $server->runtime->database,
+        );
+
+        self::assertNotNull($resolver->resolve('alice'));
+        $server->runtime->accounts->disable('alice');
+        self::assertNull($resolver->resolve('alice'));
     }
 }

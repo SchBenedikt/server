@@ -230,6 +230,20 @@ final class BlueskyAccountTest extends TestCase
         );
     }
 
+    public function testDisabledHostAccountCannotResolveItsBlueskyIdentity(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        self::assertNotNull($this->bluesky->resolve('alice'));
+
+        $this->server->runtime->accounts->disable('alice');
+
+        self::assertNull($this->bluesky->resolve('alice'));
+        self::assertSame(['connected' => false], $this->bluesky->status('alice'));
+
+        $this->server->runtime->accounts->enable('alice');
+        self::assertNotNull($this->bluesky->resolve('alice'));
+    }
+
     public function testAnHttpPdsEndpointIsRejectedBeforeCredentialsAreSent(): void
     {
         $this->http->pdsEndpoint = 'http://pds.example.test';
