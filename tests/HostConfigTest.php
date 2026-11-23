@@ -26,6 +26,7 @@ final class HostConfigTest extends TestCase
         'ALOHASOCIAL_MAIL_FROM',
         'ALOHASOCIAL_DEBUG',
         'ALOHASOCIAL_SECURE_COOKIES',
+        'ALOHASOCIAL_TRUSTED_PROXIES',
     ];
 
     /** @var array<string, string|false> */
@@ -162,6 +163,26 @@ final class HostConfigTest extends TestCase
         HostConfig::load($this->root, [
             'instance_url' => 'https://social.example',
             'secure_cookies' => false,
+        ]);
+    }
+
+    public function testTrustedProxiesCanBeConfiguredByEnvironmentOrOverride(): void
+    {
+        $config = HostConfig::load($this->root, [
+            'instance_url' => 'https://social.example',
+            'trusted_proxies' => '127.0.0.1, 10.0.0.0/8',
+        ]);
+
+        self::assertSame(['127.0.0.1', '10.0.0.0/8'], $config->trustedProxies);
+    }
+
+    public function testInvalidTrustedProxyRangeIsRejected(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('invalid IP or CIDR');
+        HostConfig::load($this->root, [
+            'instance_url' => 'https://social.example',
+            'trusted_proxies' => '10.0.0.0/33',
         ]);
     }
 
