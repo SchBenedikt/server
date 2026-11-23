@@ -194,7 +194,10 @@ ALOHASOCIAL_CORE_VERSION=
 ```
 
 `main` follows the development branch. `release` installs the tag in
-`ALOHASOCIAL_CORE_VERSION`. Apply a change on a bare-metal install with:
+`ALOHASOCIAL_CORE_VERSION`, such as `0.8.0` after that tag is published. The
+admin instance diagnostics and `php bin/doctor.php --json` report the installed
+Core package version and the exact locked commit reference. Apply a change on
+a bare-metal install with:
 
 ```bash
 php bin/core-version.php
