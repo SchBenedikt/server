@@ -9,9 +9,13 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Http;
 
+use Closure;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
+use InvalidArgumentException;
+
+use function random_int;
 
 /**
  * A fixed-window request limiter.
@@ -23,10 +27,17 @@ use AlohaSocial\Core\Support\Time;
  */
 final class RateLimiter
 {
+    /** Keep the sweep horizon in step with every declared request window. */
+    public const MAX_WINDOW_SECONDS = 3600;
+
+    private readonly Closure $shouldSweep;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
+        ?Closure $shouldSweep = null,
     ) {
+        $this->shouldSweep = $shouldSweep ?? static fn (): bool => random_int(1, 64) === 1;
     }
 
     /**
@@ -38,11 +49,22 @@ final class RateLimiter
         if ($limit < 1 || $windowSeconds < 1) {
             return null;
         }
+        if ($windowSeconds > self::MAX_WINDOW_SECONDS) {
+            throw new InvalidArgumentException('Rate limit windows must not exceed the cleanup horizon.');
+        }
 
         $bucket = self::bucket($route, $identity);
         $now = $this->clock->now();
 
         return $this->db->transaction(function () use ($bucket, $now, $limit, $windowSeconds): ?int {
+            if (($this->shouldSweep)()) {
+                $cutoff = Time::format($now->modify('-' . self::MAX_WINDOW_SECONDS . ' seconds'));
+                $this->db->execute(
+                    'DELETE FROM rate_limit WHERE window_started_at < :cutoff',
+                    ['cutoff' => $cutoff],
+                );
+            }
+
             $row = $this->db->fetchOne(
                 'SELECT hits, window_started_at FROM rate_limit WHERE bucket = :bucket',
                 ['bucket' => $bucket],

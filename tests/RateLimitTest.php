@@ -10,11 +10,54 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Server\Http\RateLimiter;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
 final class RateLimitTest extends TestCase
 {
+    public function testPeriodicSweepRemovesExpiredRowsButPreservesLiveBudgets(): void
+    {
+        $server = new TestServer();
+        $db = $server->runtime->database;
+        $now = $server->runtime->clock->now();
+        $expired = RateLimiter::bucket('public.search', '198.51.100.10');
+        $live = RateLimiter::bucket('public.search', '198.51.100.11');
+        $db->execute(
+            'INSERT INTO rate_limit (bucket, hits, window_started_at) VALUES (:expired, 1, :expired_at), (:live, 1, :live_at)',
+            [
+                'expired' => $expired,
+                'expired_at' => Time::format($now->modify('-' . (RateLimiter::MAX_WINDOW_SECONDS + 1) . ' seconds')),
+                'live' => $live,
+                'live_at' => Time::format($now->modify('-' . (RateLimiter::MAX_WINDOW_SECONDS - 1) . ' seconds')),
+            ],
+        );
+
+        $limiter = new RateLimiter($db, $server->runtime->clock, static fn (): bool => true);
+        self::assertNull($limiter->attempt('public.search', '198.51.100.12', 10, 60));
+        self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM rate_limit WHERE bucket = :bucket', ['bucket' => $expired]));
+        self::assertSame(1, (int) $db->fetchValue('SELECT COUNT(*) FROM rate_limit WHERE bucket = :bucket', ['bucket' => $live]));
+    }
+
+    public function testDeclaredRouteWindowsFitWithinTheCleanupHorizon(): void
+    {
+        $server = new TestServer();
+        foreach ($server->runtime->app->routes->routes() as $route) {
+            if ($route->rateLimit === null) {
+                continue;
+            }
+
+            [, $window] = explode('/', $route->rateLimit, 2);
+            self::assertLessThanOrEqual(
+                RateLimiter::MAX_WINDOW_SECONDS,
+                (int) $window,
+                'Rate-limit cleanup horizon is too short for ' . $route->name,
+            );
+        }
+
+        self::assertNull($server->runtime->rateLimiter->attempt('host.signup', 'signup-probe', 5, 3600));
+    }
+
     public function testExhaustedBudgetAnswersWithRetryAfter(): void
     {
         $server = new TestServer();
