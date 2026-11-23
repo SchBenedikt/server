@@ -67,6 +67,35 @@ final class AccountStatusesTest extends TestCase
 		self::assertSame($expected, $ids);
     }
 
+    public function testProfileCursorCanBePassedBackUnmodified(): void
+    {
+        foreach (range(1, 5) as $index) {
+            $id = $this->post('alice', 'cursor post ' . $index);
+            $this->server->runtime->database->execute(
+                'UPDATE social_post SET published_at = :at WHERE id = :id',
+                ['at' => sprintf('2026-11-18T10:00:%02dZ', $index), 'id' => $id],
+            );
+        }
+
+        $first = $this->server->send('GET', '/api/v1/accounts/alice/statuses', [
+            'query' => ['limit' => '2'],
+        ]);
+        self::assertSame(200, $first->status, $first->body);
+        $firstPage = $this->decoded($first);
+        self::assertIsString($firstPage['next_before']);
+
+        $second = $this->server->send('GET', '/api/v1/accounts/alice/statuses', [
+            'query' => ['limit' => '2', 'before' => $firstPage['next_before']],
+        ]);
+        self::assertSame(200, $second->status, $second->body);
+        $secondPage = $this->decoded($second);
+        self::assertSame([], array_values(array_intersect(
+            array_column($firstPage['posts'], 'id'),
+            array_column($secondPage['posts'], 'id'),
+        )));
+        self::assertNotEmpty($secondPage['posts']);
+    }
+
     public function testNextcloudCompatibleAliasesReachMastodonHandlers(): void
     {
         $public = $this->post('alice', 'public');
