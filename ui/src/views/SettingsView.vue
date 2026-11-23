@@ -8,7 +8,13 @@ import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi, type AccountMoveStatus, type AtprotoIdentityData } from '../lib/api';
 import { appState, setSession, showToast } from '../lib/state';
-import type { AccountPreferences, BlueskyAccountStatus } from '../lib/types';
+import type {
+	AccountPreferences,
+	BlueskyAccountStatus,
+	NotificationPolicy,
+	NotificationPolicyAction,
+	NotificationSenderCategory,
+} from '../lib/types';
 
 const signedIn = computed(() => appState.session.user !== null);
 const loading = ref(false);
@@ -18,6 +24,10 @@ const deleting = ref(false);
 const confirmDeletion = ref(false);
 const error = ref('');
 const preferences = ref<AccountPreferences | null>(null);
+const notificationPolicy = ref<NotificationPolicy | null>(null);
+const notificationPolicyBusy = ref(false);
+const notificationPolicyError = ref('');
+const newAccountDays = ref(7);
 
 const bluesky = ref<BlueskyAccountStatus>({ connected: false });
 const blueskyPublishEnabled = ref(true);
@@ -57,6 +67,14 @@ const notificationOptions: { key: keyof AccountPreferences; label: string; hint:
 	{ key: 'notify_mentions', label: 'Mentions', hint: 'When someone mentions you in a post.' },
 ];
 
+const senderCategories: { key: NotificationSenderCategory; label: string }[] = [
+	{ key: 'mutual', label: 'Mutual follows' },
+	{ key: 'following', label: 'People you follow' },
+	{ key: 'follower', label: 'Your followers' },
+	{ key: 'new', label: 'New accounts' },
+	{ key: 'stranger', label: 'Other senders' },
+];
+
 async function load(): Promise<void> {
 	if (!signedIn.value) {
 		return;
@@ -84,10 +102,52 @@ async function load(): Promise<void> {
 		} catch {
 			accountMove.value = null;
 		}
+		try {
+			notificationPolicy.value = await getApi().notificationPolicy();
+			newAccountDays.value = notificationPolicy.value.new_account_days;
+			notificationPolicyError.value = '';
+		} catch (caught) {
+			notificationPolicy.value = null;
+			notificationPolicyError.value = caught instanceof Error ? caught.message : 'Notification policy could not be loaded.';
+		}
 	} catch (caught) {
 		error.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
 	} finally {
 		loading.value = false;
+	}
+}
+
+async function setNotificationAction(category: NotificationSenderCategory, event: Event): Promise<void> {
+	const value = (event.target as HTMLSelectElement).value as NotificationPolicyAction;
+	if (notificationPolicyBusy.value || notificationPolicy.value === null) {
+		return;
+	}
+
+	notificationPolicyBusy.value = true;
+	try {
+		notificationPolicy.value = await getApi().updateNotificationPolicy({ actions: { [category]: value } });
+		showToast('Notification policy updated.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Notification policy could not be saved.', 'error');
+	} finally {
+		notificationPolicyBusy.value = false;
+	}
+}
+
+async function saveNewAccountDays(): Promise<void> {
+	if (notificationPolicyBusy.value || notificationPolicy.value === null) {
+		return;
+	}
+
+	notificationPolicyBusy.value = true;
+	try {
+		notificationPolicy.value = await getApi().updateNotificationPolicy({ new_account_days: newAccountDays.value });
+		showToast('New-account notification threshold updated.', 'success');
+	} catch (caught) {
+		newAccountDays.value = notificationPolicy.value.new_account_days;
+		showToast(caught instanceof Error ? caught.message : 'The threshold could not be saved.', 'error');
+	} finally {
+		notificationPolicyBusy.value = false;
 	}
 }
 
@@ -289,6 +349,9 @@ watch(signedIn, (value) => {
 		void load();
 	} else {
 		preferences.value = null;
+		notificationPolicy.value = null;
+		accountMove.value = null;
+		moveTarget.value = '';
 	}
 });
 </script>
@@ -448,6 +511,33 @@ watch(signedIn, (value) => {
 						@change="toggleFlag(option.key)"
 					>
 				</label>
+				<div class="a-settings__sender-policy">
+					<h3>Who can notify you</h3>
+					<p class="a-settings__hint">Held senders appear in your notification requests. Dropped events stay hidden.</p>
+					<p v-if="notificationPolicyError !== ''" class="a-form-error" role="alert">{{ notificationPolicyError }}</p>
+					<label v-for="category in senderCategories" :key="category.key" class="a-settings__row">
+						<span><strong>{{ category.label }}</strong></span>
+						<select
+							:value="notificationPolicy?.actions[category.key] ?? 'allow'"
+							:disabled="notificationPolicy === null || notificationPolicyBusy"
+							@change="setNotificationAction(category.key, $event)"
+						>
+							<option value="allow">Allow</option>
+							<option value="hold">Hold for review</option>
+							<option value="drop">Drop</option>
+						</select>
+					</label>
+					<label class="a-settings__row">
+						<span>
+							<strong>New-account age threshold</strong>
+							<small>Accounts younger than this many days use the New accounts rule.</small>
+						</span>
+						<span class="a-settings__inline-field">
+							<input v-model.number="newAccountDays" type="number" min="0" max="3650" :disabled="notificationPolicy === null || notificationPolicyBusy">
+							<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="notificationPolicy === null || notificationPolicyBusy" @click="saveNewAccountDays">Save</button>
+						</span>
+					</label>
+				</div>
 			</section>
 
 			<section v-if="atproto" class="a-settings__section">

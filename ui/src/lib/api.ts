@@ -17,6 +17,10 @@ import type {
 	InstanceInfo,
 	NotificationItem,
 	NotificationPageData,
+	NotificationPolicy,
+	NotificationPolicyAction,
+	NotificationSenderCategory,
+	NotificationSenderRequest,
 	Poll,
 	PostInteraction,
 	Relationship,
@@ -132,6 +136,12 @@ export interface Api {
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
 	notifications(limit?: number, before?: string | null): Promise<NotificationPageData>;
+	notificationRequests(): Promise<NotificationSenderRequest[]>;
+	acceptNotificationSender(id: string): Promise<number>;
+	dismissNotificationSender(id: string): Promise<number>;
+	notificationPolicy(): Promise<NotificationPolicy>;
+	updateNotificationPolicy(payload: { actions?: Partial<Record<NotificationSenderCategory, NotificationPolicyAction>>; new_account_days?: number }): Promise<NotificationPolicy>;
+	toggleConversationMute(postId: string): Promise<boolean>;
 	mastodonNotifications(limit?: number, maxId?: string | null): Promise<NotificationItem[]>;
 	unreadCount(): Promise<number>;
 	dismissNotification(id: string): Promise<void>;
@@ -1519,6 +1529,69 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				notifications,
 				unread_count: typeof data?.unread_count === 'number' ? data.unread_count : 0,
 			};
+		},
+
+		async notificationRequests(): Promise<NotificationSenderRequest[]> {
+			const data = await request<{ requests?: unknown }>('GET', '/api/v1/notifications/requests');
+			return Array.isArray(data?.requests)
+				? data.requests.filter(isRecord).map((entry) => ({
+					id: String(entry.id ?? ''),
+					actor_id: String(entry.actor_id ?? ''),
+					status: String(entry.status ?? 'held') as NotificationSenderRequest['status'],
+					category: String(entry.category ?? 'stranger') as NotificationSenderRequest['category'],
+					created_at: String(entry.created_at ?? ''),
+					reviewed_at: typeof entry.reviewed_at === 'string' ? entry.reviewed_at : null,
+					note: typeof entry.note === 'string' ? entry.note : null,
+				})).filter((entry) => entry.id !== '' && entry.actor_id !== '')
+				: [];
+		},
+
+		async acceptNotificationSender(id: string): Promise<number> {
+			const data = await request<{ released?: unknown }>(
+				'POST',
+				`/api/v1/notifications/requests/${encodeURIComponent(id)}/accept`,
+			);
+			return typeof data?.released === 'number' ? data.released : 0;
+		},
+
+		async dismissNotificationSender(id: string): Promise<number> {
+			const data = await request<{ suppressed?: unknown }>(
+				'POST',
+				`/api/v1/notifications/requests/${encodeURIComponent(id)}/dismiss`,
+			);
+			return typeof data?.suppressed === 'number' ? data.suppressed : 0;
+		},
+
+		async notificationPolicy(): Promise<NotificationPolicy> {
+			const data = await request<{ policy?: NotificationPolicy }>('GET', '/api/v1/notifications/policy');
+			if (data?.policy === undefined) {
+				throw new ApiError(502, 'invalid_response', 'Notification policy is not available.');
+			}
+			return data.policy;
+		},
+
+		async updateNotificationPolicy(payload): Promise<NotificationPolicy> {
+			const data = await request<{ policy?: NotificationPolicy }>(
+				'PATCH',
+				'/api/v1/notifications/policy',
+				undefined,
+				payload,
+			);
+			if (data?.policy === undefined) {
+				throw new ApiError(502, 'invalid_response', 'Notification policy could not be saved.');
+			}
+			return data.policy;
+		},
+
+		async toggleConversationMute(postId: string): Promise<boolean> {
+			const path = `/api/v1/conversations/${encodeURIComponent(postId)}/mute`;
+			const status = await request<{ muted?: unknown }>('GET', path);
+			if (status?.muted === true) {
+				await request<unknown>('DELETE', path);
+				return false;
+			}
+			await request<unknown>('POST', path);
+			return true;
 		},
 
 		async unreadCount(): Promise<number> {
