@@ -9,14 +9,15 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Support;
 
+use AlohaSocial\Core\Version;
 use Composer\InstalledVersions;
 use Throwable;
 
 /**
  * The installed core version.
  *
- * The core's `Version::CURRENT` constant is newer than the pinned `0.7.x`
- * line, so the host reads the Composer-installed version instead of guessing.
+ * Prefer the Composer lock's package version and commit reference. The source
+ * constant is only a fallback for unusual bootstrap/test assemblies.
  */
 final class CoreVersion
 {
@@ -34,6 +35,25 @@ final class CoreVersion
             // Fall through to the neutral answer.
         }
 
-        return '0.7.x';
+        return Version::CURRENT;
+    }
+
+    /**
+     * @return array{version: string, reference: ?string}
+     */
+    public static function details(): array
+    {
+        $reference = null;
+
+        try {
+            if (class_exists(InstalledVersions::class) && InstalledVersions::isInstalled('alohasocial/core')) {
+                $candidate = InstalledVersions::getReference('alohasocial/core');
+                $reference = is_string($candidate) && $candidate !== '' ? $candidate : null;
+            }
+        } catch (Throwable) {
+            // The source version remains useful when Composer metadata is absent.
+        }
+
+        return ['version' => self::current(), 'reference' => $reference];
     }
 }

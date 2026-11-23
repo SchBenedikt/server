@@ -226,7 +226,7 @@ onMounted(() => {
 				</label>
 				<label>
 					<span>Core version (release channel)</span>
-					<input v-model="form.core_version" class="a-input" placeholder="0.7.0" />
+					<input v-model="form.core_version" class="a-input" placeholder="0.8.0" />
 				</label>
 				<label>
 					<span>Jetstream relay</span>
@@ -344,6 +344,10 @@ onMounted(() => {
 						<div>
 							<dt>Application</dt>
 							<dd>{{ data.versions.application }}</dd>
+						</div>
+						<div>
+							<dt>Core commit</dt>
+							<dd>{{ data.versions.core_reference ?? 'Unavailable' }}</dd>
 						</div>
 						<div>
 							<dt>PHP</dt>

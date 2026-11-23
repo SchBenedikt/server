@@ -8,12 +8,12 @@ declare(strict_types=1);
  */
 
 use AlohaSocial\Core\Platform\Clock\SystemClock;
-use AlohaSocial\Core\Version;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Support\DatabaseBackup;
+use AlohaSocial\Server\Support\CoreVersion;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -52,7 +52,8 @@ try {
     $report = [
         'root' => $root,
         'instance_url' => $config->instanceUrl,
-        'core_version' => Version::CURRENT,
+        'core_version' => CoreVersion::current(),
+        'core_reference' => CoreVersion::details()['reference'],
         'driver' => $database->driver(),
         'database' => $backups->databaseLabel(),
         'schema_installed' => $installed,
@@ -112,6 +113,7 @@ try {
     fwrite(STDOUT, "Aloha Social doctor\n");
     fwrite(STDOUT, "  Instance:       " . $report['instance_url'] . "\n");
     fwrite(STDOUT, "  Core version:   " . $report['core_version'] . "\n");
+    fwrite(STDOUT, "  Core commit:    " . ($report['core_reference'] ?? 'unknown') . "\n");
     fwrite(STDOUT, "  Database:       " . $report['database'] . " (" . $report['driver'] . ")\n");
     fwrite(STDOUT, "  Schema:         " . ($installed ? 'installed, ' . ($report['schema_version'] ?? 'unknown') : 'missing') . "\n");
     fwrite(STDOUT, "  Pending:        " . ($pending === [] ? 'none' : implode(', ', $pending)) . "\n");
