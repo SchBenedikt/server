@@ -176,6 +176,49 @@ final class AtprotoIngestionTest extends TestCase
         ));
     }
 
+    public function testActiveAtprotoFollowProjectsPostsIntoTheHomeFeed(): void
+    {
+        $alice = $this->server->runtime->accounts->findByHandle('alice');
+        self::assertNotNull($alice);
+        $now = Time::format($this->server->runtime->clock->now());
+        $this->db->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . ' VALUES (:local, :account, :subject, :rkey, :uri, :cid, :state, :followed_at)',
+            [
+                'local' => $alice->id,
+                'account' => $this->localDid,
+                'subject' => 'did:plc:followed',
+                'rkey' => '3kfollowrecord',
+                'uri' => 'at://' . $this->localDid . '/app.bsky.graph.follow/3kfollowrecord',
+                'cid' => 'bafyfollow',
+                'state' => 'active',
+                'followed_at' => $now,
+            ],
+        );
+        $uri = 'at://did:plc:followed/app.bsky.feed.post/3kpost';
+        $this->record(
+            $uri,
+            'did:plc:followed',
+            'app.bsky.feed.post',
+            '3kpost',
+            ['text' => 'Visible in home', 'createdAt' => '2026-11-18T10:00:00.000Z'],
+            1,
+        );
+
+        $this->server->runtime->atprotoReconciler?->run();
+        $ids = array_map(
+            static fn ($entry): string => $entry->id,
+            $this->server->runtime->app->timelines->home($alice->id, 20),
+        );
+
+        self::assertContains($uri, $ids);
+        self::assertNotContains($uri, array_map(
+            static fn ($entry): string => $entry->id,
+            $this->server->runtime->app->timelines->home('another-user', 20),
+        ));
+    }
+
     /**
      * @param array<string, mixed> $body
      */
