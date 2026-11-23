@@ -136,9 +136,10 @@ server {
 }
 ```
 
-When TLS terminates in the proxy, set `ALOHASOCIAL_SECURE_COOKIES=true` only
-if the proxy also forwards to the container over HTTPS; otherwise the instance
-URL scheme already controls the cookie default.
+When TLS terminates in the proxy, the public origin remains HTTPS even though
+the proxy-to-container hop is HTTP. The instance URL enables `Secure` session
+cookies from that public origin; keep `ALOHASOCIAL_SECURE_COOKIES` unset or set
+it to `true`. Never disable secure cookies for a public instance.
 
 ## PostgreSQL
 
