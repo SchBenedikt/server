@@ -45,7 +45,7 @@ export function useTimeline(source: () => TimelineSource) {
 	const hasMore = ref(true);
 	const loaded = ref(false);
 
-	let cursor: string | null = null;
+	let cursor: { before: string; beforeId: string } | null = null;
 	let offset = 0;
 	let generation = 0;
 
@@ -77,13 +77,17 @@ export function useTimeline(source: () => TimelineSource) {
 		return merged;
 	};
 
-	async function fetchPage(before: string | null): Promise<{ posts: TimelineItem[]; consumed: number }> {
+	async function fetchPage(
+		before: { before: string; beforeId: string } | null,
+	): Promise<{ posts: TimelineItem[]; consumed: number }> {
 		const current = source();
 		const api = getApi();
+		const beforeTime = before?.before ?? null;
+		const beforeId = before?.beforeId ?? null;
 
 		switch (current.kind) {
 			case 'home':
-				return api.homeTimeline(PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
+				return api.homeTimeline(PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
 			case 'for-you':
 				return api.forYou(PAGE_SIZE, offset).then(async (data) => {
 					const loaded = await api.posts(data.posts);
@@ -101,11 +105,11 @@ export function useTimeline(source: () => TimelineSource) {
 					return { posts, consumed: data.posts.length };
 				});
 			case 'tag':
-				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
+				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
 			case 'followed':
-				return api.followedTimeline(PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
+				return api.followedTimeline(PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
 			default:
-				return api.publicTimeline(PAGE_SIZE, before).then((posts) => ({ posts, consumed: posts.length }));
+				return api.publicTimeline(PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
 		}
 	}
 
@@ -134,7 +138,8 @@ export function useTimeline(source: () => TimelineSource) {
 				offset = (reset ? 0 : offset) + page.consumed;
 				hasMore.value = page.consumed >= PAGE_SIZE;
 			} else {
-				cursor = batch.length > 0 ? batch[batch.length - 1].published_at : cursor;
+				const last = batch.at(-1);
+				cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
 				hasMore.value = batch.length >= PAGE_SIZE;
 			}
 			loaded.value = true;

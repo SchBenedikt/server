@@ -210,11 +210,11 @@ async function loadReplies(current: number): Promise<void> {
 	repliesLoading.value = true;
 	const seen = new Set<string>();
 	const found: TimelineItem[] = [];
-	let cursor: string | null = null;
+	let cursor: { before: string; beforeId: string } | null = null;
 
 	try {
 		for (let page = 0; page < 3; page += 1) {
-			const batch = await getApi().publicTimeline(PAGE_SIZE, cursor);
+			const batch = await getApi().publicTimeline(PAGE_SIZE, cursor?.before, cursor?.beforeId);
 			if (current !== generation) {
 				return;
 			}
@@ -227,7 +227,8 @@ async function loadReplies(current: number): Promise<void> {
 				}
 			}
 
-			cursor = batch.length > 0 ? batch[batch.length - 1].id : cursor;
+			const last = batch.at(-1);
+			cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
 			if (batch.length < PAGE_SIZE) {
 				break;
 			}

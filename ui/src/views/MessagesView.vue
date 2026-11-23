@@ -102,14 +102,18 @@ async function load(): Promise<void> {
 	error.value = '';
 	try {
 		const collected: TimelineItem[] = [];
-		let cursor: string | null = null;
+		let cursor: { before: string; beforeId: string } | null = null;
 		for (let page = 0; page < PAGES; page += 1) {
-			const batch = await getApi().homeTimeline(PAGE_SIZE, cursor);
+			const batch = await getApi().homeTimeline(PAGE_SIZE, cursor?.before, cursor?.beforeId);
 			collected.push(...batch);
 			if (batch.length < PAGE_SIZE) {
 				break;
 			}
-			cursor = batch[batch.length - 1].id;
+			const last = batch.at(-1);
+			if (last === undefined) {
+				break;
+			}
+			cursor = { before: last.published_at, beforeId: last.id };
 		}
 
 		// The core's home timeline omits recipient ids, so direct posts have to
