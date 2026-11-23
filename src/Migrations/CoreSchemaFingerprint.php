@@ -45,6 +45,8 @@ final class CoreSchemaFingerprint
                 \AlohaSocial\Core\Domain\Interaction\ReactionSchema::class,
                 \AlohaSocial\Core\Domain\Post\QuoteGrantSchema::class,
                 \AlohaSocial\Core\Domain\Scheduling\ScheduledPostSchema::class,
+                \AlohaSocial\Core\Domain\Atproto\AtprotoFollowSchema::class,
+                \AlohaSocial\Core\Domain\Federation\InboundBlockSchema::class,
             ],
         );
 

@@ -42,6 +42,9 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
 
     public string $sessionDid = 'did:plc:alice123';
 
+    /** @var array<string, array{cid: string, value: array<string, mixed>}> */
+    public array $records = [];
+
     public function request(
         string $method,
         string $url,
@@ -88,11 +91,33 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
 
         if (str_contains($url, 'com.atproto.repo.putRecord')) {
             $record = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+            $uri = 'at://' . $record['repo'] . '/' . $record['collection'] . '/' . $record['rkey'];
+            $cid = 'bafybeigdyrzt5sfp7udm7hu76uh72fbac7e4j4z3xq';
+            $this->records[$uri] = ['cid' => $cid, 'value' => $record['record']];
 
             return new HttpResponse(200, [], json_encode([
-                'uri' => 'at://' . $record['repo'] . '/' . $record['collection'] . '/' . $record['rkey'],
-                'cid' => 'bafybeigdyrzt5sfp7udm7hu76uh72fbac7e4j4z3xq',
+                'uri' => $uri,
+                'cid' => $cid,
             ], JSON_THROW_ON_ERROR));
+        }
+
+        if (str_contains($url, 'com.atproto.repo.getRecord')) {
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $uri = is_string($query['uri'] ?? null) ? $query['uri'] : '';
+            $record = $this->records[$uri] ?? null;
+            return $record === null
+                ? new HttpResponse(404, [], '{}')
+                : new HttpResponse(200, [], json_encode([
+                    'uri' => $uri,
+                    'cid' => $record['cid'],
+                    'value' => $record['value'],
+                ], JSON_THROW_ON_ERROR));
+        }
+
+        if (str_contains($url, 'com.atproto.repo.deleteRecord')) {
+            $record = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+            unset($this->records['at://' . $record['repo'] . '/' . $record['collection'] . '/' . $record['rkey']]);
+            return new HttpResponse(200, [], '{}');
         }
 
         throw new HttpClientException('Unexpected URL: ' . $url);
@@ -284,13 +309,51 @@ final class BlueskyAccountTest extends TestCase
         ))[0] ?? null;
         self::assertNotNull($request, 'The connected account must write through its discovered external PDS.');
         self::assertSame('https://pds.example.test/xrpc/com.atproto.repo.putRecord', $request['url']);
-        self::assertSame(
-            'Bearer ' . $this->http->session('access-1', 'refresh-1')['accessJwt'],
-            $request['headers']['Authorization'] ?? null,
-        );
+        $authorization = $request['headers']['Authorization'] ?? '';
+        self::assertStringStartsWith('Bearer ', $authorization);
+        $jwtParts = explode('.', substr($authorization, strlen('Bearer ')));
+        self::assertCount(3, $jwtParts);
+        $claims = json_decode(base64_decode(strtr($jwtParts[1], '-_', '+/')), true, 16, JSON_THROW_ON_ERROR);
+        self::assertSame('access-1', $claims['sub'] ?? null);
         $payload = json_decode($request['body'], true, 64, JSON_THROW_ON_ERROR);
         self::assertSame('did:plc:alice123', $payload['repo']);
         self::assertSame('published from standalone', $payload['record']['text']);
+    }
+
+    public function testBlueskyFollowActionsPersistAndDeleteThePdsRecord(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $auth = $this->server->signIn('alice');
+
+        $follow = $this->server->json(
+            'POST',
+            '/api/v1/host/bluesky/follows',
+            ['subject_did' => 'did:plc:bob123'],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+        self::assertSame(201, $follow->status, $follow->body);
+        $result = json_decode($follow->body, true, 64, JSON_THROW_ON_ERROR)['follow'];
+        self::assertSame('active', $result['state']);
+        self::assertSame('did:plc:bob123', $result['did']);
+        self::assertArrayHasKey($result['uri'], $this->http->records);
+
+        $status = $this->server->send('GET', '/api/v1/host/bluesky/follows', [
+            'cookies' => $auth['cookies'],
+            'query' => ['did' => 'did:plc:bob123'],
+        ]);
+        self::assertSame(200, $status->status, $status->body);
+        self::assertSame($result, json_decode($status->body, true, 64, JSON_THROW_ON_ERROR)['follow']);
+
+        $unfollow = $this->server->json(
+            'DELETE',
+            '/api/v1/host/bluesky/follows',
+            ['subject_did' => 'did:plc:bob123'],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+        self::assertSame(200, $unfollow->status, $unfollow->body);
+        self::assertArrayNotHasKey($result['uri'], $this->http->records);
     }
 
     public function testInvalidInputsAndCredentialsAreRejected(): void

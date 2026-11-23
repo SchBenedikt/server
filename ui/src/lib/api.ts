@@ -23,6 +23,7 @@ import type {
 	AccountConnectionsData,
 	RemoteConnectionsData,
 	RemoteFollowingEntry,
+	AtprotoFollowEntry,
 	RemoteEngagementData,
 	RemotePostData,
 	RemoteProfileData,
@@ -113,6 +114,9 @@ export interface Api {
 	followRemote(actor: string, inbox: string): Promise<RemoteFollowingEntry>;
 	unfollowRemote(id: string): Promise<void>;
 	remoteFollowing(): Promise<RemoteFollowingEntry[]>;
+	atprotoFollowStatus(did: string): Promise<{ follow: AtprotoFollowEntry | null; available: boolean }>;
+	followAtproto(did: string): Promise<AtprotoFollowEntry>;
+	unfollowAtproto(did: string): Promise<void>;
 	hostProfiles(): Promise<Record<string, string>>;
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
@@ -157,6 +161,7 @@ export interface Api {
 	helpKokua(id: string, message: string): Promise<KokuaEntry>;
 	withdrawKokuaHelp(id: string): Promise<KokuaEntry>;
 	postRevisions(id: string): Promise<PostRevisionData>;
+	deleteAccount(): Promise<{ state: string }>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
 		context?: string;
@@ -1167,6 +1172,27 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					.map(normalizeRemoteFollowing)
 					.filter((entry): entry is RemoteFollowingEntry => entry !== null)
 				: [];
+		},
+
+		async atprotoFollowStatus(did: string): Promise<{ follow: AtprotoFollowEntry | null; available: boolean }> {
+			const data = await request<{ follow?: AtprotoFollowEntry | null; available?: boolean }>(
+				'GET', '/api/v1/host/bluesky/follows', { did },
+			);
+			return { follow: data?.follow ?? null, available: data?.available === true };
+		},
+
+		async followAtproto(did: string): Promise<AtprotoFollowEntry> {
+			const data = await request<{ follow?: AtprotoFollowEntry }>(
+				'POST', '/api/v1/host/bluesky/follows', undefined, { subject_did: did },
+			);
+			if (!data?.follow) {
+				throw new ApiError(502, 'invalid_response', 'The Bluesky follow response is incomplete.');
+			}
+			return data.follow;
+		},
+
+		async unfollowAtproto(did: string): Promise<void> {
+			await request<unknown>('DELETE', '/api/v1/host/bluesky/follows', undefined, { subject_did: did });
 		},
 
 		async remotePost(id: string): Promise<RemotePostData> {
@@ -2551,6 +2577,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return response.blob();
+		},
+
+		async deleteAccount(): Promise<{ state: string }> {
+			const data = await request<{ deletion?: { state?: unknown } }>(
+				'DELETE',
+				'/api/v1/account/data',
+			);
+			return { state: typeof data?.deletion?.state === 'string' ? data.deletion.state : 'unknown' };
 		},
 
 		async atprotoIdentity(): Promise<AtprotoIdentityData> {
