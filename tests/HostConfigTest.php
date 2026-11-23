@@ -24,6 +24,8 @@ final class HostConfigTest extends TestCase
         'ALOHASOCIAL_BLOB_DIRECTORY',
         'ALOHASOCIAL_SECRET_KEY_FILE',
         'ALOHASOCIAL_MAIL_FROM',
+        'ALOHASOCIAL_DEBUG',
+        'ALOHASOCIAL_SECURE_COOKIES',
     ];
 
     /** @var array<string, string|false> */
@@ -144,6 +146,34 @@ final class HostConfigTest extends TestCase
         ]);
 
         self::assertSame('https://from-checkout.example', $config->instanceUrl);
+    }
+
+    public function testPublicInstanceRejectsHttpOutsideDevelopmentMode(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('A public instance URL must use HTTPS.');
+        HostConfig::load($this->root, ['instance_url' => 'http://social.example']);
+    }
+
+    public function testPublicInstanceRequiresSecureCookies(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Secure session cookies are required');
+        HostConfig::load($this->root, [
+            'instance_url' => 'https://social.example',
+            'secure_cookies' => false,
+        ]);
+    }
+
+    public function testExplicitDevelopmentModeAllowsPublicHttpForLocalTesting(): void
+    {
+        $config = HostConfig::load($this->root, [
+            'instance_url' => 'http://social.example',
+            'debug' => true,
+        ]);
+
+        self::assertSame('http://social.example', $config->instanceUrl);
+        self::assertFalse($config->secureCookies);
     }
 
     private static function removeDirectory(string $directory): void
