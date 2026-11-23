@@ -13,12 +13,18 @@ use RuntimeException;
 
 use function bin2hex;
 use function chmod;
+use function fclose;
+use function fopen;
+use function dirname;
 use function file_get_contents;
 use function file_put_contents;
+use function flock;
 use function hash_equals;
 use function is_file;
+use function rename;
 use function random_bytes;
 use function strlen;
+use function tempnam;
 use function trim;
 use function unlink;
 
@@ -46,13 +52,41 @@ final class SetupToken
     public function generate(): string
     {
         $token = bin2hex(random_bytes(32));
-        if (file_put_contents($this->path, $token . "\n") === false) {
+        $temporary = tempnam(dirname($this->path), '.setup-token-');
+        if ($temporary === false) {
+            throw new RuntimeException('Cannot create a temporary setup token file.');
+        }
+        @chmod($temporary, 0o600);
+        $contents = $token . "\n";
+        if (file_put_contents($temporary, $contents) !== strlen($contents) || !rename($temporary, $this->path)) {
+            @unlink($temporary);
             throw new RuntimeException('Cannot write the setup token: ' . $this->path);
         }
 
         @chmod($this->path, 0o600);
 
         return $token;
+    }
+
+    /** Serialize setup submissions across PHP workers and processes. */
+    public function synchronized(callable $callback): mixed
+    {
+        $handle = @fopen($this->path . '.lock', 'c');
+        if (!is_resource($handle)) {
+            throw new RuntimeException('Cannot open the setup lock file.');
+        }
+        @chmod($this->path . '.lock', 0o600);
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                throw new RuntimeException('Cannot acquire the setup lock.');
+            }
+
+            return $callback();
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 
     public function read(): ?string

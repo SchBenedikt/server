@@ -36,7 +36,11 @@ final class SetupTest extends TestCase
     public function testSetupRequiresTheOneTimeToken(): void
     {
         $server = new TestServer();
-        $token = (new SetupToken($server->config->varDirectory . '/setup.token'))->generate();
+        $setupToken = new SetupToken($server->config->varDirectory . '/setup.token');
+        $token = $setupToken->generate();
+        self::assertSame(0o600, fileperms($server->config->varDirectory . '/setup.token') & 0o777);
+
+        self::assertSame('serialized', $setupToken->synchronized(static fn (): string => 'serialized'));
 
         $missing = $server->send('GET', '/setup');
         self::assertSame(403, $missing->status);
