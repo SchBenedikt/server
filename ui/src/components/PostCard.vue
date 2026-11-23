@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useHostBridge } from '@alohasocial/ui';
 import AddToCollectionDialog from './AddToCollectionDialog.vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
@@ -32,6 +33,7 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{ bookmark: [bookmarked: boolean]; pinned: [pinned: boolean] }>();
+const hostBridge = useHostBridge();
 
 const authorId = computed(() => props.post.object_author_id ?? props.post.author_id);
 const author = computed(() => {
@@ -94,6 +96,7 @@ const editedAbsolute = computed(() => (
 	props.post.edited_at ? new Date(props.post.edited_at).toLocaleString('en-US') : ''
 ));
 const localId = computed(() => postRouteId(props.post));
+const canPublishToBluesky = computed(() => isMine.value && localId.value !== null && hostBridge.capabilities().atproto);
 const remoteTarget = computed(() => {
 	const candidate = props.post.object_id ?? props.post.id;
 	return isRemoteId(candidate) || candidate.startsWith('at://') ? candidate : null;
@@ -614,13 +617,22 @@ async function sendFeedback(kind: 'less' | 'more'): Promise<void> {
 }
 
 async function publishToBluesky(): Promise<void> {
-	if (localId.value === null || publishingBluesky.value) {
+	if (!canPublishToBluesky.value || publishingBluesky.value || localId.value === null) {
 		return;
 	}
 
 	publishingBluesky.value = true;
 	menuOpen.value = false;
 	try {
+		const status = await getApi().blueskyAccount();
+		if (!status.publish_enabled) {
+			showToast('Bluesky publishing is disabled on this instance.', 'error');
+			return;
+		}
+		if (!status.account.connected) {
+			showToast('Connect a Bluesky account in Settings before publishing.', 'info');
+			return;
+		}
 		await getApi().publishToBluesky(localId.value);
 		showToast('Post published to Bluesky.', 'success');
 	} catch (error) {
@@ -802,7 +814,7 @@ onUnmounted(() => {
 						<AppIcon name="sparkles" :size="15" /> Show more of this
 					</button>
 					<button
-						v-if="isMine && localId"
+						v-if="canPublishToBluesky"
 						type="button"
 						role="menuitem"
 						:disabled="publishingBluesky"
