@@ -23,7 +23,9 @@ use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Jobs\PdoJobQueue;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Http\CurlHttpClient;
+use AlohaSocial\Core\Platform\Http\HttpClient;
 use AlohaSocial\Core\Platform\Network\DnsHostResolver;
+use AlohaSocial\Core\Platform\Network\HostResolver;
 use AlohaSocial\Core\Platform\Storage\LocalBlobStore;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Protocol\ActivityPub\HttpActorResolver;
@@ -94,6 +96,8 @@ final class ApplicationFactory
     public function __construct(
         private readonly HostConfig $config,
         private readonly string $root,
+        private readonly ?HttpClient $httpClient = null,
+        private readonly ?HostResolver $hostResolver = null,
     ) {
     }
 
@@ -111,8 +115,8 @@ final class ApplicationFactory
 
         // 5. HTTP client and DNS policy (shared by federation, media, threads)
         $logger = new RuntimeLogger($database, $clock);
-        $httpClient = new CurlHttpClient();
-        $hostResolver = new DnsHostResolver();
+        $httpClient = $this->httpClient ?? new CurlHttpClient();
+        $hostResolver = $this->hostResolver ?? new DnsHostResolver();
         $targetGuard = new FederationTargetGuard(
             $hostResolver,
             new StoredModerationPolicy(new PdoModerationActionRepository($database)),
@@ -155,11 +159,12 @@ final class ApplicationFactory
                 new NativePdsAccountResolver($this->config, $pdsRepository),
                 $blueskyAccounts,
             );
+        $externalAtprotoPublisher = new XrpcAtprotoPublisher($httpClient);
         $atprotoPublisher = $nativePds === null
-            ? null
+            ? $externalAtprotoPublisher
             : new CompositeAtprotoPublisher(
                 new NativePdsPublisher($nativePds, $pdsRepository),
-                new XrpcAtprotoPublisher($httpClient),
+                $externalAtprotoPublisher,
             );
         $preferences = new Preferences($database, $clock);
 
