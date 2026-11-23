@@ -678,6 +678,7 @@ final class CommunityApiController
 
                 $export = $this->runtime->exports->build($account);
                 $export['core_archive'] = $this->runtime->app->accountData?->export($userId);
+                $export['linked_bluesky_account'] = $this->runtime->blueskyAccounts->status($userId);
 
                 return Response::text(
                     Exports::toJson($export),

@@ -113,6 +113,21 @@ final class PreferencesTest extends TestCase
 
     public function testExportContainsOnlyTheViewersOwnData(): void
     {
+        $this->server->runtime->database->execute(
+            'INSERT INTO atproto_account'
+            . ' (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
+            . ' VALUES (:account_id, :did, :handle, :pds_url, :access, :refresh, 0, 1, :created, :updated)',
+            [
+                'account_id' => 'alice',
+                'did' => 'did:plc:alice123',
+                'handle' => 'alice.bsky.social',
+                'pds_url' => 'https://pds.example',
+                'access' => 'sealed-access-secret',
+                'refresh' => 'sealed-refresh-secret',
+                'created' => '2026-01-01T00:00:00Z',
+                'updated' => '2026-01-01T00:00:00Z',
+            ],
+        );
         $mine = $this->server->runtime->app->posts->create(
             new CreatePost('alice', 'Mein exportierter Beitrag', Visibility::Public),
         )->id;
@@ -140,6 +155,9 @@ final class PreferencesTest extends TestCase
         self::assertArrayHasKey('following', $export);
         self::assertArrayHasKey('drafts', $export);
         self::assertSame('alohasocial-account-archive', $export['core_archive']['format']);
+        self::assertSame('alice.bsky.social', $export['linked_bluesky_account']['handle']);
+        self::assertStringNotContainsString('sealed-access-secret', $response->body);
+        self::assertStringNotContainsString('sealed-refresh-secret', $response->body);
 
         $ids = array_column($export['posts'], 'id');
         self::assertContains($mine, $ids);
