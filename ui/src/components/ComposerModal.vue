@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, nextTick, ref, watch } from 'vue';
+import { useHostBridge } from '@alohasocial/ui';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import { accountName, handleLabel, postRouteId, truncate } from '../lib/format';
@@ -46,6 +47,10 @@ interface PendingImage {
 const dialog = ref<HTMLDialogElement | null>(null);
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const hostBridge = useHostBridge();
+const canUploadMedia = computed(() => (
+	appState.session.user !== null && hostBridge.capabilities().media
+));
 
 const content = ref('');
 const contentWarning = ref('');
@@ -76,6 +81,9 @@ const isQuote = computed(() => quoteTo.value !== null);
 const preloadedDraft = computed<Draft | null>(() => appState.composer.draft);
 const directTo = computed(() => appState.composer.directTo);
 const isDirect = computed(() => directTo.value !== null);
+const hasMediaAttachments = computed(() => (
+	images.value.length > 0 || existing.value.length > 0 || restoredAttachmentIds.value.length > 0
+));
 const directHandle = computed(() => directTo.value === null ? '' : directTo.value.handle);
 const directName = computed(() => {
 	const account = directTo.value;
@@ -134,6 +142,7 @@ const scheduleReady = computed(() => (
 ));
 const canSubmit = computed(() => (
 	appState.session.user !== null
+	&& (canUploadMedia.value || !hasMediaAttachments.value)
 	&& (content.value.trim() !== '' || images.value.length > 0 || restoredAttachmentIds.value.length > 0 || (showPoll.value && pollReady.value))
 	&& !overLimit.value
 	&& !warningOverLimit.value
@@ -368,6 +377,10 @@ function addFiles(event: Event): void {
 	const input = event.target as HTMLInputElement;
 	const selected = Array.from(input.files ?? []);
 	input.value = '';
+	if (!canUploadMedia.value) {
+		showToast('Media uploads are not configured on this instance.', 'error');
+		return;
+	}
 
 	for (const file of selected) {
 		if (images.value.length + existing.value.length >= MAX_FILES) {
@@ -408,6 +421,10 @@ function removeExisting(id: string): void {
 	existing.value = existing.value.filter((attachment) => attachment.id !== id);
 }
 
+function removeRestoredAttachments(): void {
+	restoredAttachmentIds.value = [];
+}
+
 function resetImages(): void {
 	for (const image of images.value) {
 		URL.revokeObjectURL(image.preview);
@@ -417,6 +434,10 @@ function resetImages(): void {
 
 async function saveAsDraft(): Promise<void> {
 	if (savingDraft.value || appState.session.user === null) {
+		return;
+	}
+	if (!canUploadMedia.value && hasMediaAttachments.value) {
+		showToast('Remove the media attachments before saving; media uploads are unavailable on this instance.', 'error');
 		return;
 	}
 
@@ -483,6 +504,10 @@ function discardSavedDraft(): void {
 
 async function submit(): Promise<void> {
 	error.value = '';
+	if (!canUploadMedia.value && hasMediaAttachments.value) {
+		error.value = 'Remove the media attachments before publishing; media uploads are unavailable on this instance.';
+		return;
+	}
 
 	if (!canSubmit.value) {
 		if (content.value.trim() === '' && images.value.length === 0 && restoredAttachmentIds.value.length === 0) {
@@ -766,6 +791,9 @@ async function submit(): Promise<void> {
 
 				<p v-if="restoredAttachmentIds.length > 0" class="a-composer__hint">
 					{{ restoredAttachmentIds.length }} saved {{ restoredAttachmentIds.length === 1 ? 'attachment' : 'attachments' }} from the draft will be sent too.
+					<button v-if="!canUploadMedia" type="button" class="a-btn a-btn--ghost a-btn--small" @click="removeRestoredAttachments">
+						Remove saved attachments
+					</button>
 				</p>
 				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
 					<figure v-for="attachment in existing" :key="attachment.id" class="a-composer__image">
@@ -833,18 +861,22 @@ async function submit(): Promise<void> {
 						type="file"
 						accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/mpeg,audio/mp4,audio/ogg,audio/wav"
 						multiple
+						:disabled="!canUploadMedia"
 						@change="addFiles"
 					/>
 					<button
 						type="button"
 						class="a-icon-btn"
-						:disabled="images.length + existing.length >= MAX_FILES || submitting"
-						aria-label="Add images, video or audio"
-						title="Add media"
+						:disabled="!canUploadMedia || images.length + existing.length >= MAX_FILES || submitting"
+						:aria-label="canUploadMedia ? 'Add images, video or audio' : 'Media uploads are unavailable'"
+						:title="canUploadMedia ? 'Add media' : 'Media uploads are not configured on this instance'"
 						@click="fileInput?.click()"
 					>
 						<AppIcon name="image" :size="20" />
 					</button>
+					<p v-if="!canUploadMedia" class="a-composer__hint">
+						Media uploads are not configured on this instance.
+					</p>
 					<button
 						type="button"
 						class="a-icon-btn"
