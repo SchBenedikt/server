@@ -42,13 +42,14 @@ final class GlobalsRequestFactory
 
     private const EOL = "\r\n";
 
-    public static function create(): Request
+    public static function create(?string $trustedClientAddress = null): Request
     {
         $uri = (string) ($_SERVER['REQUEST_URI'] ?? '/');
         $path = (string) (parse_url($uri, PHP_URL_PATH) ?? '/');
         $method = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET');
         $headers = self::requestHeaders();
-        $remoteAddress = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : null;
+        $remoteAddress = $trustedClientAddress
+            ?? (isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : null);
         $declaredLength = $_SERVER['CONTENT_LENGTH'] ?? null;
         if (
             (is_string($declaredLength) || is_int($declaredLength))

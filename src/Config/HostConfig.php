@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Config;
 use AlohaSocial\Core\Platform\Config\ArrayConfig;
 use AlohaSocial\Core\Platform\Config\Config;
 use AlohaSocial\Server\Support\CoreVersion;
+use AlohaSocial\Server\Http\TrustedProxyClientAddress;
 use RuntimeException;
 
 /**
@@ -65,6 +66,8 @@ final readonly class HostConfig
         public string $smtpEncryption,
         public string $envFile,
         public string $atprotoJetstreamUrl = '',
+        /** @var list<string> Trusted proxy IPs or CIDRs for X-Forwarded-For. */
+        public array $trustedProxies = [],
     ) {
     }
 
@@ -207,6 +210,16 @@ final readonly class HostConfig
             throw new RuntimeException('The AT Protocol Jetstream URL must be a ws(s) URL, got: ' . $atprotoJetstream);
         }
 
+        $trustedProxiesValue = $pick('trusted_proxies', 'ALOHASOCIAL_TRUSTED_PROXIES', '');
+        $trustedProxies = is_array($trustedProxiesValue)
+            ? array_values(array_filter(array_map(static fn (mixed $value): string => trim((string) $value), $trustedProxiesValue)))
+            : array_values(array_filter(array_map('trim', explode(',', (string) $trustedProxiesValue))));
+        foreach ($trustedProxies as $proxy) {
+            if (!TrustedProxyClientAddress::isValidRange($proxy)) {
+                throw new RuntimeException('ALOHASOCIAL_TRUSTED_PROXIES contains an invalid IP or CIDR: ' . $proxy);
+            }
+        }
+
         return new self(
             instanceUrl: $instanceUrl,
             instanceName: trim((string) $pick('instance_name', 'ALOHASOCIAL_INSTANCE_NAME', 'Aloha Social')),
@@ -250,6 +263,7 @@ final readonly class HostConfig
             smtpEncryption: $smtpEncryption,
             envFile: self::resolvePath((string) $pick('env_file', 'ALOHASOCIAL_ENV_FILE', $root . '/.env'), $root),
             atprotoJetstreamUrl: $atprotoJetstream,
+            trustedProxies: $trustedProxies,
         );
     }
 
