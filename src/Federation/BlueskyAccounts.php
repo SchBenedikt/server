@@ -307,56 +307,99 @@ final class BlueskyAccounts implements AtprotoAccountResolver
     /**
      * Refreshes an expired access token and returns the new token.
      *
-     * A refresh failure deactivates the row instead of retrying forever: the
-     * user has to reconnect, which is visible in the settings page.
+     * Refresh tokens are single-use. Lock the account row before sending one
+     * so concurrent requests wait for the rotated token instead of consuming
+     * the same credential twice. Retryable PDS failures leave the account
+     * connected; terminal client errors require the user to reconnect.
      *
      * @param array<string, mixed> $row
      */
     private function refresh(string $localUserId, array $row): ?string
     {
-        try {
-            $refreshToken = $this->box->open((string) $row['refresh_token']);
-        } catch (SecretBoxException) {
-            return null;
-        }
+        return $this->db->transaction(function () use ($localUserId, $row): ?string {
+            if ($this->db->driver() === 'sqlite') {
+                // SQLite has no SELECT FOR UPDATE; a no-op write obtains its
+                // database write lock before the token is read again.
+                $this->db->execute(
+                    'UPDATE atproto_account SET updated_at = updated_at WHERE account_id = :account_id',
+                    ['account_id' => $localUserId],
+                );
+            } else {
+                $this->db->fetchOne(
+                    'SELECT account_id FROM atproto_account WHERE account_id = :account_id FOR UPDATE',
+                    ['account_id' => $localUserId],
+                );
+            }
 
-        try {
-            $response = $this->request(
-                'POST',
-                rtrim((string) $row['pds_url'], '/') . '/xrpc/com.atproto.server.refreshSession',
-                ['Authorization' => 'Bearer ' . $refreshToken, 'Accept' => 'application/json'],
+            $current = $this->row($localUserId);
+            if ($current === null || (int) ($current['active'] ?? 0) !== 1) {
+                return null;
+            }
+
+            $expiresAt = (int) ($current['expires_at'] ?? 0);
+            if ($expiresAt > $this->clock->now()->getTimestamp() + self::REFRESH_SKEW_SECONDS) {
+                try {
+                    return $this->box->open((string) $current['access_token']);
+                } catch (SecretBoxException) {
+                    return null;
+                }
+            }
+
+            try {
+                $refreshToken = $this->box->open((string) $current['refresh_token']);
+            } catch (SecretBoxException) {
+                return null;
+            }
+
+            try {
+                $response = $this->request(
+                    'POST',
+                    rtrim((string) $current['pds_url'], '/') . '/xrpc/com.atproto.server.refreshSession',
+                    ['Authorization' => 'Bearer ' . $refreshToken, 'Accept' => 'application/json'],
+                );
+            } catch (BlueskyException) {
+                return null;
+            }
+
+            if (!$response->isSuccessful()) {
+                if ($response->status !== 429 && $response->status < 500) {
+                    $this->db->execute(
+                        'UPDATE atproto_account SET active = 0, updated_at = :updated_at'
+                        . ' WHERE account_id = :account_id AND refresh_token = :refresh_token',
+                        [
+                            'account_id' => $localUserId,
+                            'refresh_token' => (string) $current['refresh_token'],
+                            'updated_at' => Time::format($this->clock->now()),
+                        ],
+                    );
+                }
+
+                return null;
+            }
+
+            try {
+                $data = $this->decode($response);
+            } catch (BlueskyException) {
+                return null;
+            }
+            $accessToken = is_string($data['accessJwt'] ?? null) ? $data['accessJwt'] : '';
+            $newRefresh = is_string($data['refreshJwt'] ?? null) ? $data['refreshJwt'] : '';
+            if ($accessToken === '' || $newRefresh === '') {
+                return null;
+            }
+
+            $this->store(
+                $localUserId,
+                (string) $current['did'],
+                (string) $current['handle'],
+                (string) $current['pds_url'],
+                $accessToken,
+                $newRefresh,
+                $this->expiresAt($accessToken),
             );
-        } catch (BlueskyException) {
-            return null;
-        }
 
-        if (!$response->isSuccessful()) {
-            $this->db->execute(
-                'UPDATE atproto_account SET active = 0, updated_at = :updated_at WHERE account_id = :account_id',
-                ['account_id' => $localUserId, 'updated_at' => Time::format($this->clock->now())],
-            );
-
-            return null;
-        }
-
-        $data = $this->decode($response);
-        $accessToken = is_string($data['accessJwt'] ?? null) ? $data['accessJwt'] : '';
-        $newRefresh = is_string($data['refreshJwt'] ?? null) ? $data['refreshJwt'] : $refreshToken;
-        if ($accessToken === '') {
-            return null;
-        }
-
-        $this->store(
-            $localUserId,
-            (string) $row['did'],
-            (string) $row['handle'],
-            (string) $row['pds_url'],
-            $accessToken,
-            $newRefresh,
-            $this->expiresAt($accessToken),
-        );
-
-        return $accessToken;
+            return $accessToken;
+        });
     }
 
     private function store(

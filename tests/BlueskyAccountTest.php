@@ -38,6 +38,10 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
 
     public bool $rejectRefresh = false;
 
+    public ?int $refreshFailureStatus = null;
+
+    public bool $omitRefreshToken = false;
+
     public string $pdsEndpoint = 'https://pds.example.test';
 
     public string $sessionDid = 'did:plc:alice123';
@@ -85,8 +89,16 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
             if ($this->rejectRefresh) {
                 return new HttpResponse(401, [], '{"message":"Expired"}');
             }
+            if ($this->refreshFailureStatus !== null) {
+                return new HttpResponse($this->refreshFailureStatus, [], '{"message":"Temporary failure"}');
+            }
 
-            return new HttpResponse(200, [], json_encode($this->session('access-2', 'refresh-2'), JSON_THROW_ON_ERROR));
+            $session = $this->session('access-2', 'refresh-2');
+            if ($this->omitRefreshToken) {
+                unset($session['refreshJwt']);
+            }
+
+            return new HttpResponse(200, [], json_encode($session, JSON_THROW_ON_ERROR));
         }
 
         if (str_contains($url, 'com.atproto.repo.putRecord')) {
@@ -276,6 +288,45 @@ final class BlueskyAccountTest extends TestCase
         self::assertNotNull($row);
         self::assertSame(0, (int) $row['active']);
         self::assertFalse($this->bluesky->status('alice')['connected']);
+    }
+
+    public function testTemporaryRefreshFailuresKeepTheConnectionAvailableForRetry(): void
+    {
+        $this->http->expiresIn = -10;
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $this->http->expiresIn = 3600;
+        $this->http->refreshFailureStatus = 503;
+
+        self::assertNull($this->bluesky->resolve('alice'));
+        self::assertTrue($this->bluesky->status('alice')['connected']);
+        self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
+            'SELECT active FROM atproto_account WHERE account_id = :id',
+            ['id' => 'alice'],
+        ));
+
+        $this->http->refreshFailureStatus = 429;
+        self::assertNull($this->bluesky->resolve('alice'));
+        self::assertTrue($this->bluesky->status('alice')['connected']);
+    }
+
+    public function testMalformedRefreshResponseDoesNotReplaceTheStoredCredential(): void
+    {
+        $this->http->expiresIn = -10;
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $this->http->expiresIn = 3600;
+        $this->http->omitRefreshToken = true;
+
+        $before = $this->server->runtime->database->fetchValue(
+            'SELECT refresh_token FROM atproto_account WHERE account_id = :id',
+            ['id' => 'alice'],
+        );
+        self::assertNull($this->bluesky->resolve('alice'));
+
+        self::assertSame($before, $this->server->runtime->database->fetchValue(
+            'SELECT refresh_token FROM atproto_account WHERE account_id = :id',
+            ['id' => 'alice'],
+        ));
+        self::assertTrue($this->bluesky->status('alice')['connected']);
     }
 
     public function testDisconnectRemovesTheConnection(): void
