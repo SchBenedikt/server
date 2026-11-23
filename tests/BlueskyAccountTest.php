@@ -46,6 +46,8 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
 
     public string $sessionDid = 'did:plc:alice123';
 
+    public string $resolvedDid = 'did:plc:alice123';
+
     /** @var array<string, array{cid: string, value: array<string, mixed>}> */
     public array $records = [];
 
@@ -59,12 +61,12 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
         $this->requests[] = ['method' => $method, 'url' => $url, 'headers' => $headers, 'body' => $body];
 
         if (str_contains($url, 'com.atproto.identity.resolveHandle')) {
-            return new HttpResponse(200, [], json_encode(['did' => 'did:plc:alice123'], JSON_THROW_ON_ERROR));
+            return new HttpResponse(200, [], json_encode(['did' => $this->resolvedDid], JSON_THROW_ON_ERROR));
         }
 
         if (str_starts_with($url, 'https://plc.directory/')) {
             return new HttpResponse(200, [], json_encode([
-                'id' => 'did:plc:alice123',
+                'id' => $this->resolvedDid,
                 'service' => [[
                     'id' => '#atproto_pds',
                     'type' => 'AtprotoPersonalDataServer',
@@ -346,11 +348,40 @@ final class BlueskyAccountTest extends TestCase
     public function testDisconnectRemovesTheConnection(): void
     {
         $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . " VALUES ('alice', 'did:plc:alice123', 'did:plc:followed', '3kfollow',"
+            . " 'at://did:plc:alice123/app.bsky.graph.follow/3kfollow', 'bafyfollow', 'active', '2026-11-20T10:00:00Z')",
+        );
 
         self::assertTrue($this->bluesky->disconnect('alice'));
         self::assertFalse($this->bluesky->disconnect('alice'));
         self::assertNull($this->bluesky->resolve('alice'));
         self::assertSame(['connected' => false], $this->bluesky->status('alice'));
+        self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = 'alice'",
+        ));
+    }
+
+    public function testConnectingADifferentBlueskyAccountRemovesOldAccountFollows(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . " VALUES ('alice', 'did:plc:alice123', 'did:plc:followed', '3kfollow',"
+            . " 'at://did:plc:alice123/app.bsky.graph.follow/3kfollow', 'bafyfollow', 'active', '2026-11-20T10:00:00Z')",
+        );
+
+        $this->http->resolvedDid = 'did:plc:alice456';
+        $this->http->sessionDid = 'did:plc:alice456';
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+
+        self::assertSame('did:plc:alice456', $this->bluesky->status('alice')['did']);
+        self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = 'alice'",
+        ));
     }
 
     public function testExternalPdsPublishesWithoutTheOptionalNativePds(): void

@@ -198,10 +198,28 @@ final class BlueskyAccounts implements AtprotoAccountResolver
 
     public function disconnect(string $localUserId): bool
     {
-        return $this->db->execute(
-            'DELETE FROM atproto_account WHERE account_id = :account_id',
-            ['account_id' => $localUserId],
-        ) > 0;
+        return $this->db->transaction(function () use ($localUserId): bool {
+            $account = $this->db->fetchOne(
+                'SELECT did FROM atproto_account WHERE account_id = :account_id',
+                ['account_id' => $localUserId],
+            );
+            if ($account === null) {
+                return false;
+            }
+
+            $did = is_string($account['did'] ?? null) ? $account['did'] : '';
+            if ($did !== '') {
+                $this->db->execute(
+                    'DELETE FROM social_atproto_follow WHERE local_user_id = :account_id AND account_did = :did',
+                    ['account_id' => $localUserId, 'did' => $did],
+                );
+            }
+
+            return $this->db->execute(
+                'DELETE FROM atproto_account WHERE account_id = :account_id',
+                ['account_id' => $localUserId],
+            ) > 0;
+        });
     }
 
     /**
@@ -415,38 +433,45 @@ final class BlueskyAccounts implements AtprotoAccountResolver
     ): void {
         $now = Time::format($this->clock->now());
 
-        try {
+        $this->db->transaction(function () use ($localUserId, $did, $handle, $pdsUrl, $accessToken, $refreshToken, $expiresAt, $now): void {
+            try {
+                $this->db->execute(
+                    'INSERT INTO atproto_account (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
+                    . ' VALUES (:account_id, :did, :handle, :pds_url, :access_token, :refresh_token, :expires_at, 1, :created_at, :updated_at)'
+                    . ' ON CONFLICT (account_id) DO UPDATE SET'
+                    . ' did = excluded.did,'
+                    . ' handle = excluded.handle,'
+                    . ' pds_url = excluded.pds_url,'
+                    . ' access_token = excluded.access_token,'
+                    . ' refresh_token = excluded.refresh_token,'
+                    . ' expires_at = excluded.expires_at,'
+                    . ' active = 1,'
+                    . ' updated_at = excluded.updated_at',
+                    [
+                        'account_id' => $localUserId,
+                        'did' => $did,
+                        'handle' => $handle,
+                        'pds_url' => $pdsUrl,
+                        'access_token' => $this->box->seal($accessToken),
+                        'refresh_token' => $this->box->seal($refreshToken),
+                        'expires_at' => $expiresAt,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ],
+                );
+            } catch (\PDOException) {
+                throw new BlueskyException(
+                    409,
+                    'bluesky_already_connected',
+                    'This Bluesky account is already connected to another Aloha account.',
+                );
+            }
+
             $this->db->execute(
-                'INSERT INTO atproto_account (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
-                . ' VALUES (:account_id, :did, :handle, :pds_url, :access_token, :refresh_token, :expires_at, 1, :created_at, :updated_at)'
-                . ' ON CONFLICT (account_id) DO UPDATE SET'
-                . ' did = excluded.did,'
-                . ' handle = excluded.handle,'
-                . ' pds_url = excluded.pds_url,'
-                . ' access_token = excluded.access_token,'
-                . ' refresh_token = excluded.refresh_token,'
-                . ' expires_at = excluded.expires_at,'
-                . ' active = 1,'
-                . ' updated_at = excluded.updated_at',
-                [
-                    'account_id' => $localUserId,
-                    'did' => $did,
-                    'handle' => $handle,
-                    'pds_url' => $pdsUrl,
-                    'access_token' => $this->box->seal($accessToken),
-                    'refresh_token' => $this->box->seal($refreshToken),
-                    'expires_at' => $expiresAt,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ],
+                'DELETE FROM social_atproto_follow WHERE local_user_id = :account_id AND account_did <> :did',
+                ['account_id' => $localUserId, 'did' => $did],
             );
-        } catch (\PDOException) {
-            throw new BlueskyException(
-                409,
-                'bluesky_already_connected',
-                'This Bluesky account is already connected to another Aloha account.',
-            );
-        }
+        });
     }
 
     private function expiresAt(string $jwt): int
