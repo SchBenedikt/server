@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Bootstrap;
 use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Atproto\Pds\NativePdsService;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
 use AlohaSocial\Core\Protocol\Atproto\PlcDirectoryClient;
 use AlohaSocial\Core\Protocol\Atproto\XrpcAtprotoPublisher;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
@@ -195,6 +196,7 @@ final class ApplicationFactory
             hostResolver: $hostResolver,
             atprotoAccounts: $atprotoAccounts,
             atprotoPublisher: $atprotoPublisher,
+            atprotoFollowRepository: new PdoAtprotoFollowRepository($database),
             localProfiles: new AccountProfileProvider($accounts, $preferences),
             pdsRepository: $pdsRepository,
             pdsSecrets: $this->secretBox(),
