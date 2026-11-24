@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Accounts;
 
+use AlohaSocial\Core\Domain\Account\AccountDeletionSchema;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
@@ -152,5 +153,47 @@ final readonly class AccountErasureCleanup
 
             return $deleted;
         });
+    }
+
+    /**
+     * Finish host-owned cleanup for Core deletions that completed after the
+     * original HTTP request returned. This scan is safe to repeat: `erase()`
+     * is transactional and preserves the generated tombstone on retries.
+     *
+     * @return array{processed: int, failed: int}
+     */
+    public function finalizeCompleted(int $limit = 50): array
+    {
+        if ($limit < 1 || $limit > 1000) {
+            throw new \InvalidArgumentException('Account erasure batch size must be between 1 and 1000.');
+        }
+
+        $rows = $this->db->fetchAll(
+            'SELECT deletion.user_id FROM ' . AccountDeletionSchema::TABLE . ' deletion'
+            . ' INNER JOIN account ON account.id = deletion.user_id'
+            . " WHERE deletion.state = 'erased' AND account.handle NOT LIKE 'deleted-%'"
+            . ' ORDER BY deletion.completed_at, deletion.user_id LIMIT :limit',
+            ['limit' => $limit],
+        );
+
+        $processed = 0;
+        $failed = 0;
+        foreach ($rows as $row) {
+            $accountId = is_string($row['user_id'] ?? null) ? trim($row['user_id']) : '';
+            if ($accountId === '') {
+                continue;
+            }
+
+            try {
+                $this->erase($accountId);
+                ++$processed;
+            } catch (\Throwable) {
+                // A failed account remains eligible and will be retried on a
+                // later worker tick; it must not block other completed erasures.
+                ++$failed;
+            }
+        }
+
+        return ['processed' => $processed, 'failed' => $failed];
     }
 }

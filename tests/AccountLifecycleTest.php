@@ -19,6 +19,63 @@ use PHPUnit\Framework\TestCase;
 
 final class AccountLifecycleTest extends TestCase
 {
+    public function testWorkerFinishesHostCleanupAfterCoreErasureCompletes(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $login = $server->signIn('alice');
+        $now = '2026-11-24T12:00:00Z';
+        $server->runtime->database->execute(
+            'INSERT INTO atproto_account'
+            . ' (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
+            . ' VALUES (:account, :did, :handle, :pds, :access, :refresh, 0, 1, :now, :now)',
+            [
+                'account' => 'alice',
+                'did' => 'did:plc:alice',
+                'handle' => 'alice.bsky.social',
+                'pds' => 'https://pds.example.test',
+                'access' => 'sealed-access',
+                'refresh' => 'sealed-refresh',
+                'now' => $now,
+            ],
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO social_account_deletion'
+            . ' (user_id, state, requested_at, updated_at, completed_at, deleted_counts, blobs_deleted, blob_failures, attempts, lease_until)'
+            . ' VALUES (:user, :state, :now, :now, :now, :counts, 0, :failures, 1, NULL)',
+            [
+                'user' => 'alice',
+                'state' => 'erased',
+                'now' => $now,
+                'counts' => '{}',
+                'failures' => '[]',
+            ],
+        );
+
+        $first = $server->runtime->accountErasureCleanup->finalizeCompleted();
+        $second = $server->runtime->accountErasureCleanup->finalizeCompleted();
+
+        self::assertSame(['processed' => 1, 'failed' => 0], $first);
+        self::assertSame(['processed' => 0, 'failed' => 0], $second);
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM session WHERE account_id = :account',
+            ['account' => 'alice'],
+        ));
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM atproto_account WHERE account_id = :account',
+            ['account' => 'alice'],
+        ));
+        self::assertStringStartsWith('deleted-', (string) $server->runtime->database->fetchValue(
+            'SELECT handle FROM account WHERE id = :account',
+            ['account' => 'alice'],
+        ));
+        self::assertSame(401, $server->send(
+            'GET',
+            '/api/v1/host/preferences',
+            ['cookies' => $login['cookies']],
+        )->status);
+    }
+
     public function testFrozenDeletionBlocksHostWritesAndLoginButCanBeRetried(): void
     {
         $server = new TestServer();
