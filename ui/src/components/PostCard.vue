@@ -20,6 +20,7 @@ import { ensureInteractions, interactionFor, rememberInteraction } from '../lib/
 import { cachedQuote, loadQuote } from '../lib/quotes';
 import { appState, openComposer, openEditor, openQuote, showToast } from '../lib/state';
 import type { Attachment, Poll, TimelineItem } from '../lib/types';
+import type { AtprotoPublicationStatus } from '../lib/api';
 
 const props = withDefaults(defineProps<{
 	post: TimelineItem;
@@ -283,8 +284,15 @@ const bookmarked = ref(props.post.bookmarked === true);
 const bookmarking = ref(false);
 const archiving = ref(false);
 const publishingBluesky = ref(false);
+const blueskyPublication = ref<AtprotoPublicationStatus | null>(null);
+const blueskyPublicationLoading = ref(false);
+const blueskyPublicationError = ref('');
+let blueskyPublicationLookup = 0;
 const pinning = ref(false);
 const isPinned = ref(props.pinned === true);
+const blueskyPublicationUrl = computed(() => blueskyPublication.value === null
+	? ''
+	: `https://bsky.app/profile/${encodeURIComponent(blueskyPublication.value.accountDid)}/post/${encodeURIComponent(blueskyPublication.value.rkey)}`);
 
 watch(() => props.pinned, (value) => {
 	isPinned.value = value === true;
@@ -663,17 +671,55 @@ async function publishToBluesky(): Promise<void> {
 			showToast('Bluesky publishing is disabled on this instance.', 'error');
 			return;
 		}
-		const accountDid = status.identity?.did ?? (status.external.connected ? status.external.did : undefined);
-		if (accountDid === undefined) {
+		const accountDid = status.identity?.did || (status.external.connected ? status.external.did : undefined);
+		if (accountDid === undefined || accountDid === '') {
 			showToast('Connect a Bluesky account in Settings before publishing.', 'info');
 			return;
 		}
-		await getApi().publishToBluesky(localId.value, accountDid);
+		blueskyPublication.value = await getApi().publishToBluesky(localId.value, accountDid);
 		showToast('Post published to Bluesky.', 'success');
 	} catch (error) {
 		showToast(error instanceof Error ? error.message : 'The post could not be published to Bluesky.', 'error');
 	} finally {
 		publishingBluesky.value = false;
+	}
+}
+
+async function loadBlueskyPublication(): Promise<void> {
+	if (!canPublishToBluesky.value || localId.value === null) {
+		return;
+	}
+
+	const lookup = ++blueskyPublicationLookup;
+	blueskyPublication.value = null;
+	blueskyPublicationError.value = '';
+	blueskyPublicationLoading.value = true;
+	try {
+		const status = await getApi().atprotoIdentity();
+		if (lookup !== blueskyPublicationLookup || !menuOpen.value) {
+			return;
+		}
+		if (!status.publish) {
+			return;
+		}
+		const accountDid = status.identity?.did || (status.external.connected ? status.external.did : undefined);
+		if (accountDid === undefined || accountDid === '') {
+			return;
+		}
+		const publication = await getApi().atprotoPublication(localId.value, accountDid);
+		if (lookup === blueskyPublicationLookup && menuOpen.value) {
+			blueskyPublication.value = publication;
+		}
+	} catch (error) {
+		if (lookup === blueskyPublicationLookup && menuOpen.value) {
+			blueskyPublicationError.value = error instanceof Error
+				? error.message
+				: 'The Bluesky publication status could not be loaded.';
+		}
+	} finally {
+		if (lookup === blueskyPublicationLookup) {
+			blueskyPublicationLoading.value = false;
+		}
 	}
 }
 
@@ -724,12 +770,16 @@ function onDocumentClick(event: MouseEvent): void {
 watch(menuOpen, (open) => {
 	if (open) {
 		document.addEventListener('click', onDocumentClick);
+		void loadBlueskyPublication();
 	} else {
+		blueskyPublicationLookup += 1;
+		blueskyPublicationLoading.value = false;
 		document.removeEventListener('click', onDocumentClick);
 	}
 });
 
 onUnmounted(() => {
+	blueskyPublicationLookup += 1;
 	document.removeEventListener('click', onDocumentClick);
 });
 </script>
@@ -849,7 +899,25 @@ onUnmounted(() => {
 						<AppIcon name="sparkles" :size="15" /> Show more of this
 					</button>
 					<button
-						v-if="canPublishToBluesky"
+						v-if="canPublishToBluesky && blueskyPublicationLoading"
+						type="button"
+						role="menuitem"
+						disabled
+					>
+						<AppIcon name="refresh" :size="15" class="a-spin" /> Checking Bluesky publication…
+					</button>
+					<a
+						v-else-if="canPublishToBluesky && blueskyPublication !== null"
+						:href="blueskyPublicationUrl"
+						target="_blank"
+						rel="noopener noreferrer"
+						role="menuitem"
+						@click="menuOpen = false"
+					>
+						<AppIcon name="check" :size="15" /> Published on Bluesky · View post
+					</a>
+					<button
+						v-else-if="canPublishToBluesky"
 						type="button"
 						role="menuitem"
 						:disabled="publishingBluesky"
@@ -858,6 +926,9 @@ onUnmounted(() => {
 						<AppIcon :name="publishingBluesky ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': publishingBluesky }" />
 						Publish to Bluesky
 					</button>
+					<p v-if="canPublishToBluesky && blueskyPublicationError !== ''" class="a-post__menu-error" role="status">
+						{{ blueskyPublicationError }}
+					</p>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
 						<AppIcon name="flag" :size="15" /> Report post
 					</button>
