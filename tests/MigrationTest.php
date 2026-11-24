@@ -69,6 +69,15 @@ final class MigrationTest extends TestCase
         $publicationColumnNames = array_map(static fn (array $row): string => (string) $row['name'], $publicationColumns);
         self::assertContains('pds_url', $publicationColumnNames);
         self::assertContains('cid', $publicationColumnNames);
+
+        foreach ([
+            'social_post',
+            'social_post_revision',
+            'social_scheduled_post',
+        ] as $table) {
+            $columns = $server->runtime->database->fetchAll('PRAGMA table_info(' . $table . ')');
+            self::assertContains('language', array_column($columns, 'name'), 'Missing language on ' . $table);
+        }
     }
 
     public function testSecondRunIsANoOp(): void
@@ -160,6 +169,43 @@ final class MigrationTest extends TestCase
                 "SELECT value FROM runtime_state WHERE name = 'core_schema_fingerprint'",
             ),
         );
+    }
+
+    public function testPostLanguageMigrationPreservesExistingRows(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $database->execute(
+            "INSERT INTO social_post (id, author_id, content, visibility, published_at)"
+            . " VALUES ('post-1', 'alice', 'hello', 'public', '2026-11-24T00:00:00Z')",
+        );
+        $database->execute(
+            "INSERT INTO social_post_revision (post_id, revision, content, visibility, attachment_ids, edited_at)"
+            . " VALUES ('post-1', 1, 'hello', 'public', '[]', '2026-11-24T00:00:00Z')",
+        );
+        $database->execute(
+            "INSERT INTO social_scheduled_post "
+            . '(id, author_id, post_id, content, visibility, attachment_ids, recipient_ids, scheduled_at, created_at, state)'
+            . " VALUES ('schedule-1', 'alice', 'post-2', 'later', 'public', '[]', '[]',"
+            . " '2026-11-25T00:00:00Z', '2026-11-24T00:00:00Z', 'scheduled')",
+        );
+
+        foreach (['social_post', 'social_post_revision', 'social_scheduled_post'] as $table) {
+            $database->execute('ALTER TABLE ' . $table . ' DROP COLUMN language');
+        }
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611250002'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611250002'], $runner->migrate());
+        self::assertSame('hello', (string) $database->fetchValue(
+            "SELECT content FROM social_post WHERE id = 'post-1'",
+        ));
+        self::assertSame('hello', (string) $database->fetchValue(
+            "SELECT content FROM social_post_revision WHERE post_id = 'post-1'",
+        ));
+        self::assertSame('later', (string) $database->fetchValue(
+            "SELECT content FROM social_scheduled_post WHERE id = 'schedule-1'",
+        ));
     }
 
     public function testCoreSchemaDriftIsReportedBeforeQueriesRun(): void

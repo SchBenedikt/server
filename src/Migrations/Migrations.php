@@ -50,6 +50,7 @@ final class Migrations
             new Version202611240003AtprotoInteractionLedger(),
             new Version202611240004AtprotoOAuthSchema(),
             new Version202611250001AtprotoPublicationCid(),
+            new Version202611250002PostLanguage(),
         ];
     }
 }
