@@ -113,6 +113,24 @@ final class PreferencesTest extends TestCase
 
     public function testExportContainsOnlyTheViewersOwnData(): void
     {
+        foreach (['alice', 'bob'] as $handle) {
+            $this->server->runtime->database->execute(
+                'INSERT INTO social_atproto_follow'
+                . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+                . ' VALUES (:user, :did, :subject, :rkey, :uri, :cid, :state, :followed_at)',
+                [
+                    'user' => $handle,
+                    'did' => 'did:plc:' . $handle,
+                    'subject' => 'did:plc:followed-by-' . $handle,
+                    'rkey' => 'follow-' . $handle,
+                    'uri' => 'at://did:plc:' . $handle . '/app.bsky.graph.follow/follow-' . $handle,
+                    'cid' => 'bafy' . $handle,
+                    'state' => 'active',
+                    'followed_at' => '2026-01-01T00:00:00Z',
+                ],
+            );
+        }
+
         $this->server->runtime->database->execute(
             'INSERT INTO atproto_account'
             . ' (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
@@ -155,6 +173,10 @@ final class PreferencesTest extends TestCase
         self::assertArrayHasKey('following', $export);
         self::assertArrayHasKey('drafts', $export);
         self::assertSame('alohasocial-account-archive', $export['core_archive']['format']);
+        self::assertSame(
+            ['did:plc:followed-by-alice'],
+            array_column($export['core_archive']['data']['social_atproto_follow'], 'subject_did'),
+        );
         self::assertSame('alice.bsky.social', $export['linked_bluesky_account']['handle']);
         self::assertStringNotContainsString('sealed-access-secret', $response->body);
         self::assertStringNotContainsString('sealed-refresh-secret', $response->body);
