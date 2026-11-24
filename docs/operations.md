@@ -160,6 +160,10 @@ spinning.
 ### Cleanup
 
 `php bin/cleanup.php` queues a bounded retention job; `--now` runs it directly.
+The default `all` cleanup also purges one bounded batch of technical error-log
+rows older than `ALOHASOCIAL_RUNTIME_ERROR_RETENTION_DAYS` (90 days by default).
+Use `--dry-run` to preview the matching error-log rows. Administrator audit
+records are deliberately excluded and remain available for accountability.
 
 ```shell
 php bin/cleanup.php --now --dry-run   # inspect without deleting

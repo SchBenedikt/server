@@ -34,6 +34,7 @@ final class HostConfigTest extends TestCase
         'ALOHASOCIAL_S3_KMS_KEY_ID',
         'ALOHASOCIAL_S3_TIMEOUT',
         'ALOHASOCIAL_S3_MAX_OBJECT_BYTES',
+        'ALOHASOCIAL_RUNTIME_ERROR_RETENTION_DAYS',
         'ALOHASOCIAL_SECRET_KEY_FILE',
         'ALOHASOCIAL_MAIL_FROM',
         'ALOHASOCIAL_DEBUG',
@@ -248,6 +249,19 @@ final class HostConfigTest extends TestCase
         self::assertSame('alias/aloha-media', $config->s3KmsKeyId);
         self::assertSame(15, $config->s3TimeoutSeconds);
         self::assertSame(104857600, $config->s3MaxObjectBytes);
+    }
+
+    public function testRuntimeErrorRetentionCanBeConfiguredAndRejectsUnboundedValues(): void
+    {
+        $config = HostConfig::load($this->root, ['runtime_error_retention_days' => 365]);
+        self::assertSame(365, $config->runtimeErrorRetentionDays);
+
+        try {
+            HostConfig::load($this->root, ['runtime_error_retention_days' => 0]);
+            self::fail('A zero-day retention window must be rejected.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('between 1 and 3650 days', $exception->getMessage());
+        }
     }
 
     public function testS3StorageRequiresABucket(): void
