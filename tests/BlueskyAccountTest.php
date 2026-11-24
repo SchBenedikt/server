@@ -508,6 +508,48 @@ final class BlueskyAccountTest extends TestCase
         self::assertCount(1, $repostDeletes);
     }
 
+    public function testPublishedRecordsCanBeDeletedWhenOutboundPublishingIsDisabled(): void
+    {
+        $disabled = new TestServer(['atproto_publish' => false], $this->http, new class implements HostResolver {
+            public function resolve(string $host): array
+            {
+                return match ($host) {
+                    'public.api.bsky.app' => ['8.8.8.8'],
+                    'plc.directory' => ['1.1.1.1'],
+                    'pds.example.test' => ['9.9.9.9'],
+                    default => [],
+                };
+            }
+        });
+        $disabled->createAccount('alice', 'alice-disabled@example.test');
+        $disabled->runtime->blueskyAccounts->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $post = $disabled->runtime->app->posts->create(new CreatePost('alice', 'previously published'));
+        $disabled->runtime->database->execute(
+            'INSERT INTO social_atproto_publication'
+            . ' (local_user_id, post_id, rkey, uri, pds_url, published_at)'
+            . ' VALUES (:user, :post, :rkey, :uri, :pds, :published)',
+            [
+                'user' => 'alice',
+                'post' => $post->id,
+                'rkey' => 'post1',
+                'uri' => 'at://did:plc:alice123/app.bsky.feed.post/post1',
+                'pds' => 'https://pds.example.test',
+                'published' => '2026-11-24T00:00:00Z',
+            ],
+        );
+
+        $disabled->runtime->app->atproto?->deleteRemote('alice', $post->id);
+
+        self::assertNotEmpty(array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.deleteRecord'),
+        ));
+        self::assertSame(0, (int) $disabled->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM social_atproto_publication WHERE local_user_id = :user AND post_id = :post',
+            ['user' => 'alice', 'post' => $post->id],
+        ));
+    }
+
     public function testBlueskyFollowActionsPersistAndDeleteThePdsRecord(): void
     {
         $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
