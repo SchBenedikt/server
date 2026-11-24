@@ -127,8 +127,9 @@ The core already owns the protocol implementation that both hosts share:
   posts/replies/facets/media/likes/reposts, publication rows and remote delete,
   an AppView read port, replay-safe inbound relay/Jetstream import, the native
   PDS and XRPC surface, the authorization-code/PAR/revocation **client**, DPoP,
-  and OAuth session refresh. Account linking UI, the browser callback, the
-  short-lived flow store and the event transport are host adapters by design.
+  and OAuth session refresh. This host now supplies the account-linking UI,
+  browser callback, encrypted short-lived flow store and account-bound DPoP
+  credentials; the event transport remains host-owned.
 - **Mastodon compatibility:** 53 core routes under `/api/mastodon/v1`.
 
 Two protocol surfaces are deliberately not claimed as complete here:
