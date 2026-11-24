@@ -301,6 +301,10 @@ final class BlueskyAccounts implements AtprotoAccountCollectionResolver
                     'DELETE FROM social_atproto_follow WHERE local_user_id = :account_id AND account_did = :did',
                     ['account_id' => $localUserId, 'did' => $did],
                 );
+                $this->db->execute(
+                    'DELETE FROM social_atproto_interaction WHERE local_user_id = :account_id AND account_did = :did',
+                    ['account_id' => $localUserId, 'did' => $did],
+                );
             }
 
             $this->db->execute('DELETE FROM atproto_oauth_account WHERE account_id = :account_id', ['account_id' => $localUserId]);
@@ -583,6 +587,11 @@ final class BlueskyAccounts implements AtprotoAccountCollectionResolver
         $now = Time::format($this->clock->now());
 
         $this->db->transaction(function () use ($localUserId, $did, $handle, $pdsUrl, $accessToken, $refreshToken, $expiresAt, $now): void {
+            $previous = $this->db->fetchOne(
+                'SELECT did FROM atproto_account WHERE account_id = :account_id',
+                ['account_id' => $localUserId],
+            );
+            $previousDid = is_string($previous['did'] ?? null) ? $previous['did'] : null;
             try {
                 $this->db->execute(
                     'INSERT INTO atproto_account (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
@@ -616,10 +625,17 @@ final class BlueskyAccounts implements AtprotoAccountCollectionResolver
                 );
             }
 
-            $this->db->execute(
-                'DELETE FROM social_atproto_follow WHERE local_user_id = :account_id AND account_did <> :did',
-                ['account_id' => $localUserId, 'did' => $did],
-            );
+            if ($previousDid !== null && $previousDid !== $did) {
+                $parameters = ['account_id' => $localUserId, 'did' => $previousDid];
+                $this->db->execute(
+                    'DELETE FROM social_atproto_follow WHERE local_user_id = :account_id AND account_did = :did',
+                    $parameters,
+                );
+                $this->db->execute(
+                    'DELETE FROM social_atproto_interaction WHERE local_user_id = :account_id AND account_did = :did',
+                    $parameters,
+                );
+            }
         });
     }
 
