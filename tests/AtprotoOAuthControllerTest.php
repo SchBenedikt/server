@@ -14,10 +14,18 @@ use AlohaSocial\Core\Platform\Http\HttpResponse;
 use AlohaSocial\Core\Platform\Network\HostResolver;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use AlohaSocial\Core\Domain\Atproto\AtprotoOAuthSession;
+use AlohaSocial\Server\Federation\BlueskyException;
 use PHPUnit\Framework\TestCase;
 
 final class FakeOAuthDiscoveryClient implements BoundedHttpClient
 {
+    public string $state = '';
+
+    /** @var array<string, string> */
+    public array $tokenForm = [];
+
+    public string $tokenDpopProof = '';
+
     public function request(string $method, string $url, array $headers = [], string $body = '', int $timeoutSeconds = 10): HttpResponse
     {
         if (str_contains($url, 'com.atproto.identity.resolveHandle')) return new HttpResponse(200, [], '{"did":"did:plc:alice123"}');
@@ -31,7 +39,19 @@ final class FakeOAuthDiscoveryClient implements BoundedHttpClient
             'grant_types_supported' => ['authorization_code', 'refresh_token'], 'code_challenge_methods_supported' => ['S256'],
             'token_endpoint_auth_methods_supported' => ['none'], 'dpop_signing_alg_values_supported' => ['ES256'], 'scopes_supported' => ['atproto'],
         ], JSON_THROW_ON_ERROR));
-        if ($url === 'https://auth.example.test/par') return new HttpResponse(201, ['dpop-nonce' => 'par-nonce'], '{"request_uri":"urn:ietf:params:oauth:request_uri:abc"}');
+        if ($url === 'https://auth.example.test/par') {
+            parse_str($body, $form);
+            $this->state = is_string($form['state'] ?? null) ? $form['state'] : '';
+            return new HttpResponse(201, ['dpop-nonce' => 'par-nonce'], '{"request_uri":"urn:ietf:params:oauth:request_uri:abc"}');
+        }
+        if ($url === 'https://auth.example.test/token') {
+            parse_str($body, $this->tokenForm);
+            $this->tokenDpopProof = $headers['DPoP'] ?? '';
+            return new HttpResponse(200, ['dpop-nonce' => 'token-nonce'], json_encode([
+                'access_token' => 'oauth-access-token', 'refresh_token' => 'oauth-refresh-token',
+                'token_type' => 'DPoP', 'scope' => 'atproto', 'sub' => 'did:plc:alice123', 'expires_in' => 3600,
+            ], JSON_THROW_ON_ERROR));
+        }
         throw new \RuntimeException('Unexpected OAuth test request: ' . $method . ' ' . $url);
     }
 
@@ -110,5 +130,36 @@ final class AtprotoOAuthControllerTest extends TestCase
         self::assertSame(str_repeat('a', 64), $flow['browser_session_hash']);
         self::assertStringNotContainsString('code_verifier', (string) $flow['payload']);
         self::assertStringNotContainsString('BEGIN EC PRIVATE KEY', (string) $flow['payload']);
+    }
+
+    public function testCallbackExchangesCodeAndConsumesSessionBoundStateOnce(): void
+    {
+        $http = new FakeOAuthDiscoveryClient();
+        $browserSession = str_repeat('b', 64);
+        $server = new TestServer([], $http, new FakeOAuthHostResolver());
+        $server->createAccount('alice');
+        $server->runtime->atprotoOAuth->begin('alice', $browserSession, 'alice.bsky.social');
+
+        try {
+            $server->runtime->atprotoOAuth->complete('alice', str_repeat('c', 64), $http->state, 'auth-code', 'https://auth.example.test');
+            self::fail('A callback from another browser session must be rejected.');
+        } catch (BlueskyException $error) {
+            self::assertSame('bluesky_oauth_state_invalid', $error->errorCode);
+        }
+
+        $server->runtime->atprotoOAuth->complete('alice', $browserSession, $http->state, 'auth-code', 'https://auth.example.test');
+        self::assertSame('oauth', $server->runtime->blueskyAccounts->status('alice')['auth_method']);
+        self::assertSame('authorization_code', $http->tokenForm['grant_type']);
+        self::assertSame('auth-code', $http->tokenForm['code']);
+        self::assertNotEmpty($http->tokenForm['code_verifier']);
+        self::assertNotEmpty($http->tokenDpopProof);
+        self::assertSame(0, $server->runtime->database->execute('DELETE FROM atproto_oauth_flow'));
+
+        try {
+            $server->runtime->atprotoOAuth->complete('alice', $browserSession, $http->state, 'auth-code', 'https://auth.example.test');
+            self::fail('A consumed callback state must not be reusable.');
+        } catch (BlueskyException $error) {
+            self::assertSame('bluesky_oauth_state_invalid', $error->errorCode);
+        }
     }
 }
