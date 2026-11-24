@@ -9,6 +9,10 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Domain\Atproto\AtprotoAccountStatus;
+use AlohaSocial\Core\Domain\Atproto\AtprotoFollow;
+use AlohaSocial\Core\Domain\Atproto\AtprotoRemoteAccount;
+use AlohaSocial\Core\Domain\Atproto\AtprotoRemoteRecord;
 use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClientException;
 use AlohaSocial\Core\Platform\Http\ResponseLimitExceededException;
@@ -17,6 +21,9 @@ use AlohaSocial\Core\Platform\Http\HttpResponse;
 use AlohaSocial\Core\Service\CreatePost;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\BlueskyException;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -512,6 +519,91 @@ final class BlueskyAccountTest extends TestCase
             },
         ));
         self::assertCount(1, $repostDeletes);
+    }
+
+    public function testRemoteLikeCanBeRemovedAfterTheFeedTargetIsTombstoned(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $now = $this->server->runtime->clock->now();
+        $source = 'jetstream';
+        $remoteDid = 'did:plc:remoteauthor';
+        $uri = 'at://' . $remoteDid . '/app.bsky.feed.post/remote-post';
+        $inbound = new PdoAtprotoInboundRepository($this->server->runtime->database);
+        $inbound->saveAccount(new AtprotoRemoteAccount(
+            $source,
+            $remoteDid,
+            'author.example',
+            AtprotoAccountStatus::Active,
+            true,
+            $now,
+        ));
+        $inbound->saveRecord(new AtprotoRemoteRecord(
+            $source,
+            $remoteDid,
+            'app.bsky.feed.post',
+            'remote-post',
+            $uri,
+            'bafy-remote-post',
+            null,
+            1,
+            ['text' => 'Remote target', 'createdAt' => '2026-11-24T10:00:00Z'],
+            false,
+            $now,
+            $now,
+            $now,
+        ));
+        (new PdoAtprotoFollowRepository($this->server->runtime->database))->save(new AtprotoFollow(
+            'alice',
+            'did:plc:alice123',
+            $remoteDid,
+            'follow-remote-author',
+            'at://did:plc:alice123/app.bsky.graph.follow/follow-remote-author',
+            'bafy-follow',
+            AtprotoFollow::ACTIVE,
+            $now,
+        ));
+
+        $session = $this->server->signIn('alice');
+        $path = '/api/v1/posts/' . rawurlencode($uri) . '/like';
+        $liked = $this->server->json(
+            'POST',
+            $path,
+            ['account_did' => 'did:plc:alice123'],
+            $session['cookies'],
+            $session['csrf'],
+        );
+        self::assertSame(200, $liked->status, $liked->body);
+
+        $inbound->saveRecord(new AtprotoRemoteRecord(
+            $source,
+            $remoteDid,
+            'app.bsky.feed.post',
+            'remote-post',
+            $uri,
+            null,
+            null,
+            2,
+            [],
+            true,
+            null,
+            $now,
+            $now,
+        ));
+        $this->http->requests = [];
+        $unliked = $this->server->json(
+            'DELETE',
+            $path,
+            ['account_did' => 'did:plc:alice123'],
+            $session['cookies'],
+            $session['csrf'],
+        );
+
+        self::assertSame(200, $unliked->status, $unliked->body);
+        $deletes = array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.deleteRecord'),
+        );
+        self::assertCount(1, $deletes);
     }
 
     public function testPublishedRecordsCanBeDeletedWhenOutboundPublishingIsDisabled(): void
