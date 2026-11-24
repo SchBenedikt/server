@@ -242,6 +242,7 @@ export interface Api {
 	uploadMedia(file: File, altText: string): Promise<Attachment>;
 	blueskyAccount(): Promise<BlueskyData>;
 	connectBluesky(handle: string, appPassword: string): Promise<BlueskyAccountStatus>;
+	startBlueskyOAuth(handle: string): Promise<string>;
 	disconnectBluesky(): Promise<boolean>;
 	publishToBluesky(postId: string): Promise<void>;
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
@@ -2800,6 +2801,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 
 			return normalizeBlueskyAccount(data?.account);
+		},
+
+		async startBlueskyOAuth(handle: string): Promise<string> {
+			const data = await request<{ authorization_url?: unknown }>(
+				'POST', '/api/v1/host/bluesky/oauth', undefined, { handle },
+			);
+			if (typeof data?.authorization_url !== 'string') throw new ApiError(502, 'invalid_response', 'Bluesky authorization URL is missing.');
+			return data.authorization_url;
 		},
 
 		async disconnectBluesky(): Promise<boolean> {
