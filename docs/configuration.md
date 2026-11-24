@@ -140,6 +140,7 @@ usage.
 | `ALOHASOCIAL_SECURE_COOKIES` | `secure_cookies` | on for `https://` instance URLs | Adds `Secure` to the session cookie. |
 | `ALOHASOCIAL_SESSION_LIFETIME` | `session_lifetime` | `604800` | Session lifetime in seconds; minimum 60. |
 | — | `session_cookie_name` | `alohasocial_session` | Cookie name. Useful when several instances share a hostname. |
+| `ALOHASOCIAL_RUNTIME_ERROR_RETENTION_DAYS` | `runtime_error_retention_days` | `90` | Purge technical error rows older than this many days during cleanup; accepted range is 1–3650 days. Administrator audit history is retained separately. |
 
 Cookies are `HttpOnly` and `SameSite=Lax`. Use HTTPS in production and keep the
 instance URL in sync with the origin users open, otherwise secure cookies can

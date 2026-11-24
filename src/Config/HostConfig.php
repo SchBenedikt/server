@@ -81,6 +81,7 @@ final readonly class HostConfig
         public string $atprotoJetstreamUrl = '',
         /** @var list<string> Trusted proxy IPs or CIDRs for X-Forwarded-For. */
         public array $trustedProxies = [],
+        public int $runtimeErrorRetentionDays = 90,
     ) {
     }
 
@@ -320,6 +321,14 @@ final readonly class HostConfig
         if ($s3MaxObjectBytes < 1 || $s3MaxObjectBytes > 5368709120) {
             throw new RuntimeException('ALOHASOCIAL_S3_MAX_OBJECT_BYTES must be between 1 byte and 5 GiB.');
         }
+        $runtimeErrorRetentionDays = (int) $pick(
+            'runtime_error_retention_days',
+            'ALOHASOCIAL_RUNTIME_ERROR_RETENTION_DAYS',
+            90,
+        );
+        if ($runtimeErrorRetentionDays < 1 || $runtimeErrorRetentionDays > 3650) {
+            throw new RuntimeException('ALOHASOCIAL_RUNTIME_ERROR_RETENTION_DAYS must be between 1 and 3650 days.');
+        }
 
         return new self(
             instanceUrl: $instanceUrl,
@@ -377,6 +386,7 @@ final readonly class HostConfig
             envFile: self::resolvePath((string) $pick('env_file', 'ALOHASOCIAL_ENV_FILE', $root . '/.env'), $root),
             atprotoJetstreamUrl: $atprotoJetstream,
             trustedProxies: $trustedProxies,
+            runtimeErrorRetentionDays: $runtimeErrorRetentionDays,
         );
     }
 

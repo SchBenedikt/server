@@ -274,8 +274,10 @@ preserves a disabled identity as a tombstone with scrubbed account details. Its
 stable internal account id remains so deletion and moderation records can be
 audited; email, display name, handle, and password verifier are cleared or
 replaced with random, non-routable values. Moderation reports and administrative
-audit records remain for accountability and retain that internal id. The last active
-administrator cannot be deleted. Once deletion begins, writes through
+audit records remain for accountability and retain that internal id. Technical
+error-log rows are purged according to `ALOHASOCIAL_RUNTIME_ERROR_RETENTION_DAYS`;
+they do not replace the administrator audit trail. The last active administrator
+cannot be deleted. Once deletion begins, writes through
 host-only APIs and native PDS sessions are blocked too; a repeated deletion
 request can resume cleanup after an interrupted attempt. Operator-managed web
 server and proxy logs follow their own retention policy. Remote copies and
