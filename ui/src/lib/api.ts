@@ -111,6 +111,13 @@ export interface AtprotoPublicationStatus {
 	publishedAt: string;
 }
 
+export interface AtprotoPublicationLookup {
+	state: 'published' | 'pending' | 'failed' | 'not_queued';
+	publication: AtprotoPublicationStatus | null;
+	attempts: number;
+	retryable: boolean;
+}
+
 export interface AccountMoveStatus {
 	event_id: string;
 	target_actor_id: string;
@@ -257,7 +264,7 @@ export interface Api {
 	startBlueskyOAuth(handle: string): Promise<string>;
 	disconnectBluesky(): Promise<boolean>;
 	publishToBluesky(postId: string, accountDid?: string): Promise<AtprotoPublicationStatus>;
-	atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationStatus | null>;
+	atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationLookup>;
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
@@ -2873,14 +2880,29 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return publication;
 		},
 
-		async atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationStatus | null> {
-			const data = await request<{ publication?: unknown }>(
+		async atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationLookup> {
+			const data = await request<Record<string, unknown>>(
 				'GET',
-				`/api/v1/posts/${encodeURIComponent(postId)}/atproto`,
-				{ account_did: accountDid },
+				'/api/v1/host/bluesky/publication-status',
+				{ post_id: postId, account_did: accountDid },
 			);
 
-			return normalizeAtprotoPublication(data?.publication);
+			const state = data.state;
+			if (state !== 'published' && state !== 'pending' && state !== 'failed' && state !== 'not_queued') {
+				throw new ApiError(502, 'invalid_response', 'The Bluesky delivery status is invalid.');
+			}
+
+			const publication = data.publication === null ? null : normalizeAtprotoPublication(data.publication);
+			if (data.publication !== null && publication === null) {
+				throw new ApiError(502, 'invalid_response', 'The Bluesky publication was not confirmed.');
+			}
+
+			return {
+				state,
+				publication,
+				attempts: typeof data.attempts === 'number' ? data.attempts : 0,
+				retryable: data.retryable === true,
+			};
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {
