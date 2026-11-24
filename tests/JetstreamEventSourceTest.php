@@ -62,10 +62,11 @@ final class JetstreamEventSourceTest extends TestCase
             followedAt: $server->runtime->clock->now(),
         ));
         $database->execute(
-            'INSERT INTO social_atproto_publication (local_user_id, post_id, rkey, uri, published_at)'
-            . ' VALUES (:local, :post, :rkey, :uri, :now)',
+            'INSERT INTO social_atproto_publication (local_user_id, account_did, post_id, rkey, uri, published_at)'
+            . ' VALUES (:local, :did, :post, :rkey, :uri, :now)',
             [
                 'local' => $alice->id,
+                'did' => 'did:plc:local',
                 'post' => 'post-1',
                 'rkey' => '3klocal',
                 'uri' => 'at://did:plc:local/app.bsky.feed.post/3klocal',

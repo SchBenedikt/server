@@ -658,16 +658,17 @@ async function publishToBluesky(): Promise<void> {
 	publishingBluesky.value = true;
 	menuOpen.value = false;
 	try {
-		const status = await getApi().blueskyAccount();
-		if (!status.publish_enabled) {
+		const status = await getApi().atprotoIdentity();
+		if (!status.publish) {
 			showToast('Bluesky publishing is disabled on this instance.', 'error');
 			return;
 		}
-		if (!status.account.connected) {
+		const accountDid = status.identity?.did ?? (status.external.connected ? status.external.did : undefined);
+		if (accountDid === undefined) {
 			showToast('Connect a Bluesky account in Settings before publishing.', 'info');
 			return;
 		}
-		await getApi().publishToBluesky(localId.value);
+		await getApi().publishToBluesky(localId.value, accountDid);
 		showToast('Post published to Bluesky.', 'success');
 	} catch (error) {
 		showToast(error instanceof Error ? error.message : 'The post could not be published to Bluesky.', 'error');

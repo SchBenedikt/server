@@ -53,6 +53,8 @@ const canUploadMedia = computed(() => (
 ));
 const blueskyStatusChecked = ref(false);
 const blueskyConnected = ref(false);
+const blueskyAccounts = ref<Array<{ did: string; handle: string }>>([]);
+const selectedBlueskyDid = ref('');
 const crossPostBluesky = ref(false);
 
 const content = ref('');
@@ -334,16 +336,24 @@ watch(() => appState.composer.open, (open) => {
 	const request = ++blueskyStatusRequest;
 	blueskyStatusChecked.value = false;
 	blueskyConnected.value = false;
+	blueskyAccounts.value = [];
+	selectedBlueskyDid.value = '';
 	crossPostBluesky.value = false;
 	if (!open || appState.session.user === null || !hostBridge.capabilities().atproto) {
 		return;
 	}
 
-	void getApi().blueskyAccount().then((status) => {
+	void getApi().atprotoIdentity().then((status) => {
 		if (request !== blueskyStatusRequest) {
 			return;
 		}
-		blueskyConnected.value = status.publish_enabled && status.account.connected;
+		blueskyAccounts.value = [
+			...(status.identity === null ? [] : [{ did: status.identity.did, handle: status.identity.handle }]),
+			...(status.external.connected && status.external.did && status.external.handle
+				? [{ did: status.external.did, handle: status.external.handle }] : []),
+		];
+		blueskyConnected.value = status.publish && blueskyAccounts.value.length > 0;
+		selectedBlueskyDid.value = blueskyAccounts.value[0]?.did ?? '';
 		blueskyStatusChecked.value = true;
 	}).catch(() => {
 		if (request === blueskyStatusRequest) {
@@ -698,7 +708,7 @@ async function submit(): Promise<void> {
 		closeComposer();
 		if (publishOnBluesky) {
 			try {
-				await getApi().publishToBluesky(post.id);
+			await getApi().publishToBluesky(post.id, selectedBlueskyDid.value || undefined);
 				showToast('Post saved here and published to Bluesky.', 'success');
 			} catch (caught) {
 				const reason = caught instanceof Error ? ` ${caught.message}` : '';
@@ -1001,6 +1011,12 @@ async function submit(): Promise<void> {
 						<input v-model="crossPostBluesky" type="checkbox" :disabled="submitting" />
 						<span>Also publish to Bluesky</span>
 					</label>
+			<label v-if="showBlueskyCrossPost && blueskyAccounts.length > 1" class="a-composer__visibility">
+				<span>Bluesky account</span>
+				<select v-model="selectedBlueskyDid" :disabled="submitting" aria-label="Bluesky account">
+					<option v-for="account in blueskyAccounts" :key="account.did" :value="account.did">{{ account.handle }}</option>
+				</select>
+			</label>
 					<p v-else-if="showBlueskyConnectionHint" class="a-composer__hint" role="status">
 						Connect a Bluesky account in Settings to publish to both networks.
 					</p>

@@ -245,7 +245,7 @@ export interface Api {
 	connectBluesky(handle: string, appPassword: string): Promise<BlueskyAccountStatus>;
 	startBlueskyOAuth(handle: string): Promise<string>;
 	disconnectBluesky(): Promise<boolean>;
-	publishToBluesky(postId: string): Promise<void>;
+	publishToBluesky(postId: string, accountDid?: string): Promise<void>;
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
@@ -2831,12 +2831,12 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return data?.disconnected === true;
 		},
 
-		async publishToBluesky(postId: string): Promise<void> {
+		async publishToBluesky(postId: string, accountDid?: string): Promise<void> {
 			await request<unknown>(
 				'POST',
 				'/api/v1/host/bluesky/publish',
 				undefined,
-				{ post_id: postId },
+				{ post_id: postId, ...(accountDid === undefined ? {} : { account_did: accountDid }) },
 			);
 		},
 
