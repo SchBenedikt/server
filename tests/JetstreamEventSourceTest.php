@@ -76,7 +76,7 @@ final class JetstreamEventSourceTest extends TestCase
 
         $port = $this->freePort();
         $process = proc_open(
-            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port, '3'],
+            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port, '3', 'v2', '903'],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
         );
@@ -94,7 +94,7 @@ final class JetstreamEventSourceTest extends TestCase
             $page = $source->pull(null, 10);
 
             self::assertCount(3, $page->events);
-            self::assertSame('1700000000000004', $page->cursor);
+            self::assertSame('903', $page->cursor);
 
             $post = null;
             $like = null;
@@ -147,6 +147,54 @@ final class JetstreamEventSourceTest extends TestCase
                 'SELECT COUNT(*) FROM social_atproto_remote_record WHERE uri = :uri',
                 ['uri' => 'at://did:plc:followed/app.bsky.feed.post/3kpost'],
             ));
+        } finally {
+            proc_terminate($process);
+            @proc_close($process);
+        }
+    }
+
+    public function testPullFallsBackToLegacyTimestampWhenSequenceCursorIsMissing(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $alice = $server->createAccount('alice');
+        $now = Time::format($server->runtime->clock->now());
+        $database->execute(
+            'INSERT INTO social_following'
+            . ' (id, local_user_id, actor_id, inbox_url, followed_at, state, follow_activity_id)'
+            . " VALUES ('follow-1', :local, 'did:plc:ap-followed', 'https://remote.example/inbox', :now, 'accepted', NULL)",
+            ['local' => $alice->id, 'now' => $now],
+        );
+        (new PdoAtprotoFollowRepository($database))->save(new AtprotoFollow(
+            localUserId: $alice->id,
+            accountDid: 'did:plc:localalice',
+            subjectDid: 'did:plc:followed',
+            rkey: '3kfollow',
+            uri: 'at://did:plc:localalice/app.bsky.graph.follow/3kfollow',
+            cid: 'bafyfollow',
+            state: AtprotoFollow::ACTIVE,
+            followedAt: $server->runtime->clock->now(),
+        ));
+
+        $port = $this->freePort();
+        $process = proc_open(
+            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port, '1', 'legacy'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+
+        try {
+            usleep(350_000);
+            $source = new JetstreamEventSource(
+                'ws://127.0.0.1:' . $port . '/subscribe',
+                $database,
+                $server->runtime->clock,
+            );
+            $page = $source->pull(null, 10);
+
+            self::assertSame('1700000000000004', $page->cursor);
+            self::assertCount(2, $page->events);
         } finally {
             proc_terminate($process);
             @proc_close($process);
