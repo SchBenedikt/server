@@ -65,6 +65,45 @@ final class MultipartGlobalsTest extends TestCase
         self::assertNull(GlobalsRequestFactory::multipartBody([], []));
     }
 
+    public function testOversizeTemporaryUploadIsRejectedBeforeItsContentsAreRead(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'aloha-upload-');
+        self::assertIsString($tmp);
+        $handle = fopen($tmp, 'wb');
+        self::assertIsResource($handle);
+        self::assertTrue(ftruncate($handle, GlobalsRequestFactory::MAX_BODY_BYTES + 1));
+        fclose($handle);
+
+        try {
+            $rebuilt = GlobalsRequestFactory::multipartBody([], [
+                'file' => [
+                    'name' => 'oversize.bin',
+                    'type' => 'application/octet-stream',
+                    'tmp_name' => $tmp,
+                    'error' => UPLOAD_ERR_OK,
+                    'size' => 1,
+                ],
+            ]);
+        } finally {
+            @unlink($tmp);
+        }
+
+        self::assertNotNull($rebuilt);
+        self::assertTrue($rebuilt['tooLarge']);
+        self::assertSame('', $rebuilt['body']);
+    }
+
+    public function testMultipartFieldsCannotExceedTheRequestLimit(): void
+    {
+        $rebuilt = GlobalsRequestFactory::multipartBody([
+            'field' => str_repeat('x', GlobalsRequestFactory::MAX_BODY_BYTES),
+        ], []);
+
+        self::assertNotNull($rebuilt);
+        self::assertTrue($rebuilt['tooLarge']);
+        self::assertSame('', $rebuilt['body']);
+    }
+
     public function testDeclaredOversizeBodyIsRejectedBeforeReadingInput(): void
     {
         $original = $_SERVER;
