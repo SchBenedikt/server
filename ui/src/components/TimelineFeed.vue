@@ -55,7 +55,7 @@ defineExpose({
 			</li>
 		</TransitionGroup>
 
-		<slot v-else name="empty">
+		<slot v-else name="empty" :has-more="timeline.hasMore.value">
 			<EmptyState
 				v-if="timeline.hasMore.value"
 				icon="filter"
