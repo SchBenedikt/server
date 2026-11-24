@@ -255,10 +255,21 @@ their existing public ActivityPub/Bluesky lookup.
 
 Account export and deletion are available in Settings. Export combines
 host-owned account data with the Core archive, including available media
-blobs. Deletion asks for a second confirmation, revokes local and AT Protocol
-credentials, preserves a disabled identity as a tombstone, and refuses to
-remove the last active administrator. Once deletion begins, writes through
+blobs. The host export includes profile email, pending follow requests,
+featured tags, stories and views, announcements, collections, drafts, archived
+posts, Kokua posts and replies, and recommendation feedback. Password hashes,
+session tokens, OAuth secrets, and private signing keys are never exported.
+
+Deletion asks for a second confirmation, revokes local and AT Protocol
+credentials, removes host-owned account content and linked credentials, and
+preserves a disabled identity as a tombstone with scrubbed account details. Its
+stable internal account id remains so deletion and moderation records can be
+audited; email, display name, handle, and password verifier are cleared or
+replaced with random, non-routable values. Moderation reports and administrative
+audit records remain for accountability and retain that internal id. The last active
+administrator cannot be deleted. Once deletion begins, writes through
 host-only APIs and native PDS sessions are blocked too; a repeated deletion
-request can resume cleanup after an interrupted attempt. Remote copies and
+request can resume cleanup after an interrupted attempt. Operator-managed web
+server and proxy logs follow their own retention policy. Remote copies and
 remote AT Protocol data are outside this instance's control and may remain on
 peer servers.

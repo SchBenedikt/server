@@ -49,7 +49,7 @@ use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
-use AlohaSocial\Server\Storage\StorageFactory;
+use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountProfileProvider;
 use AlohaSocial\Server\Accounts\AccountRepository;
@@ -78,6 +78,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\LogMailer;
@@ -250,6 +251,11 @@ final class ApplicationFactory
             router: new Router($app->routes),
             rateLimiter: new RateLimiter($database, $clock),
             accounts: $accounts,
+            accountErasureCleanup: new AccountErasureCleanup(
+                $database,
+                new ActivityFactory($this->config->coreConfig()),
+                $clock,
+            ),
             directory: $directory,
             registration: new RegistrationService($this->config, $accounts, $passwordHasher),
             sessions: $sessions,
