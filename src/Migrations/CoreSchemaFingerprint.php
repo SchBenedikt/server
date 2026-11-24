@@ -47,6 +47,7 @@ final class CoreSchemaFingerprint
                 \AlohaSocial\Core\Domain\Scheduling\ScheduledPostSchema::class,
                 \AlohaSocial\Core\Domain\Atproto\AtprotoFollowSchema::class,
                 \AlohaSocial\Core\Domain\Federation\InboundBlockSchema::class,
+                \AlohaSocial\Core\Domain\Atproto\AtprotoInteractionSchema::class,
             ],
         );
 
