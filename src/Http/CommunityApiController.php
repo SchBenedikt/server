@@ -26,6 +26,7 @@ use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Community\CommunityException;
 use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Federation\BlueskyException;
+use AlohaSocial\Server\Federation\Atproto\AtprotoPublicationDeliveryStatus;
 use Throwable;
 
 use function array_key_exists;
@@ -577,6 +578,52 @@ final class CommunityApiController
                     'account' => $this->runtime->blueskyAccounts->status($userId),
                     'publish_enabled' => $this->runtime->config->atprotoPublish,
                 ]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/bluesky/publication-status') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to see your Bluesky publication status.');
+                }
+
+                $postId = trim((string) ($request->queryParam('post_id') ?? ''));
+                $accountDid = trim((string) ($request->queryParam('account_did') ?? ''));
+                if ($postId === '' || preg_match('/^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$/', $accountDid) !== 1) {
+                    return $this->error(422, 'invalid_request', 'A post ID and linked Bluesky identity are required.');
+                }
+
+                $identity = $this->runtime->pdsRepository->identityForUser($userId);
+                $external = $this->runtime->blueskyAccounts->status($userId);
+                $allowedDids = array_values(array_filter([
+                    $identity?->did,
+                    ($external['connected'] ?? false) === true ? ($external['did'] ?? null) : null,
+                ], 'is_string'));
+                if (!in_array($accountDid, $allowedDids, true)) {
+                    return $this->error(404, 'atproto_account_not_connected', 'This Bluesky identity is not connected.');
+                }
+
+                $service = $this->runtime->app->atproto;
+                if ($service === null) {
+                    return $this->error(503, 'atproto_not_configured', 'Bluesky publishing is not configured.');
+                }
+
+                try {
+                    $publication = $service->publicationFor($userId, $postId, $accountDid);
+                } catch (PostNotFoundException) {
+                    return $this->error(404, 'not_found', 'This post does not exist.');
+                }
+
+                $defaultDid = $identity?->did
+                    ?? (($external['connected'] ?? false) === true && is_string($external['did'] ?? null)
+                        ? $external['did']
+                        : null);
+
+                return Response::json((new AtprotoPublicationDeliveryStatus($this->runtime->database))->forPost(
+                    $userId,
+                    $postId,
+                    $accountDid,
+                    $defaultDid,
+                    $publication,
+                ));
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/bluesky/follows') {

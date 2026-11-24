@@ -20,7 +20,7 @@ import { ensureInteractions, interactionFor, rememberInteraction } from '../lib/
 import { cachedQuote, loadQuote } from '../lib/quotes';
 import { appState, openComposer, openEditor, openQuote, showToast } from '../lib/state';
 import type { Attachment, Poll, TimelineItem } from '../lib/types';
-import type { AtprotoPublicationStatus } from '../lib/api';
+import type { AtprotoPublicationLookup, AtprotoPublicationStatus } from '../lib/api';
 
 const props = withDefaults(defineProps<{
 	post: TimelineItem;
@@ -285,6 +285,8 @@ const bookmarking = ref(false);
 const archiving = ref(false);
 const publishingBluesky = ref(false);
 const blueskyPublication = ref<AtprotoPublicationStatus | null>(null);
+const blueskyDeliveryState = ref<AtprotoPublicationLookup['state']>('not_queued');
+const blueskyDeliveryAttempts = ref(0);
 const blueskyPublicationLoading = ref(false);
 const blueskyPublicationError = ref('');
 let blueskyPublicationLookup = 0;
@@ -677,6 +679,8 @@ async function publishToBluesky(): Promise<void> {
 			return;
 		}
 		blueskyPublication.value = await getApi().publishToBluesky(localId.value, accountDid);
+		blueskyDeliveryState.value = 'published';
+		blueskyDeliveryAttempts.value = 0;
 		showToast('Post published to Bluesky.', 'success');
 	} catch (error) {
 		showToast(error instanceof Error ? error.message : 'The post could not be published to Bluesky.', 'error');
@@ -692,6 +696,8 @@ async function loadBlueskyPublication(): Promise<void> {
 
 	const lookup = ++blueskyPublicationLookup;
 	blueskyPublication.value = null;
+	blueskyDeliveryState.value = 'not_queued';
+	blueskyDeliveryAttempts.value = 0;
 	blueskyPublicationError.value = '';
 	blueskyPublicationLoading.value = true;
 	try {
@@ -706,9 +712,11 @@ async function loadBlueskyPublication(): Promise<void> {
 		if (accountDid === undefined || accountDid === '') {
 			return;
 		}
-		const publication = await getApi().atprotoPublication(localId.value, accountDid);
+		const delivery = await getApi().atprotoPublication(localId.value, accountDid);
 		if (lookup === blueskyPublicationLookup && menuOpen.value) {
-			blueskyPublication.value = publication;
+			blueskyPublication.value = delivery.publication;
+			blueskyDeliveryState.value = delivery.state;
+			blueskyDeliveryAttempts.value = delivery.attempts;
 		}
 	} catch (error) {
 		if (lookup === blueskyPublicationLookup && menuOpen.value) {
@@ -907,17 +915,36 @@ onUnmounted(() => {
 						<AppIcon name="refresh" :size="15" class="a-spin" /> Checking Bluesky publication…
 					</button>
 					<a
-						v-else-if="canPublishToBluesky && blueskyPublication !== null"
+						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyPublication !== null"
 						:href="blueskyPublicationUrl"
 						target="_blank"
 						rel="noopener noreferrer"
 						role="menuitem"
 						@click="menuOpen = false"
 					>
-						<AppIcon name="check" :size="15" /> Published on Bluesky · View post
+						<AppIcon name="check" :size="15" />
+						{{ blueskyDeliveryState === 'published' ? 'Published on Bluesky · View post' : 'Last confirmed on Bluesky · View post' }}
 					</a>
 					<button
-						v-else-if="canPublishToBluesky"
+						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyDeliveryState === 'pending'"
+						type="button"
+						role="menuitem"
+						disabled
+					>
+						<AppIcon name="refresh" :size="15" class="a-spin" /> Queued for Bluesky delivery
+					</button>
+					<button
+						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyDeliveryState === 'failed'"
+						type="button"
+						role="menuitem"
+						:disabled="publishingBluesky"
+						@click.stop="publishToBluesky"
+					>
+						<AppIcon :name="publishingBluesky ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': publishingBluesky }" />
+						Retry Bluesky delivery{{ blueskyDeliveryAttempts > 0 ? ` · ${blueskyDeliveryAttempts} attempts` : '' }}
+					</button>
+					<button
+						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyDeliveryState === 'not_queued'"
 						type="button"
 						role="menuitem"
 						:disabled="publishingBluesky"
