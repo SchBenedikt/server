@@ -74,6 +74,10 @@ final class GlobalsRequestFactory
             return self::fromParts($method, $uri, $headers, '', $remoteAddress);
         }
 
+        if ($rebuilt['tooLarge']) {
+            return self::tooLargeRequest($method, $path, $headers, $remoteAddress);
+        }
+
         return self::fromParts(
             $method,
             $uri,
@@ -126,7 +130,7 @@ final class GlobalsRequestFactory
      * @param array<string, mixed> $post
      * @param array<string, mixed> $files
      *
-     * @return array{contentType: string, body: string}|null
+     * @return array{contentType: string, body: string, tooLarge: bool}|null
      */
     public static function multipartBody(array $post, array $files): ?array
     {
@@ -136,16 +140,21 @@ final class GlobalsRequestFactory
 
         $boundary = '----AlohaSocial' . bin2hex(random_bytes(16));
         $body = '';
+        $closingBoundary = '--' . $boundary . '--' . self::EOL;
 
         foreach (self::flattenFields($post) as [$name, $value]) {
             if (!is_string($value)) {
                 continue;
             }
 
-            $body .= '--' . $boundary . self::EOL
+            $part = '--' . $boundary . self::EOL
                 . 'Content-Disposition: form-data; name="' . self::quote($name) . '"' . self::EOL
                 . self::EOL
                 . $value . self::EOL;
+            if (strlen($body) + strlen($part) + strlen($closingBoundary) > self::MAX_BODY_BYTES) {
+                return ['contentType' => '', 'body' => '', 'tooLarge' => true];
+            }
+            $body .= $part;
         }
 
         foreach (self::flattenFiles($files) as [$name, $file]) {
@@ -154,22 +163,36 @@ final class GlobalsRequestFactory
                 continue;
             }
 
-            $contents = file_get_contents($tmp);
-            if ($contents === false) {
-                continue;
+            // Check the actual temporary file before reading it. The PHP
+            // supplied size can be stale or client-controlled, while an
+            // unbounded file_get_contents() would bypass our request cap.
+            $fileSize = filesize($tmp);
+            if ($fileSize === false) {
+                return ['contentType' => '', 'body' => '', 'tooLarge' => true];
             }
 
             $filename = is_string($file['name'] ?? null) && $file['name'] !== '' ? $file['name'] : 'upload';
             $type = is_string($file['type'] ?? null) && $file['type'] !== ''
                 ? $file['type']
                 : 'application/octet-stream';
-
-            $body .= '--' . $boundary . self::EOL
+            $header = '--' . $boundary . self::EOL
                 . 'Content-Disposition: form-data; name="' . self::quote($name)
                 . '"; filename="' . self::quote($filename) . '"' . self::EOL
                 . 'Content-Type: ' . $type . self::EOL
-                . self::EOL
-                . $contents . self::EOL;
+                . self::EOL;
+            if (strlen($body) + strlen($header) + $fileSize + strlen(self::EOL) + strlen($closingBoundary) > self::MAX_BODY_BYTES) {
+                return ['contentType' => '', 'body' => '', 'tooLarge' => true];
+            }
+
+            $contents = file_get_contents($tmp, false, null, 0, $fileSize + 1);
+            if ($contents === false) {
+                continue;
+            }
+            if (strlen($contents) !== $fileSize) {
+                return ['contentType' => '', 'body' => '', 'tooLarge' => true];
+            }
+
+            $body .= $header . $contents . self::EOL;
         }
 
         if ($body === '') {
@@ -178,7 +201,8 @@ final class GlobalsRequestFactory
 
         return [
             'contentType' => 'multipart/form-data; boundary=' . $boundary,
-            'body' => $body . '--' . $boundary . '--' . self::EOL,
+            'body' => $body . $closingBoundary,
+            'tooLarge' => false,
         ];
     }
 
