@@ -10,6 +10,11 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Domain\Post\Visibility;
+use AlohaSocial\Core\Domain\Atproto\AtprotoFollow;
+use AlohaSocial\Core\Domain\Atproto\AtprotoAccountStatus;
+use AlohaSocial\Core\Domain\Atproto\AtprotoRemoteAccount;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Service\CreatePost;
 use AlohaSocial\Core\Support\Time;
@@ -40,12 +45,15 @@ final class AtprotoIngestionTest extends TestCase
 
     private string $localPostUri;
 
+    private string $localUserId;
+
     protected function setUp(): void
     {
         $this->server = new TestServer(['atproto_jetstream' => 'wss://relay.example/subscribe']);
         $this->db = $this->server->runtime->database;
 
         $alice = $this->server->createAccount('alice');
+        $this->localUserId = $alice->id;
         $post = $this->server->runtime->app->posts->create(
             new CreatePost($alice->id, 'A local post', Visibility::Public),
         );
@@ -155,6 +163,64 @@ final class AtprotoIngestionTest extends TestCase
             ['uri' => 'at://did:plc:followed/app.bsky.feed.post/3kpost'],
         );
         self::assertNotNull($deleted);
+    }
+
+    public function testAtprotoFeedInteractionsRequireAValidFollowAndUnblockedRecord(): void
+    {
+        $session = $this->server->signIn('alice');
+        $uri = 'at://did:plc:followed/app.bsky.feed.post/3kinteract';
+        $this->record(
+            $uri,
+            'did:plc:followed',
+            'app.bsky.feed.post',
+            '3kinteract',
+            ['text' => 'A valid synced post', 'createdAt' => '2026-11-18T10:00:00.000Z'],
+            20,
+        );
+        $now = $this->server->runtime->clock->now();
+        (new PdoAtprotoInboundRepository($this->db))->saveAccount(new AtprotoRemoteAccount(
+            source: 'jetstream',
+            did: 'did:plc:followed',
+            handle: 'followed.example',
+            status: AtprotoAccountStatus::Active,
+            active: true,
+            updatedAt: $now,
+        ));
+        (new PdoAtprotoFollowRepository($this->db))->save(new AtprotoFollow(
+            localUserId: $this->localUserId,
+            accountDid: 'did:plc:localalice',
+            subjectDid: 'did:plc:followed',
+            rkey: '3kfollow',
+            uri: 'at://did:plc:localalice/app.bsky.graph.follow/3kfollow',
+            cid: 'bafyfollow',
+            state: AtprotoFollow::ACTIVE,
+            followedAt: $now,
+        ));
+
+        $response = $this->server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $session['cookies'],
+            'query' => ['ids' => $uri],
+        ]);
+        self::assertSame(200, $response->status);
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayHasKey($uri, $body['interactions']);
+
+        $this->db->execute(
+            'INSERT INTO social_block (id, local_user_id, actor_id, blocked_at)'
+            . ' VALUES (:id, :user, :actor, :at)',
+            [
+                'id' => 'block-followed',
+                'user' => $this->localUserId,
+                'actor' => 'https://bsky.app/profile/did:plc:followed',
+                'at' => Time::format($now),
+            ],
+        );
+        $blocked = $this->server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $session['cookies'],
+            'query' => ['ids' => $uri],
+        ]);
+        $blockedBody = json_decode($blocked->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayNotHasKey($uri, $blockedBody['interactions']);
     }
 
     public function testUnrelatedRecordsAreNotStoredAsPosts(): void
