@@ -67,7 +67,8 @@ export function useTimeline(source: () => TimelineSource) {
 		}
 		if (current.kind === 'tag') {
 			const tag = (current.tag ?? '').toLowerCase();
-			return tag !== '' && post.content.toLowerCase().includes(`#${tag}`);
+			const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			return tag !== '' && new RegExp(`(?:^|[^\\p{L}\\p{N}_])#${escapedTag}(?![\\p{L}\\p{N}_])`, 'u').test(post.content.toLowerCase());
 		}
 
 		return true;
@@ -185,15 +186,24 @@ export function useTimeline(source: () => TimelineSource) {
 	}
 
 	const stopCreated = onPostCreated((post) => {
-		if (!include(post) || posts.value.some((item) => item.id === post.id)) {
+		if (posts.value.some((item) => item.id === post.id)) {
 			return;
 		}
 
-		posts.value = [post, ...posts.value];
+		// The server decides whether a post belongs in a filtered, followed,
+		// ranked or private timeline. Refresh the first page instead of guessing
+		// from the post body and leaking it into the wrong feed.
+		void load(true);
 	});
 
 	const stopUpdated = onPostUpdated((post) => {
-		posts.value = posts.value.map((item) => {
+		posts.value = posts.value.filter((item) => {
+			if (item.id === post.id || item.object_id === post.id) {
+				return include(post);
+			}
+
+			return true;
+		}).map((item) => {
 			if (item.id === post.id) {
 				return { ...item, ...post, interaction: item.interaction ?? post.interaction };
 			}
