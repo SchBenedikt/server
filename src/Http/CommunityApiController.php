@@ -14,11 +14,13 @@ use AlohaSocial\Core\Service\Atproto\AtprotoFollowException;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Core\Service\Atproto\AtprotoAccountNotConnectedException;
 use AlohaSocial\Core\Service\Atproto\AtprotoNotConfiguredException;
 use AlohaSocial\Core\Service\Atproto\AtprotoPostRejectedException;
 use AlohaSocial\Core\Service\Atproto\AtprotoPublishDisabledException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
+use AlohaSocial\Server\Auth\MastodonOAuthRepository;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Community\CommunityException;
@@ -795,6 +797,8 @@ final class CommunityApiController
                     'DELETE FROM atproto_session WHERE account_id = :account_id',
                     ['account_id' => $userId],
                 );
+                (new MastodonOAuthRepository($this->runtime->database))
+                    ->revokeAccount($userId, Time::format($this->runtime->clock->now()));
                 $this->runtime->blueskyAccounts->disconnect($userId);
                 $this->runtime->accounts->disable($userId);
 

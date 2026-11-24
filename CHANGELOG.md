@@ -9,6 +9,16 @@ and the patch version for fixes.
 The release version is kept in `VERSION`, `ui/package.json` and the newest
 entry below. `tests/VersionTest.php` fails when those three drift apart.
 
+## Unreleased
+
+### Added
+
+- **Mastodon-compatible OAuth:** clients can register, authorize with PKCE,
+  rotate refresh tokens and revoke access. OAuth scopes are enforced on API
+  routes and account security changes invalidate outstanding credentials.
+  See [the OAuth guide](docs/mastodon-oauth.md) for supported flows and
+  current client limitations.
+
 ## [0.12.0] - 2026-11-18
 
 ### Added
