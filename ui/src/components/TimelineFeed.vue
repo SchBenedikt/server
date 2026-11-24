@@ -56,7 +56,13 @@ defineExpose({
 		</TransitionGroup>
 
 		<slot v-else name="empty">
-			<EmptyState :icon="emptyIcon" :title="emptyTitle" :text="emptyText" />
+			<EmptyState
+				v-if="timeline.hasMore.value"
+				icon="filter"
+				title="More posts are available"
+				text="Some entries are hidden by your settings. Continue to older posts."
+			/>
+			<EmptyState v-else :icon="emptyIcon" :title="emptyTitle" :text="emptyText" />
 		</slot>
 
 		<p v-if="timeline.error.value !== '' && timeline.posts.value.length > 0" class="a-feed__inline-error">
@@ -64,14 +70,14 @@ defineExpose({
 		</p>
 
 		<button
-			v-if="timeline.hasMore.value && timeline.posts.value.length > 0"
+			v-if="timeline.hasMore.value && timeline.loaded.value"
 			type="button"
 			class="a-btn a-btn--ghost a-feed__more"
 			:disabled="timeline.loadingMore.value"
 			@click="timeline.loadMore"
 		>
 			<AppIcon v-if="timeline.loadingMore.value" name="refresh" :size="16" class="a-spin" />
-			{{ timeline.loadingMore.value ? 'Loading…' : 'More posts' }}
+			{{ timeline.loadingMore.value ? 'Loading…' : timeline.posts.value.length === 0 ? 'Continue' : 'More posts' }}
 		</button>
 
 		<p
