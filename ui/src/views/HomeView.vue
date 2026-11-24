@@ -187,8 +187,14 @@ function refresh(): void {
 			:empty-text="emptyText"
 			:empty-icon="currentTab === 'followed' ? 'hash' : 'sparkles'"
 		>
-			<template #empty>
-				<EmptyState :icon="currentTab === 'followed' ? 'hash' : 'sparkles'" :title="emptyTitle" :text="emptyText">
+			<template #empty="{ hasMore }">
+				<EmptyState
+					v-if="hasMore"
+					icon="filter"
+					title="No posts on this page"
+					text="Some entries may be hidden by your settings or no longer available. Continue below to keep looking."
+				/>
+				<EmptyState v-else :icon="currentTab === 'followed' ? 'hash' : 'sparkles'" :title="emptyTitle" :text="emptyText">
 					<a v-if="currentTab === 'followed'" class="a-btn a-btn--primary a-btn--small" href="#/explore">Discover hashtags</a>
 					<button v-else-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
 						Write your first post
