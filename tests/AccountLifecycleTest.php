@@ -404,6 +404,33 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame('active', $server->runtime->app->accountData?->deletionStatus('admin')->state);
     }
 
+    public function testDisabledAccountIsHiddenFromFederationUntilReenabled(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('admin', 'admin@example.test', TestServer::PASSWORD, true);
+        $server->createAccount('alice', 'alice@example.test');
+
+        $server->runtime->admin->disableUser('admin', 'alice');
+
+        $actor = $server->send('GET', '/@alice', [
+            'headers' => ['Accept' => 'application/activity+json'],
+        ]);
+        $webfinger = $server->send('GET', '/.well-known/webfinger', [
+            'query' => ['resource' => 'acct:alice@localhost:3000'],
+        ]);
+        self::assertSame(404, $actor->status, $actor->body);
+        self::assertSame(404, $webfinger->status, $webfinger->body);
+
+        $server->runtime->admin->enableUser('admin', 'alice');
+
+        self::assertSame(200, $server->send('GET', '/@alice', [
+            'headers' => ['Accept' => 'application/activity+json'],
+        ])->status);
+        self::assertSame(200, $server->send('GET', '/.well-known/webfinger', [
+            'query' => ['resource' => 'acct:alice@localhost:3000'],
+        ])->status);
+    }
+
     public function testAccountErasurePublishesNativePdsDeletionStatus(): void
     {
         $server = new TestServer();
