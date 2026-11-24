@@ -12,6 +12,8 @@ namespace AlohaSocial\Server\Tests;
 use AlohaSocial\Core\Domain\Atproto\AllowAllAtprotoContent;
 use AlohaSocial\Core\Domain\Atproto\AtprotoEventKind;
 use AlohaSocial\Core\Domain\Atproto\AtprotoRecordOperation;
+use AlohaSocial\Core\Domain\Atproto\AtprotoFollow;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
 use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
 use AlohaSocial\Core\Service\Atproto\AtprotoSyncService;
 use AlohaSocial\Core\Support\Time;
@@ -46,9 +48,19 @@ final class JetstreamEventSourceTest extends TestCase
         $database->execute(
             'INSERT INTO social_following'
             . ' (id, local_user_id, actor_id, inbox_url, followed_at, state, follow_activity_id)'
-            . " VALUES ('follow-1', :local, 'did:plc:followed', 'https://remote.example/inbox', :now, 'accepted', NULL)",
+            . " VALUES ('follow-1', :local, 'did:plc:ap-followed', 'https://remote.example/inbox', :now, 'accepted', NULL)",
             ['local' => $alice->id, 'now' => $now],
         );
+        (new PdoAtprotoFollowRepository($database))->save(new AtprotoFollow(
+            localUserId: $alice->id,
+            accountDid: 'did:plc:localalice',
+            subjectDid: 'did:plc:followed',
+            rkey: '3kfollow',
+            uri: 'at://did:plc:localalice/app.bsky.graph.follow/3kfollow',
+            cid: 'bafyfollow',
+            state: AtprotoFollow::ACTIVE,
+            followedAt: $server->runtime->clock->now(),
+        ));
         $database->execute(
             'INSERT INTO social_atproto_publication (local_user_id, post_id, rkey, uri, published_at)'
             . ' VALUES (:local, :post, :rkey, :uri, :now)',

@@ -46,6 +46,7 @@ use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
+use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Setup\SetupService;
 
@@ -97,6 +98,7 @@ final readonly class Runtime
         public PdsRepository $pdsRepository,
         public ?AtprotoReconciler $atprotoReconciler = null,
         public ?AtprotoBackoff $atprotoBackoff = null,
+        public ?AtprotoRemoteInteractions $atprotoRemoteInteractions = null,
     ) {
     }
 }
