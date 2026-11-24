@@ -62,7 +62,9 @@ curl -fsS http://localhost:3000/api/v1/instance
 docker compose logs -f app worker
 ```
 
-The app should report `healthy`; the worker and firehose should be `running`.
+The app and firehose should report `healthy`; the worker should be `running`.
+The firehose health check verifies that its WebSocket listener accepts local
+connections on port 2584. It does not verify public relay discovery.
 Both background services wait for the app healthcheck, so migrations never run
 twice. When native PDS is enabled, the app proxies
 `/xrpc/com.atproto.sync.subscribeRepos` to the firehose process. It shares the
