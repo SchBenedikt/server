@@ -16,6 +16,7 @@ use AlohaSocial\Core\Domain\Post\PostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\PdoConnection;
+use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Accounts\RegistrationService;
@@ -66,6 +67,7 @@ final readonly class Runtime
         public Router $router,
         public RateLimiter $rateLimiter,
         public AccountRepository $accounts,
+        public AccountErasureCleanup $accountErasureCleanup,
         public AccountDirectory $directory,
         public RegistrationService $registration,
         public SessionManager $sessions,

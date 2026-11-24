@@ -64,6 +64,7 @@ final class Exports
             'profile' => [
                 'id' => $account->id,
                 'handle' => $account->handle,
+                'email' => $account->email,
                 'display_name' => $account->displayName,
                 'created_at' => $account->createdAt,
                 'role' => $account->role,
@@ -98,12 +99,57 @@ final class Exports
                 ['account_id' => $accountId],
             ),
             'filters' => $this->filters($accountId),
+            'featured_tags' => $this->rows(
+                'SELECT tag, position, created_at FROM featured_tag'
+                . ' WHERE account_id = :account_id ORDER BY position ASC, tag ASC',
+                ['account_id' => $accountId],
+            ),
+            'follow_requests' => $this->rows(
+                'SELECT actor_id, actor_handle, is_local, created_at FROM follow_request'
+                . ' WHERE target_account_id = :account_id ORDER BY created_at ASC, actor_id ASC',
+                ['account_id' => $accountId],
+            ),
+            'announcements' => $this->rows(
+                'SELECT id, content, active, created_at, updated_at, expires_at FROM announcement'
+                . ' WHERE author_id = :account_id ORDER BY created_at ASC, id ASC',
+                ['account_id' => $accountId],
+            ),
+            'stories' => $this->rows(
+                'SELECT id, content, background, created_at, expires_at FROM story'
+                . ' WHERE account_id = :account_id ORDER BY created_at ASC, id ASC',
+                ['account_id' => $accountId],
+            ),
+            'story_views' => $this->rows(
+                'SELECT story_id, seen_at FROM story_seen'
+                . ' WHERE account_id = :account_id ORDER BY seen_at ASC, story_id ASC',
+                ['account_id' => $accountId],
+            ),
             'lists' => $this->lists($accountId),
             'collections' => $this->collections($accountId),
             'drafts' => $this->rows(
                 'SELECT context, content, content_warning, visibility, attachment_ids, in_reply_to_id,'
                 . ' quoted_post_id, poll_options, poll_multiple, poll_hide_totals, poll_expires_in, updated_at'
                 . ' FROM draft WHERE account_id = :account_id ORDER BY updated_at ASC',
+                ['account_id' => $accountId],
+            ),
+            'archived_posts' => $this->rows(
+                'SELECT post_id, archived_at FROM archived_post'
+                . ' WHERE account_id = :account_id ORDER BY archived_at ASC, post_id ASC',
+                ['account_id' => $accountId],
+            ),
+            'recommendation_feedback' => $this->rows(
+                'SELECT post_id, kind, created_at FROM recommendation_feedback'
+                . ' WHERE account_id = :account_id ORDER BY created_at ASC, post_id ASC',
+                ['account_id' => $accountId],
+            ),
+            'kokua_posts' => $this->rows(
+                'SELECT id, kind, title, details, category, place, needed_by, status, created_at, updated_at, done_at'
+                . ' FROM kokua WHERE account_id = :account_id ORDER BY created_at ASC, id ASC',
+                ['account_id' => $accountId],
+            ),
+            'kokua_responses' => $this->rows(
+                'SELECT kokua_id, message, created_at FROM kokua_help'
+                . ' WHERE account_id = :account_id ORDER BY created_at ASC, kokua_id ASC',
                 ['account_id' => $accountId],
             ),
             'scheduled_posts' => $this->rows(
