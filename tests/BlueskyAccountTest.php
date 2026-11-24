@@ -437,7 +437,13 @@ final class BlueskyAccountTest extends TestCase
         self::assertSame([], $this->http->requests, 'A local like must stay local before opt-in.');
 
         $this->server->runtime->preferences->update('alice', ['mirror_likes_to_atproto' => true]);
-        $this->server->json('POST', $likePath, [], $auth['cookies'], $auth['csrf']);
+        $this->server->json(
+            'POST',
+            $likePath,
+            ['account_did' => 'did:plc:alice123'],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
         $likeWrite = array_values(array_filter(
             $this->http->requests,
             static function (array $request): bool {

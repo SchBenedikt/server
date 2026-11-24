@@ -57,19 +57,19 @@ final class AtprotoRemoteInteractions
 	}
 
 	/** @return array{interaction: array<string, mixed>} */
-	public function change(string $userId, string $uri, string $kind, bool $enabled): array
+	public function change(string $userId, string $uri, string $kind, bool $enabled, ?string $accountDid = null): array
 	{
 		$target = $this->target($uri);
 		if ($kind === AtprotoInteractionRecord::LIKE) {
 			if ($enabled) {
-				$this->interactions->likeRemote($userId, $target);
+				$this->interactions->likeRemote($userId, $target, $accountDid);
 			} else {
-				$this->interactions->unlikeRemote($userId, $target);
+				$this->interactions->unlikeRemote($userId, $target, $accountDid);
 			}
 		} elseif ($enabled) {
-			$this->interactions->repostRemote($userId, $target);
+			$this->interactions->repostRemote($userId, $target, $accountDid);
 		} else {
-			$this->interactions->undoRemoteRepost($userId, $target);
+			$this->interactions->undoRemoteRepost($userId, $target, $accountDid);
 		}
 
 		return ['interaction' => $this->snapshot($userId, $uri)];

@@ -688,6 +688,13 @@ final class FrontController
             }
 
             $postId = rawurldecode($matches[1]);
+            $interactionBody = json_decode($request->body, true);
+            $accountDid = is_array($interactionBody) && is_string($interactionBody['account_did'] ?? null)
+                ? trim($interactionBody['account_did'])
+                : null;
+            if ($accountDid === '') {
+                $accountDid = null;
+            }
             if (AtprotoRemoteInteractions::supports($postId)) {
                 if ($this->runtime->atprotoRemoteInteractions === null) {
                     return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
@@ -699,6 +706,7 @@ final class FrontController
                         $postId,
                         AtprotoInteractionRecord::REPOST,
                         $request->method === 'POST',
+                        $accountDid,
                     );
 
                     return Response::json(['ok' => true]);
@@ -740,10 +748,10 @@ final class FrontController
             try {
                 if ($request->method === 'POST') {
                     $boosts->boost($userId, $postId);
-                    $this->runtime->interactions->mirrorBoost($userId, $postId, true);
+                    $this->runtime->interactions->mirrorBoost($userId, $postId, true, $accountDid);
                 } else {
                     $boosts->unboost($userId, $postId);
-                    $this->runtime->interactions->mirrorBoost($userId, $postId, false);
+                    $this->runtime->interactions->mirrorBoost($userId, $postId, false, $accountDid);
                 }
             } catch (PostNotFoundException) {
                 return $this->apiError(404, 'post_not_found', 'This post is not available.');
@@ -767,6 +775,13 @@ final class FrontController
             }
 
             $postId = rawurldecode($matches[1]);
+            $interactionBody = json_decode($request->body, true);
+            $accountDid = is_array($interactionBody) && is_string($interactionBody['account_did'] ?? null)
+                ? trim($interactionBody['account_did'])
+                : null;
+            if ($accountDid === '') {
+                $accountDid = null;
+            }
             if (AtprotoRemoteInteractions::supports($postId)) {
                 if ($this->runtime->atprotoRemoteInteractions === null) {
                     return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
@@ -778,6 +793,7 @@ final class FrontController
                         $postId,
                         AtprotoInteractionRecord::LIKE,
                         $request->method === 'POST',
+                        $accountDid,
                     );
 
                     return Response::json($result);
@@ -813,8 +829,8 @@ final class FrontController
 
             try {
                 $interaction = $request->method === 'POST'
-                    ? $this->runtime->interactions->like($userId, $postId)
-                    : $this->runtime->interactions->unlike($userId, $postId);
+                    ? $this->runtime->interactions->like($userId, $postId, $accountDid)
+                    : $this->runtime->interactions->unlike($userId, $postId, $accountDid);
             } catch (PostNotFoundException) {
                 return $this->apiError(404, 'post_not_found', 'This post is not available.');
             }
