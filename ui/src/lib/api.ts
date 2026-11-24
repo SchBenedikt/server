@@ -103,6 +103,14 @@ export interface AtprotoIdentityData {
 	external: BlueskyAccountStatus;
 }
 
+export interface AtprotoPublicationStatus {
+	postId: string;
+	accountDid: string;
+	rkey: string;
+	uri: string;
+	publishedAt: string;
+}
+
 export interface AccountMoveStatus {
 	event_id: string;
 	target_actor_id: string;
@@ -248,7 +256,8 @@ export interface Api {
 	connectBluesky(handle: string, appPassword: string): Promise<BlueskyAccountStatus>;
 	startBlueskyOAuth(handle: string): Promise<string>;
 	disconnectBluesky(): Promise<boolean>;
-	publishToBluesky(postId: string, accountDid?: string): Promise<void>;
+	publishToBluesky(postId: string, accountDid?: string): Promise<AtprotoPublicationStatus>;
+	atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationStatus | null>;
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
@@ -890,6 +899,26 @@ function normalizeBlueskyAccount(value: unknown): BlueskyAccountStatus {
 		pds_url: typeof value.pds_url === 'string' ? value.pds_url : undefined,
 		connected_at: typeof value.connected_at === 'string' ? value.connected_at : undefined,
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : undefined,
+	};
+}
+
+function normalizeAtprotoPublication(value: unknown): AtprotoPublicationStatus | null {
+	if (!isRecord(value)
+		|| typeof value.post_id !== 'string'
+		|| typeof value.account_did !== 'string'
+		|| typeof value.rkey !== 'string'
+		|| typeof value.uri !== 'string'
+		|| typeof value.published_at !== 'string'
+	) {
+		return null;
+	}
+
+	return {
+		postId: value.post_id,
+		accountDid: value.account_did,
+		rkey: value.rkey,
+		uri: value.uri,
+		publishedAt: value.published_at,
 	};
 }
 
@@ -2828,13 +2857,30 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return data?.disconnected === true;
 		},
 
-		async publishToBluesky(postId: string, accountDid?: string): Promise<void> {
-			await request<unknown>(
+		async publishToBluesky(postId: string, accountDid?: string): Promise<AtprotoPublicationStatus> {
+			const data = await request<{ publication?: unknown }>(
 				'POST',
 				'/api/v1/host/bluesky/publish',
 				undefined,
 				{ post_id: postId, ...(accountDid === undefined ? {} : { account_did: accountDid }) },
 			);
+
+			const publication = normalizeAtprotoPublication(data?.publication);
+			if (publication === null) {
+				throw new ApiError(502, 'invalid_response', 'The Bluesky publication was not confirmed.');
+			}
+
+			return publication;
+		},
+
+		async atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationStatus | null> {
+			const data = await request<{ publication?: unknown }>(
+				'GET',
+				`/api/v1/posts/${encodeURIComponent(postId)}/atproto`,
+				{ account_did: accountDid },
+			);
+
+			return normalizeAtprotoPublication(data?.publication);
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {
