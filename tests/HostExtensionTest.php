@@ -111,6 +111,9 @@ final class HostExtensionTest extends TestCase
 
     public function testBoostCanBeToggledAndProjectsViewerState(): void
     {
+        $followed = $this->server->json('POST', '/api/v1/accounts/alice/follow', [], $this->bobCookies, $this->bobCsrf);
+        self::assertSame(200, $followed->status, $followed->body);
+
         $boost = '/api/v1/posts/' . $this->postId . '/boost';
         $response = $this->server->json('POST', $boost, [], $this->bobCookies, $this->bobCsrf);
         self::assertSame(200, $response->status, $response->body);
@@ -128,9 +131,10 @@ final class HostExtensionTest extends TestCase
         /** @var array{posts: list<array<string, mixed>>} $homeBody */
         $homeBody = json_decode($home->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertCount(1, $homeBody['posts'], json_encode($homeBody['posts'], JSON_THROW_ON_ERROR));
-        self::assertSame('boost', $homeBody['posts'][0]['kind']);
+        self::assertSame('post', $homeBody['posts'][0]['kind']);
+        self::assertSame($this->postId, $homeBody['posts'][0]['id']);
         self::assertSame($this->postId, $homeBody['posts'][0]['object_id']);
-        self::assertSame('bob', $homeBody['posts'][0]['boosted_by']);
+        self::assertNull($homeBody['posts'][0]['boosted_by']);
 
         $removed = $this->server->json('DELETE', $boost, [], $this->bobCookies, $this->bobCsrf);
         self::assertSame(200, $removed->status, $removed->body);
@@ -146,7 +150,9 @@ final class HostExtensionTest extends TestCase
         $afterHome = $this->server->send('GET', '/api/v1/timelines/home', ['cookies' => $this->bobCookies]);
         /** @var array{posts: list<array<string, mixed>>} $afterHomeBody */
         $afterHomeBody = json_decode($afterHome->body, true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame([], $afterHomeBody['posts']);
+        self::assertCount(1, $afterHomeBody['posts']);
+        self::assertSame('post', $afterHomeBody['posts'][0]['kind']);
+        self::assertSame($this->postId, $afterHomeBody['posts'][0]['id']);
     }
 
     public function testCachedRemotePostLikeUsesCoreFollowAndBlockPolicy(): void
