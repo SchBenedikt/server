@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Service\CreatePost;
+use AlohaSocial\Core\Jobs\JobType;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -23,6 +24,34 @@ final class AccountLifecycleTest extends TestCase
         $login = $server->signIn('alice');
         $post = $server->runtime->app->posts->create(
             new CreatePost('alice', 'Private account data', Visibility::Public),
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO social_follower'
+            . ' (id, local_user_id, actor_id, inbox_url, shared_inbox_url, followed_at, is_local, state, follow_activity)'
+            . ' VALUES (:id, :user, :actor, :inbox, :shared, :followed_at, 0, :state, NULL)',
+            [
+                'id' => 'remote-follower',
+                'user' => 'alice',
+                'actor' => 'https://peer.example/@follower',
+                'inbox' => 'https://peer.example/inbox/follower',
+                'shared' => 'https://peer.example/inbox',
+                'followed_at' => '2026-11-24T00:00:00Z',
+                'state' => 'accepted',
+            ],
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO social_following'
+            . ' (id, local_user_id, actor_id, inbox_url, followed_at, state, follow_activity_id)'
+            . ' VALUES (:id, :user, :actor, :inbox, :followed_at, :state, :activity)',
+            [
+                'id' => 'remote-follow',
+                'user' => 'alice',
+                'actor' => 'https://remote.example/@followed',
+                'inbox' => 'https://remote.example/inbox',
+                'followed_at' => '2026-11-24T00:00:00Z',
+                'state' => 'accepted',
+                'activity' => 'http://localhost:3000/api/v1/following/remote-follow/follow',
+            ],
         );
         $server->runtime->database->execute(
             'INSERT INTO social_atproto_follow'
@@ -66,6 +95,28 @@ final class AccountLifecycleTest extends TestCase
             'SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = :user',
             ['user' => 'alice'],
         ));
+        $federationJobs = $server->runtime->database->fetchAll(
+            'SELECT type, payload, subject_type FROM social_job WHERE type = :type ORDER BY id',
+            ['type' => JobType::FEDERATION_DELIVER],
+        );
+        self::assertCount(2, $federationJobs);
+        $jobPayloads = array_map(
+            static fn (array $job): array => json_decode((string) $job['payload'], true, 64, JSON_THROW_ON_ERROR),
+            $federationJobs,
+        );
+        $deletePayload = array_values(array_filter(
+            $jobPayloads,
+            static fn (array $payload): bool => ($payload['activity']['type'] ?? null) === 'Delete',
+        ));
+        $undoPayload = array_values(array_filter(
+            $jobPayloads,
+            static fn (array $payload): bool => ($payload['activity']['type'] ?? null) === 'Undo',
+        ));
+        self::assertCount(1, $deletePayload);
+        self::assertCount(1, $undoPayload);
+        self::assertSame('https://peer.example/inbox', $deletePayload[0]['inbox']);
+        self::assertSame('https://remote.example/inbox', $undoPayload[0]['inbox']);
+        self::assertSame([null, null], array_column($federationJobs, 'subject_type'));
         self::assertSame(401, $server->send(
             'GET',
             '/api/v1/host/preferences',
