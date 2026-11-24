@@ -306,7 +306,7 @@ checkout with dev dependencies installed.
 - **Disk:** watch `var/blobs/`, database size and backup storage. Uploads and
   federation media are the usual growth sources.
 - **Logs:** PHP-FPM/error log for web errors, worker journal for jobs. Keep
-  `ALOHASOCIAL_DEBUG=false` in production; enable it only while diagnosing.
+  `ALOHASOCIAL_DEBUG=false` in production. Boot failures stay generic in web responses; use the error log or `php bin/doctor.php` for diagnostic details.
 - **TLS and proxy:** monitor certificate expiry and make sure the public
   origin matches `ALOHASOCIAL_INSTANCE_URL`.
 
@@ -320,8 +320,8 @@ convenience, not a monitoring signal.
 | `The database schema is not installed` or `Pending migrations` | Migrations were skipped or a new version was deployed without migrating. | Run `php bin/update.php`; inspect output; restart PHP-FPM/worker. |
 | Accounts seem to be gone after an update | Wrong data directory, a lost Docker volume, or a release directory that was replaced. | Stop services; check `php bin/doctor.php` for the database path; restore the newest `var/backups/*.sqlite` or the PostgreSQL dump with `var/secret.key`; set `--data-dir` for the next install. Never use `docker compose down -v`. |
 | `Migration stopped: the safety backup could not be created` | `var/backups` is not writable, or `pg_dump` is missing/incompatible. | Fix permissions or install the matching PostgreSQL client; run `php bin/backup.php`; only then retry. `--allow-unbacked` is a last resort. |
-| `/healthz` is green but pages return 500 | Database, key or schema problem. | Check the PHP error log; set `ALOHASOCIAL_DEBUG=true` temporarily. |
-| Browser shows **Server is not ready** | Boot failed, usually a pending migration, missing schema or an invalid secret key. | Run `php bin/doctor.php`, then `php bin/update.php`; the HTML error page and the PHP log name the cause. Restart PHP-FPM/worker. |
+| `/healthz` is green but pages return 500 | Database, key or schema problem. | Check the PHP error log and run `php bin/doctor.php`; do not enable debug mode on a public instance. |
+| Browser shows **Server is not ready** | Boot failed, usually a pending migration, missing schema or an invalid secret key. | Run `php bin/doctor.php`, then `php bin/update.php`; the public page stays generic while the PHP log and doctor output give the cause. Restart PHP-FPM/worker. |
 | Web setup is locked after a reset | The one-time token is missing or was already used. | Open the URL printed by `php bin/reset.php`; read `var/setup.token` as the application user. Run the reset again if the token was lost. |
 | Federation links still use the old domain after web setup | Long-running FPM workers or the worker still hold the old environment. | Restart PHP-FPM and the worker after setup; verify `/api/v1/instance` reports the new domain. Changing the domain after accounts exist is not supported. |
 | Login succeeds but the next request is signed out | Origin mismatch or secure-cookie policy. | Use the exact `ALOHASOCIAL_INSTANCE_URL` origin; use HTTPS in production; check proxy/forwarding. |
