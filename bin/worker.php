@@ -46,6 +46,23 @@ function syncAtproto(Runtime $runtime): void
     }
 }
 
+/** Complete host cleanup after Core's durable account erasure reaches `erased`. */
+function finalizeAccountErasures(Runtime $runtime): void
+{
+    try {
+        $result = $runtime->accountErasureCleanup->finalizeCompleted();
+        if ($result['failed'] > 0) {
+            fwrite(
+                STDERR,
+                'Account erasure cleanup will retry failed accounts on a later worker tick. ('
+                . $result['failed'] . ")\n",
+            );
+        }
+    } catch (Throwable $exception) {
+        fwrite(STDERR, 'Account erasure cleanup scan failed: ' . $exception->getMessage() . "\n");
+    }
+}
+
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
 
@@ -60,6 +77,7 @@ try {
 
 if ($once) {
     $runtime->admin->heartbeat();
+    finalizeAccountErasures($runtime);
     syncAtproto($runtime);
     $handled = $runtime->app->worker->runOnce(10);
     fwrite(STDOUT, 'handled=' . $handled . "\n");
@@ -81,6 +99,7 @@ while (!$stop) {
     // A non-empty batch is drained immediately; an empty one sleeps, so the
     // worker is not a busy loop.
     $runtime->admin->heartbeat();
+    finalizeAccountErasures($runtime);
     syncAtproto($runtime);
     $handled = $runtime->app->worker->runOnce(10);
     if ($handled === 0) {
