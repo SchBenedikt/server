@@ -15,6 +15,7 @@ use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Service\Atproto\AtprotoAccountNotConnectedException;
 use AlohaSocial\Core\Service\Atproto\AtprotoNotConfiguredException;
 use AlohaSocial\Core\Service\Atproto\AtprotoPostRejectedException;
@@ -26,6 +27,7 @@ use AlohaSocial\Server\Community\CommunityException;
 use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Federation\BlueskyException;
 use AlohaSocial\Server\Federation\Atproto\AtprotoPublicationDeliveryStatus;
+use AlohaSocial\Server\Federation\ActivityPubDeliveryStatus;
 use Throwable;
 
 use function array_key_exists;
@@ -61,6 +63,47 @@ final class CommunityApiController
         $isAdmin = $session?->account?->isAdmin() === true;
 
         try {
+            if (preg_match('#^/api/v1/host/posts/([^/]+)/activitypub-delivery(?:/(retry))?$#', $path, $matches) === 1
+                && in_array($method, ['GET', 'POST'], true)
+            ) {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to view delivery status.');
+                }
+                $retryAfter = $this->runtime->rateLimiter->attempt(
+                    'host.activitypub_delivery.' . strtolower($method),
+                    $userId,
+                    $method === 'POST' ? 10 : 60,
+                    60,
+                );
+                if ($retryAfter !== null) {
+                    return Response::json([
+                        'error' => ['code' => 'rate_limited', 'message' => 'Wait before checking or retrying delivery again.'],
+                    ], 429, ['Retry-After' => (string) $retryAfter]);
+                }
+                $postId = rawurldecode($matches[1]);
+                try {
+                    $post = $this->runtime->app->posts->get($postId);
+                } catch (PostNotFoundException) {
+                    return $this->error(404, 'not_found', 'This post is not available.');
+                }
+                if ($post->authorId !== $userId) {
+                    return $this->error(404, 'not_found', 'This post is not available.');
+                }
+                $delivery = new ActivityPubDeliveryStatus(
+                    $this->runtime->database,
+                    new ActivityFactory($this->runtime->config->coreConfig()),
+                    $this->runtime->clock,
+                );
+                if ($method === 'POST' && ($matches[2] ?? '') === 'retry') {
+                    $retried = $delivery->retry($userId, $postId);
+
+                    return Response::json(['retried' => $retried] + $delivery->forPost($userId, $postId));
+                }
+                if ($method === 'GET' && ($matches[2] ?? '') === '') {
+                    return Response::json($delivery->forPost($userId, $postId));
+                }
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/kokua') {
                 return Response::json($this->runtime->kokua->page(
                     $userId,
