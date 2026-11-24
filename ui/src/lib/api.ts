@@ -119,6 +119,14 @@ export interface AtprotoPublicationLookup {
 	retryable: boolean;
 }
 
+export interface ActivityPubDeliveryLookup {
+	state: 'clear' | 'pending' | 'failed';
+	pending: number;
+	failed: number;
+	attempts: number;
+	retryable: boolean;
+}
+
 export interface AccountMoveStatus {
 	event_id: string;
 	target_actor_id: string;
@@ -266,6 +274,8 @@ export interface Api {
 	disconnectBluesky(): Promise<boolean>;
 	publishToBluesky(postId: string, accountDid?: string): Promise<AtprotoPublicationStatus>;
 	atprotoPublication(postId: string, accountDid: string): Promise<AtprotoPublicationLookup>;
+	activityPubDelivery(postId: string): Promise<ActivityPubDeliveryLookup>;
+	retryActivityPubDelivery(postId: string): Promise<ActivityPubDeliveryLookup & { retried: number }>;
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
@@ -274,6 +284,26 @@ export interface Api {
 
 function isRecord(value: unknown): value is JsonRecord {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeActivityPubDelivery(value: unknown): ActivityPubDeliveryLookup {
+	if (!isRecord(value)
+		|| (value.state !== 'clear' && value.state !== 'pending' && value.state !== 'failed')
+		|| typeof value.pending !== 'number'
+		|| typeof value.failed !== 'number'
+		|| typeof value.attempts !== 'number'
+		|| typeof value.retryable !== 'boolean'
+	) {
+		throw new ApiError(502, 'invalid_response', 'The ActivityPub delivery status is invalid.');
+	}
+
+	return {
+		state: value.state,
+		pending: Math.max(0, value.pending),
+		failed: Math.max(0, value.failed),
+		attempts: Math.max(0, value.attempts),
+		retryable: value.retryable,
+	};
 }
 
 function errorMessage(body: string, status: number): { code: string; message: string; fields: Record<string, string> } {
@@ -2921,6 +2951,20 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				attempts: typeof data.attempts === 'number' ? data.attempts : 0,
 				retryable: data.retryable === true,
 			};
+		},
+
+		async activityPubDelivery(postId: string): Promise<ActivityPubDeliveryLookup> {
+			const data = await request<Record<string, unknown>>(
+				'GET', `/api/v1/host/posts/${encodeURIComponent(postId)}/activitypub-delivery`,
+			);
+			return normalizeActivityPubDelivery(data);
+		},
+
+		async retryActivityPubDelivery(postId: string): Promise<ActivityPubDeliveryLookup & { retried: number }> {
+			const data = await request<Record<string, unknown>>(
+				'POST', `/api/v1/host/posts/${encodeURIComponent(postId)}/activitypub-delivery/retry`, undefined, {},
+			);
+			return { ...normalizeActivityPubDelivery(data), retried: typeof data.retried === 'number' ? data.retried : 0 };
 		},
 
 		async followedTags(): Promise<FollowedTag[]> {
