@@ -1326,10 +1326,12 @@ final class FrontController
             'displayName' => $account?->name() ?? '',
             'isAdmin' => $account?->isAdmin() === true,
             'media' => $this->runtime->app->media !== null,
-            // This UI capability currently gates the manual Bluesky publish
-            // action, whose API is controlled by atprotoPublish. A native
-            // PDS alone does not make that outbound action available.
-            'atproto' => $this->runtime->config->atprotoPublish,
+            // A configured publisher is not enough: only advertise this
+            // action when this signed-in account has an active Bluesky link.
+            // A native PDS alone does not make external publishing available.
+            'atproto' => $account !== null
+                && $this->runtime->config->atprotoPublish
+                && ($this->runtime->blueskyAccounts->status($account->id)['connected'] ?? false) === true,
             'appShell' => true,
         ], 'App', 200, null, [
             'Content-Security-Policy' => "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self'; font-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",

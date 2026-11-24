@@ -58,6 +58,35 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('data-atproto="0"', $response->body);
     }
 
+    public function testPublishingCapabilityRequiresAnActiveLinkedAccount(): void
+    {
+        $server = new TestServer(['atproto_publish' => true]);
+        $server->createAccount('alice', 'alice@example.test');
+
+        $unlinked = $server->signIn('alice');
+        $unlinkedPage = $server->send('GET', '/app', ['cookies' => $unlinked['cookies']]);
+        self::assertStringContainsString('data-atproto="0"', $unlinkedPage->body);
+
+        $server->runtime->database->execute(
+            'INSERT INTO atproto_account'
+            . ' (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
+            . ' VALUES (:account_id, :did, :handle, :pds_url, :access, :refresh, 0, 1, :created, :updated)',
+            [
+                'account_id' => 'alice',
+                'did' => 'did:plc:alice123',
+                'handle' => 'alice.bsky.social',
+                'pds_url' => 'https://pds.example',
+                'access' => 'sealed-access-token',
+                'refresh' => 'sealed-refresh-token',
+                'created' => '2026-01-01T00:00:00Z',
+                'updated' => '2026-01-01T00:00:00Z',
+            ],
+        );
+
+        $linkedPage = $server->send('GET', '/app', ['cookies' => $unlinked['cookies']]);
+        self::assertStringContainsString('data-atproto="1"', $linkedPage->body);
+    }
+
     public function testTheBuiltSharedBundleIsInTheRepository(): void
     {
         $root = dirname(__DIR__);
