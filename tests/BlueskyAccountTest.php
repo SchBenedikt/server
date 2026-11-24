@@ -23,6 +23,7 @@ use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\BlueskyException;
 use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
 use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
+use AlohaSocial\Core\Jobs\JobType;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
@@ -40,6 +41,8 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
     public array $requests = [];
 
     public int $expiresIn = 3600;
+
+    public int $blobUploadFailures = 0;
 
     public bool $rejectCredentials = false;
 
@@ -108,6 +111,23 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
             }
 
             return new HttpResponse(200, [], json_encode($session, JSON_THROW_ON_ERROR));
+        }
+
+        if (str_contains($url, 'com.atproto.repo.uploadBlob')) {
+            if ($this->blobUploadFailures > 0) {
+                $this->blobUploadFailures--;
+
+                return new HttpResponse(503, [], '{"error":"ServiceUnavailable"}');
+            }
+
+            return new HttpResponse(200, [], json_encode([
+                'blob' => [
+                    '$type' => 'blob',
+                    'ref' => ['$link' => 'bafy-uploaded-image'],
+                    'mimeType' => $headers['Content-Type'] ?? 'application/octet-stream',
+                    'size' => strlen($body),
+                ],
+            ], JSON_THROW_ON_ERROR));
         }
 
         if (str_contains($url, 'com.atproto.repo.putRecord')) {
@@ -186,6 +206,8 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
 
 final class BlueskyAccountTest extends TestCase
 {
+	private const PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
     private TestServer $server;
 
     private FakeBlueskyHttpClient $http;
@@ -465,6 +487,46 @@ final class BlueskyAccountTest extends TestCase
         $payload = json_decode($request['body'], true, 64, JSON_THROW_ON_ERROR);
         self::assertSame('did:plc:alice123', $payload['repo']);
         self::assertSame('published from standalone', $payload['record']['text']);
+    }
+
+    public function testAutomaticImagePublicationRetriesTemporaryBlobUploadFailure(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $png = base64_decode(self::PIXEL_PNG, true);
+        self::assertIsString($png);
+        $attachment = $this->server->runtime->app->media?->upload('alice', $png, 'Pixel', 'image/png');
+        self::assertNotNull($attachment);
+        $post = $this->server->runtime->app->posts->create(new CreatePost(
+            'alice',
+            'Image that retries #media',
+            attachmentIds: [$attachment->id],
+        ));
+
+        $this->http->blobUploadFailures = 1;
+        self::assertSame(1, $this->server->runtime->app->worker->runOnce());
+        self::assertSame(1, $this->server->runtime->app->queue->pendingCount());
+        self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM social_atproto_publication WHERE post_id = :post',
+            ['post' => $post->id],
+        ));
+
+        $this->server->runtime->database->execute(
+            'UPDATE social_job SET available_at = :available WHERE type = :type',
+            [
+                'available' => Time::format($this->server->runtime->clock->now()->modify('-1 minute')),
+                'type' => JobType::ATPROTO_PUBLISH,
+            ],
+        );
+        self::assertSame(1, $this->server->runtime->app->worker->runOnce());
+        self::assertSame(0, $this->server->runtime->app->queue->pendingCount());
+        self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM social_atproto_publication WHERE post_id = :post',
+            ['post' => $post->id],
+        ));
+        self::assertCount(2, array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.uploadBlob'),
+        ));
     }
 
     public function testPublicAtprotoLikesRequireThePerAccountOptIn(): void
