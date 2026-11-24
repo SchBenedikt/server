@@ -42,6 +42,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
+use AlohaSocial\Server\Federation\AtprotoOAuthService;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
@@ -93,6 +94,7 @@ final readonly class Runtime
         public KokuaBoard $kokua,
         public SetupService $setup,
         public BlueskyAccounts $blueskyAccounts,
+        public AtprotoOAuthService $atprotoOAuth,
         public PostRevisionRepository $postRevisions,
         public ?NativePdsService $pds,
         public PdsRepository $pdsRepository,

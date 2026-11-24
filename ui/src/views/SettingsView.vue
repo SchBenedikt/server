@@ -32,7 +32,6 @@ const newAccountDays = ref(7);
 const bluesky = ref<BlueskyAccountStatus>({ connected: false });
 const blueskyPublishEnabled = ref(true);
 const blueskyHandle = ref('');
-const blueskyPassword = ref('');
 const blueskyBusy = ref(false);
 const atproto = ref<AtprotoIdentityData | null>(null);
 const atprotoHandle = ref('');
@@ -191,9 +190,8 @@ async function connectBluesky(): Promise<void> {
 
 	blueskyBusy.value = true;
 	try {
-		bluesky.value = await getApi().connectBluesky(blueskyHandle.value, blueskyPassword.value);
-		blueskyPassword.value = '';
-		showToast('Bluesky account connected.', 'success');
+		const url = await getApi().startBlueskyOAuth(blueskyHandle.value);
+		window.location.assign(url);
 	} catch (caught) {
 		showToast(caught instanceof Error ? caught.message : 'The connection failed.', 'error');
 	} finally {
@@ -345,7 +343,14 @@ async function startAccountMove(): Promise<void> {
 	}
 }
 
-onMounted(load);
+onMounted(() => {
+	const callback = new URLSearchParams(window.location.search).get('atproto');
+	if (callback === 'connected' || callback === 'error') {
+		showToast(callback === 'connected' ? 'Bluesky account connected.' : 'Bluesky authorization failed or was cancelled.', callback === 'connected' ? 'success' : 'error');
+		window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+	}
+	load();
+});
 watch(signedIn, (value) => {
 	if (value) {
 		void load();
@@ -605,8 +610,7 @@ watch(signedIn, (value) => {
 			<section class="a-settings__section">
 				<h2>Bluesky</h2>
 				<p class="a-settings__hint">
-					Connect your Bluesky account to publish public posts there as well.
-					You need an app password from Bluesky settings — not your regular password.
+					Connect securely with Bluesky OAuth to publish public posts there as well.
 				</p>
 
 				<div v-if="bluesky.connected" class="a-settings__bluesky">
@@ -639,20 +643,9 @@ watch(signedIn, (value) => {
 							required
 						>
 					</label>
-					<label class="a-settings__field">
-						<span>App-password</span>
-						<input
-							v-model="blueskyPassword"
-							type="password"
-							autocomplete="current-password"
-							placeholder="xxxx-xxxx-xxxx-xxxx"
-							required
-						>
-						<small>You can find it in Bluesky under Settings → Privacy and Security → App Passwords.</small>
-					</label>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="blueskyBusy">
 						<AppIcon :name="blueskyBusy ? 'refresh' : 'plus'" :size="15" :class="{ 'a-spin': blueskyBusy }" />
-						{{ blueskyBusy ? 'Connecting…' : 'Connect Bluesky' }}
+						{{ blueskyBusy ? 'Opening Bluesky…' : 'Continue with Bluesky' }}
 					</button>
 				</form>
 			</section>

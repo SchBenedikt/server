@@ -48,6 +48,7 @@ final class Migrations
             new Version202611240001AtprotoInteractionPreferences(),
             new Version202611240002AtprotoPublicationPdsUrl(),
             new Version202611240003AtprotoInteractionLedger(),
+            new Version202611240004AtprotoOAuthSchema(),
         ];
     }
 }

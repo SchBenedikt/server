@@ -11,6 +11,8 @@ namespace AlohaSocial\Server\Federation;
 
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccount;
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
+use AlohaSocial\Core\Domain\Atproto\AtprotoOAuthSession;
+use AlohaSocial\Core\Domain\Atproto\AtprotoSessionRefreshException;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\DatabaseException;
@@ -23,6 +25,10 @@ use AlohaSocial\Core\Service\Federation\RemoteFetchException;
 use AlohaSocial\Core\Security\SecretBox;
 use AlohaSocial\Core\Security\SecretBoxException;
 use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Core\Protocol\Atproto\Es256DpopProofProvider;
+use AlohaSocial\Core\Protocol\Atproto\DpopResourceProofProvider;
+use AlohaSocial\Core\Protocol\Atproto\XrpcAtprotoSessionRefresher;
+use DateTimeImmutable;
 
 use function base64_decode;
 use function count;
@@ -102,12 +108,18 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             $accessToken = $refreshed;
         }
 
+        $dpop = $this->oauthDpop($localUserId);
+        if ($this->oauthRow($localUserId) !== null && $dpop === null) {
+            return null;
+        }
+
         try {
             return new AtprotoAccount(
                 did: (string) $row['did'],
                 handle: (string) $row['handle'],
                 pdsUrl: (string) $row['pds_url'],
                 accessToken: $accessToken,
+                dpop: $dpop,
             );
         } catch (\InvalidArgumentException) {
             return null;
@@ -131,7 +143,73 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             'pds_url' => (string) $row['pds_url'],
             'connected_at' => (string) $row['created_at'],
             'updated_at' => (string) $row['updated_at'],
+            'auth_method' => $this->oauthRow($localUserId) === null ? 'app_password' : 'oauth',
         ];
+    }
+
+    /** @return array{did: string, handle: string, pds_url: string} */
+    public function resolveIdentity(string $handle): array
+    {
+        $handle = strtolower(ltrim(trim($handle), '@'));
+        if (preg_match('/^(?=.{3,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/', $handle) !== 1) {
+            throw new BlueskyException(422, 'bluesky_handle_invalid', 'Please enter a valid Bluesky handle.');
+        }
+
+        $did = $this->resolveHandle($handle);
+
+        return ['did' => $did, 'handle' => $handle, 'pds_url' => $this->resolvePds($did)];
+    }
+
+    /** @return array<string, mixed> */
+    public function storeOAuth(
+        string $localUserId,
+        string $handle,
+        string $pdsUrl,
+        string $issuer,
+        AtprotoOAuthSession $session,
+        string $dpopPrivateKey,
+    ): array {
+        if ($session->did === '' || $dpopPrivateKey === '' || $issuer === '') {
+            throw new BlueskyException(502, 'bluesky_oauth_session_invalid', 'The OAuth session could not be stored.');
+        }
+
+        $this->db->transaction(function () use ($localUserId, $handle, $pdsUrl, $issuer, $session, $dpopPrivateKey): void {
+            $this->store(
+                $localUserId,
+                $session->did,
+                strtolower($handle),
+                $pdsUrl,
+                $session->accessToken,
+                $session->refreshToken,
+                $session->expiresAt->getTimestamp(),
+            );
+
+            $parameters = [
+                'account_id' => $localUserId,
+                'issuer' => $issuer,
+                'token_endpoint' => $session->tokenEndpoint,
+                'client_id' => $session->clientId,
+                'scope' => $session->scope,
+                'dpop_private_key' => $this->box->seal($dpopPrivateKey),
+            ];
+            if ($this->oauthRow($localUserId) !== null) {
+                $this->db->execute(
+                    'UPDATE atproto_oauth_account SET issuer = :issuer, token_endpoint = :token_endpoint,'
+                    . ' client_id = :client_id, scope = :scope, dpop_private_key = :dpop_private_key'
+                    . ' WHERE account_id = :account_id',
+                    $parameters,
+                );
+            } else {
+                $this->db->execute(
+                    'INSERT INTO atproto_oauth_account'
+                    . ' (account_id, issuer, token_endpoint, client_id, scope, dpop_private_key)'
+                    . ' VALUES (:account_id, :issuer, :token_endpoint, :client_id, :scope, :dpop_private_key)',
+                    $parameters,
+                );
+            }
+        });
+
+        return $this->status($localUserId) + ['connected' => true];
     }
 
     /**
@@ -192,6 +270,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             $refreshToken,
             $this->expiresAt($accessToken),
         );
+        $this->db->execute('DELETE FROM atproto_oauth_account WHERE account_id = :account_id', ['account_id' => $localUserId]);
 
         return $this->status($localUserId) + ['connected' => true];
     }
@@ -204,6 +283,7 @@ final class BlueskyAccounts implements AtprotoAccountResolver
                 ['account_id' => $localUserId],
             );
             if ($account === null) {
+                $this->db->execute('DELETE FROM atproto_oauth_account WHERE account_id = :account_id', ['account_id' => $localUserId]);
                 return false;
             }
 
@@ -214,6 +294,8 @@ final class BlueskyAccounts implements AtprotoAccountResolver
                     ['account_id' => $localUserId, 'did' => $did],
                 );
             }
+
+            $this->db->execute('DELETE FROM atproto_oauth_account WHERE account_id = :account_id', ['account_id' => $localUserId]);
 
             return $this->db->execute(
                 'DELETE FROM atproto_account WHERE account_id = :account_id',
@@ -233,6 +315,23 @@ final class BlueskyAccounts implements AtprotoAccountResolver
             . ' WHERE connected.account_id = :account_id AND host_account.disabled_at IS NULL',
             ['account_id' => $localUserId],
         );
+    }
+
+    /** @return array<string, mixed>|null */
+    private function oauthRow(string $localUserId): ?array
+    {
+        return $this->db->fetchOne('SELECT * FROM atproto_oauth_account WHERE account_id = :account_id', ['account_id' => $localUserId]);
+    }
+
+    private function oauthDpop(string $localUserId): ?DpopResourceProofProvider
+    {
+        $row = $this->oauthRow($localUserId);
+        if ($row === null) return null;
+        try {
+            return new Es256DpopProofProvider($this->box->open((string) $row['dpop_private_key']), $this->clock);
+        } catch (SecretBoxException|\InvalidArgumentException) {
+            return null;
+        }
     }
 
     private function resolveHandle(string $handle): string
@@ -369,6 +468,48 @@ final class BlueskyAccounts implements AtprotoAccountResolver
                 $refreshToken = $this->box->open((string) $current['refresh_token']);
             } catch (SecretBoxException) {
                 return null;
+            }
+
+            $oauth = $this->oauthRow($localUserId);
+            if ($oauth !== null) {
+                try {
+                    $dpop = new Es256DpopProofProvider($this->box->open((string) $oauth['dpop_private_key']), $this->clock);
+                    $session = new AtprotoOAuthSession(
+                        did: (string) $current['did'],
+                        tokenEndpoint: (string) $oauth['token_endpoint'],
+                        clientId: (string) $oauth['client_id'],
+                        accessToken: $this->box->open((string) $current['access_token']),
+                        refreshToken: $refreshToken,
+                        scope: (string) $oauth['scope'],
+                        expiresAt: new DateTimeImmutable('@' . $expiresAt),
+                    );
+                    $rotated = (new XrpcAtprotoSessionRefresher($this->http, $dpop, $this->clock))->refresh($session);
+                } catch (SecretBoxException|\InvalidArgumentException $exception) {
+                    $this->db->execute(
+                        'UPDATE atproto_account SET active = 0, updated_at = :updated_at WHERE account_id = :account_id',
+                        ['account_id' => $localUserId, 'updated_at' => Time::format($this->clock->now())],
+                    );
+                    return null;
+                } catch (AtprotoSessionRefreshException $exception) {
+                    if (!$exception->retryable) {
+                        $this->db->execute(
+                            'UPDATE atproto_account SET active = 0, updated_at = :updated_at WHERE account_id = :account_id',
+                            ['account_id' => $localUserId, 'updated_at' => Time::format($this->clock->now())],
+                        );
+                    }
+                    return null;
+                }
+                $this->db->execute(
+                    'UPDATE atproto_account SET access_token = :access_token, refresh_token = :refresh_token, expires_at = :expires_at, updated_at = :updated_at WHERE account_id = :account_id',
+                    [
+                        'account_id' => $localUserId,
+                        'access_token' => $this->box->seal($rotated->accessToken),
+                        'refresh_token' => $this->box->seal($rotated->refreshToken),
+                        'expires_at' => $rotated->expiresAt->getTimestamp(),
+                        'updated_at' => Time::format($this->clock->now()),
+                    ],
+                );
+                return $rotated->accessToken;
             }
 
             try {
