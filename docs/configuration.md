@@ -281,6 +281,9 @@ host, and `ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN` is the suffix members get
 operations with the key sealed by `ALOHASOCIAL_SECRET_KEY`; back that secret up
 before the first identity is created. Without a wildcard record, members can
 still create a DID, but handle verification and external discovery will fail.
+When the native PDS is disabled, its `subscribeRepos` WebSocket endpoint also
+returns `503 Service Unavailable`; enabling the PDS makes that endpoint
+available through the firehose service.
 
 A new identity is created under **Settings → AT Protocol** in the app. Rotating
 the keys is available there as well. Keep the PDS disabled until the domain and
