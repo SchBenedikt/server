@@ -58,6 +58,8 @@ final class FrontController
 
     private readonly AtprotoOAuthController $atprotoOAuth;
 
+    private readonly MastodonOAuthController $mastodonOAuth;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
@@ -67,6 +69,7 @@ final class FrontController
         $this->atprotoIdentity = new AtprotoIdentityController($runtime);
         $this->atprotoSession = new AtprotoSessionController($runtime);
         $this->atprotoOAuth = new AtprotoOAuthController($runtime);
+        $this->mastodonOAuth = new MastodonOAuthController($runtime);
     }
 
     /**
@@ -115,6 +118,8 @@ final class FrontController
         $rawCookie = is_string($rawCookie) && $rawCookie !== '' ? $rawCookie : null;
 
         $session = $this->runtime->sessions->resolve($rawCookie);
+
+        $request = $this->mastodonOAuth->authenticate($request);
 
         $atprotoSessionResponse = $this->atprotoSession->handle($request);
         if ($atprotoSessionResponse !== null) {
@@ -543,8 +548,9 @@ final class FrontController
         $sessionUserId = $session?->userId();
         $userId = $sessionUserId ?? $request->userId;
 
-        if ($sessionUserId !== null && in_array($request->method, self::MUTATING_METHODS, true)) {
-            $token = (string) ($request->header('x-csrf-token') ?? '');
+        $protocolEndpoint = in_array($request->path, ['/api/v1/apps', '/oauth/token', '/oauth/revoke'], true);
+        if (!$protocolEndpoint && $sessionUserId !== null && in_array($request->method, self::MUTATING_METHODS, true)) {
+            $token = $this->csrfToken($request);
             if (!$this->runtime->sessions->csrfMatches($session, $token)) {
                 return Response::json(
                     [
@@ -556,6 +562,11 @@ final class FrontController
                     403,
                 );
             }
+        }
+
+        $mastodonOAuthResponse = $this->mastodonOAuth->handle($request, $session);
+        if ($mastodonOAuthResponse !== null) {
+            return $mastodonOAuthResponse;
         }
 
         $oauthResponse = $this->atprotoOAuth->handle($request, $session);
@@ -798,9 +809,9 @@ final class FrontController
         // A first-party session is full access, so the compatibility routes'
         // scope middleware sees every scope. Bearer-token requests keep the
         // scopes their authenticator supplied.
-        $authenticated = $userId === null
-            ? $request->withUserId(null)
-            : $request->withUserId($userId)->withScopes(['*']);
+        $authenticated = $sessionUserId !== null
+            ? $request->withUserId($sessionUserId)->withScopes(['*'])
+            : $request;
 
         $response = $this->federation->decorate(
             $request,
