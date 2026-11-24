@@ -44,6 +44,8 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
 
     public int $blobUploadFailures = 0;
 
+    public ?int $recordWriteFailureStatus = null;
+
     public bool $rejectCredentials = false;
 
     public bool $rejectRefresh = false;
@@ -131,6 +133,10 @@ final class FakeBlueskyHttpClient implements BoundedHttpClient
         }
 
         if (str_contains($url, 'com.atproto.repo.putRecord')) {
+            if ($this->recordWriteFailureStatus !== null) {
+                return new HttpResponse($this->recordWriteFailureStatus, [], '{}');
+            }
+
             $record = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
             $uri = 'at://' . $record['repo'] . '/' . $record['collection'] . '/' . $record['rkey'];
             $cid = 'bafybeigdyrzt5sfp7udm7hu76uh72fbac7e4j4z3xq';
@@ -628,6 +634,52 @@ final class BlueskyAccountTest extends TestCase
             },
         ));
         self::assertCount(1, $repostDeletes);
+    }
+
+    public function testLocalLikeAndBoostReportAndRetryTransientAtprotoFailures(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $post = $this->server->runtime->app->posts->create(new CreatePost('alice', 'mirror retry target'));
+        $auth = $this->server->signIn('alice');
+        $this->server->json(
+            'POST',
+            '/api/v1/host/bluesky/publish',
+            ['post_id' => $post->id],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+        $this->server->runtime->preferences->update('alice', [
+            'mirror_likes_to_atproto' => true,
+            'mirror_boosts_to_atproto' => true,
+            'mirror_atproto_account_did' => 'did:plc:alice123',
+        ]);
+        $this->http->recordWriteFailureStatus = 503;
+
+        $likePath = '/api/v1/posts/' . rawurlencode($post->id) . '/like';
+        $failedLike = $this->server->json('POST', $likePath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $failedLike->status, $failedLike->body);
+        $failedLikeBody = json_decode($failedLike->body, true, 64, JSON_THROW_ON_ERROR);
+        self::assertTrue($failedLikeBody['interaction']['favourited']);
+        self::assertSame('failed', $failedLikeBody['interaction']['atproto_mirror']['state']);
+        self::assertTrue($failedLikeBody['interaction']['atproto_mirror']['retryable']);
+
+        $this->http->recordWriteFailureStatus = null;
+        $retriedLike = $this->server->json('POST', $likePath, [], $auth['cookies'], $auth['csrf']);
+        $retriedLikeBody = json_decode($retriedLike->body, true, 64, JSON_THROW_ON_ERROR);
+        self::assertSame('published', $retriedLikeBody['interaction']['atproto_mirror']['state']);
+        self::assertSame(1, $retriedLikeBody['interaction']['favourites_count']);
+
+        $boostPath = '/api/v1/posts/' . rawurlencode($post->id) . '/boost';
+        $this->http->recordWriteFailureStatus = 503;
+        $failedBoost = $this->server->json('POST', $boostPath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $failedBoost->status, $failedBoost->body);
+        $failedBoostBody = json_decode($failedBoost->body, true, 64, JSON_THROW_ON_ERROR);
+        self::assertSame('failed', $failedBoostBody['atproto_mirror']['state']);
+        self::assertTrue($failedBoostBody['atproto_mirror']['retryable']);
+
+        $this->http->recordWriteFailureStatus = null;
+        $retriedBoost = $this->server->json('POST', $boostPath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame('published', json_decode($retriedBoost->body, true, 64, JSON_THROW_ON_ERROR)['atproto_mirror']['state']);
     }
 
     public function testInteractionPreferenceSelectsExternalIdentityWhenNativeIdentityAlsoExists(): void

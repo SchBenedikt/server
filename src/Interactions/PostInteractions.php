@@ -15,10 +15,13 @@ use AlohaSocial\Core\Domain\Post\PdoBoostRepository;
 use AlohaSocial\Core\Domain\Post\PdoFavouriteRepository;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Domain\Post\PostSchema;
+use AlohaSocial\Core\Domain\Atproto\AtprotoAccountNotConnectedException;
+use AlohaSocial\Core\Domain\Atproto\AtprotoPublishFailedException;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Service\Atproto\AtprotoInteractionService;
+use AlohaSocial\Core\Service\Atproto\AtprotoInteractionRejectedException;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Service\PostService;
 use AlohaSocial\Server\Community\Preferences;
@@ -178,7 +181,7 @@ final class PostInteractions
      * Add the viewer's like. Repeating it is idempotent; the owner receives a
      * local notification the first time the edge is stored.
      *
-     * @return array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int}
+     * @return array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int, atproto_mirror?: array{state: string, retryable: bool, reason?: string}}
      *
      * @throws PostNotFoundException when the post is missing or not visible
      */
@@ -203,13 +206,18 @@ final class PostInteractions
             $this->notifications->recordFavourite($post->authorId, $viewerId, $post->id);
         }
 
-        $this->mirrorLike($viewerId, $post->id, true, $accountDid);
+        $mirror = $this->mirrorLike($viewerId, $post->id, true, $accountDid);
 
-        return $this->forPosts([$post->id], $viewerId)[$post->id];
+        $result = $this->forPosts([$post->id], $viewerId)[$post->id];
+        if ($mirror !== null) {
+            $result['atproto_mirror'] = $mirror;
+        }
+
+        return $result;
     }
 
     /**
-     * @return array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int}
+     * @return array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int, atproto_mirror?: array{state: string, retryable: bool, reason?: string}}
      *
      * @throws PostNotFoundException when the post is missing or not visible
      */
@@ -217,9 +225,14 @@ final class PostInteractions
     {
         $post = $this->posts->getVisible($postId, $viewerId);
         (new PdoFavouriteRepository($this->db))->remove($viewerId, $post->id);
-        $this->mirrorLike($viewerId, $post->id, false, $accountDid);
+        $mirror = $this->mirrorLike($viewerId, $post->id, false, $accountDid);
 
-        return $this->forPosts([$post->id], $viewerId)[$post->id];
+        $result = $this->forPosts([$post->id], $viewerId)[$post->id];
+        if ($mirror !== null) {
+            $result['atproto_mirror'] = $mirror;
+        }
+
+        return $result;
     }
 
     /**
@@ -231,12 +244,13 @@ final class PostInteractions
      * never published. The remote record is therefore best effort: a failure
      * is swallowed here and the next like attempt rewrites the same record key.
      */
-    private function mirrorLike(string $viewerId, string $postId, bool $liked, ?string $accountDid = null): void
+    private function mirrorLike(string $viewerId, string $postId, bool $liked, ?string $accountDid = null): ?array
     {
-        if ($this->atproto === null || !$this->atproto->isEnabled()
-            || $this->preferences?->forAccount($viewerId)['mirror_likes_to_atproto'] !== true
-        ) {
-            return;
+        if ($this->preferences?->forAccount($viewerId)['mirror_likes_to_atproto'] !== true) {
+            return null;
+        }
+        if ($this->atproto === null || !$this->atproto->isEnabled()) {
+            return ['state' => 'unavailable', 'retryable' => false, 'reason' => 'atproto_disabled'];
         }
 
         try {
@@ -246,21 +260,32 @@ final class PostInteractions
             } else {
                 $this->atproto->unlike($viewerId, $postId, $accountDid);
             }
+            return ['state' => $liked ? 'published' : 'removed', 'retryable' => false];
+        } catch (AtprotoInteractionRejectedException $exception) {
+            return ['state' => 'failed', 'retryable' => false, 'reason' => $exception->reason];
+        } catch (AtprotoAccountNotConnectedException) {
+            return ['state' => 'failed', 'retryable' => false, 'reason' => 'atproto_account_not_connected'];
+        } catch (AtprotoPublishFailedException $exception) {
+            return [
+                'state' => 'failed',
+                'retryable' => $this->retryablePdsStatus($exception->status),
+                'reason' => 'atproto_publish_failed',
+            ];
         } catch (\Throwable) {
-            // A missing publication or an unreachable PDS only means the
-            // Bluesky copy of this favourite is skipped.
+            return ['state' => 'failed', 'retryable' => false, 'reason' => 'atproto_interaction_failed'];
         }
     }
 
     /**
      * Mirror a local boost only after the account has opted in.
      */
-    public function mirrorBoost(string $viewerId, string $postId, bool $boosted, ?string $accountDid = null): void
+    public function mirrorBoost(string $viewerId, string $postId, bool $boosted, ?string $accountDid = null): ?array
     {
-        if ($this->atproto === null || !$this->atproto->isEnabled()
-            || $this->preferences?->forAccount($viewerId)['mirror_boosts_to_atproto'] !== true
-        ) {
-            return;
+        if ($this->preferences?->forAccount($viewerId)['mirror_boosts_to_atproto'] !== true) {
+            return null;
+        }
+        if ($this->atproto === null || !$this->atproto->isEnabled()) {
+            return ['state' => 'unavailable', 'retryable' => false, 'reason' => 'atproto_disabled'];
         }
 
         try {
@@ -270,10 +295,25 @@ final class PostInteractions
             } else {
                 $this->atproto->undoRepost($viewerId, $postId, $accountDid);
             }
+            return ['state' => $boosted ? 'published' : 'removed', 'retryable' => false];
+        } catch (AtprotoInteractionRejectedException $exception) {
+            return ['state' => 'failed', 'retryable' => false, 'reason' => $exception->reason];
+        } catch (AtprotoAccountNotConnectedException) {
+            return ['state' => 'failed', 'retryable' => false, 'reason' => 'atproto_account_not_connected'];
+        } catch (AtprotoPublishFailedException $exception) {
+            return [
+                'state' => 'failed',
+                'retryable' => $this->retryablePdsStatus($exception->status),
+                'reason' => 'atproto_publish_failed',
+            ];
         } catch (\Throwable) {
-            // The local boost is authoritative; a PDS failure is retried on
-            // the next idempotent local action.
+            return ['state' => 'failed', 'retryable' => false, 'reason' => 'atproto_interaction_failed'];
         }
+    }
+
+    private function retryablePdsStatus(int $status): bool
+    {
+        return $status === 0 || $status === 408 || $status === 425 || $status === 429 || $status >= 500;
     }
 
     private function interactionAccountDid(string $viewerId, ?string $accountDid): ?string
