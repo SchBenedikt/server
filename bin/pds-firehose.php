@@ -22,6 +22,7 @@ try {
     putenv('PDS_DATABASE_PASSWORD=' . ($config->databasePassword ?? ''));
     putenv('PDS_FIREHOSE_HOST=' . (getenv('PDS_FIREHOSE_HOST') ?: '0.0.0.0'));
     putenv('PDS_FIREHOSE_PORT=' . (getenv('PDS_FIREHOSE_PORT') ?: '2584'));
+    putenv('PDS_FIREHOSE_MAX_CLIENTS=' . (getenv('PDS_FIREHOSE_MAX_CLIENTS') ?: '256'));
 
     require $root . '/vendor/alohasocial/core/bin/pds-firehose';
 } catch (Throwable $exception) {
