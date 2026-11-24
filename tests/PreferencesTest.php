@@ -9,8 +9,12 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
+use AlohaSocial\Core\Domain\Federation\RemotePost;
+use AlohaSocial\Core\Domain\Federation\RemotePostKind;
 use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Service\CreatePost;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -286,6 +290,64 @@ final class PreferencesTest extends TestCase
             $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]),
         );
         self::assertNotContains($more, $second['posts']);
+    }
+
+    public function testForYouIncludesOnlyRemotePostsFromActiveAtprotoFollows(): void
+    {
+        $now = $this->server->runtime->clock->now();
+        $repository = new PdoRemotePostRepository($this->server->runtime->database);
+        $followedPost = 'at://did:plc:followed/app.bsky.feed.post/3kfollowed';
+        $unfollowedPost = 'at://did:plc:unfollowed/app.bsky.feed.post/3kunfollowed';
+        foreach ([
+            [$followedPost, 'did:plc:followed', 'From an ATProto account you follow'],
+            [$unfollowedPost, 'did:plc:unfollowed', 'From an ATProto account you do not follow'],
+        ] as [$uri, $did, $content]) {
+            $repository->insert(new RemotePost(
+                activityId: $uri,
+                objectId: $uri,
+                actorId: $did,
+                kind: RemotePostKind::Post,
+                content: $content,
+                contentWarning: null,
+                publishedAt: $now,
+                objectAuthorId: $did,
+            ));
+        }
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . ' VALUES (:user, :account_did, :subject_did, :rkey, :uri, :cid, :state, :followed_at)',
+            [
+                'user' => 'alice',
+                'account_did' => 'did:plc:alice',
+                'subject_did' => 'did:plc:followed',
+                'rkey' => '3kfollow',
+                'uri' => 'at://did:plc:alice/app.bsky.graph.follow/3kfollow',
+                'cid' => 'bafyfollow',
+                'state' => 'active',
+                'followed_at' => Time::format($now),
+            ],
+        );
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . ' VALUES (:user, :account_did, :subject_did, :rkey, NULL, NULL, :state, :followed_at)',
+            [
+                'user' => 'alice',
+                'account_did' => 'did:plc:alice',
+                'subject_did' => 'did:plc:unfollowed',
+                'rkey' => '3kunfollowed',
+                'state' => 'pending',
+                'followed_at' => Time::format($now),
+            ],
+        );
+
+        $feed = $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]);
+        self::assertSame(200, $feed->status, $feed->body);
+        $body = $this->decoded($feed);
+        self::assertContains($followedPost, $body['posts']);
+        self::assertNotContains($unfollowedPost, $body['posts']);
+        self::assertSame('Because you follow this account', $body['reasons'][$followedPost]);
     }
 
     public function testPreferencesAreScopedToOneAccount(): void
