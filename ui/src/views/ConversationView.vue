@@ -27,9 +27,12 @@ const target = computed(() => route.value.name === 'conversation' ? route.value.
 const counterpart = computed(() => target.value.split(',')[0] ?? '');
 
 const loading = ref(false);
+const loadingMore = ref(false);
 const error = ref('');
 const items = ref<TimelineItem[]>([]);
 const person = ref<Account | null>(null);
+const hasMore = ref(false);
+const cursor = ref<{ before: string; beforeId: string } | null>(null);
 let generation = 0;
 
 const title = computed(() => person.value?.display_name || (counterpart.value !== '' ? handleLabel(counterpart.value) : 'Conversation'));
@@ -53,6 +56,8 @@ async function load(): Promise<void> {
 	items.value = [];
 	error.value = '';
 	person.value = null;
+	hasMore.value = false;
+	cursor.value = null;
 
 	if (!signedIn.value || counterpart.value === '') {
 		return;
@@ -66,37 +71,21 @@ async function load(): Promise<void> {
 		}
 
 		const collected: TimelineItem[] = [];
-		let cursor: { before: string; beforeId: string } | null = null;
 		for (let page = 0; page < PAGES; page += 1) {
-			const batch = await getApi().homeTimeline(PAGE_SIZE, cursor?.before, cursor?.beforeId);
-			collected.push(...batch);
-			if (batch.length < PAGE_SIZE) {
+			const result = await getApi().directTimelinePage(PAGE_SIZE, cursor.value?.before, cursor.value?.beforeId);
+			collected.push(...result.posts);
+			cursor.value = result.nextCursor;
+			hasMore.value = result.hasMore;
+			if (!result.hasMore) {
 				break;
 			}
-			const last = batch.at(-1);
-			if (last === undefined) {
-				break;
-			}
-			cursor = { before: last.published_at, beforeId: last.id };
 		}
 
 		if (current !== generation) {
 			return;
 		}
 
-		const direct = collected.filter((message) => message.visibility === 'direct');
-		const hydrated = direct.length > 0 ? await getApi().posts(direct.map((message) => message.id)) : {};
-		if (current !== generation) {
-			return;
-		}
-
-		items.value = direct
-			.map((message) => {
-				const full = hydrated[message.id];
-				return full === undefined
-					? message
-					: { ...message, ...full, interaction: message.interaction ?? full.interaction };
-			})
+		items.value = collected
 			.filter((message) => belongsToConversation(message))
 			.sort((left, right) => timeOf(left) - timeOf(right));
 	} catch (caught) {
@@ -106,6 +95,35 @@ async function load(): Promise<void> {
 	} finally {
 		if (current === generation) {
 			loading.value = false;
+		}
+	}
+}
+
+async function loadMore(): Promise<void> {
+	if (loadingMore.value || !hasMore.value || cursor.value === null) {
+		return;
+	}
+	const current = generation;
+	loadingMore.value = true;
+	error.value = '';
+	try {
+		const result = await getApi().directTimelinePage(PAGE_SIZE, cursor.value.before, cursor.value.beforeId);
+		if (current !== generation) {
+			return;
+		}
+		cursor.value = result.nextCursor;
+		hasMore.value = result.hasMore;
+		const seen = new Set(items.value.map((item) => item.id));
+		items.value = [...items.value, ...result.posts.filter((message) => (
+			belongsToConversation(message) && !seen.has(message.id)
+		))].sort((left, right) => timeOf(left) - timeOf(right));
+	} catch (caught) {
+		if (current === generation) {
+			error.value = caught instanceof Error ? caught.message : 'Older messages could not be loaded.';
+		}
+	} finally {
+		if (current === generation) {
+			loadingMore.value = false;
 		}
 	}
 }
@@ -217,6 +235,10 @@ void stopDeleted;
 			>
 				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Write message</button>
 			</EmptyState>
+
+			<button v-if="hasMore" type="button" class="a-btn a-btn--ghost" :disabled="loadingMore" @click="loadMore">
+				{{ loadingMore ? 'Loading…' : 'Load older messages' }}
+			</button>
 
 			<button v-if="items.length > 0" type="button" class="a-inline-reply" @click="compose">
 				<AppIcon name="pen" :size="18" />
