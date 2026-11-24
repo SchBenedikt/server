@@ -65,9 +65,10 @@ use function unpack;
  *
  * The host owns the transport: the core only sees bounded pages of
  * {@see AtprotoEvent}. Each pull opens one WebSocket, replays from the stored
- * `time_us` cursor, keeps a bounded number of events and closes again. The
- * cursor is the Jetstream event time, so a restarted worker continues where it
- * stopped instead of losing the gap.
+ * Jetstream sequence cursor, keeps a bounded number of events and closes
+ * again. The sequence cursor resumes v2 streams without conflating multiple
+ * events that share the same display timestamp. Legacy events without a
+ * sequence cursor fall back to their `time_us` timestamp.
  *
  * Jetstream is a global firehose, so the source filters by the accounts this
  * instance actually follows and by records that reference one of its own
@@ -192,9 +193,14 @@ final class JetstreamEventSource implements AtprotoEventSource
                     continue;
                 }
 
-                $timeUs = is_int($data['time_us'] ?? null) ? $data['time_us'] : null;
-                if ($timeUs !== null) {
-                    $lastSeen = (string) $timeUs;
+                $sequence = $data['cursor'] ?? null;
+                if (is_int($sequence) && $sequence >= 0) {
+                    $lastSeen = (string) $sequence;
+                } else {
+                    $timeUs = is_int($data['time_us'] ?? null) ? $data['time_us'] : null;
+                    if ($timeUs !== null) {
+                        $lastSeen = (string) $timeUs;
+                    }
                 }
 
                 $event = $this->toEvent($data);

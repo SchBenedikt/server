@@ -303,10 +303,12 @@ ALOHASOCIAL_ATPROTO_JETSTREAM=wss://jetstream2.us-east.bsky.network
 ```
 
 Leave the value empty to disable the ingestion. When set, the background
-worker subscribes to the relay, advances the durable `time_us` cursor stored in
-`social_atproto_sync_checkpoint`, and saves the records the instance cares
-about: posts and account updates from followed DIDs, plus likes and replies
-that reference a post this instance published. A reconciler then projects
+worker subscribes to the relay and advances the durable event cursor stored in
+`social_atproto_sync_checkpoint`. Jetstream v2 sequence cursors are preferred;
+older messages without a sequence cursor fall back to `time_us`. The worker
+saves the records the instance cares about: posts and account updates from
+followed DIDs, plus likes and replies that reference a post this instance
+published. A reconciler then projects
 those records into the same tables the timelines already read, so Bluesky
 likes count on the card and Bluesky replies appear in the reply counter.
 
