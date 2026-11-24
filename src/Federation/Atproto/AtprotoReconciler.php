@@ -272,7 +272,7 @@ final class AtprotoReconciler
             . ' VALUES (:id, :user_id, :post_id, :created_at) ON CONFLICT DO NOTHING',
             [
                 'id' => $id,
-                'user_id' => $did,
+                'user_id' => $this->remoteBoostActorKey($did),
                 'post_id' => $parentId,
                 'created_at' => Time::format($createdAt),
             ],
@@ -474,6 +474,13 @@ final class AtprotoReconciler
         }
 
         return $result;
+    }
+
+    private function remoteBoostActorKey(string $did): string
+    {
+        // social_boost.user_id is limited to 64 characters; keep arbitrary
+        // valid DIDs collision-resistant without truncating or invalidating them.
+        return 'atp_' . substr(hash('sha256', 'atproto-did|' . $did), 0, 56);
     }
 
     /**
