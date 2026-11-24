@@ -92,12 +92,28 @@ final class MastodonOAuthTest extends TestCase
             'headers' => ['Authorization' => 'Bearer ' . $tokens['access_token']],
         ]);
         self::assertSame(200, $verified->status, $verified->body);
+        $home = $server->send('GET', '/api/v1/timelines/home', [
+            'headers' => ['Authorization' => 'Bearer ' . $tokens['access_token']],
+        ]);
+        self::assertSame(200, $home->status, $home->body);
+        self::assertSame([], json_decode($home->body, true, 32, JSON_THROW_ON_ERROR));
+        $nativeHome = $server->send('GET', '/api/v1/timelines/home', ['cookies' => $session['cookies']]);
+        self::assertSame(200, $nativeHome->status, $nativeHome->body);
+        self::assertArrayHasKey('posts', json_decode($nativeHome->body, true, 32, JSON_THROW_ON_ERROR));
         $write = $server->send('POST', '/api/mastodon/v1/statuses', [
             'headers' => ['Authorization' => 'Bearer ' . $tokens['access_token'], 'Content-Type' => 'application/json'],
             'body' => '{"status":"hello"}',
         ]);
         self::assertSame(403, $write->status);
         self::assertStringContainsString('insufficient_scope', $write->body);
+        $nativeWrite = $server->send('POST', '/api/v1/posts', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $tokens['access_token'],
+                'Content-Type' => 'application/json',
+            ],
+            'body' => '{"content":"must not be authorized"}',
+        ]);
+        self::assertSame(401, $nativeWrite->status);
 
         $refresh = $server->form('/oauth/token', [
             'grant_type' => 'refresh_token',

@@ -118,8 +118,30 @@ final class FrontController
         $rawCookie = is_string($rawCookie) && $rawCookie !== '' ? $rawCookie : null;
 
         $session = $this->runtime->sessions->resolve($rawCookie);
+        $sessionUserId = $session?->userId();
 
         $request = $this->mastodonOAuth->authenticate($request);
+
+        // The native API owns this path for first-party clients, but a
+        // Mastodon OAuth client expects the Mastodon status-list response.
+        // Keep native sessions on the neutral contract and route bearer tokens
+        // through the configured compatibility handler.
+        if ($sessionUserId === null
+            && ($request->attributes['mastodon_oauth'] ?? false) === true
+            && $request->path === '/api/v1/timelines/home'
+        ) {
+            $request = new Request(
+                method: $request->method,
+                path: rtrim($this->runtime->config->mastodonPrefix, '/') . '/timelines/home',
+                query: $request->query,
+                headers: $request->headers,
+                body: $request->body,
+                attributes: $request->attributes,
+                remoteAddress: $request->remoteAddress,
+                userId: $request->userId,
+                scopes: $request->scopes,
+            );
+        }
 
         $atprotoSessionResponse = $this->atprotoSession->handle($request);
         if ($atprotoSessionResponse !== null) {
@@ -545,7 +567,6 @@ final class FrontController
             return Response::json(['quoted' => $quoted]);
         }
 
-        $sessionUserId = $session?->userId();
         $userId = $sessionUserId ?? $request->userId;
 
         $protocolEndpoint = in_array($request->path, ['/api/v1/apps', '/oauth/token', '/oauth/revoke'], true);

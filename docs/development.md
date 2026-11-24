@@ -130,7 +130,7 @@ The core already owns the protocol implementation that both hosts share:
   and OAuth session refresh. This host now supplies the account-linking UI,
   browser callback, encrypted short-lived flow store and account-bound DPoP
   credentials; the event transport remains host-owned.
-- **Mastodon compatibility:** 53 core routes under `/api/mastodon/v1`.
+- **Mastodon compatibility:** 54 core routes under `/api/mastodon/v1`.
 
 Two protocol surfaces are deliberately not claimed as complete here:
 
