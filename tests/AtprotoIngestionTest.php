@@ -92,6 +92,15 @@ final class AtprotoIngestionTest extends TestCase
             ['text' => 'Hello from Bluesky', 'createdAt' => '2026-11-18T10:00:00.000Z'],
             1,
         );
+        $unfollowedPostUri = 'at://did:plc:unfollowed/app.bsky.feed.post/3koriginal';
+        $this->record(
+            $unfollowedPostUri,
+            'did:plc:unfollowed',
+            'app.bsky.feed.post',
+            '3koriginal',
+            ['text' => 'An original from an unfollowed author', 'createdAt' => '2026-11-18T09:59:00.000Z'],
+            0,
+        );
         $this->record(
             'at://did:plc:fan/app.bsky.feed.like/3klike',
             'did:plc:fan',
@@ -102,6 +111,18 @@ final class AtprotoIngestionTest extends TestCase
                 'createdAt' => '2026-11-18T10:05:00.000Z',
             ],
             2,
+        );
+        $remoteRepostUri = 'at://did:plc:followed/app.bsky.feed.repost/3kboost';
+        $this->record(
+            $remoteRepostUri,
+            'did:plc:followed',
+            'app.bsky.feed.repost',
+            '3kboost',
+            [
+                'subject' => ['uri' => $unfollowedPostUri, 'cid' => 'bafyoriginal'],
+                'createdAt' => '2026-11-18T10:05:15.000Z',
+            ],
+            5,
         );
         $longReposterDid = 'did:web:' . str_repeat('a', 80);
         $this->record(
@@ -146,6 +167,24 @@ final class AtprotoIngestionTest extends TestCase
         self::assertNull($post['deleted_at']);
         self::assertSame('did:plc:followed', $post['actor_id']);
 
+        $remoteBoost = $this->db->fetchOne(
+            'SELECT object_id, object_author_id, actor_id, kind, content, deleted_at'
+            . ' FROM social_remote_post WHERE activity_id = :uri',
+            ['uri' => $remoteRepostUri],
+        );
+        self::assertNotNull($remoteBoost, 'A followed reposter makes an unfollowed author post visible in the home feed.');
+        self::assertSame($unfollowedPostUri, $remoteBoost['object_id']);
+        self::assertSame('did:plc:unfollowed', $remoteBoost['object_author_id']);
+        self::assertSame('did:plc:followed', $remoteBoost['actor_id']);
+        self::assertSame('boost', $remoteBoost['kind']);
+        self::assertSame('An original from an unfollowed author', $remoteBoost['content']);
+        self::assertNull($remoteBoost['deleted_at']);
+
+        $home = $this->server->runtime->app->timelines->home($this->localUserId, 20);
+        $boostEntries = array_values(array_filter($home, static fn ($entry): bool => $entry->id === $remoteRepostUri));
+        self::assertCount(1, $boostEntries);
+        self::assertSame('did:plc:followed', $boostEntries[0]->boostedBy);
+
         $interactions = $this->server->runtime->interactions->forPosts([$this->localPostId], null)[$this->localPostId];
         self::assertSame(1, $interactions['favourites_count']);
         self::assertSame(1, $interactions['reblogs_count']);
@@ -182,6 +221,11 @@ final class AtprotoIngestionTest extends TestCase
             ['uri' => 'at://did:plc:followed/app.bsky.feed.post/3kpost'],
         );
         self::assertNotNull($deleted);
+        $deletedRepost = $this->db->fetchValue(
+            'SELECT deleted_at FROM social_remote_post WHERE activity_id = :uri',
+            ['uri' => $remoteRepostUri],
+        );
+        self::assertNotNull($deletedRepost);
     }
 
     public function testMirroredLocalLikeAndRepostEchoesDoNotDoubleLocalCounts(): void
@@ -367,14 +411,38 @@ final class AtprotoIngestionTest extends TestCase
             ['text' => 'Visible in home', 'createdAt' => '2026-11-18T10:00:00.000Z'],
             1,
         );
-
-        $this->server->runtime->atprotoReconciler?->run();
-        $ids = array_map(
-            static fn ($entry): string => $entry->id,
-            $this->server->runtime->app->timelines->home($alice->id, 20),
+        $unfollowedUri = 'at://did:plc:other/app.bsky.feed.post/3kother';
+        $this->record(
+            $unfollowedUri,
+            'did:plc:other',
+            'app.bsky.feed.post',
+            '3kother',
+            ['text' => 'Visible because a followed account reposted it', 'createdAt' => '2026-11-18T09:59:00.000Z'],
+            0,
+        );
+        $repostUri = 'at://did:plc:followed/app.bsky.feed.repost/3krepost';
+        $this->record(
+            $repostUri,
+            'did:plc:followed',
+            'app.bsky.feed.repost',
+            '3krepost',
+            [
+                'subject' => ['uri' => $unfollowedUri, 'cid' => 'bafyother'],
+                'createdAt' => '2026-11-18T10:01:00.000Z',
+            ],
+            2,
         );
 
+        $this->server->runtime->atprotoReconciler?->run();
+        $entries = $this->server->runtime->app->timelines->home($alice->id, 20);
+        $ids = array_map(static fn ($entry): string => $entry->id, $entries);
+
         self::assertContains($uri, $ids);
+        self::assertContains($repostUri, $ids);
+        $reposts = array_values(array_filter($entries, static fn ($entry): bool => $entry->id === $repostUri));
+        self::assertCount(1, $reposts);
+        self::assertSame('did:plc:followed', $reposts[0]->boostedBy);
+        self::assertSame('Visible because a followed account reposted it', $reposts[0]->content);
         self::assertNotContains($uri, array_map(
             static fn ($entry): string => $entry->id,
             $this->server->runtime->app->timelines->home('another-user', 20),
