@@ -278,6 +278,14 @@ const boosting = ref(false);
 const liking = ref(false);
 const atprotoMirrorStatus = ref<AtprotoMirrorStatus | null>(null);
 const retryingAtprotoMirror = ref(false);
+
+function atprotoMirrorProblem(status: AtprotoMirrorStatus | null): string | null {
+	if (status === null || status.state === 'published' || status.state === 'removed') return null;
+	if (status.state === 'unavailable' || status.reason === 'atproto_disabled') return 'Bluesky mirroring is unavailable.';
+	if (status.reason === 'atproto_account_not_connected') return 'the linked Bluesky account needs to be connected again.';
+	if (status.retryable) return 'a temporary Bluesky publishing error occurred.';
+	return 'Bluesky publishing failed.';
+}
 const sharing = ref(false);
 const deleting = ref(false);
 const confirmingDelete = ref(false);
@@ -468,6 +476,7 @@ async function toggleBoost(): Promise<void> {
 
 	boosting.value = true;
 	atprotoMirrorKind.value = 'boost';
+	atprotoMirrorStatus.value = null;
 	const before = interaction.value ?? {
 		favourites_count: 0,
 		favourited: false,
@@ -489,14 +498,15 @@ async function toggleBoost(): Promise<void> {
 		}
 		boosted.value = nextBoosted;
 		rememberInteraction(id, next);
+		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
 		showToast(
-			atprotoMirrorStatus.value?.state === 'failed'
-				? 'Boost saved locally, but the Bluesky mirror failed.'
+			mirrorProblem !== null
+				? `Boost saved locally, but ${mirrorProblem}`
 				: (
 					localId.value === null
 						? (nextBoosted ? 'Remote boost queued.' : 'Remote boost removal queued.')
 						: (nextBoosted ? 'Post boosted.' : 'Boost removed.')),
-			atprotoMirrorStatus.value?.state === 'failed' ? 'error' : 'success',
+			mirrorProblem !== null ? 'error' : 'success',
 		);
 		try {
 			sessionStorage.setItem(storageKey(), boosted.value ? '1' : '0');
@@ -538,20 +548,22 @@ async function toggleLike(): Promise<void> {
 	rememberInteraction(id, next);
 	liking.value = true;
 	atprotoMirrorKind.value = 'like';
+	atprotoMirrorStatus.value = null;
 	try {
 		const saved = next.favourited
 			? await getApi().likePost(id)
 			: await getApi().unlikePost(id);
 		rememberInteraction(id, saved);
 		atprotoMirrorStatus.value = saved.atproto_mirror ?? null;
+		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
 		showToast(
-			saved.atproto_mirror?.state === 'failed'
-				? 'Like saved locally, but the Bluesky mirror failed.'
+			mirrorProblem !== null
+				? `Like saved locally, but ${mirrorProblem}`
 				: (
 					id === remoteTarget.value
 						? (saved.favourited ? 'Remote like queued.' : 'Remote unlike queued.')
 						: (saved.favourited ? 'Post liked.' : 'Like removed.')),
-			saved.atproto_mirror?.state === 'failed' ? 'error' : 'success',
+			mirrorProblem !== null ? 'error' : 'success',
 		);
 	} catch (error) {
 		rememberInteraction(id, before);
@@ -573,7 +585,8 @@ async function retryAtprotoMirror(): Promise<void> {
 		} else {
 			atprotoMirrorStatus.value = boosted.value ? await getApi().boostPost(id) : await getApi().unboostPost(id);
 		}
-		showToast(atprotoMirrorStatus.value?.state === 'failed' ? 'Bluesky mirror retry failed.' : 'Bluesky mirror updated.', atprotoMirrorStatus.value?.state === 'failed' ? 'error' : 'success');
+		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
+		showToast(mirrorProblem === null ? 'Bluesky mirror updated.' : `Bluesky mirror retry failed: ${mirrorProblem}`, mirrorProblem === null ? 'success' : 'error');
 	} catch (error) {
 		showToast(error instanceof Error ? error.message : 'The Bluesky mirror could not be retried.', 'error');
 	} finally { retryingAtprotoMirror.value = false; }
@@ -1289,8 +1302,8 @@ onUnmounted(() => {
 				<AppIcon name="external" :size="17" />
 			</a>
 		</footer>
-		<p v-if="atprotoMirrorStatus?.state === 'failed'" class="a-post__mirror-status" role="status">
-			Bluesky mirror failed{{ atprotoMirrorStatus.retryable ? '.' : ' and cannot be retried automatically.' }}
+		<p v-if="atprotoMirrorProblem(atprotoMirrorStatus)" class="a-form-error a-post__mirror-status" role="status">
+			{{ atprotoMirrorProblem(atprotoMirrorStatus) }}{{ atprotoMirrorStatus?.retryable ? ' You can retry this action.' : ' This action cannot be retried automatically.' }}
 			<button v-if="atprotoMirrorStatus.retryable" type="button" class="a-btn a-btn--small" :disabled="retryingAtprotoMirror" @click="retryAtprotoMirror">
 				{{ retryingAtprotoMirror ? 'Retrying…' : 'Retry Bluesky mirror' }}
 			</button>
