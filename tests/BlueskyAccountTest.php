@@ -564,6 +564,33 @@ final class BlueskyAccountTest extends TestCase
         self::assertCount(1, $repostDeletes);
     }
 
+    public function testOptOutStaysPendingWhenAnIdentityWithInteractionsIsDisconnected(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $this->insertInteractionRecord('did:plc:alice123', 'connected-like');
+        $this->insertInteractionRecord('did:plc:alice456', 'disconnected-like');
+        $auth = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'PATCH',
+            '/api/v1/host/preferences',
+            ['mirror_likes_to_atproto' => false],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $body = json_decode($response->body, true, 64, JSON_THROW_ON_ERROR);
+        self::assertTrue($body['mirror_cleanup_pending']['mirror_likes_to_atproto']);
+        self::assertSame(2, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_interaction WHERE local_user_id = 'alice' AND kind = 'like'",
+        ));
+        self::assertSame([], array_values(array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.deleteRecord'),
+        )));
+    }
+
     public function testRemoteLikeCanBeRemovedAfterTheFeedTargetIsTombstoned(): void
     {
         $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
