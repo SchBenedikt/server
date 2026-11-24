@@ -67,10 +67,13 @@ defineExpose({
 
 		<p v-if="timeline.error.value !== '' && timeline.posts.value.length > 0" class="a-feed__inline-error">
 			{{ timeline.error.value }}
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="timeline.loadMore">
+				Try loading more again
+			</button>
 		</p>
 
 		<button
-			v-if="timeline.hasMore.value && timeline.loaded.value"
+			v-if="timeline.hasMore.value && timeline.loaded.value && timeline.error.value === ''"
 			type="button"
 			class="a-btn a-btn--ghost a-feed__more"
 			:disabled="timeline.loadingMore.value"
