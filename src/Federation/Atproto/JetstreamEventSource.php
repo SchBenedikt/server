@@ -238,6 +238,19 @@ final class JetstreamEventSource implements AtprotoEventSource
                 }
             }
 
+            // AT-native follows are stored separately from the ActivityPub
+            // graph; include them or users following only through Bluesky
+            // never receive those authors' Jetstream records.
+            $rows = $this->db->fetchAll(
+                "SELECT subject_did FROM social_atproto_follow WHERE state = 'active'",
+            );
+            foreach ($rows as $row) {
+                $did = is_string($row['subject_did'] ?? null) ? trim($row['subject_did']) : '';
+                if (str_starts_with($did, 'did:')) {
+                    $followed[$did] = true;
+                }
+            }
+
             $rows = $this->db->fetchAll(
                 'SELECT uri FROM social_atproto_publication ORDER BY published_at DESC LIMIT 5000',
             );
