@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
-                "reference": "89570f0bebd7ce03faeb78cd500163994cd6f4d7"
+                "reference": "32cb9e3a088be2fa61668c38a3f98caf01605bb9"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/89570f0bebd7ce03faeb78cd500163994cd6f4d7",
-                "reference": "89570f0bebd7ce03faeb78cd500163994cd6f4d7",
+                "url": "https://api.github.com/repos/SchBenedikt/core/zipball/32cb9e3a088be2fa61668c38a3f98caf01605bb9",
+                "reference": "32cb9e3a088be2fa61668c38a3f98caf01605bb9",
                 "shasum": ""
             },
             "require": {
