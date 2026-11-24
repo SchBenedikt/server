@@ -361,6 +361,8 @@ final class BlueskyAccountTest extends TestCase
             . " VALUES ('alice', 'did:plc:alice123', 'did:plc:followed', '3kfollow',"
             . " 'at://did:plc:alice123/app.bsky.graph.follow/3kfollow', 'bafyfollow', 'active', '2026-11-20T10:00:00Z')",
         );
+        $this->insertInteractionRecord('did:plc:alice123', 'connected-like');
+        $this->insertInteractionRecord('did:plc:native', 'native-like');
 
         self::assertTrue($this->bluesky->disconnect('alice'));
         self::assertFalse($this->bluesky->disconnect('alice'));
@@ -368,6 +370,12 @@ final class BlueskyAccountTest extends TestCase
         self::assertSame(['connected' => false], $this->bluesky->status('alice'));
         self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
             "SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = 'alice'",
+        ));
+        self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_interaction WHERE local_user_id = 'alice' AND account_did = 'did:plc:alice123'",
+        ));
+        self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_interaction WHERE local_user_id = 'alice' AND account_did = 'did:plc:native'",
         ));
     }
 
@@ -380,6 +388,14 @@ final class BlueskyAccountTest extends TestCase
             . " VALUES ('alice', 'did:plc:alice123', 'did:plc:followed', '3kfollow',"
             . " 'at://did:plc:alice123/app.bsky.graph.follow/3kfollow', 'bafyfollow', 'active', '2026-11-20T10:00:00Z')",
         );
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . " VALUES ('alice', 'did:plc:native', 'did:plc:native-followed', 'native-follow',"
+            . " 'at://did:plc:native/app.bsky.graph.follow/native-follow', 'bafyfollow', 'active', '2026-11-20T10:00:00Z')",
+        );
+        $this->insertInteractionRecord('did:plc:alice123', 'connected-like');
+        $this->insertInteractionRecord('did:plc:native', 'native-like');
 
         $this->http->resolvedDid = 'did:plc:alice456';
         $this->http->sessionDid = 'did:plc:alice456';
@@ -387,8 +403,35 @@ final class BlueskyAccountTest extends TestCase
 
         self::assertSame('did:plc:alice456', $this->bluesky->status('alice')['did']);
         self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
-            "SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = 'alice'",
+            "SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = 'alice' AND account_did = 'did:plc:alice123'",
         ));
+        self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = 'alice' AND account_did = 'did:plc:native'",
+        ));
+        self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_interaction WHERE local_user_id = 'alice' AND account_did = 'did:plc:alice123'",
+        ));
+        self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_interaction WHERE local_user_id = 'alice' AND account_did = 'did:plc:native'",
+        ));
+    }
+
+    private function insertInteractionRecord(string $accountDid, string $rkey): void
+    {
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_atproto_interaction'
+            . ' (local_user_id, account_did, post_id, kind, rkey, uri, created_at)'
+            . ' VALUES (:user, :did, :post, :kind, :rkey, :uri, :created)',
+            [
+                'user' => 'alice',
+                'did' => $accountDid,
+                'post' => hash('sha256', 'at://did:plc:remote/app.bsky.feed.post/post1'),
+                'kind' => 'like',
+                'rkey' => $rkey,
+                'uri' => 'at://' . $accountDid . '/app.bsky.feed.like/' . $rkey,
+                'created' => '2026-11-24T10:00:00Z',
+            ],
+        );
     }
 
     public function testExternalPdsPublishesWithoutTheOptionalNativePds(): void
