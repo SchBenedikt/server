@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Federation;
 
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccount;
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
+use AlohaSocial\Core\Domain\Atproto\AtprotoAccountCollectionResolver;
 
 /**
  * One resolver for an instance that offers both identity models.
@@ -19,7 +20,7 @@ use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
  * hosts. Only a member without one falls back to a connected Bluesky account,
  * so a post is never written to both repositories by accident.
  */
-final class CompositeAtprotoAccounts implements AtprotoAccountResolver
+final class CompositeAtprotoAccounts implements AtprotoAccountCollectionResolver
 {
     public function __construct(
         private readonly AtprotoAccountResolver $native,
@@ -32,5 +33,18 @@ final class CompositeAtprotoAccounts implements AtprotoAccountResolver
         $account = $this->native->resolve($localUserId);
 
         return $account ?? $this->external->resolve($localUserId);
+    }
+
+    /** @return list<AtprotoAccount> */
+    public function resolveAll(string $localUserId): array
+    {
+        $accounts = [];
+        foreach ([$this->native->resolve($localUserId), $this->external->resolve($localUserId)] as $account) {
+            if ($account !== null) {
+                $accounts[$account->did] = $account;
+            }
+        }
+
+        return array_values($accounts);
     }
 }
