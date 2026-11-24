@@ -24,6 +24,21 @@ final class AccountLifecycleTest extends TestCase
         $post = $server->runtime->app->posts->create(
             new CreatePost('alice', 'Private account data', Visibility::Public),
         );
+        $server->runtime->database->execute(
+            'INSERT INTO social_atproto_follow'
+            . ' (local_user_id, account_did, subject_did, rkey, uri, cid, state, followed_at)'
+            . ' VALUES (:user, :did, :subject, :rkey, :uri, :cid, :state, :followed_at)',
+            [
+                'user' => 'alice',
+                'did' => 'did:plc:alice',
+                'subject' => 'did:plc:followed',
+                'rkey' => 'follow-alice',
+                'uri' => 'at://did:plc:alice/app.bsky.graph.follow/follow-alice',
+                'cid' => 'bafy-alice',
+                'state' => 'active',
+                'followed_at' => '2026-11-24T00:00:00Z',
+            ],
+        );
 
         $response = $server->json(
             'DELETE',
@@ -46,6 +61,10 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame(0, (int) $server->runtime->database->fetchValue(
             'SELECT COUNT(*) FROM social_post WHERE id = :id',
             ['id' => $post->id],
+        ));
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM social_atproto_follow WHERE local_user_id = :user',
+            ['user' => 'alice'],
         ));
         self::assertSame(401, $server->send(
             'GET',
