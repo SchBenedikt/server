@@ -16,6 +16,15 @@ export interface TimelineSource {
 
 const PAGE_SIZE = 20;
 
+type TimelineCursor = { before: string; beforeId: string };
+
+type TimelineBatch = {
+	posts: TimelineItem[];
+	consumed: number;
+	nextCursor?: TimelineCursor | null;
+	hasMore?: boolean;
+};
+
 function sourceKey(source: TimelineSource): string {
 	return `${source.kind}:${source.tag ?? ''}`;
 }
@@ -78,8 +87,8 @@ export function useTimeline(source: () => TimelineSource) {
 	};
 
 	async function fetchPage(
-		before: { before: string; beforeId: string } | null,
-	): Promise<{ posts: TimelineItem[]; consumed: number }> {
+		before: TimelineCursor | null,
+	): Promise<TimelineBatch> {
 		const current = source();
 		const api = getApi();
 		const beforeTime = before?.before ?? null;
@@ -87,7 +96,12 @@ export function useTimeline(source: () => TimelineSource) {
 
 		switch (current.kind) {
 			case 'home':
-				return api.homeTimeline(PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
+				return api.homeTimelinePage(PAGE_SIZE, beforeTime, beforeId).then((page) => ({
+					posts: page.posts,
+					consumed: page.posts.length,
+					nextCursor: page.nextCursor,
+					hasMore: page.hasMore,
+				}));
 			case 'for-you':
 				return api.forYou(PAGE_SIZE, offset).then(async (data) => {
 					const loaded = await api.posts(data.posts);
@@ -138,9 +152,14 @@ export function useTimeline(source: () => TimelineSource) {
 				offset = (reset ? 0 : offset) + page.consumed;
 				hasMore.value = page.consumed >= PAGE_SIZE;
 			} else {
-				const last = batch.at(-1);
-				cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
-				hasMore.value = batch.length >= PAGE_SIZE;
+				if (page.hasMore !== undefined) {
+					cursor = page.nextCursor ?? null;
+					hasMore.value = page.hasMore;
+				} else {
+					const last = batch.at(-1);
+					cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
+					hasMore.value = batch.length >= PAGE_SIZE;
+				}
 			}
 			loaded.value = true;
 		} catch (caught) {
