@@ -276,6 +276,93 @@ final class EngagementTest extends TestCase
         self::assertNull($secondBody['next']);
     }
 
+    public function testForYouCursorKeepsTheRankedOrderWhenTheFeedChanges(): void
+    {
+        for ($index = 0; $index < 6; $index++) {
+            $this->post($index % 2 === 0 ? 'alice' : 'bob', 'Snapshot post ' . $index);
+        }
+        $expected = $this->server->runtime->forYou->page('alice', 40)['posts'];
+
+        $first = $this->decoded($this->server->send('GET', '/api/v1/host/for-you', [
+            'query' => ['limit' => '2'],
+            'cookies' => $this->aliceCookies,
+        ]));
+        self::assertIsString($first['next']);
+
+        $newPost = $this->post('bob', 'A newer post added after page one');
+        $this->server->runtime->interactions->like('alice', $newPost);
+        $actual = $first['posts'];
+        $cursor = $first['next'];
+        while ($cursor !== null) {
+            $page = $this->decoded($this->server->send('GET', '/api/v1/host/for-you', [
+                'query' => ['limit' => '2', 'cursor' => $cursor],
+                'cookies' => $this->aliceCookies,
+            ]));
+            $actual = array_merge($actual, $page['posts']);
+            $cursor = $page['next'];
+        }
+
+        self::assertSame($expected, $actual, 'Later pages must continue the original ranking snapshot.');
+    }
+
+    public function testRankedFeedCursorIsAccountScopedAndExpires(): void
+    {
+        for ($index = 0; $index < 3; $index++) {
+            $this->post('bob', 'Cursor scope post ' . $index);
+        }
+        $first = $this->decoded($this->server->send('GET', '/api/v1/host/for-you', [
+            'query' => ['limit' => '1'],
+            'cookies' => $this->aliceCookies,
+        ]));
+        $cursor = $first['next'];
+        self::assertIsString($cursor);
+
+        $wrongAccount = $this->server->send('GET', '/api/v1/host/for-you', [
+            'query' => ['limit' => '1', 'cursor' => $cursor],
+            'cookies' => $this->bobCookies,
+        ]);
+        self::assertSame(410, $wrongAccount->status);
+        self::assertSame('timeline_cursor_expired', $this->decoded($wrongAccount)['error']['code']);
+
+        $this->server->runtime->database->execute(
+            'UPDATE recommendation_snapshot SET expires_at = :expired',
+            ['expired' => '2000-01-01T00:00:00Z'],
+        );
+        $expired = $this->server->send('GET', '/api/v1/host/for-you', [
+            'query' => ['limit' => '1', 'cursor' => $cursor],
+            'cookies' => $this->aliceCookies,
+        ]);
+        self::assertSame(410, $expired->status);
+        self::assertSame('timeline_cursor_expired', $this->decoded($expired)['error']['code']);
+    }
+
+    public function testTrendingCursorKeepsItsSnapshotWhenPopularityChanges(): void
+    {
+        for ($index = 0; $index < 5; $index++) {
+            $this->post($index % 2 === 0 ? 'alice' : 'bob', 'Trending snapshot ' . $index);
+        }
+        $expected = $this->server->runtime->forYou->trending(40)['posts'];
+
+        $first = $this->decoded($this->server->send('GET', '/api/v1/host/trending', [
+            'query' => ['limit' => '2'],
+        ]));
+        self::assertIsString($first['next']);
+
+        $popular = $this->post('bob', 'A popular post added after page one');
+        $this->server->runtime->interactions->like('alice', $popular);
+        $actual = $first['posts'];
+        $cursor = $first['next'];
+        while ($cursor !== null) {
+            $page = $this->decoded($this->server->send('GET', '/api/v1/host/trending', [
+                'query' => ['limit' => '2', 'cursor' => $cursor],
+            ]));
+            $actual = array_merge($actual, $page['posts']);
+            $cursor = $page['next'];
+        }
+
+        self::assertSame($expected, $actual, 'Trending pages must continue the original snapshot.');
+    }
+
     public function testRankedFeedsExcludeLocalAndRemoteReplies(): void
     {
         $localParent = $this->post('bob', 'Lokaler Hauptbeitrag');

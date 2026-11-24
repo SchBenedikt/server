@@ -577,7 +577,7 @@ export interface ArchivedPost {
 export interface ForYouData {
 	posts: string[];
 	reasons: Record<string, string>;
-	next: number | null;
+	next: string | number | null;
 	total: number;
 }
 

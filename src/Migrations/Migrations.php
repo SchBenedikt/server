@@ -53,6 +53,7 @@ final class Migrations
             new Version202611250002PostLanguage(),
             new Version202611250003MastodonOAuthSchema(),
             new Version202611260001AtprotoPublicationIdentity(),
+            new Version202611260002RecommendationSnapshots(),
         ];
     }
 }

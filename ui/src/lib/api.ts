@@ -226,8 +226,8 @@ export interface Api {
 	archivedPosts(): Promise<ArchivedPost[]>;
 	archivePost(postId: string): Promise<ArchivedPost>;
 	unarchivePost(postId: string): Promise<void>;
-	forYou(limit?: number, offset?: number): Promise<ForYouData>;
-	trending(limit?: number, offset?: number): Promise<ForYouData>;
+	forYou(limit?: number, cursorOrOffset?: string | number | null): Promise<ForYouData>;
+	trending(limit?: number, cursorOrOffset?: string | number | null): Promise<ForYouData>;
 	followedTags(): Promise<FollowedTag[]>;
 	followTag(tag: string): Promise<void>;
 	unfollowTag(tag: string): Promise<void>;
@@ -2665,16 +2665,19 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			await request<unknown>('DELETE', `/api/v1/host/archived/${encodeURIComponent(postId)}`);
 		},
 
-		async forYou(limit = 20, offset = 0): Promise<ForYouData> {
+		async forYou(limit = 20, cursorOrOffset: string | number | null = null): Promise<ForYouData> {
+			const query: Record<string, string> = { limit: String(limit) };
+			if (typeof cursorOrOffset === 'number') {
+				query.offset = String(cursorOrOffset);
+			} else if (cursorOrOffset !== null) {
+				query.cursor = cursorOrOffset;
+			}
 			const data = await request<{
 				posts?: unknown;
 				reasons?: unknown;
 				next?: unknown;
 				total?: unknown;
-			}>('GET', '/api/v1/host/for-you', {
-				limit: String(limit),
-				offset: String(offset),
-			});
+			}>('GET', '/api/v1/host/for-you', query);
 
 			const reasons: Record<string, string> = {};
 			if (isRecord(data?.reasons)) {
@@ -2690,21 +2693,24 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					? data.posts.filter((id): id is string => typeof id === 'string')
 					: [],
 				reasons,
-				next: typeof data?.next === 'number' ? data.next : null,
+				next: typeof data?.next === 'number' || typeof data?.next === 'string' ? data.next : null,
 				total: typeof data?.total === 'number' ? data.total : 0,
 			};
 		},
 
-		async trending(limit = 20, offset = 0): Promise<ForYouData> {
+		async trending(limit = 20, cursorOrOffset: string | number | null = null): Promise<ForYouData> {
+			const query: Record<string, string> = { limit: String(limit) };
+			if (typeof cursorOrOffset === 'number') {
+				query.offset = String(cursorOrOffset);
+			} else if (cursorOrOffset !== null) {
+				query.cursor = cursorOrOffset;
+			}
 			const data = await request<{
 				posts?: unknown;
 				reasons?: unknown;
 				next?: unknown;
 				total?: unknown;
-			}>('GET', '/api/v1/host/trending', {
-				limit: String(limit),
-				offset: String(offset),
-			});
+			}>('GET', '/api/v1/host/trending', query);
 
 			const reasons: Record<string, string> = {};
 			if (isRecord(data?.reasons)) {
@@ -2720,7 +2726,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					? data.posts.filter((id): id is string => typeof id === 'string')
 					: [],
 				reasons,
-				next: typeof data?.next === 'number' ? data.next : null,
+				next: typeof data?.next === 'number' || typeof data?.next === 'string' ? data.next : null,
 				total: typeof data?.total === 'number' ? data.total : 0,
 			};
 		},
