@@ -173,9 +173,10 @@ final class ForYouFeed
      * The instance-wide trending page.
      *
      * Unlike For You this is the same for every reader and needs no account:
-     * it ranks the last week of public posts by engagement and freshness and
-     * includes cached federated posts so the page is not a local echo. Repeat
-     * authors are damped exactly as in the personal feed.
+     * it ranks the last week of local public posts by engagement and freshness.
+     * Cached federated posts are included by recency because this host has no
+     * reliable global engagement counts for them. Repeat authors are damped
+     * exactly as in the personal feed.
      *
      * @return array{
      *     posts: list<string>,
@@ -230,8 +231,8 @@ final class ForYouFeed
                 'author_id' => (string) $candidate['author_id'],
                 'score' => log(1 + $engagement) * 4.0 + max(0, 4.0 * (1 - $ageHours / 168)),
                 'reason' => $remotePost
-                    ? 'Popular across the fediverse right now'
-                    : 'Popular on this instance',
+                    ? 'Recent from the fediverse'
+                    : ($engagement > 0 ? 'Popular on this instance' : 'Recent on this instance'),
             ];
         }
 
