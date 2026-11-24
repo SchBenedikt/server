@@ -708,7 +708,25 @@ final class CommunityApiController
                     return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
                 }
 
-                $preferences = $this->runtime->preferences->update($userId, $this->jsonBody($request));
+                $payload = $this->jsonBody($request);
+                $cleanupPending = [];
+                $preferences = $this->runtime->preferences->update($userId, $payload);
+                foreach ([
+                    'mirror_likes_to_atproto' => 'like',
+                    'mirror_boosts_to_atproto' => 'repost',
+                ] as $setting => $kind) {
+                    if (($payload[$setting] ?? null) !== false) {
+                        continue;
+                    }
+                    try {
+                        $this->runtime->app->atprotoInteractions?->removeAllForUser($userId, $kind);
+                        $cleanupPending[$setting] = false;
+                    } catch (Throwable) {
+                        // Disabling mirroring takes effect immediately. Keep
+                        // the ledger row so another settings save can retry.
+                        $cleanupPending[$setting] = true;
+                    }
+                }
                 try {
                     $this->runtime->app->profileUpdates?->publish($userId);
                 } catch (\Throwable) {
@@ -716,7 +734,10 @@ final class CommunityApiController
                     // be queued; the next edit publishes the current document.
                 }
 
-                return Response::json(['preferences' => $preferences]);
+                return Response::json([
+                    'preferences' => $preferences,
+                    'mirror_cleanup_pending' => $cleanupPending,
+                ]);
             }
 
             if ($method === 'GET' && $path === '/api/v1/host/export') {
