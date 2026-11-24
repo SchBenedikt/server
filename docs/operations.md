@@ -265,6 +265,31 @@ count drops it prints the restore command. `bin/migrate.php` remains the
 low-level migration runner for development and tests, but the update command
 is the supported operator path.
 
+### Core release upgrade and rollback
+
+For a tagged Core release, select **Release** and the exact Core version in
+the admin settings, then run `php bin/core-version.php` on a bare-metal
+installation. Review the resulting `composer.json` and `composer.lock` before
+deploying; they record the version and commit that will be installed. In
+Docker, set the release version in the build configuration and rebuild the
+image instead of changing `vendor/` in a running container. Keep the previous
+image or code release and both Composer files until the upgrade is verified.
+
+Before a production upgrade, make and verify an off-host backup of the
+database, `.env`, `var/secret.key` and `var/blobs/`. Stop the worker, deploy
+the new code/image, install its locked dependencies, run `php bin/update.php`,
+and check `php bin/doctor.php`, `/readyz`, sign-in, the feed and existing media.
+`bin/update.php` also creates its own database backup before applying pending
+migrations when accounts exist.
+
+If verification fails, stop the web and worker processes, restore the database
+and files from the same pre-upgrade backup, restore the previous code/image and
+its `composer.json`/`composer.lock`, then restart and run `php bin/doctor.php`.
+Do not run the previous Core against a database migrated by the failed
+upgrade: the schema fingerprint deliberately refuses that mixed state. If the
+database backup cannot be restored, keep the instance stopped and repair the
+new release forward rather than mixing code and schema versions.
+
 Read the migration output. The server refuses to boot with a pending
 migration rather than failing on the first request that touches a missing
 table. Restart PHP-FPM after code changes so opcache picks them up.

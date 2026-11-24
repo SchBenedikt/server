@@ -46,6 +46,9 @@ jobs:
           # ALOHASOCIAL_SMOKE_HOST runs the full round trip instead.
           ALOHASOCIAL_SMOKE_ALLOW_SKIP: '1'
 
+      - name: Install previous release and upgrade its database
+        run: bash tools/upgrade-smoke.sh 0.12.0
+
       - name: Frontend build
         run: |
           npm ci --prefix ui
