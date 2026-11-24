@@ -10,11 +10,21 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Server\Support\CoreVersion;
+use AlohaSocial\Core\Version;
 use Composer\InstalledVersions;
 use PHPUnit\Framework\TestCase;
 
 final class CoreVersionTest extends TestCase
 {
+    public function testHostCompatibilityContractTargetsCore08(): void
+    {
+        self::assertSame(
+            '0.8.0',
+            Version::CURRENT,
+            'Update the host compatibility and upgrade matrix when changing the supported Core line.',
+        );
+    }
+
     public function testDiagnosticsReportComposerVersionAndLockedReference(): void
     {
         self::assertTrue(InstalledVersions::isInstalled('alohasocial/core'));
