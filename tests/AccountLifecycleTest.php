@@ -310,6 +310,11 @@ final class AccountLifecycleTest extends TestCase
             . ' VALUES (:state, :account, :session, :payload, :created, :expires)',
             ['state' => str_repeat('b', 64), 'account' => 'alice', 'session' => str_repeat('c', 64), 'payload' => '{}', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
         );
+        $db->execute(
+            'INSERT INTO recommendation_snapshot (id_hash, account_id, feed_kind, payload, created_at, expires_at)'
+            . ' VALUES (:hash, :account, :kind, :payload, :created, :expires)',
+            ['hash' => str_repeat('9', 64), 'account' => 'alice', 'kind' => 'for-you', 'payload' => '[]', 'created' => $stamp, 'expires' => '2026-11-25T12:30:00Z'],
+        );
 
         $response = $server->json('DELETE', '/api/v1/account/data', [], $login['cookies'], $login['csrf']);
 
@@ -328,6 +333,7 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame(1, $payload['host_data_deleted']['linked_atproto_oauth_account']);
         self::assertSame(1, $payload['host_data_deleted']['mastodon_oauth_codes']);
         self::assertSame(1, $payload['host_data_deleted']['mastodon_oauth_tokens']);
+        self::assertSame(1, $payload['host_data_deleted']['recommendation_snapshots']);
         foreach ([
             'draft', 'archived_post', 'account_preference', 'recommendation_feedback',
             'featured_tag', 'collection', 'story', 'kokua',
@@ -337,6 +343,7 @@ final class AccountLifecycleTest extends TestCase
                 ['account_id' => 'alice'],
             ), $table . ' should be purged');
         }
+        self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM recommendation_snapshot'));
         foreach (['collection_item', 'story_seen', 'kokua_help'] as $table) {
             self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM ' . $table), $table . ' should be purged');
         }

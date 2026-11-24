@@ -16,7 +16,7 @@ export interface TimelineSource {
 
 const PAGE_SIZE = 20;
 
-type TimelineCursor = { before: string; beforeId: string };
+type TimelineCursor = { before: string; beforeId: string } | { ranked: string };
 
 type TimelineBatch = {
 	posts: TimelineItem[];
@@ -54,8 +54,7 @@ export function useTimeline(source: () => TimelineSource) {
 	const hasMore = ref(true);
 	const loaded = ref(false);
 
-	let cursor: { before: string; beforeId: string } | null = null;
-	let offset = 0;
+	let cursor: TimelineCursor | null = null;
 	let generation = 0;
 
 	const key = computed(() => sourceKey(source()));
@@ -92,8 +91,8 @@ export function useTimeline(source: () => TimelineSource) {
 	): Promise<TimelineBatch> {
 		const current = source();
 		const api = getApi();
-		const beforeTime = before?.before ?? null;
-		const beforeId = before?.beforeId ?? null;
+		const beforeTime = before !== null && 'before' in before ? before.before : null;
+		const beforeId = before !== null && 'beforeId' in before ? before.beforeId : null;
 
 		switch (current.kind) {
 			case 'home':
@@ -104,20 +103,30 @@ export function useTimeline(source: () => TimelineSource) {
 					hasMore: page.hasMore,
 				}));
 			case 'for-you':
-				return api.forYou(PAGE_SIZE, offset).then(async (data) => {
+				return api.forYou(PAGE_SIZE, before !== null && 'ranked' in before ? before.ranked : null).then(async (data) => {
 					const loaded = await api.posts(data.posts);
 					const posts = data.posts
 						.map((id) => loaded[id])
 						.filter((post): post is TimelineItem => post !== undefined);
-					return { posts, consumed: data.posts.length };
+					return {
+						posts,
+						consumed: data.posts.length,
+						nextCursor: typeof data.next === 'string' ? { ranked: data.next } : null,
+						hasMore: data.next !== null,
+					};
 				});
 			case 'trending':
-				return api.trending(PAGE_SIZE, offset).then(async (data) => {
+				return api.trending(PAGE_SIZE, before !== null && 'ranked' in before ? before.ranked : null).then(async (data) => {
 					const loaded = await api.posts(data.posts);
 					const posts = data.posts
 						.map((id) => loaded[id])
 						.filter((post): post is TimelineItem => post !== undefined);
-					return { posts, consumed: data.posts.length };
+					return {
+						posts,
+						consumed: data.posts.length,
+						nextCursor: typeof data.next === 'string' ? { ranked: data.next } : null,
+						hasMore: data.next !== null,
+					};
 				});
 			case 'tag':
 				return api.tagTimelinePage(current.tag ?? '', PAGE_SIZE, beforeTime, beforeId).then((page) => ({
@@ -147,9 +156,7 @@ export function useTimeline(source: () => TimelineSource) {
 		const currentGeneration = ++generation;
 		const before = reset ? null : cursor;
 
-		const isRanked = source().kind === 'for-you' || source().kind === 'trending';
 		if (reset) {
-			offset = 0;
 			loading.value = true;
 		} else {
 			loadingMore.value = true;
@@ -164,18 +171,13 @@ export function useTimeline(source: () => TimelineSource) {
 			}
 
 			posts.value = reset ? merge([], batch) : merge(posts.value, batch);
-			if (isRanked) {
-				offset = (reset ? 0 : offset) + page.consumed;
-				hasMore.value = page.consumed >= PAGE_SIZE;
+			if (page.hasMore !== undefined) {
+				cursor = page.nextCursor ?? null;
+				hasMore.value = page.hasMore;
 			} else {
-				if (page.hasMore !== undefined) {
-					cursor = page.nextCursor ?? null;
-					hasMore.value = page.hasMore;
-				} else {
-					const last = batch.at(-1);
-					cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
-					hasMore.value = batch.length >= PAGE_SIZE;
-				}
+				const last = batch.at(-1);
+				cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
+				hasMore.value = batch.length >= PAGE_SIZE;
 			}
 			loaded.value = true;
 		} catch (caught) {
@@ -244,7 +246,6 @@ export function useTimeline(source: () => TimelineSource) {
 	watch(key, () => {
 		posts.value = [];
 		cursor = null;
-		offset = 0;
 		hasMore.value = true;
 		loaded.value = false;
 		void load(true);
