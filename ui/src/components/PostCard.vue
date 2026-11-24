@@ -20,7 +20,7 @@ import { ensureInteractions, interactionFor, rememberInteraction } from '../lib/
 import { cachedQuote, loadQuote } from '../lib/quotes';
 import { appState, openComposer, openEditor, openQuote, showToast } from '../lib/state';
 import type { Attachment, AtprotoMirrorStatus, Poll, TimelineItem } from '../lib/types';
-import type { AtprotoPublicationLookup, AtprotoPublicationStatus } from '../lib/api';
+import type { ActivityPubDeliveryLookup, AtprotoPublicationLookup, AtprotoPublicationStatus } from '../lib/api';
 
 const props = withDefaults(defineProps<{
 	post: TimelineItem;
@@ -300,6 +300,11 @@ const blueskyDeliveryAttempts = ref(0);
 const blueskyPublicationLoading = ref(false);
 const blueskyPublicationError = ref('');
 let blueskyPublicationLookup = 0;
+const activityPubDelivery = ref<ActivityPubDeliveryLookup | null>(null);
+const activityPubDeliveryLoading = ref(false);
+const activityPubDeliveryError = ref('');
+const retryingActivityPubDelivery = ref(false);
+let activityPubDeliveryLookup = 0;
 const pinning = ref(false);
 const isPinned = ref(props.pinned === true);
 const blueskyPublicationUrl = computed(() => blueskyPublication.value === null
@@ -775,6 +780,40 @@ async function loadBlueskyPublication(): Promise<void> {
 	}
 }
 
+async function loadActivityPubDelivery(): Promise<void> {
+	if (!isMine.value || localId.value === null) {
+		activityPubDelivery.value = null;
+		return;
+	}
+	const lookup = ++activityPubDeliveryLookup;
+	activityPubDeliveryLoading.value = true;
+	activityPubDeliveryError.value = '';
+	try {
+		const status = await getApi().activityPubDelivery(localId.value);
+		if (lookup === activityPubDeliveryLookup && menuOpen.value) activityPubDelivery.value = status;
+	} catch (error) {
+		if (lookup === activityPubDeliveryLookup && menuOpen.value) {
+			activityPubDeliveryError.value = error instanceof Error ? error.message : 'Delivery status could not be loaded.';
+		}
+	} finally {
+		if (lookup === activityPubDeliveryLookup) activityPubDeliveryLoading.value = false;
+	}
+}
+
+async function retryActivityPubDelivery(): Promise<void> {
+	if (localId.value === null || retryingActivityPubDelivery.value || !activityPubDelivery.value?.retryable) return;
+	retryingActivityPubDelivery.value = true;
+	try {
+		const result = await getApi().retryActivityPubDelivery(localId.value);
+		activityPubDelivery.value = result;
+		showToast(result.retried > 0 ? `Retry queued for ${result.retried} remote delivery attempt(s).` : 'There are no retryable remote deliveries.', result.retried > 0 ? 'success' : 'info');
+	} catch (error) {
+		showToast(error instanceof Error ? error.message : 'Remote delivery could not be retried.', 'error');
+	} finally {
+		retryingActivityPubDelivery.value = false;
+	}
+}
+
 function edit(): void {
 	menuOpen.value = false;
 	openEditor(props.post);
@@ -823,15 +862,19 @@ watch(menuOpen, (open) => {
 	if (open) {
 		document.addEventListener('click', onDocumentClick);
 		void loadBlueskyPublication();
+		void loadActivityPubDelivery();
 	} else {
 		blueskyPublicationLookup += 1;
 		blueskyPublicationLoading.value = false;
+		activityPubDeliveryLookup += 1;
+		activityPubDeliveryLoading.value = false;
 		document.removeEventListener('click', onDocumentClick);
 	}
 });
 
 onUnmounted(() => {
 	blueskyPublicationLookup += 1;
+	activityPubDeliveryLookup += 1;
 	document.removeEventListener('click', onDocumentClick);
 });
 </script>
@@ -889,6 +932,35 @@ onUnmounted(() => {
 				</button>
 
 				<div v-if="menuOpen" class="a-post__menu" role="menu">
+					<button
+						v-if="isMine && localId && activityPubDeliveryLoading"
+						type="button" role="menuitem" disabled
+					>
+						<AppIcon name="refresh" :size="15" class="a-spin" /> Checking remote delivery…
+					</button>
+					<button
+						v-if="isMine && localId && activityPubDelivery?.state === 'pending'"
+						type="button" role="menuitem" disabled
+					>
+						<AppIcon name="refresh" :size="15" class="a-spin" /> Queued for {{ activityPubDelivery.pending }} remote server(s)
+					</button>
+					<p v-if="isMine && localId && activityPubDelivery?.state === 'failed' && activityPubDelivery.pending > 0" class="a-post__menu-error" role="status">
+						{{ activityPubDelivery.pending }} other remote delivery(s) are still queued.
+					</p>
+					<button
+						v-if="isMine && localId && activityPubDelivery?.state === 'failed' && activityPubDelivery.retryable"
+						type="button" role="menuitem" :disabled="retryingActivityPubDelivery"
+						@click.stop="retryActivityPubDelivery"
+					>
+						<AppIcon :name="retryingActivityPubDelivery ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': retryingActivityPubDelivery }" />
+						Retry {{ activityPubDelivery.failed }} failed remote delivery(s){{ activityPubDelivery.attempts > 0 ? ` · ${activityPubDelivery.attempts} attempts` : '' }}
+					</button>
+					<p v-if="isMine && localId && activityPubDelivery?.state === 'failed' && !activityPubDelivery.retryable" class="a-post__menu-error" role="status">
+						{{ activityPubDelivery.failed }} remote delivery(s) failed and cannot be retried automatically.
+					</p>
+					<p v-if="isMine && localId && activityPubDeliveryError !== ''" class="a-post__menu-error" role="status">
+						{{ activityPubDeliveryError }}
+					</p>
 					<button v-if="localId" type="button" role="menuitem" :disabled="bookmarking" @click.stop="toggleBookmark">
 						<AppIcon name="bookmark" :size="15" />
 						{{ bookmarked ? 'Remove bookmark' : 'Bookmark post' }}
