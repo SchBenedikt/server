@@ -23,6 +23,7 @@ use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\AtprotoSessionRepository;
+use AlohaSocial\Server\Auth\MastodonOAuthRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
@@ -81,6 +82,8 @@ final class AdminService
 
     private readonly AtprotoSessionRepository $atprotoSessions;
 
+    private readonly MastodonOAuthRepository $mastodonOAuth;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
@@ -92,6 +95,7 @@ final class AdminService
         private readonly ?S3CompatibleClient $s3Client = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
+        $this->mastodonOAuth = new MastodonOAuthRepository($db);
     }
 
     /**
@@ -388,6 +392,7 @@ final class AdminService
         $cancelled = $this->app->queue->cancelBySubject(JobSubject::account($id));
         $revoked = $this->sessions->revokeAccount($id);
         $revoked += $this->atprotoSessions->deleteForAccount($id);
+        $revoked += $this->mastodonOAuth->revokeAccount($id, Time::format($this->clock->now()));
         $this->record($adminId, 'user.disable', 'account', $id, [
             'sessions_revoked' => $revoked,
             'jobs_cancelled' => $cancelled,
@@ -425,6 +430,7 @@ final class AdminService
         $this->accounts->updatePasswordHash($id, $this->hasher->hash($password));
         $revoked = $this->sessions->revokeAccount($id);
         $revoked += $this->atprotoSessions->deleteForAccount($id);
+        $revoked += $this->mastodonOAuth->revokeAccount($id, Time::format($this->clock->now()));
         $this->record($adminId, 'user.password', 'account', $id, ['sessions_revoked' => $revoked]);
 
         return $revoked;
@@ -435,6 +441,7 @@ final class AdminService
         $this->requireUser($id);
         $revoked = $this->sessions->revokeAccount($id);
         $revoked += $this->atprotoSessions->deleteForAccount($id);
+        $revoked += $this->mastodonOAuth->revokeAccount($id, Time::format($this->clock->now()));
         $this->record($adminId, 'user.sessions', 'account', $id, ['sessions_revoked' => $revoked]);
 
         return $revoked;

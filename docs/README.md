@@ -16,6 +16,7 @@ delivery and cleanup; the social behaviour lives in the Composer package
 | Understand every environment variable | [Configuration](configuration.md) |
 | Run, back up, upgrade or repair an instance | [Operations](operations.md) |
 | See the user-facing feature surface | [Features](features.md) |
+| Register Mastodon-compatible clients | [Mastodon OAuth](mastodon-oauth.md) |
 | Understand the architecture, core checkout and test gates | [Development](development.md) |
 | Understand where the frontend lives and how it is built | [Frontend hosting decision](frontend.md) |
 | See the project overview and architecture | [README](../README.md) |

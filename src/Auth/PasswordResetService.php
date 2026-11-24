@@ -159,6 +159,14 @@ final class PasswordResetService
             $this->accounts->updatePasswordHash($account->id, $hash);
             $this->db->execute('DELETE FROM session WHERE account_id = :account', ['account' => $account->id]);
             $this->db->execute('DELETE FROM atproto_session WHERE account_id = :account', ['account' => $account->id]);
+            $this->db->execute(
+                'UPDATE mastodon_oauth_token SET revoked_at = :now WHERE account_id = :account AND revoked_at IS NULL',
+                ['account' => $account->id, 'now' => Time::format($now)],
+            );
+            $this->db->execute(
+                'UPDATE mastodon_oauth_code SET consumed_at = :now WHERE account_id = :account AND consumed_at IS NULL',
+                ['account' => $account->id, 'now' => Time::format($now)],
+            );
             $this->db->execute('DELETE FROM password_reset WHERE account_id = :account', ['account' => $account->id]);
         });
     }
