@@ -20,10 +20,12 @@ tokens and refresh tokens. Authorization codes expire after five minutes and
 are consumed once. Access tokens expire after 30 days; refresh tokens expire
 after 90 days and rotate on use. Reusing a refresh token fails. Revocation,
 password reset, account disable and account deletion invalidate the account's
-tokens. Bearer credentials are accepted only on the configured Mastodon API
-prefix. Core route scope middleware receives the scopes granted at consent;
-first-party cookie sessions continue to receive full access and keep CSRF
-protection.
+tokens. Bearer credentials are accepted on the configured Mastodon API prefix.
+The standard `/api/v1/timelines/home` path also accepts OAuth bearer tokens. The host
+dispatches OAuth bearer requests to the Mastodon-compatible status-list route;
+first-party cookie sessions continue to use the native timeline route, receive
+full access and keep CSRF protection. Core route scope middleware receives the
+scopes granted at consent.
 
 The supported scopes are the scopes declared by the current Core Mastodon
 route manifest (`read`, `write`, `follow`, and its implemented granular
@@ -45,7 +47,8 @@ use every API endpoint.
    the matching `redirect_uri`, `client_id`, `client_secret` (when retained by
    the client), and `code_verifier`.
 4. Send the access token as `Authorization: Bearer …` to the configured
-   Mastodon API prefix. Use the returned refresh token to rotate credentials;
+   Mastodon API prefix. `/api/v1/timelines/home` is also supported for clients
+   using the standard home timeline path. Use the returned refresh token to rotate credentials;
    send either token to `/oauth/revoke` to revoke the grant.
 
 The OAuth endpoint integration tests cover registration validation, PKCE,
