@@ -104,6 +104,17 @@ final class AtprotoIngestionTest extends TestCase
             2,
         );
         $this->record(
+            'at://did:plc:fan/app.bsky.feed.repost/3krepost',
+            'did:plc:fan',
+            'app.bsky.feed.repost',
+            '3krepost',
+            [
+                'subject' => ['uri' => $this->localPostUri, 'cid' => 'bafylocal'],
+                'createdAt' => '2026-11-18T10:05:30.000Z',
+            ],
+            3,
+        );
+        $this->record(
             'at://did:plc:fan/app.bsky.feed.post/3kreply',
             'did:plc:fan',
             'app.bsky.feed.post',
@@ -116,7 +127,7 @@ final class AtprotoIngestionTest extends TestCase
                     'root' => ['uri' => $this->localPostUri, 'cid' => 'bafylocal'],
                 ],
             ],
-            3,
+            4,
         );
 
         $reconciler = $this->server->runtime->atprotoReconciler;
@@ -136,7 +147,13 @@ final class AtprotoIngestionTest extends TestCase
 
         $interactions = $this->server->runtime->interactions->forPosts([$this->localPostId], null)[$this->localPostId];
         self::assertSame(1, $interactions['favourites_count']);
+        self::assertSame(1, $interactions['reblogs_count']);
         self::assertSame(1, $interactions['replies_count']);
+
+        $reconciler->run();
+        $replayed = $this->server->runtime->interactions->forPosts([$this->localPostId], null)[$this->localPostId];
+        self::assertSame(1, $replayed['favourites_count'], 'Replaying an AT record must not inflate the like count.');
+        self::assertSame(1, $replayed['reblogs_count'], 'Replaying an AT record must not inflate the repost count.');
 
         // The same rows the timeline hydrator reads.
         $response = $this->server->send('GET', '/api/v1/host/posts', [
@@ -149,13 +166,14 @@ final class AtprotoIngestionTest extends TestCase
 
         // A tombstone removes exactly what its record created.
         $this->db->execute(
-            "UPDATE social_atproto_remote_record SET deleted = 1 WHERE collection IN ('app.bsky.feed.like', 'app.bsky.feed.post')",
+            "UPDATE social_atproto_remote_record SET deleted = 1 WHERE collection IN ('app.bsky.feed.like', 'app.bsky.feed.repost', 'app.bsky.feed.post')",
         );
         $removed = $reconciler->run();
         self::assertGreaterThanOrEqual(2, $removed['removed']);
 
         $interactions = $this->server->runtime->interactions->forPosts([$this->localPostId], null)[$this->localPostId];
         self::assertSame(0, $interactions['favourites_count']);
+        self::assertSame(0, $interactions['reblogs_count']);
         self::assertSame(0, $interactions['replies_count']);
 
         $deleted = $this->db->fetchValue(
@@ -163,6 +181,83 @@ final class AtprotoIngestionTest extends TestCase
             ['uri' => 'at://did:plc:followed/app.bsky.feed.post/3kpost'],
         );
         self::assertNotNull($deleted);
+    }
+
+    public function testMirroredLocalLikeAndRepostEchoesDoNotDoubleLocalCounts(): void
+    {
+        $this->server->runtime->interactions->like($this->localUserId, $this->localPostId);
+        $this->server->runtime->app->boosts?->boost($this->localUserId, $this->localPostId);
+        $now = Time::format($this->server->runtime->clock->now());
+        $this->db->execute(
+            'INSERT INTO atproto_account'
+            . ' (account_id, did, handle, pds_url, access_token, refresh_token, expires_at, active, created_at, updated_at)'
+            . ' VALUES (:account_id, :did, :handle, :pds_url, :access_token, :refresh_token, 0, 1, :created_at, :updated_at)',
+            [
+                'account_id' => $this->localUserId,
+                'did' => $this->localDid,
+                'handle' => 'localalice.example',
+                'pds_url' => 'https://pds.example',
+                'access_token' => 'sealed-access-token',
+                'refresh_token' => 'sealed-refresh-token',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        );
+        $this->record(
+            'at://' . $this->localDid . '/app.bsky.feed.like/3klikeecho',
+            $this->localDid,
+            'app.bsky.feed.like',
+            '3klikeecho',
+            [
+                'subject' => ['uri' => $this->localPostUri, 'cid' => 'bafylocal'],
+                'createdAt' => '2026-11-18T10:05:00.000Z',
+            ],
+            1,
+        );
+        $this->record(
+            'at://' . $this->localDid . '/app.bsky.feed.repost/3krepostecho',
+            $this->localDid,
+            'app.bsky.feed.repost',
+            '3krepostecho',
+            [
+                'subject' => ['uri' => $this->localPostUri, 'cid' => 'bafylocal'],
+                'createdAt' => '2026-11-18T10:05:00.000Z',
+            ],
+            2,
+        );
+        // The account may be disconnected after it wrote the records. The
+        // interaction ledger remains the durable association with this DID.
+        $this->db->execute('DELETE FROM atproto_account WHERE account_id = :account_id', [
+            'account_id' => $this->localUserId,
+        ]);
+        $this->db->execute(
+            'INSERT INTO social_atproto_interaction'
+            . ' (local_user_id, account_did, post_id, kind, rkey, uri, created_at)'
+            . ' VALUES (:user_id, :did, :post_id, :kind, :rkey, :uri, :created_at)',
+            [
+                'user_id' => $this->localUserId,
+                'did' => $this->localDid,
+                'post_id' => $this->localPostId,
+                'kind' => 'like',
+                'rkey' => '3klikeecho',
+                'uri' => 'at://' . $this->localDid . '/app.bsky.feed.like/3klikeecho',
+                'created_at' => $now,
+            ],
+        );
+
+        $this->server->runtime->atprotoReconciler?->run();
+
+        $interactions = $this->server->runtime->interactions->forPosts([$this->localPostId], null)[$this->localPostId];
+        self::assertSame(1, $interactions['favourites_count']);
+        self::assertSame(1, $interactions['reblogs_count']);
+        self::assertSame(0, (int) $this->db->fetchValue(
+            'SELECT COUNT(*) FROM social_reaction WHERE activity_id = :uri',
+            ['uri' => 'at://' . $this->localDid . '/app.bsky.feed.like/3klikeecho'],
+        ));
+        self::assertSame(0, (int) $this->db->fetchValue(
+            'SELECT COUNT(*) FROM social_boost WHERE id = :id',
+            ['id' => 'atp_' . substr(hash('sha256', 'at://' . $this->localDid . '/app.bsky.feed.repost/3krepostecho'), 0, 32)],
+        ));
     }
 
     public function testAtprotoFeedInteractionsRequireAValidFollowAndUnblockedRecord(): void
