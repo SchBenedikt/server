@@ -68,6 +68,7 @@ final class MigrationTest extends TestCase
         $publicationColumns = $server->runtime->database->fetchAll('PRAGMA table_info(social_atproto_publication)');
         $publicationColumnNames = array_map(static fn (array $row): string => (string) $row['name'], $publicationColumns);
         self::assertContains('pds_url', $publicationColumnNames);
+        self::assertContains('cid', $publicationColumnNames);
     }
 
     public function testSecondRunIsANoOp(): void
@@ -123,6 +124,42 @@ final class MigrationTest extends TestCase
             ),
         );
         self::assertSame([], $runner->migrate());
+    }
+
+    public function testAtprotoPublicationCidMigrationAddsItsColumnWithoutDroppingRows(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $database->execute(
+            'INSERT INTO social_atproto_publication '
+            . '(local_user_id, post_id, rkey, uri, published_at, pds_url) '
+            . 'VALUES (:user, :post, :rkey, :uri, :at, :pds)',
+            [
+                'user' => 'alice',
+                'post' => 'post-1',
+                'rkey' => '234567abcdefg',
+                'uri' => 'at://did:plc:alice/app.bsky.feed.post/234567abcdefg',
+                'at' => '2026-11-24T00:00:00Z',
+                'pds' => 'https://pds.example',
+            ],
+        );
+        $database->execute('ALTER TABLE social_atproto_publication DROP COLUMN cid');
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611250001'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611250001'], $runner->migrate());
+        self::assertSame('post-1', (string) $database->fetchValue(
+            'SELECT post_id FROM social_atproto_publication WHERE local_user_id = :user',
+            ['user' => 'alice'],
+        ));
+        $columns = $database->fetchAll('PRAGMA table_info(social_atproto_publication)');
+        self::assertContains('cid', array_column($columns, 'name'));
+        self::assertSame(
+            \AlohaSocial\Server\Migrations\CoreSchemaFingerprint::current(),
+            (string) $database->fetchValue(
+                "SELECT value FROM runtime_state WHERE name = 'core_schema_fingerprint'",
+            ),
+        );
     }
 
     public function testCoreSchemaDriftIsReportedBeforeQueriesRun(): void
