@@ -411,6 +411,11 @@ final class EngagementTest extends TestCase
         self::assertContains($remoteParent, $trending['posts']);
         self::assertNotContains($localReply, $trending['posts']);
         self::assertNotContains($remoteReply, $trending['posts']);
+
+        $this->server->runtime->interactions->like('alice', $localParent);
+        $trendingWithEngagement = $this->decoded($this->server->send('GET', '/api/v1/host/trending'));
+        self::assertSame('Recent from the fediverse', $trendingWithEngagement['reasons'][$remoteParent]);
+        self::assertSame('Popular on this instance', $trendingWithEngagement['reasons'][$localParent]);
     }
 
     public function testForYouIncludesFollowedFediversePostsAndHydratesThem(): void

@@ -54,7 +54,7 @@ const subtitle = computed(() => {
 		case 'for-you':
 			return 'Recommended from this instance and the fediverse — based on who you follow, your tags, engagement and recency.';
 		case 'trending':
-			return 'The public posts moving this instance and the fediverse right now.';
+			return 'Local posts are ranked by known engagement and freshness; federated posts are ranked by recency.';
 		case 'home':
 			return 'Posts from people you follow.';
 		case 'followed':
@@ -89,7 +89,7 @@ const emptyText = computed(() => {
 		return 'Follow people and hashtags, and this feed mixes their posts with what is moving on this instance.';
 	}
 	if (currentTab.value === 'trending') {
-		return 'Trending ranks public posts by engagement and freshness — local and federated.';
+		return 'Local posts are ranked by engagement and freshness. Federated posts are included by recency because their global engagement is not available here.';
 	}
 	if (currentTab.value === 'home') {
 		return 'Follow people who share interesting things — or write the first post yourself.';
