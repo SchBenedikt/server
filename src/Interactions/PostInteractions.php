@@ -182,7 +182,7 @@ final class PostInteractions
      *
      * @throws PostNotFoundException when the post is missing or not visible
      */
-    public function like(string $viewerId, string $postId): array
+    public function like(string $viewerId, string $postId, ?string $accountDid = null): array
     {
         $post = $this->posts->getVisible($postId, $viewerId);
         $favourites = new PdoFavouriteRepository($this->db);
@@ -203,7 +203,7 @@ final class PostInteractions
             $this->notifications->recordFavourite($post->authorId, $viewerId, $post->id);
         }
 
-        $this->mirrorLike($viewerId, $post->id, true);
+        $this->mirrorLike($viewerId, $post->id, true, $accountDid);
 
         return $this->forPosts([$post->id], $viewerId)[$post->id];
     }
@@ -213,11 +213,11 @@ final class PostInteractions
      *
      * @throws PostNotFoundException when the post is missing or not visible
      */
-    public function unlike(string $viewerId, string $postId): array
+    public function unlike(string $viewerId, string $postId, ?string $accountDid = null): array
     {
         $post = $this->posts->getVisible($postId, $viewerId);
         (new PdoFavouriteRepository($this->db))->remove($viewerId, $post->id);
-        $this->mirrorLike($viewerId, $post->id, false);
+        $this->mirrorLike($viewerId, $post->id, false, $accountDid);
 
         return $this->forPosts([$post->id], $viewerId)[$post->id];
     }
@@ -231,7 +231,7 @@ final class PostInteractions
      * never published. The remote record is therefore best effort: a failure
      * is swallowed here and the next like attempt rewrites the same record key.
      */
-    private function mirrorLike(string $viewerId, string $postId, bool $liked): void
+    private function mirrorLike(string $viewerId, string $postId, bool $liked, ?string $accountDid = null): void
     {
         if ($this->atproto === null || !$this->atproto->isEnabled()
             || $this->preferences?->forAccount($viewerId)['mirror_likes_to_atproto'] !== true
@@ -241,9 +241,9 @@ final class PostInteractions
 
         try {
             if ($liked) {
-                $this->atproto->like($viewerId, $postId);
+                $this->atproto->like($viewerId, $postId, $accountDid);
             } else {
-                $this->atproto->unlike($viewerId, $postId);
+                $this->atproto->unlike($viewerId, $postId, $accountDid);
             }
         } catch (\Throwable) {
             // A missing publication or an unreachable PDS only means the
@@ -254,7 +254,7 @@ final class PostInteractions
     /**
      * Mirror a local boost only after the account has opted in.
      */
-    public function mirrorBoost(string $viewerId, string $postId, bool $boosted): void
+    public function mirrorBoost(string $viewerId, string $postId, bool $boosted, ?string $accountDid = null): void
     {
         if ($this->atproto === null || !$this->atproto->isEnabled()
             || $this->preferences?->forAccount($viewerId)['mirror_boosts_to_atproto'] !== true
@@ -264,9 +264,9 @@ final class PostInteractions
 
         try {
             if ($boosted) {
-                $this->atproto->repost($viewerId, $postId);
+                $this->atproto->repost($viewerId, $postId, $accountDid);
             } else {
-                $this->atproto->undoRepost($viewerId, $postId);
+                $this->atproto->undoRepost($viewerId, $postId, $accountDid);
             }
         } catch (\Throwable) {
             // The local boost is authoritative; a PDS failure is retried on
