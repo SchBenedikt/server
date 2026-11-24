@@ -898,6 +898,8 @@ function normalizePreferences(value: unknown): AccountPreferences {
 		notify_favourites: value.notify_favourites !== false,
 		notify_boosts: value.notify_boosts !== false,
 		notify_mentions: value.notify_mentions !== false,
+		mirror_likes_to_atproto: value.mirror_likes_to_atproto === true,
+		mirror_boosts_to_atproto: value.mirror_boosts_to_atproto === true,
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }

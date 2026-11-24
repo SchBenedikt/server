@@ -593,6 +593,8 @@ export interface AccountPreferences {
 	notify_favourites: boolean;
 	notify_boosts: boolean;
 	notify_mentions: boolean;
+	mirror_likes_to_atproto: boolean;
+	mirror_boosts_to_atproto: boolean;
 	updated_at: string | null;
 }
 

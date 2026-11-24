@@ -62,6 +62,8 @@ final class PreferencesTest extends TestCase
         self::assertSame('public', $preferences['default_visibility']);
         self::assertSame('everyone', $preferences['dm_policy']);
         self::assertTrue($preferences['notify_follows']);
+        self::assertFalse($preferences['mirror_likes_to_atproto']);
+        self::assertFalse($preferences['mirror_boosts_to_atproto']);
         self::assertNull($preferences['updated_at']);
 
         $updated = $this->server->json('PATCH', '/api/v1/host/preferences', [
@@ -71,6 +73,8 @@ final class PreferencesTest extends TestCase
             'show_boosts' => false,
             'discoverable' => false,
             'notify_favourites' => false,
+            'mirror_likes_to_atproto' => true,
+            'mirror_boosts_to_atproto' => true,
         ], $this->aliceCookies, $this->aliceCsrf);
 
         self::assertSame(200, $updated->status);
@@ -81,6 +85,8 @@ final class PreferencesTest extends TestCase
         self::assertFalse($saved['show_boosts']);
         self::assertFalse($saved['discoverable']);
         self::assertFalse($saved['notify_favourites']);
+        self::assertTrue($saved['mirror_likes_to_atproto']);
+        self::assertTrue($saved['mirror_boosts_to_atproto']);
         self::assertTrue($saved['notify_mentions']);
         self::assertNotNull($saved['updated_at']);
 
@@ -88,6 +94,8 @@ final class PreferencesTest extends TestCase
             $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
         )['preferences'];
         self::assertSame('unlisted', $reloaded['default_visibility']);
+        self::assertTrue($reloaded['mirror_likes_to_atproto']);
+        self::assertTrue($reloaded['mirror_boosts_to_atproto']);
 
         $invalidVisibility = $this->server->json('PATCH', '/api/v1/host/preferences', [
             'default_visibility' => 'direct',
@@ -104,6 +112,11 @@ final class PreferencesTest extends TestCase
             'show_boosts' => 'yes',
         ], $this->aliceCookies, $this->aliceCsrf);
         self::assertSame(422, $invalidFlag->status);
+
+        $invalidMirrorFlag = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'mirror_likes_to_atproto' => 'yes',
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(422, $invalidMirrorFlag->status);
 
         $csrf = $this->server->json('PATCH', '/api/v1/host/preferences', [
             'dm_policy' => 'nobody',

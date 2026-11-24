@@ -416,6 +416,85 @@ final class BlueskyAccountTest extends TestCase
         self::assertSame('published from standalone', $payload['record']['text']);
     }
 
+    public function testPublicAtprotoLikesRequireThePerAccountOptIn(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $post = $this->server->runtime->app->posts->create(new CreatePost('alice', 'like opt-in target'));
+        $auth = $this->server->signIn('alice');
+        $published = $this->server->json(
+            'POST',
+            '/api/v1/host/bluesky/publish',
+            ['post_id' => $post->id],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+        self::assertSame(201, $published->status, $published->body);
+
+        $this->http->requests = [];
+        $likePath = '/api/v1/posts/' . rawurlencode($post->id) . '/like';
+        $localLike = $this->server->json('POST', $likePath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $localLike->status, $localLike->body);
+        self::assertSame([], $this->http->requests, 'A local like must stay local before opt-in.');
+
+        $this->server->runtime->preferences->update('alice', ['mirror_likes_to_atproto' => true]);
+        $this->server->json('POST', $likePath, [], $auth['cookies'], $auth['csrf']);
+        $likeWrite = array_values(array_filter(
+            $this->http->requests,
+            static function (array $request): bool {
+                if (!str_contains($request['url'], 'com.atproto.repo.putRecord')) {
+                    return false;
+                }
+                $payload = json_decode($request['body'], true);
+
+                return ($payload['collection'] ?? null) === 'app.bsky.feed.like';
+            },
+        ));
+        self::assertCount(1, $likeWrite);
+        $payload = json_decode($likeWrite[0]['body'], true, 64, JSON_THROW_ON_ERROR);
+        self::assertSame('app.bsky.feed.like', $payload['record']['$type']);
+        self::assertSame(1, json_decode($localLike->body, true, 64, JSON_THROW_ON_ERROR)['interaction']['favourites_count']);
+
+        $unlike = $this->server->json('DELETE', $likePath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $unlike->status, $unlike->body);
+        self::assertSame(0, json_decode($unlike->body, true, 64, JSON_THROW_ON_ERROR)['interaction']['favourites_count']);
+        self::assertNotEmpty(array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.deleteRecord'),
+        ));
+
+        $this->server->runtime->preferences->update('alice', ['mirror_boosts_to_atproto' => true]);
+        $boostPath = '/api/v1/posts/' . rawurlencode($post->id) . '/boost';
+        $boost = $this->server->json('POST', $boostPath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $boost->status, $boost->body);
+        $repostWrite = array_values(array_filter(
+            $this->http->requests,
+            static function (array $request): bool {
+                if (!str_contains($request['url'], 'com.atproto.repo.putRecord')) {
+                    return false;
+                }
+                $payload = json_decode($request['body'], true);
+
+                return ($payload['collection'] ?? null) === 'app.bsky.feed.repost';
+            },
+        ));
+        self::assertCount(1, $repostWrite);
+
+        $unboost = $this->server->json('DELETE', $boostPath, [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $unboost->status, $unboost->body);
+        $repostDeletes = array_values(array_filter(
+            $this->http->requests,
+            static function (array $request): bool {
+                if (!str_contains($request['url'], 'com.atproto.repo.deleteRecord')) {
+                    return false;
+                }
+                $payload = json_decode($request['body'], true);
+
+                return ($payload['collection'] ?? null) === 'app.bsky.feed.repost';
+            },
+        ));
+        self::assertCount(1, $repostDeletes);
+    }
+
     public function testBlueskyFollowActionsPersistAndDeleteThePdsRecord(): void
     {
         $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');

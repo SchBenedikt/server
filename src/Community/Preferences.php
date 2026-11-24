@@ -60,6 +60,8 @@ final class Preferences
      *     notify_favourites: bool,
      *     notify_boosts: bool,
      *     notify_mentions: bool,
+     *     mirror_likes_to_atproto: bool,
+     *     mirror_boosts_to_atproto: bool,
      *     updated_at: string|null
      * }
      */
@@ -92,6 +94,8 @@ final class Preferences
             'notify_favourites' => (bool) ($row['notify_favourites'] ?? true),
             'notify_boosts' => (bool) ($row['notify_boosts'] ?? true),
             'notify_mentions' => (bool) ($row['notify_mentions'] ?? true),
+            'mirror_likes_to_atproto' => (bool) ($row['mirror_likes_to_atproto'] ?? false),
+            'mirror_boosts_to_atproto' => (bool) ($row['mirror_boosts_to_atproto'] ?? false),
             'updated_at' => is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null,
         ];
     }
@@ -131,7 +135,7 @@ final class Preferences
             );
         }
 
-        foreach (['show_boosts', 'discoverable', 'locked', 'notify_follows', 'notify_favourites', 'notify_boosts', 'notify_mentions'] as $flag) {
+        foreach (['show_boosts', 'discoverable', 'locked', 'notify_follows', 'notify_favourites', 'notify_boosts', 'notify_mentions', 'mirror_likes_to_atproto', 'mirror_boosts_to_atproto'] as $flag) {
             if (array_key_exists($flag, $payload)) {
                 if (!is_bool($payload[$flag])) {
                     throw CommunityException::invalid(
@@ -146,9 +150,9 @@ final class Preferences
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -160,6 +164,8 @@ final class Preferences
             . ' notify_favourites = excluded.notify_favourites,'
             . ' notify_boosts = excluded.notify_boosts,'
             . ' notify_mentions = excluded.notify_mentions,'
+            . ' mirror_likes_to_atproto = excluded.mirror_likes_to_atproto,'
+            . ' mirror_boosts_to_atproto = excluded.mirror_boosts_to_atproto,'
             . ' updated_at = excluded.updated_at',
             [
                 'account_id' => $accountId,
@@ -173,6 +179,8 @@ final class Preferences
                 'notify_favourites' => $next['notify_favourites'] ? 1 : 0,
                 'notify_boosts' => $next['notify_boosts'] ? 1 : 0,
                 'notify_mentions' => $next['notify_mentions'] ? 1 : 0,
+                'mirror_likes_to_atproto' => $next['mirror_likes_to_atproto'] ? 1 : 0,
+                'mirror_boosts_to_atproto' => $next['mirror_boosts_to_atproto'] ? 1 : 0,
                 'updated_at' => $now,
             ],
         );
@@ -197,6 +205,8 @@ final class Preferences
             'notify_favourites' => true,
             'notify_boosts' => true,
             'notify_mentions' => true,
+            'mirror_likes_to_atproto' => false,
+            'mirror_boosts_to_atproto' => false,
             'updated_at' => null,
         ];
     }
