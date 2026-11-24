@@ -144,10 +144,11 @@ final class MigrationTest extends TestCase
         $database = $server->runtime->database;
         $database->execute(
             'INSERT INTO social_atproto_publication '
-            . '(local_user_id, post_id, rkey, uri, published_at, pds_url) '
-            . 'VALUES (:user, :post, :rkey, :uri, :at, :pds)',
+            . '(local_user_id, account_did, post_id, rkey, uri, published_at, pds_url) '
+            . 'VALUES (:user, :did, :post, :rkey, :uri, :at, :pds)',
             [
                 'user' => 'alice',
+                'did' => 'did:plc:alice',
                 'post' => 'post-1',
                 'rkey' => '234567abcdefg',
                 'uri' => 'at://did:plc:alice/app.bsky.feed.post/234567abcdefg',
@@ -172,6 +173,53 @@ final class MigrationTest extends TestCase
                 "SELECT value FROM runtime_state WHERE name = 'core_schema_fingerprint'",
             ),
         );
+    }
+
+    public function testAtprotoPublicationIdentityMigrationPreservesAndRekeysExistingRows(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $database->execute(
+            'INSERT INTO social_atproto_publication '
+            . '(local_user_id, account_did, post_id, rkey, uri, published_at, pds_url, cid) '
+            . 'VALUES (:user, :did, :post, :rkey, :uri, :at, :pds, :cid)',
+            [
+                'user' => 'alice', 'did' => 'did:plc:alice', 'post' => 'post-1',
+                'rkey' => '234567abcdefg', 'uri' => 'at://did:plc:alice/app.bsky.feed.post/234567abcdefg',
+                'at' => '2026-11-24T00:00:00Z', 'pds' => 'https://pds.example', 'cid' => 'bafy-old',
+            ],
+        );
+        $database->execute('CREATE TABLE social_atproto_publication_legacy ('
+            . ' local_user_id VARCHAR(255) NOT NULL, post_id VARCHAR(64) NOT NULL, rkey VARCHAR(13) NOT NULL,'
+            . ' uri VARCHAR(512) NOT NULL, cid VARCHAR(256) NULL, pds_url VARCHAR(512) NULL,'
+            . ' published_at VARCHAR(20) NOT NULL, PRIMARY KEY (local_user_id, post_id))');
+        $database->execute(
+            'INSERT INTO social_atproto_publication_legacy '
+            . 'SELECT local_user_id, post_id, rkey, uri, cid, pds_url, published_at FROM social_atproto_publication',
+        );
+        $database->execute('DROP TABLE social_atproto_publication');
+        $database->execute('ALTER TABLE social_atproto_publication_legacy RENAME TO social_atproto_publication');
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611260001'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611260001'], $runner->migrate());
+        $row = $database->fetchAll('SELECT account_did, cid FROM social_atproto_publication WHERE post_id = :post', ['post' => 'post-1'])[0];
+        self::assertSame('did:plc:alice', $row['account_did']);
+        self::assertSame('bafy-old', $row['cid']);
+        $database->execute(
+            'INSERT INTO social_atproto_publication '
+            . '(local_user_id, account_did, post_id, rkey, uri, published_at) '
+            . 'VALUES (:user, :did, :post, :rkey, :uri, :at)',
+            [
+                'user' => 'alice', 'did' => 'did:plc:alice2', 'post' => 'post-1',
+                'rkey' => '234567abcdefh', 'uri' => 'at://did:plc:alice2/app.bsky.feed.post/234567abcdefh',
+                'at' => '2026-11-24T00:00:00Z',
+            ],
+        );
+        self::assertSame(2, (int) $database->fetchValue(
+            'SELECT COUNT(*) FROM social_atproto_publication WHERE local_user_id = :user AND post_id = :post',
+            ['user' => 'alice', 'post' => 'post-1'],
+        ));
     }
 
     public function testPostLanguageMigrationPreservesExistingRows(): void

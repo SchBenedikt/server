@@ -70,10 +70,11 @@ final class AtprotoIngestionTest extends TestCase
             ['local' => $alice->id, 'now' => $now],
         );
         $this->db->execute(
-            'INSERT INTO social_atproto_publication (local_user_id, post_id, rkey, uri, published_at)'
-            . ' VALUES (:local, :post, :rkey, :uri, :now)',
+            'INSERT INTO social_atproto_publication (local_user_id, account_did, post_id, rkey, uri, published_at)'
+            . ' VALUES (:local, :did, :post, :rkey, :uri, :now)',
             [
                 'local' => $alice->id,
+                'did' => 'did:plc:local',
                 'post' => $post->id,
                 'rkey' => '3klocalrecord',
                 'uri' => $this->localPostUri,
