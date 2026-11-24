@@ -658,8 +658,10 @@ final class FrontController
             try {
                 if ($request->method === 'POST') {
                     $boosts->boost($userId, $postId);
+                    $this->runtime->interactions->mirrorBoost($userId, $postId, true);
                 } else {
                     $boosts->unboost($userId, $postId);
+                    $this->runtime->interactions->mirrorBoost($userId, $postId, false);
                 }
             } catch (PostNotFoundException) {
                 return $this->apiError(404, 'post_not_found', 'This post is not available.');

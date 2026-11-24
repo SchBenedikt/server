@@ -237,6 +237,8 @@ async function save(): Promise<void> {
 			notify_favourites: current.notify_favourites,
 			notify_boosts: current.notify_boosts,
 			notify_mentions: current.notify_mentions,
+			mirror_likes_to_atproto: current.mirror_likes_to_atproto,
+			mirror_boosts_to_atproto: current.mirror_boosts_to_atproto,
 		});
 		showToast('Settings saved.', 'success');
 	} catch (caught) {
@@ -495,6 +497,25 @@ watch(signedIn, (value) => {
 						<span>{{ option.label }}</span>
 					</label>
 				</fieldset>
+			</section>
+
+			<section v-if="blueskyPublishEnabled" class="a-settings__section">
+				<h2>Share interactions to Bluesky</h2>
+				<p class="a-settings__hint">Only public posts already published to AT Protocol can be mirrored. This is off until you opt in.</p>
+				<label class="a-settings__row">
+					<span>
+						<strong>Mirror likes</strong>
+						<small>Publish and remove a Bluesky like when you like or unlike an eligible post here.</small>
+					</span>
+					<input type="checkbox" :checked="preferences.mirror_likes_to_atproto" @change="toggleFlag('mirror_likes_to_atproto')">
+				</label>
+				<label class="a-settings__row">
+					<span>
+						<strong>Mirror boosts</strong>
+						<small>Publish and remove a Bluesky repost when you boost or unboost an eligible post here.</small>
+					</span>
+					<input type="checkbox" :checked="preferences.mirror_boosts_to_atproto" @change="toggleFlag('mirror_boosts_to_atproto')">
+				</label>
 			</section>
 
 			<section class="a-settings__section">

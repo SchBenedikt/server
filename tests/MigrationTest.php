@@ -59,6 +59,11 @@ final class MigrationTest extends TestCase
         ] as $expected) {
             self::assertContains($expected, $tables, 'Missing table: ' . $expected);
         }
+
+        $preferenceColumns = $server->runtime->database->fetchAll('PRAGMA table_info(account_preference)');
+        $columnNames = array_map(static fn (array $row): string => (string) $row['name'], $preferenceColumns);
+        self::assertContains('mirror_likes_to_atproto', $columnNames);
+        self::assertContains('mirror_boosts_to_atproto', $columnNames);
     }
 
     public function testSecondRunIsANoOp(): void

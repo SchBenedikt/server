@@ -225,6 +225,7 @@ final class ApplicationFactory
             new NotificationService(new PdoNotificationRepository($database), $clock, $logger),
             $this->config->instanceUrl,
             $app->atprotoInteractions,
+            $preferences,
         );
 
         return new Runtime(
