@@ -24,6 +24,93 @@ use PHPUnit\Framework\TestCase;
  */
 final class NativePdsTest extends TestCase
 {
+    public function testFrozenDeletionBlocksNativePdsSessionsAndBearerWrites(): void
+    {
+        $server = new TestServer([
+            'atproto_pds' => true,
+            'atproto_pds_url' => 'https://social.example',
+            'atproto_pds_handle_domain' => 'social.example',
+            'atproto_plc_url' => 'https://plc.directory',
+        ]);
+        $server->createAccount('alice', 'alice@example.test');
+
+        $secret = $server->config->secretKey
+            ?? trim((string) file_get_contents($server->config->secretKeyFile));
+        $pds = new NativePdsService(
+            $server->config->coreConfig(),
+            $server->runtime->pdsRepository,
+            OpenSslSecretBox::fromBase64Key($secret),
+            $server->runtime->clock,
+            new LocalBlobStore($server->config->blobDirectory),
+            null,
+        );
+        $identity = $pds->createIdentity('alice');
+        $created = $server->json('POST', '/xrpc/com.atproto.server.createSession', [
+            'identifier' => 'alice',
+            'password' => TestServer::PASSWORD,
+        ]);
+        self::assertSame(200, $created->status, $created->body);
+        $session = json_decode($created->body, true, 512, JSON_THROW_ON_ERROR);
+
+        $server->runtime->database->execute(
+            'INSERT INTO social_account_deletion'
+            . ' (user_id, state, requested_at, updated_at, completed_at, deleted_counts,'
+            . ' blobs_deleted, blob_failures, attempts, lease_until)'
+            . ' VALUES (:user, :state, :requested, :updated, NULL, :counts, 0, :failures, 0, NULL)',
+            [
+                'user' => 'alice',
+                'state' => 'frozen',
+                'requested' => '2026-11-24T00:00:00Z',
+                'updated' => '2026-11-24T00:00:00Z',
+                'counts' => '{}',
+                'failures' => '[]',
+            ],
+        );
+
+        $refresh = $server->send('POST', '/xrpc/com.atproto.server.refreshSession', [
+            'headers' => ['Authorization' => 'Bearer ' . $session['refreshJwt']],
+        ]);
+        self::assertSame(401, $refresh->status, $refresh->body);
+
+        $newSession = $server->json('POST', '/xrpc/com.atproto.server.createSession', [
+            'identifier' => 'alice',
+            'password' => TestServer::PASSWORD,
+        ]);
+        self::assertSame(401, $newSession->status, $newSession->body);
+
+        $readSession = $server->send('GET', '/xrpc/com.atproto.server.getSession', [
+            'headers' => ['Authorization' => 'Bearer ' . $session['accessJwt']],
+        ]);
+        self::assertSame(401, $readSession->status, $readSession->body);
+
+        $write = $server->send('POST', '/xrpc/com.atproto.repo.putRecord', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $session['accessJwt'],
+                'Content-Type' => 'application/json',
+            ],
+            'body' => json_encode([
+                'repo' => $identity['did'],
+                'collection' => 'app.bsky.feed.post',
+                'rkey' => 'frozen-write',
+                'record' => [
+                    '$type' => 'app.bsky.feed.post',
+                    'text' => 'Must not write during deletion',
+                    'createdAt' => '2026-11-24T00:00:00Z',
+                ],
+            ], JSON_THROW_ON_ERROR),
+        ]);
+        self::assertSame(401, $write->status, $write->body);
+
+        $deleteSession = $server->send('POST', '/xrpc/com.atproto.server.deleteSession', [
+            'headers' => ['Authorization' => 'Bearer ' . $session['accessJwt']],
+        ]);
+        self::assertSame(200, $deleteSession->status, $deleteSession->body);
+        self::assertNull($server->runtime->database->fetchValue(
+            'SELECT account_id FROM atproto_session WHERE account_id = :account',
+            ['account' => 'alice'],
+        ));
+    }
+
     public function testBearerSessionCanWriteAndReadANativeRepositoryRecord(): void
     {
         $server = new TestServer([
