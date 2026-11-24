@@ -144,7 +144,9 @@ a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
   eligible public top-level posts from the composer. The action is offered
   only while the linked account and instance publishing setting are available.
   A local post is saved first; Bluesky failures are reported separately and
-  can be retried from the post menu. Expired OAuth credentials refresh through
+  can be retried from the post menu. That menu reads the saved publication
+  state for the linked identity and links a published post back to Bluesky.
+  Expired OAuth credentials refresh through
   the account's authorization server; if refresh is refused, reconnect the
   account in Settings. This uses the account's discovered PDS and
   does not require the instance to run its optional native PDS. Local likes
