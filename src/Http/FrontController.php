@@ -56,6 +56,8 @@ final class FrontController
 
     private readonly AtprotoSessionController $atprotoSession;
 
+    private readonly AtprotoOAuthController $atprotoOAuth;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
@@ -64,6 +66,7 @@ final class FrontController
         $this->federation = new FederationController($runtime);
         $this->atprotoIdentity = new AtprotoIdentityController($runtime);
         $this->atprotoSession = new AtprotoSessionController($runtime);
+        $this->atprotoOAuth = new AtprotoOAuthController($runtime);
     }
 
     /**
@@ -119,6 +122,10 @@ final class FrontController
         }
 
         $request = $this->atprotoSession->authenticate($request);
+
+        if ($request->method === 'GET' && $request->path === '/oauth/atproto/client-metadata.json') {
+            return $this->atprotoOAuth->handle($request, $session) ?? Response::json([]);
+        }
 
         // Public ActivityPub/NodeInfo documents the core does not route. This
         // must run before the compatibility API so a post URL can negotiate
@@ -545,6 +552,9 @@ final class FrontController
                 );
             }
         }
+
+        $oauthResponse = $this->atprotoOAuth->handle($request, $session);
+        if ($oauthResponse !== null) return $oauthResponse;
 
         $atprotoResponse = $this->atprotoIdentity->handle($request, $session);
         if ($atprotoResponse !== null) {

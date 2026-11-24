@@ -42,6 +42,7 @@ use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
 use AlohaSocial\Server\Federation\Atproto\RemoteInteractionTargetPolicy;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
+use AlohaSocial\Server\Federation\AtprotoOAuthService;
 use AlohaSocial\Server\Federation\CompositeAtprotoAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
 use AlohaSocial\Server\Federation\NativePdsAccountResolver;
@@ -307,6 +308,7 @@ final class ApplicationFactory
                 $clock,
             ),
             blueskyAccounts: $blueskyAccounts,
+            atprotoOAuth: new AtprotoOAuthService($database, $httpClient, $this->secretBox(), $clock, $targetGuard, $blueskyAccounts, $this->config),
             pds: $app->pds,
             pdsRepository: $pdsRepository,
             atprotoReconciler: $atprotoJetstream === null
