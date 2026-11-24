@@ -33,6 +33,13 @@ export interface PostInteraction {
 	reblogged: boolean;
 	replies_count: number;
 	emoji_reactions?: EmojiReaction[];
+	atproto_mirror?: AtprotoMirrorStatus;
+}
+
+export interface AtprotoMirrorStatus {
+	state: 'published' | 'removed' | 'failed' | 'unavailable';
+	retryable: boolean;
+	reason?: string;
 }
 
 export interface Poll {

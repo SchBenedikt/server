@@ -55,6 +55,7 @@ import type {
 	FollowRequestData,
 	BlueskyData,
 	BlueskyAccountStatus,
+	AtprotoMirrorStatus,
 	KokuaCategory,
 	KokuaCreatePayload,
 	KokuaEntry,
@@ -176,8 +177,8 @@ export interface Api {
 	createStatus(payload: CreateStatusPayload): Promise<TimelineItem>;
 	updatePost(id: string, payload: UpdatePostPayload): Promise<TimelineItem>;
 	deletePost(id: string): Promise<void>;
-	boostPost(id: string): Promise<void>;
-	unboostPost(id: string): Promise<void>;
+	boostPost(id: string): Promise<AtprotoMirrorStatus | null>;
+	unboostPost(id: string): Promise<AtprotoMirrorStatus | null>;
 	interactions(ids: string[]): Promise<Record<string, PostInteraction>>;
 	likePost(id: string): Promise<PostInteraction>;
 	unlikePost(id: string): Promise<PostInteraction>;
@@ -475,6 +476,11 @@ function normalizeInteraction(value: unknown): PostInteraction | null {
 	if (!isRecord(value)) {
 		return null;
 	}
+	const mirrorValue = isRecord(value.atproto_mirror) ? value.atproto_mirror : null;
+	const mirror = mirrorValue && ['published', 'removed', 'failed', 'unavailable'].includes(String(mirrorValue.state))
+		? { state: mirrorValue.state as AtprotoMirrorStatus['state'], retryable: mirrorValue.retryable === true,
+			...(typeof mirrorValue.reason === 'string' ? { reason: mirrorValue.reason } : {}) }
+		: undefined;
 
 	return {
 		favourites_count: typeof value.favourites_count === 'number' ? value.favourites_count : 0,
@@ -489,6 +495,7 @@ function normalizeInteraction(value: unknown): PostInteraction | null {
 				))
 				.map((entry) => ({ emoji: entry.emoji, count: entry.count }))
 			: [],
+		...(mirror ? { atproto_mirror: mirror } : {}),
 	};
 }
 
@@ -2080,12 +2087,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			await request<unknown>('DELETE', `/api/v1/posts/${encodeURIComponent(id)}`);
 		},
 
-		async boostPost(id: string): Promise<void> {
-			await request<unknown>('POST', `/api/v1/posts/${encodeURIComponent(id)}/boost`);
+		async boostPost(id: string): Promise<AtprotoMirrorStatus | null> {
+			const data = await request<{ atproto_mirror?: unknown }>('POST', `/api/v1/posts/${encodeURIComponent(id)}/boost`);
+			return normalizeInteraction({ atproto_mirror: data?.atproto_mirror })?.atproto_mirror ?? null;
 		},
 
-		async unboostPost(id: string): Promise<void> {
-			await request<unknown>('DELETE', `/api/v1/posts/${encodeURIComponent(id)}/boost`);
+		async unboostPost(id: string): Promise<AtprotoMirrorStatus | null> {
+			const data = await request<{ atproto_mirror?: unknown }>('DELETE', `/api/v1/posts/${encodeURIComponent(id)}/boost`);
+			return normalizeInteraction({ atproto_mirror: data?.atproto_mirror })?.atproto_mirror ?? null;
 		},
 
 		async interactions(ids: string[]): Promise<Record<string, PostInteraction>> {
