@@ -103,9 +103,10 @@ final class AtprotoIngestionTest extends TestCase
             ],
             2,
         );
+        $longReposterDid = 'did:web:' . str_repeat('a', 80);
         $this->record(
-            'at://did:plc:fan/app.bsky.feed.repost/3krepost',
-            'did:plc:fan',
+            'at://' . $longReposterDid . '/app.bsky.feed.repost/3krepost',
+            $longReposterDid,
             'app.bsky.feed.repost',
             '3krepost',
             [
