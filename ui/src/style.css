@@ -1405,6 +1405,11 @@ button.a-nav__item {
 }
 
 .a-feed__inline-error {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px;
 	padding: 10px 13px;
 	border-radius: 10px;
 	background: var(--a-danger-soft);

@@ -179,7 +179,7 @@ export function useTimeline(source: () => TimelineSource) {
 	}
 
 	function loadMore(): void {
-		if (!loading.value && !loadingMore.value && hasMore.value && error.value === '') {
+		if (!loading.value && !loadingMore.value && hasMore.value) {
 			void load(false);
 		}
 	}
