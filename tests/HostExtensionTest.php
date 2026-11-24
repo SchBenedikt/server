@@ -124,6 +124,14 @@ final class HostExtensionTest extends TestCase
         self::assertTrue($stateBody['interactions'][$this->postId]['reblogged']);
         self::assertSame(1, $stateBody['interactions'][$this->postId]['reblogs_count']);
 
+        $home = $this->server->send('GET', '/api/v1/timelines/home', ['cookies' => $this->bobCookies]);
+        /** @var array{posts: list<array<string, mixed>>} $homeBody */
+        $homeBody = json_decode($home->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertCount(1, $homeBody['posts'], json_encode($homeBody['posts'], JSON_THROW_ON_ERROR));
+        self::assertSame('boost', $homeBody['posts'][0]['kind']);
+        self::assertSame($this->postId, $homeBody['posts'][0]['object_id']);
+        self::assertSame('bob', $homeBody['posts'][0]['boosted_by']);
+
         $removed = $this->server->json('DELETE', $boost, [], $this->bobCookies, $this->bobCsrf);
         self::assertSame(200, $removed->status, $removed->body);
         $after = $this->server->send('GET', '/api/v1/host/interactions', [
@@ -134,6 +142,11 @@ final class HostExtensionTest extends TestCase
         $afterBody = json_decode($after->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertFalse($afterBody['interactions'][$this->postId]['reblogged']);
         self::assertSame(0, $afterBody['interactions'][$this->postId]['reblogs_count']);
+
+        $afterHome = $this->server->send('GET', '/api/v1/timelines/home', ['cookies' => $this->bobCookies]);
+        /** @var array{posts: list<array<string, mixed>>} $afterHomeBody */
+        $afterHomeBody = json_decode($afterHome->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame([], $afterHomeBody['posts']);
     }
 
     public function testCachedRemotePostLikeUsesCoreFollowAndBlockPolicy(): void
