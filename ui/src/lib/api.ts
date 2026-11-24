@@ -119,6 +119,7 @@ export interface Api {
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	homeTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	homeTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
+	directTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	tagTimeline(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	followedTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
@@ -1008,7 +1009,8 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		return normalizePosts(data?.posts);
 	}
 
-	async function homeTimelinePage(
+	async function pagedTimeline(
+		path: string,
 		limit: number,
 		before?: string | null,
 		beforeId?: string | null,
@@ -1026,7 +1028,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			has_more?: unknown;
 			next_before?: unknown;
 			next_before_id?: unknown;
-		}>('GET', '/api/v1/timelines/home', query);
+		}>('GET', path, query);
 		const nextCursor = typeof data?.next_before === 'string'
 			&& data.next_before !== ''
 			&& typeof data.next_before_id === 'string'
@@ -1039,6 +1041,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			nextCursor,
 			hasMore: data?.has_more === true && nextCursor !== null,
 		};
+	}
+
+	function homeTimelinePage(limit: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData> {
+		return pagedTimeline('/api/v1/timelines/home', limit, before, beforeId);
+	}
+
+	function directTimelinePage(limit: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData> {
+		return pagedTimeline('/api/v1/timelines/direct', limit, before, beforeId);
 	}
 
 	return {
@@ -1079,6 +1089,10 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		homeTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
 			return homeTimelinePage(limit, before, beforeId);
+		},
+
+		directTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
+			return directTimelinePage(limit, before, beforeId);
 		},
 
 		tagTimeline(tag: string, limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {

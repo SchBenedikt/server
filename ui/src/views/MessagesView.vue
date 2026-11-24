@@ -26,8 +26,11 @@ const PAGE_SIZE = 40;
 const PAGES = 4;
 
 const loading = ref(false);
+const loadingMore = ref(false);
 const error = ref('');
 const messages = ref<TimelineItem[]>([]);
+const hasMore = ref(false);
+const cursor = ref<{ before: string; beforeId: string } | null>(null);
 const pickerOpen = ref(false);
 const pickerQuery = ref('');
 const pickerLoading = ref(false);
@@ -100,32 +103,20 @@ function counterpartLabel(counterpart: string): string {
 async function load(): Promise<void> {
 	loading.value = true;
 	error.value = '';
+	cursor.value = null;
+	hasMore.value = false;
 	try {
 		const collected: TimelineItem[] = [];
-		let cursor: { before: string; beforeId: string } | null = null;
 		for (let page = 0; page < PAGES; page += 1) {
-			const batch = await getApi().homeTimeline(PAGE_SIZE, cursor?.before, cursor?.beforeId);
-			collected.push(...batch);
-			if (batch.length < PAGE_SIZE) {
+			const result = await getApi().directTimelinePage(PAGE_SIZE, cursor.value?.before, cursor.value?.beforeId);
+			collected.push(...result.posts);
+			cursor.value = result.nextCursor;
+			hasMore.value = result.hasMore;
+			if (!result.hasMore) {
 				break;
 			}
-			const last = batch.at(-1);
-			if (last === undefined) {
-				break;
-			}
-			cursor = { before: last.published_at, beforeId: last.id };
 		}
-
-		// The core's home timeline omits recipient ids, so direct posts have to
-		// be hydrated before a conversation can be identified.
-		const direct = collected.filter((message) => message.visibility === 'direct');
-		const hydrated = direct.length > 0 ? await getApi().posts(direct.map((message) => message.id)) : {};
-		messages.value = direct.map((message) => {
-			const full = hydrated[message.id];
-			return full === undefined
-				? message
-				: { ...message, ...full, interaction: message.interaction ?? full.interaction };
-		});
+		messages.value = collected;
 
 		for (const conversation of conversations.value) {
 			void resolveAccount(conversation.counterpart.split(',')[0] ?? '');
@@ -134,6 +125,29 @@ async function load(): Promise<void> {
 		error.value = caught instanceof Error ? caught.message : 'Messages could not be loaded.';
 	} finally {
 		loading.value = false;
+	}
+}
+
+async function loadMore(): Promise<void> {
+	if (loadingMore.value || !hasMore.value || cursor.value === null) {
+		return;
+	}
+
+	loadingMore.value = true;
+	error.value = '';
+	try {
+		const result = await getApi().directTimelinePage(PAGE_SIZE, cursor.value.before, cursor.value.beforeId);
+		const seen = new Set(messages.value.map((message) => message.id));
+		messages.value = [...messages.value, ...result.posts.filter((message) => !seen.has(message.id))];
+		cursor.value = result.nextCursor;
+		hasMore.value = result.hasMore;
+		for (const conversation of conversations.value) {
+			void resolveAccount(conversation.counterpart.split(',')[0] ?? '');
+		}
+	} catch (caught) {
+		error.value = caught instanceof Error ? caught.message : 'Older messages could not be loaded.';
+	} finally {
+		loadingMore.value = false;
 	}
 }
 
@@ -259,6 +273,10 @@ function startWith(account: Account): void {
 					</button>
 				</li>
 			</ul>
+
+			<button v-if="hasMore" type="button" class="a-btn a-btn--ghost" :disabled="loadingMore" @click="loadMore">
+				{{ loadingMore ? 'Loading…' : 'Load older messages' }}
+			</button>
 
 			<EmptyState
 				v-else-if="!loading"
