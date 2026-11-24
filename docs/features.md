@@ -255,5 +255,8 @@ Account export and deletion are available in Settings. Export combines
 host-owned account data with the Core archive, including available media
 blobs. Deletion asks for a second confirmation, revokes local and AT Protocol
 credentials, preserves a disabled identity as a tombstone, and refuses to
-remove the last active administrator. Remote copies and remote AT Protocol
-data are outside this instance's control and may remain on peer servers.
+remove the last active administrator. Once deletion begins, writes through
+host-only APIs and native PDS sessions are blocked too; a repeated deletion
+request can resume cleanup after an interrupted attempt. Remote copies and
+remote AT Protocol data are outside this instance's control and may remain on
+peer servers.

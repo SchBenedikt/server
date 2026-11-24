@@ -123,6 +123,11 @@ final class FrontController
 
         $request = $this->atprotoSession->authenticate($request);
 
+        $deletionResponse = $this->rejectAccountDeletionWrite($request, $session);
+        if ($deletionResponse !== null) {
+            return $deletionResponse;
+        }
+
         if ($request->method === 'GET' && $request->path === '/oauth/atproto/client-metadata.json') {
             return $this->atprotoOAuth->handle($request, $session) ?? Response::json([]);
         }
@@ -925,6 +930,39 @@ final class FrontController
         return $this->enforceIdentityRateLimit($match->route->name, $identity, $limit, $window);
     }
 
+    private function rejectAccountDeletionWrite(Request $request, ?AuthenticatedSession $session): ?Response
+    {
+        $isMutation = in_array($request->method, self::MUTATING_METHODS, true)
+            || ($request->method === 'GET' && $request->path === '/oauth/atproto/callback');
+        if (!$isMutation
+            || $request->path === '/logout'
+            || ($request->method === 'DELETE' && $request->path === '/api/v1/account/data')
+        ) {
+            return null;
+        }
+
+        $userId = $session?->userId() ?? $request->userId;
+        if ($userId === null || $this->runtime->app->accountData === null) {
+            return null;
+        }
+
+        $deletion = $this->runtime->app->accountData->deletionStatus($userId);
+        $status = $deletion->blockedStatus();
+        if ($status === null) {
+            return null;
+        }
+
+        $deleted = $status === 410;
+        return Response::json([
+            'error' => [
+                'code' => $deleted ? 'account_deleted' : 'account_deletion_in_progress',
+                'message' => $deleted
+                    ? 'This account has been deleted; no further writes are accepted.'
+                    : 'This account is being deleted; writes are blocked.',
+            ],
+        ], $status);
+    }
+
     private function enforceIdentityRateLimit(string $route, string $identity, int $limit, int $window): ?Response
     {
         $retryAfter = $this->runtime->rateLimiter->attempt($route, $identity, $limit, $window);
@@ -1169,9 +1207,13 @@ final class FrontController
 
         $account = $this->runtime->accounts->findByHandle($handle)
             ?? $this->runtime->accounts->findByEmail($handle);
+        $deletionStatus = $account === null
+            ? null
+            : $this->runtime->app->accountData?->deletionStatus($account->id)->blockedStatus();
 
         $valid = $account !== null
             && !$account->isDisabled()
+            && $deletionStatus === null
             && $this->runtime->passwordHasher->verify($password, $account->passwordHash);
 
         if (!$valid) {
