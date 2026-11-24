@@ -454,6 +454,19 @@ final class BlueskyAccountTest extends TestCase
         self::assertSame('app.bsky.feed.like', $payload['record']['$type']);
         self::assertSame(1, json_decode($localLike->body, true, 64, JSON_THROW_ON_ERROR)['interaction']['favourites_count']);
 
+        $optOut = $this->server->json(
+            'PATCH',
+            '/api/v1/host/preferences',
+            ['mirror_likes_to_atproto' => false],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+        self::assertSame(200, $optOut->status, $optOut->body);
+        self::assertFalse(json_decode($optOut->body, true, 64, JSON_THROW_ON_ERROR)['mirror_cleanup_pending']['mirror_likes_to_atproto']);
+        self::assertSame(0, (int) $this->server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_atproto_interaction WHERE local_user_id = 'alice' AND kind = 'like'",
+        ));
+
         $unlike = $this->server->json('DELETE', $likePath, [], $auth['cookies'], $auth['csrf']);
         self::assertSame(200, $unlike->status, $unlike->body);
         self::assertSame(0, json_decode($unlike->body, true, 64, JSON_THROW_ON_ERROR)['interaction']['favourites_count']);
