@@ -111,4 +111,33 @@ final class AtprotoSessionTest extends TestCase
         self::assertSame(409, $response->status);
         self::assertStringContainsString('RepoNotFound', $response->body);
     }
+
+    public function testCreateSessionLimitsAttemptsPerClientAddressAcrossIdentifiers(): void
+    {
+        for ($attempt = 0; $attempt < 20; ++$attempt) {
+            $response = $this->server->json('POST', '/xrpc/com.atproto.server.createSession', [
+                'identifier' => 'unknown-' . $attempt,
+                'password' => 'incorrect-password',
+            ]);
+            self::assertSame(401, $response->status, $response->body);
+        }
+
+        $limited = $this->server->json('POST', '/xrpc/com.atproto.server.createSession', [
+            'identifier' => 'alice',
+            'password' => TestServer::PASSWORD,
+        ]);
+
+        self::assertSame(429, $limited->status, $limited->body);
+        self::assertStringContainsString('RateLimitExceeded', $limited->body);
+
+        $otherClient = $this->server->send('POST', '/xrpc/com.atproto.server.createSession', [
+            'ip' => '198.51.100.24',
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => json_encode([
+                'identifier' => 'alice',
+                'password' => TestServer::PASSWORD,
+            ], JSON_THROW_ON_ERROR),
+        ]);
+        self::assertSame(200, $otherClient->status, $otherClient->body);
+    }
 }
