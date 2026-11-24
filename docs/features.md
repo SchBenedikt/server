@@ -41,6 +41,8 @@ the core route contract:
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
 | `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |
+| `GET /api/v1/host/for-you?limit=…&cursor=…` | Page the signed-in account's ranked public feed. The opaque cursor continues the same ranking snapshot for 30 minutes; refresh the feed after it expires. |
+| `GET /api/v1/host/trending?limit=…&cursor=…` | Page the instance-wide ranked public feed using the same snapshot cursor behavior. |
 | `GET /api/v1/host/kokua?kind=all\|request\|offer&category=…&state=open\|done` | Read the Kokua mutual-aid board with open/request/offer filters. |
 | `POST /api/v1/host/kokua` | Ask for help or offer it. |
 | `GET` / `PATCH` / `DELETE /api/v1/host/kokua/{id}` | Read, complete/reopen or remove one Kokua (author only for mutations). |
@@ -59,6 +61,10 @@ All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
 posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
 `FrontController`.
+
+Ranked feed snapshots are stored for at most 30 minutes and scoped to the
+account for **For You** or shared for **Trending**. They contain only post
+identifiers and display reasons, and account erasure removes that account's snapshots.
 
 ## Account moves
 

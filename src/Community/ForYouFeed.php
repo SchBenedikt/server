@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Community;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
+use JsonException;
 
 use function array_filter;
 use function array_intersect;
@@ -53,6 +54,10 @@ final class ForYouFeed
 
     private const CANDIDATE_LIMIT = 500;
 
+    private const SNAPSHOT_TTL_SECONDS = 1800;
+
+    private const MAX_SNAPSHOTS_PER_SCOPE = 10;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
@@ -63,14 +68,18 @@ final class ForYouFeed
      * @return array{
      *     posts: list<string>,
      *     reasons: array<string, string>,
-     *     next: int|null,
+     *     next: string|int|null,
      *     total: int
      * }
      */
-    public function page(string $accountId, int $limit = 20, int $offset = 0): array
+    public function page(string $accountId, int $limit = 20, int $offset = 0, ?string $cursor = null): array
     {
         $limit = max(1, min(self::MAX_LIMIT, $limit));
         $offset = max(0, $offset);
+
+        if ($cursor !== null) {
+            return $this->continueSnapshot('for-you', $accountId, $cursor, $limit);
+        }
 
         $candidates = $this->candidates($accountId);
         if ($candidates === []) {
@@ -157,21 +166,7 @@ final class ForYouFeed
             return $b['score'] <=> $a['score'];
         });
 
-        $total = count($scored);
-        $window = array_slice($scored, $offset, $limit);
-        $posts = array_column($window, 'id');
-        $reasons = [];
-        foreach ($window as $entry) {
-            $reasons[$entry['id']] = $entry['reason'];
-        }
-        $next = $offset + $limit;
-
-        return [
-            'posts' => array_values($posts),
-            'reasons' => $reasons,
-            'next' => $next < $total ? $next : null,
-            'total' => $total,
-        ];
+        return $this->rankedPage('for-you', $accountId, $scored, $limit, $offset);
     }
 
     /**
@@ -185,14 +180,18 @@ final class ForYouFeed
      * @return array{
      *     posts: list<string>,
      *     reasons: array<string, string>,
-     *     next: int|null,
+     *     next: string|int|null,
      *     total: int
      * }
      */
-    public function trending(int $limit = 20, int $offset = 0): array
+    public function trending(int $limit = 20, int $offset = 0, ?string $cursor = null): array
     {
         $limit = max(1, min(self::MAX_LIMIT, $limit));
         $offset = max(0, $offset);
+
+        if ($cursor !== null) {
+            return $this->continueSnapshot('trending', null, $cursor, $limit);
+        }
         $now = $this->clock->now();
         $since = Time::format($now->modify('-7 days'));
 
@@ -255,21 +254,179 @@ final class ForYouFeed
         }
         usort($scored, $compare);
 
-        $total = count($scored);
-        $window = array_slice($scored, $offset, $limit);
+        return $this->rankedPage('trending', null, $scored, $limit, $offset);
+    }
+
+    /** @param list<array{id:string, author_id?:string, score?:float, reason:string}> $scored
+     *  @return array{posts:list<string>, reasons:array<string,string>, next:string|int|null, total:int}
+     */
+    private function rankedPage(string $kind, ?string $accountId, array $scored, int $limit, int $offset): array
+    {
+        $entries = array_map(
+            static fn (array $entry): array => ['id' => (string) $entry['id'], 'reason' => (string) $entry['reason']],
+            array_slice($scored, 0, self::CANDIDATE_LIMIT),
+        );
+
+        return $this->pageEntries($entries, $kind, $accountId, $limit, $offset, $offset > 0);
+    }
+
+    /**
+     * @param list<array{id:string,reason:string}> $entries
+     * @return array{posts:list<string>, reasons:array<string,string>, next:string|int|null, total:int}
+     */
+    private function pageEntries(
+        array $entries,
+        string $kind,
+        ?string $accountId,
+        int $limit,
+        int $offset,
+        bool $legacyOffset,
+        ?string $snapshotToken = null,
+    ): array
+    {
+        $total = count($entries);
+        $window = array_slice($entries, $offset, $limit);
+        $posts = array_column($window, 'id');
         $reasons = [];
         foreach ($window as $entry) {
             $reasons[$entry['id']] = $entry['reason'];
         }
 
-        $next = $offset + $limit;
+        $nextOffset = $offset + count($window);
+        $next = null;
+        if ($nextOffset < $total) {
+            $next = $legacyOffset
+                ? $nextOffset
+                : ($snapshotToken === null
+                    ? $this->storeSnapshot($kind, $accountId, $entries, $nextOffset)
+                    : $this->encodeCursor($snapshotToken, $nextOffset));
+        }
 
-        return [
-            'posts' => array_values(array_column($window, 'id')),
-            'reasons' => $reasons,
-            'next' => $next < $total ? $next : null,
-            'total' => $total,
-        ];
+        return ['posts' => array_values($posts), 'reasons' => $reasons, 'next' => $next, 'total' => $total];
+    }
+
+    /** @param list<array{id:string,reason:string}> $entries */
+    private function storeSnapshot(string $kind, ?string $accountId, array $entries, int $offset): string
+    {
+        $now = $this->clock->now();
+        $createdAt = Time::format($now);
+        $expiresAt = Time::format($now->modify('+' . self::SNAPSHOT_TTL_SECONDS . ' seconds'));
+        $token = bin2hex(random_bytes(32));
+
+        try {
+            $payload = json_encode($entries, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        } catch (JsonException $exception) {
+            throw new \RuntimeException('The ranked feed snapshot could not be encoded.', 0, $exception);
+        }
+
+        $this->db->transaction(function (Connection $db) use ($kind, $accountId, $createdAt, $expiresAt, $token, $payload): void {
+            $db->execute('DELETE FROM recommendation_snapshot WHERE expires_at <= :now', ['now' => $createdAt]);
+
+            $outerScope = $accountId === null ? 'account_id IS NULL' : 'account_id = :outer_account_id';
+            $innerScope = $accountId === null ? 'account_id IS NULL' : 'account_id = :inner_account_id';
+            $parameters = ['outer_kind' => $kind, 'inner_kind' => $kind];
+            if ($accountId !== null) {
+                $parameters['outer_account_id'] = $accountId;
+                $parameters['inner_account_id'] = $accountId;
+            }
+            $db->execute(
+                'DELETE FROM recommendation_snapshot WHERE feed_kind = :outer_kind AND ' . $outerScope
+                . ' AND id_hash NOT IN (SELECT id_hash FROM recommendation_snapshot WHERE feed_kind = :inner_kind'
+                . ' AND ' . $innerScope . ' ORDER BY created_at DESC, id_hash DESC LIMIT '
+                . (self::MAX_SNAPSHOTS_PER_SCOPE - 1) . ')',
+                $parameters,
+            );
+
+            $db->execute(
+                'INSERT INTO recommendation_snapshot (id_hash, account_id, feed_kind, payload, created_at, expires_at)'
+                . ' VALUES (:id_hash, :account_id, :kind, :payload, :created_at, :expires_at)',
+                [
+                    'id_hash' => hash('sha256', $token),
+                    'account_id' => $accountId,
+                    'kind' => $kind,
+                    'payload' => $payload,
+                    'created_at' => $createdAt,
+                    'expires_at' => $expiresAt,
+                ],
+            );
+        });
+
+        return $this->encodeCursor($token, $offset);
+    }
+
+    private function encodeCursor(string $token, int $offset): string
+    {
+        $cursor = json_encode(['snapshot' => $token, 'offset' => $offset], JSON_THROW_ON_ERROR);
+        return 'r1.' . rtrim(strtr(base64_encode($cursor), '+/', '-_'), '=');
+    }
+
+    /** @return array{posts:list<string>, reasons:array<string,string>, next:string|int|null, total:int} */
+    private function continueSnapshot(string $kind, ?string $accountId, string $cursor, int $limit): array
+    {
+        $decoded = $this->decodeCursor($cursor);
+        $now = Time::format($this->clock->now());
+        $scope = $accountId === null ? 'account_id IS NULL' : 'account_id = :account_id';
+        $parameters = ['id_hash' => hash('sha256', $decoded['snapshot']), 'kind' => $kind, 'now' => $now];
+        if ($accountId !== null) {
+            $parameters['account_id'] = $accountId;
+        }
+
+        $row = $this->db->fetchOne(
+            'SELECT payload FROM recommendation_snapshot WHERE id_hash = :id_hash AND feed_kind = :kind'
+            . ' AND ' . $scope . ' AND expires_at > :now',
+            $parameters,
+        );
+        if ($row === null) {
+            throw new CommunityException(410, 'timeline_cursor_expired', 'This ranked feed page expired. Refresh the feed to continue.');
+        }
+
+        try {
+            $entries = json_decode((string) $row['payload'], true, 8, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new CommunityException(410, 'timeline_cursor_expired', 'This ranked feed page is no longer available. Refresh the feed to continue.');
+        }
+        if (!is_array($entries) || count($entries) > self::CANDIDATE_LIMIT) {
+            throw new CommunityException(410, 'timeline_cursor_expired', 'This ranked feed page is no longer available. Refresh the feed to continue.');
+        }
+
+        foreach ($entries as $entry) {
+            if (!is_array($entry) || !is_string($entry['id'] ?? null) || !is_string($entry['reason'] ?? null)) {
+                throw new CommunityException(410, 'timeline_cursor_expired', 'This ranked feed page is no longer available. Refresh the feed to continue.');
+            }
+        }
+
+        return $this->pageEntries($entries, $kind, $accountId, $limit, $decoded['offset'], false, $decoded['snapshot']);
+    }
+
+    /** @return array{snapshot:string,offset:int} */
+    private function decodeCursor(string $cursor): array
+    {
+        if (strlen($cursor) > 512 || !str_starts_with($cursor, 'r1.')) {
+            throw new CommunityException(400, 'invalid_cursor', 'The ranked feed cursor is malformed.');
+        }
+
+        $encoded = substr($cursor, 3);
+        $json = base64_decode(strtr($encoded, '-_', '+/') . str_repeat('=', (4 - strlen($encoded) % 4) % 4), true);
+        if ($json === false) {
+            throw new CommunityException(400, 'invalid_cursor', 'The ranked feed cursor is malformed.');
+        }
+
+        try {
+            $value = json_decode($json, true, 4, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new CommunityException(400, 'invalid_cursor', 'The ranked feed cursor is malformed.');
+        }
+        if (!is_array($value)
+            || !is_string($value['snapshot'] ?? null)
+            || preg_match('/^[a-f0-9]{64}$/D', $value['snapshot']) !== 1
+            || !is_int($value['offset'] ?? null)
+            || $value['offset'] < 1
+            || $value['offset'] >= self::CANDIDATE_LIMIT
+        ) {
+            throw CommunityException::invalid('The ranked feed cursor is malformed.');
+        }
+
+        return ['snapshot' => $value['snapshot'], 'offset' => $value['offset']];
     }
 
     /**

@@ -873,6 +873,7 @@ final class CommunityApiController
                 return Response::json($this->runtime->forYou->trending(
                     $this->intParam($request, 'limit', 20, 1, 40),
                     $this->intParam($request, 'offset', 0, 0, 10_000),
+                    $this->cursorParam($request),
                 ));
             }
 
@@ -886,6 +887,7 @@ final class CommunityApiController
                         $userId,
                         $this->intParam($request, 'limit', 20, 1, 40),
                         $this->intParam($request, 'offset', 0, 0, 10_000),
+                        $this->cursorParam($request),
                     ),
                 );
             }
@@ -938,6 +940,13 @@ final class CommunityApiController
         }
 
         return max($min, min($max, (int) $value));
+    }
+
+    private function cursorParam(Request $request): ?string
+    {
+        $cursor = $request->queryParam('cursor');
+
+        return is_string($cursor) && $cursor !== '' ? $cursor : null;
     }
 
     /**
