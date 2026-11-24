@@ -16,6 +16,8 @@ declare(strict_types=1);
 
 $port = (int) ($argv[1] ?? 0);
 $connections = max(1, (int) ($argv[2] ?? 1));
+$legacy = ($argv[3] ?? '') === 'legacy';
+$expectedResumeCursor = is_string($argv[4] ?? null) ? $argv[4] : null;
 
 $server = @stream_socket_server('tcp://127.0.0.1:' . $port, $errorNumber, $errorMessage);
 if ($server === false) {
@@ -95,6 +97,16 @@ $messages = [
     ], JSON_THROW_ON_ERROR),
 ];
 
+if (!$legacy) {
+    foreach ($messages as $index => $message) {
+        $event = json_decode($message, true, 64, JSON_THROW_ON_ERROR);
+        // Display timestamps can collide; sequence cursors must still advance.
+        $event['time_us'] = 1_700_000_000_000_001;
+        $event['cursor'] = 900 + $index;
+        $messages[$index] = json_encode($event, JSON_THROW_ON_ERROR);
+    }
+}
+
 for ($served = 0; $served < $connections; ++$served) {
     $connection = @stream_socket_accept($server, 10);
     if ($connection === false) {
@@ -109,6 +121,12 @@ for ($served = 0; $served < $connections; ++$served) {
         }
 
         $headers .= $chunk;
+    }
+
+    if ($expectedResumeCursor !== null && $served === 2 && !str_contains($headers, 'cursor=' . $expectedResumeCursor)) {
+        fwrite(STDERR, 'The client did not resume from the expected sequence cursor.' . "\n");
+        fclose($connection);
+        break;
     }
 
     $key = '';
