@@ -120,11 +120,26 @@ export function useTimeline(source: () => TimelineSource) {
 					return { posts, consumed: data.posts.length };
 				});
 			case 'tag':
-				return api.tagTimeline(current.tag ?? '', PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
+				return api.tagTimelinePage(current.tag ?? '', PAGE_SIZE, beforeTime, beforeId).then((page) => ({
+					posts: page.posts,
+					consumed: page.posts.length,
+					nextCursor: page.nextCursor,
+					hasMore: page.hasMore,
+				}));
 			case 'followed':
-				return api.followedTimeline(PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
+				return api.followedTimelinePage(PAGE_SIZE, beforeTime, beforeId).then((page) => ({
+					posts: page.posts,
+					consumed: page.posts.length,
+					nextCursor: page.nextCursor,
+					hasMore: page.hasMore,
+				}));
 			default:
-				return api.publicTimeline(PAGE_SIZE, beforeTime, beforeId).then((posts) => ({ posts, consumed: posts.length }));
+				return api.publicTimelinePage(PAGE_SIZE, beforeTime, beforeId).then((page) => ({
+					posts: page.posts,
+					consumed: page.posts.length,
+					nextCursor: page.nextCursor,
+					hasMore: page.hasMore,
+				}));
 		}
 	}
 

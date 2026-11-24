@@ -117,11 +117,14 @@ export interface AccountMoveStatus {
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	publicTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	homeTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	homeTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	directTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	tagTimeline(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	tagTimelinePage(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	followedTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	followedTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
 	post(id: string): Promise<TimelineItem>;
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
@@ -991,24 +994,6 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		return parsed as T;
 	}
 
-	async function timeline(
-		path: string,
-		limit: number,
-		before?: string | null,
-		beforeId?: string | null,
-	): Promise<TimelineItem[]> {
-		const query: Record<string, string> = { limit: String(limit) };
-		if (before !== undefined && before !== null && before !== '') {
-			query.before = before;
-		}
-		if (beforeId !== undefined && beforeId !== null && beforeId !== '') {
-			query.before_id = beforeId;
-		}
-
-		const data = await request<{ posts?: unknown }>('GET', path, query);
-		return normalizePosts(data?.posts);
-	}
-
 	async function pagedTimeline(
 		path: string,
 		limit: number,
@@ -1062,7 +1047,11 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		},
 
 		publicTimeline(limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
-			return timeline('/api/v1/timelines/public', limit, before, beforeId);
+			return pagedTimeline('/api/v1/timelines/public', limit, before, beforeId).then((page) => page.posts);
+		},
+
+		publicTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
+			return pagedTimeline('/api/v1/timelines/public', limit, before, beforeId);
 		},
 
 		async accountStatuses(id: string, limit = 20, before: string | null = null): Promise<AccountStatusesData> {
@@ -1096,11 +1085,19 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		},
 
 		tagTimeline(tag: string, limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
-			return timeline(`/api/v1/timelines/tag/${encodeURIComponent(tag)}`, limit, before, beforeId);
+			return pagedTimeline(`/api/v1/timelines/tag/${encodeURIComponent(tag)}`, limit, before, beforeId).then((page) => page.posts);
+		},
+
+		tagTimelinePage(tag: string, limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
+			return pagedTimeline(`/api/v1/timelines/tag/${encodeURIComponent(tag)}`, limit, before, beforeId);
 		},
 
 		followedTimeline(limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
-			return timeline('/api/v1/timelines/followed_tags', limit, before, beforeId);
+			return pagedTimeline('/api/v1/timelines/followed_tags', limit, before, beforeId).then((page) => page.posts);
+		},
+
+		followedTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
+			return pagedTimeline('/api/v1/timelines/followed_tags', limit, before, beforeId);
 		},
 
 		async listTimeline(id: string, limit = 20, maxId: string | null = null): Promise<TimelineItem[]> {

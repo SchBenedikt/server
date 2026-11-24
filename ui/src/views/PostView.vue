@@ -214,12 +214,12 @@ async function loadReplies(current: number): Promise<void> {
 
 	try {
 		for (let page = 0; page < 3; page += 1) {
-			const batch = await getApi().publicTimeline(PAGE_SIZE, cursor?.before, cursor?.beforeId);
+			const result = await getApi().publicTimelinePage(PAGE_SIZE, cursor?.before, cursor?.beforeId);
 			if (current !== generation) {
 				return;
 			}
 
-			for (const entry of batch) {
+			for (const entry of result.posts) {
 				const parentId = entry.in_reply_to_id ?? null;
 				if (parentId === id.value && !seen.has(entry.id)) {
 					seen.add(entry.id);
@@ -227,9 +227,8 @@ async function loadReplies(current: number): Promise<void> {
 				}
 			}
 
-			const last = batch.at(-1);
-			cursor = last === undefined ? cursor : { before: last.published_at, beforeId: last.id };
-			if (batch.length < PAGE_SIZE) {
+			cursor = result.nextCursor;
+			if (!result.hasMore || cursor === null) {
 				break;
 			}
 		}

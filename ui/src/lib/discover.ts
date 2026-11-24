@@ -51,18 +51,14 @@ export async function loadDiscover(force = false): Promise<void> {
 
 		try {
 			for (let page = 0; page < MAX_PAGES; page += 1) {
-				const batch = await getApi().publicTimeline(PAGE_SIZE, before?.time, before?.id);
-				collected = merge(collected, batch);
+				const result = await getApi().publicTimelinePage(PAGE_SIZE, before?.time, before?.id);
+				collected = merge(collected, result.posts);
 
-				if (batch.length < PAGE_SIZE) {
+				if (!result.hasMore || result.nextCursor === null) {
 					break;
 				}
 
-				const last = batch.at(-1);
-				if (last === undefined) {
-					break;
-				}
-				before = { time: last.published_at, id: last.id };
+				before = { time: result.nextCursor.before, id: result.nextCursor.beforeId };
 			}
 
 			discover.posts = collected;
