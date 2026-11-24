@@ -14,11 +14,14 @@ use AlohaSocial\Core\Platform\Http\HttpResponse;
 use AlohaSocial\Core\Platform\Network\HostResolver;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use AlohaSocial\Core\Domain\Atproto\AtprotoOAuthSession;
+use AlohaSocial\Core\Domain\Atproto\AtprotoOAuthException;
 use AlohaSocial\Server\Federation\BlueskyException;
 use PHPUnit\Framework\TestCase;
 
 final class FakeOAuthDiscoveryClient implements BoundedHttpClient
 {
+    /** @var list<array{method: string, url: string, headers: array<string, string>, body: string}> */
+    public array $requests = [];
     public string $state = '';
 
     /** @var array<string, string> */
@@ -26,11 +29,18 @@ final class FakeOAuthDiscoveryClient implements BoundedHttpClient
 
     public string $tokenDpopProof = '';
 
+    public bool $pdsUnavailable = false;
+
     public function request(string $method, string $url, array $headers = [], string $body = '', int $timeoutSeconds = 10): HttpResponse
     {
+        $this->requests[] = compact('method', 'url', 'headers', 'body');
         if (str_contains($url, 'com.atproto.identity.resolveHandle')) return new HttpResponse(200, [], '{"did":"did:plc:alice123"}');
         if (str_starts_with($url, 'https://plc.directory/')) return new HttpResponse(200, [], '{"service":[{"id":"#atproto_pds","type":"AtprotoPersonalDataServer","serviceEndpoint":"https://pds.example.test"}]}');
-        if ($url === 'https://pds.example.test/.well-known/oauth-protected-resource') return new HttpResponse(200, [], '{"authorization_servers":["https://auth.example.test"]}');
+        if ($url === 'https://pds.example.test/.well-known/oauth-protected-resource') {
+            return $this->pdsUnavailable
+                ? new HttpResponse(503, [], '{}')
+                : new HttpResponse(200, [], '{"authorization_servers":["https://auth.example.test"]}');
+        }
         if ($url === 'https://auth.example.test/.well-known/oauth-authorization-server') return new HttpResponse(200, [], json_encode([
             'issuer' => 'https://auth.example.test', 'authorization_endpoint' => 'https://auth.example.test/authorize',
             'token_endpoint' => 'https://auth.example.test/token', 'pushed_authorization_request_endpoint' => 'https://auth.example.test/par',
@@ -47,10 +57,21 @@ final class FakeOAuthDiscoveryClient implements BoundedHttpClient
         if ($url === 'https://auth.example.test/token') {
             parse_str($body, $this->tokenForm);
             $this->tokenDpopProof = $headers['DPoP'] ?? '';
+            if (($this->tokenForm['grant_type'] ?? '') === 'refresh_token') {
+                return new HttpResponse(200, ['dpop-nonce' => 'refresh-nonce'], json_encode([
+                    'access_token' => 'oauth-refreshed-access', 'refresh_token' => 'oauth-refreshed-refresh',
+                    'token_type' => 'DPoP', 'scope' => 'atproto', 'sub' => 'did:plc:alice123', 'expires_in' => 3600,
+                ], JSON_THROW_ON_ERROR));
+            }
             return new HttpResponse(200, ['dpop-nonce' => 'token-nonce'], json_encode([
                 'access_token' => 'oauth-access-token', 'refresh_token' => 'oauth-refresh-token',
                 'token_type' => 'DPoP', 'scope' => 'atproto', 'sub' => 'did:plc:alice123', 'expires_in' => 3600,
             ], JSON_THROW_ON_ERROR));
+        }
+        if (str_contains($url, 'com.atproto.repo.putRecord')) {
+            $record = json_decode($body, true, 32, JSON_THROW_ON_ERROR);
+            $uri = 'at://' . $record['repo'] . '/' . $record['collection'] . '/' . $record['rkey'];
+            return new HttpResponse(200, [], json_encode(['uri' => $uri, 'cid' => 'bafybeigdyrzt5sfp7udm7hu76uh72fbac7e4j4z3xq'], JSON_THROW_ON_ERROR));
         }
         throw new \RuntimeException('Unexpected OAuth test request: ' . $method . ' ' . $url);
     }
@@ -161,5 +182,94 @@ final class AtprotoOAuthControllerTest extends TestCase
         } catch (BlueskyException $error) {
             self::assertSame('bluesky_oauth_state_invalid', $error->errorCode);
         }
+    }
+
+    public function testExpiredOAuthAccessTokenIsSafelyRefreshedAndRotated(): void
+    {
+        $http = new FakeOAuthDiscoveryClient();
+        $server = new TestServer([], $http, new FakeOAuthHostResolver());
+        $server->createAccount('alice');
+        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        self::assertNotFalse($key);
+        self::assertTrue(openssl_pkey_export($key, $pem));
+        $session = new AtprotoOAuthSession(
+            'did:plc:alice123', 'https://auth.example.test/token',
+            'http://localhost:3000/oauth/atproto/client-metadata.json', 'old-access',
+            'old-refresh', 'atproto', new \DateTimeImmutable('-1 hour'),
+        );
+        $server->runtime->blueskyAccounts->storeOAuth('alice', 'alice.bsky.social', 'https://pds.example.test', 'https://auth.example.test', $session, $pem);
+
+        $account = $server->runtime->blueskyAccounts->resolve('alice');
+        $stored = $server->runtime->database->fetchOne('SELECT * FROM atproto_account WHERE account_id = :id', ['id' => 'alice']);
+
+        self::assertNotNull($account);
+        self::assertSame('oauth-refreshed-access', $account->accessToken);
+        self::assertSame('refresh_token', $http->tokenForm['grant_type']);
+        self::assertNotEmpty($http->tokenDpopProof);
+        self::assertSame('oauth', $server->runtime->blueskyAccounts->status('alice')['auth_method']);
+        self::assertStringNotContainsString('oauth-refreshed-refresh', (string) $stored['refresh_token']);
+    }
+
+    public function testUnavailablePdsAuthorizationMetadataStopsLinking(): void
+    {
+        $http = new FakeOAuthDiscoveryClient();
+        $http->pdsUnavailable = true;
+        $server = new TestServer([], $http, new FakeOAuthHostResolver());
+        $server->createAccount('alice');
+
+        try {
+            $server->runtime->atprotoOAuth->begin('alice', str_repeat('a', 64), 'alice.bsky.social');
+            self::fail('OAuth must not start when the PDS authorization metadata is unavailable.');
+        } catch (AtprotoOAuthException) {
+            self::assertNull($server->runtime->database->fetchOne('SELECT * FROM atproto_oauth_flow'));
+        }
+    }
+
+    public function testUnlinkRemovesOAuthTokensAndDpopMetadata(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        self::assertNotFalse($key);
+        self::assertTrue(openssl_pkey_export($key, $pem));
+        $session = new AtprotoOAuthSession(
+            'did:plc:alice123', 'https://auth.example.test/token',
+            'http://localhost:3000/oauth/atproto/client-metadata.json', 'access-to-remove',
+            'refresh-to-remove', 'atproto', new \DateTimeImmutable('+1 hour'),
+        );
+        $server->runtime->blueskyAccounts->storeOAuth('alice', 'alice.bsky.social', 'https://pds.example.test', 'https://auth.example.test', $session, $pem);
+
+        self::assertTrue($server->runtime->blueskyAccounts->disconnect('alice'));
+        self::assertFalse($server->runtime->blueskyAccounts->status('alice')['connected']);
+        self::assertNull($server->runtime->database->fetchOne('SELECT * FROM atproto_account WHERE account_id = :id', ['id' => 'alice']));
+        self::assertNull($server->runtime->database->fetchOne('SELECT * FROM atproto_oauth_account WHERE account_id = :id', ['id' => 'alice']));
+    }
+
+    public function testLinkedOAuthAccountPublishesThroughItsPdsWithDpop(): void
+    {
+        $http = new FakeOAuthDiscoveryClient();
+        $server = new TestServer([], $http, new FakeOAuthHostResolver());
+        $server->createAccount('alice');
+        $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
+        self::assertNotFalse($key);
+        self::assertTrue(openssl_pkey_export($key, $pem));
+        $session = new AtprotoOAuthSession(
+            'did:plc:alice123', 'https://auth.example.test/token',
+            'http://localhost:3000/oauth/atproto/client-metadata.json', 'oauth-publish-access',
+            'oauth-publish-refresh', 'atproto', new \DateTimeImmutable('+1 hour'),
+        );
+        $server->runtime->blueskyAccounts->storeOAuth('alice', 'alice.bsky.social', 'https://pds.example.test', 'https://auth.example.test', $session, $pem);
+        $post = $server->runtime->app->posts->create(new \AlohaSocial\Core\Service\CreatePost('alice', 'published with OAuth'));
+        $auth = $server->signIn('alice');
+
+        $response = $server->json('POST', '/api/v1/host/bluesky/publish', ['post_id' => $post->id], $auth['cookies'], $auth['csrf']);
+        $publishRequest = array_values(array_filter($http->requests, static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.putRecord')))[0] ?? null;
+
+        self::assertSame(201, $response->status, $response->body);
+        self::assertNotNull($publishRequest);
+        self::assertNotEmpty($publishRequest['headers']['DPoP'] ?? null);
+        self::assertStringContainsString('oauth-publish-access', (string) ($publishRequest['headers']['Authorization'] ?? ''));
+        self::assertStringContainsString('published with OAuth', (string) $publishRequest['body']);
+        self::assertStringContainsString('"uri":"at://did:plc:alice123/app.bsky.feed.post/', $response->body);
     }
 }
