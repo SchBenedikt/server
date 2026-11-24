@@ -20,7 +20,6 @@ use AlohaSocial\Core\Service\Atproto\AtprotoNotConfiguredException;
 use AlohaSocial\Core\Service\Atproto\AtprotoPostRejectedException;
 use AlohaSocial\Core\Service\Atproto\AtprotoPublishDisabledException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
-use AlohaSocial\Server\Auth\MastodonOAuthRepository;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Community\CommunityException;
@@ -836,22 +835,17 @@ final class CommunityApiController
                 }
 
                 $report = $this->runtime->app->accountData->erase($userId);
-                // Core freezes writes before returning either an in-progress
-                // or completed report. Retire host credentials in both cases
-                // so a concurrent deletion cannot keep using host-only APIs.
-                // Preserve the disabled identity as the host-side tombstone.
-                $this->runtime->sessions->revokeAccount($userId);
-                $this->runtime->database->execute(
-                    'DELETE FROM atproto_session WHERE account_id = :account_id',
-                    ['account_id' => $userId],
-                );
-                (new MastodonOAuthRepository($this->runtime->database))
-                    ->revokeAccount($userId, Time::format($this->runtime->clock->now()));
-                $this->runtime->blueskyAccounts->disconnect($userId);
-                $this->runtime->accounts->disable($userId);
+                $hostDataDeleted = $report->inProgress()
+                    ? []
+                    : $this->runtime->accountErasureCleanup->erase($userId);
+                // Core freezes access first. Keep the host session available
+                // only for retrying a frozen deletion; the access guard blocks
+                // every other request until the durable Core erase completes.
+                // Final host cleanup and credential retirement are atomic.
 
                 return Response::json([
                     'deletion' => $report->toArray(),
+                    'host_data_deleted' => $hostDataDeleted,
                     'account_disabled' => true,
                     'remote_deletion' => 'ActivityPub and Bluesky data at remote servers may persist.',
                 ], $report->inProgress() ? 202 : 200, ['Cache-Control' => 'private, no-store']);

@@ -150,7 +150,7 @@ final class FrontController
 
         $request = $this->atprotoSession->authenticate($request);
 
-        $deletionResponse = $this->rejectAccountDeletionWrite($request, $session);
+        $deletionResponse = $this->rejectAccountDeletionAccess($request, $session);
         if ($deletionResponse !== null) {
             return $deletionResponse;
         }
@@ -978,12 +978,9 @@ final class FrontController
         return $this->enforceIdentityRateLimit($match->route->name, $identity, $limit, $window);
     }
 
-    private function rejectAccountDeletionWrite(Request $request, ?AuthenticatedSession $session): ?Response
+    private function rejectAccountDeletionAccess(Request $request, ?AuthenticatedSession $session): ?Response
     {
-        $isMutation = in_array($request->method, self::MUTATING_METHODS, true)
-            || ($request->method === 'GET' && $request->path === '/oauth/atproto/callback');
-        if (!$isMutation
-            || $request->path === '/logout'
+        if ($request->path === '/logout'
             || ($request->method === 'DELETE' && $request->path === '/api/v1/account/data')
         ) {
             return null;
@@ -1005,8 +1002,8 @@ final class FrontController
             'error' => [
                 'code' => $deleted ? 'account_deleted' : 'account_deletion_in_progress',
                 'message' => $deleted
-                    ? 'This account has been deleted; no further writes are accepted.'
-                    : 'This account is being deleted; writes are blocked.',
+                    ? 'This account has been deleted; further access is blocked.'
+                    : 'This account is being deleted; access is temporarily blocked.',
             ],
         ], $status);
     }

@@ -165,6 +165,27 @@ final class PreferencesTest extends TestCase
         $this->server->runtime->app->posts->create(
             new CreatePost('bob', 'Nicht meiner', Visibility::Public),
         );
+        $stamp = '2026-11-24T12:00:00Z';
+        $this->server->runtime->database->execute(
+            'INSERT INTO featured_tag (account_id, tag, position, created_at)'
+            . ' VALUES (:account, :tag, 0, :created)',
+            ['account' => 'alice', 'tag' => 'favorite', 'created' => $stamp],
+        );
+        $this->server->runtime->database->execute(
+            'INSERT INTO follow_request (id, target_account_id, actor_id, actor_handle, created_at)'
+            . ' VALUES (:id, :target, :actor, :handle, :created)',
+            ['id' => 'request-alice', 'target' => 'alice', 'actor' => 'https://remote.example/@person', 'handle' => 'person@remote.example', 'created' => $stamp],
+        );
+        $this->server->runtime->database->execute(
+            'INSERT INTO story (id, account_id, content, created_at, expires_at)'
+            . ' VALUES (:id, :account, :content, :created, :expires)',
+            ['id' => 'story-alice', 'account' => 'alice', 'content' => 'Alice story', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
+        );
+        $this->server->runtime->database->execute(
+            'INSERT INTO story (id, account_id, content, created_at, expires_at)'
+            . ' VALUES (:id, :account, :content, :created, :expires)',
+            ['id' => 'story-bob', 'account' => 'bob', 'content' => 'Bob story', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
+        );
 
         $anonymous = $this->server->send('GET', '/api/v1/host/export');
         self::assertSame(401, $anonymous->status);
@@ -179,12 +200,16 @@ final class PreferencesTest extends TestCase
         self::assertSame('aloha-account-export', $export['format']);
         self::assertSame(1, $export['version']);
         self::assertSame('alice', $export['profile']['handle']);
+        self::assertSame('alice@example.test', $export['profile']['email']);
         self::assertArrayNotHasKey('password_hash', $export['profile']);
         self::assertSame('http://localhost:3000', $export['instance']['url']);
         self::assertArrayHasKey('preferences', $export);
         self::assertArrayHasKey('posts', $export);
         self::assertArrayHasKey('following', $export);
         self::assertArrayHasKey('drafts', $export);
+        self::assertSame(['favorite'], array_column($export['featured_tags'], 'tag'));
+        self::assertSame(['person@remote.example'], array_column($export['follow_requests'], 'actor_handle'));
+        self::assertSame(['story-alice'], array_column($export['stories'], 'id'));
         self::assertSame('alohasocial-account-archive', $export['core_archive']['format']);
         self::assertSame(
             ['did:plc:followed-by-alice'],
