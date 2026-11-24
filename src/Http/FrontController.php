@@ -695,6 +695,7 @@ final class FrontController
             if ($accountDid === '') {
                 $accountDid = null;
             }
+            $accountDid ??= $this->runtime->preferences->forAccount($userId)['mirror_atproto_account_did'];
             if (AtprotoRemoteInteractions::supports($postId)) {
                 if ($this->runtime->atprotoRemoteInteractions === null) {
                     return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
@@ -782,6 +783,7 @@ final class FrontController
             if ($accountDid === '') {
                 $accountDid = null;
             }
+            $accountDid ??= $this->runtime->preferences->forAccount($userId)['mirror_atproto_account_did'];
             if (AtprotoRemoteInteractions::supports($postId)) {
                 if ($this->runtime->atprotoRemoteInteractions === null) {
                     return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
