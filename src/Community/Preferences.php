@@ -62,6 +62,7 @@ final class Preferences
      *     notify_mentions: bool,
      *     mirror_likes_to_atproto: bool,
      *     mirror_boosts_to_atproto: bool,
+     *     mirror_atproto_account_did: string|null,
      *     updated_at: string|null
      * }
      */
@@ -96,6 +97,8 @@ final class Preferences
             'notify_mentions' => (bool) ($row['notify_mentions'] ?? true),
             'mirror_likes_to_atproto' => (bool) ($row['mirror_likes_to_atproto'] ?? false),
             'mirror_boosts_to_atproto' => (bool) ($row['mirror_boosts_to_atproto'] ?? false),
+            'mirror_atproto_account_did' => is_string($row['mirror_atproto_account_did'] ?? null)
+                && $row['mirror_atproto_account_did'] !== '' ? (string) $row['mirror_atproto_account_did'] : null,
             'updated_at' => is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null,
         ];
     }
@@ -147,12 +150,23 @@ final class Preferences
             }
         }
 
+        if (array_key_exists('mirror_atproto_account_did', $payload)) {
+            $did = $payload['mirror_atproto_account_did'];
+            if ($did !== null && (!is_string($did) || preg_match('/^did:[a-z0-9]+:[A-Za-z0-9._:%-]+$/', $did) !== 1)) {
+                throw CommunityException::invalid(
+                    'This setting is invalid.',
+                    ['mirror_atproto_account_did' => 'Choose a connected AT Protocol identity.'],
+                );
+            }
+            $next['mirror_atproto_account_did'] = $did;
+        }
+
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, mirror_atproto_account_did, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :mirror_atproto_account_did, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -166,6 +180,7 @@ final class Preferences
             . ' notify_mentions = excluded.notify_mentions,'
             . ' mirror_likes_to_atproto = excluded.mirror_likes_to_atproto,'
             . ' mirror_boosts_to_atproto = excluded.mirror_boosts_to_atproto,'
+            . ' mirror_atproto_account_did = excluded.mirror_atproto_account_did,'
             . ' updated_at = excluded.updated_at',
             [
                 'account_id' => $accountId,
@@ -181,6 +196,7 @@ final class Preferences
                 'notify_mentions' => $next['notify_mentions'] ? 1 : 0,
                 'mirror_likes_to_atproto' => $next['mirror_likes_to_atproto'] ? 1 : 0,
                 'mirror_boosts_to_atproto' => $next['mirror_boosts_to_atproto'] ? 1 : 0,
+                'mirror_atproto_account_did' => $next['mirror_atproto_account_did'],
                 'updated_at' => $now,
             ],
         );
@@ -207,6 +223,7 @@ final class Preferences
             'notify_mentions' => true,
             'mirror_likes_to_atproto' => false,
             'mirror_boosts_to_atproto' => false,
+            'mirror_atproto_account_did' => null,
             'updated_at' => null,
         ];
     }

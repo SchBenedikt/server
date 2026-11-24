@@ -240,6 +240,7 @@ final class PostInteractions
         }
 
         try {
+            $accountDid = $this->interactionAccountDid($viewerId, $accountDid);
             if ($liked) {
                 $this->atproto->like($viewerId, $postId, $accountDid);
             } else {
@@ -263,6 +264,7 @@ final class PostInteractions
         }
 
         try {
+            $accountDid = $this->interactionAccountDid($viewerId, $accountDid);
             if ($boosted) {
                 $this->atproto->repost($viewerId, $postId, $accountDid);
             } else {
@@ -272,6 +274,17 @@ final class PostInteractions
             // The local boost is authoritative; a PDS failure is retried on
             // the next idempotent local action.
         }
+    }
+
+    private function interactionAccountDid(string $viewerId, ?string $accountDid): ?string
+    {
+        if ($accountDid !== null) {
+            return $accountDid;
+        }
+
+        $selected = $this->preferences?->forAccount($viewerId)['mirror_atproto_account_did'] ?? null;
+
+        return is_string($selected) && $selected !== '' ? $selected : null;
     }
 
     /**
