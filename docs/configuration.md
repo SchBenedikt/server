@@ -202,7 +202,7 @@ reset messages are delivered. A message that cannot be handed off returns
 
 | Variable | Config file key | Default | Meaning |
 | --- | --- | --- | --- |
-| `ALOHASOCIAL_DEBUG` | `debug` | `false` | Adds exception details and allows non-loopback HTTP origins for development. Never enable in production. |
+| `ALOHASOCIAL_DEBUG` | `debug` | `false` | Adds development diagnostics and allows non-loopback HTTP origins for development. Never enable in production. Boot errors stay generic in web responses; inspect the PHP error log or run `php bin/doctor.php` for details. |
 | `ALOHASOCIAL_ENV_FILE` | `env_file` | `.env` | File the web setup reads and rewrites. Usually left at the default; useful for tests or a container-managed environment file. |
 
 Logs go to PHP's configured `error_log` (PHP-FPM, the built-in server's
