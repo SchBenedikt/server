@@ -140,11 +140,13 @@ a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
   `false`).
 - **Bluesky**: the unauthenticated public AppView supplies the profile and the
   author feed. Remote profiles remain read-only. A signed-in member can link a
-  Bluesky account from Settings with an app password and opt into publishing
+  Bluesky account from Settings through OAuth and opt into publishing
   eligible public top-level posts from the composer. The action is offered
   only while the linked account and instance publishing setting are available.
   A local post is saved first; Bluesky failures are reported separately and
-  can be retried from the post menu. This uses the account's discovered PDS and
+  can be retried from the post menu. Expired OAuth credentials refresh through
+  the account's authorization server; if refresh is refused, reconnect the
+  account in Settings. This uses the account's discovered PDS and
   does not require the instance to run its optional native PDS. Local likes
   and reposts are mirrored when an account is linked.
 
