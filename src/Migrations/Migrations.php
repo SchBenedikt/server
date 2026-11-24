@@ -45,6 +45,7 @@ final class Migrations
             new Version202611230001AtprotoFollowSchema(),
             new Version202611230002InboundBlocks(),
             new Version202611230003RemotePostReplyEdge(),
+            new Version202611240001AtprotoInteractionPreferences(),
         ];
     }
 }

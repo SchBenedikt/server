@@ -21,6 +21,7 @@ use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Service\Atproto\AtprotoInteractionService;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Service\PostService;
+use AlohaSocial\Server\Community\Preferences;
 
 /**
  * Read and write the viewer-specific interaction layer for one or more posts.
@@ -39,6 +40,7 @@ final class PostInteractions
         private readonly NotificationService $notifications,
         private readonly string $instanceUrl,
         private readonly ?AtprotoInteractionService $atproto = null,
+        private readonly ?Preferences $preferences = null,
     ) {
     }
 
@@ -231,7 +233,9 @@ final class PostInteractions
      */
     private function mirrorLike(string $viewerId, string $postId, bool $liked): void
     {
-        if ($this->atproto === null || !$this->atproto->isEnabled()) {
+        if ($this->atproto === null || !$this->atproto->isEnabled()
+            || $this->preferences?->forAccount($viewerId)['mirror_likes_to_atproto'] !== true
+        ) {
             return;
         }
 
@@ -244,6 +248,29 @@ final class PostInteractions
         } catch (\Throwable) {
             // A missing publication or an unreachable PDS only means the
             // Bluesky copy of this favourite is skipped.
+        }
+    }
+
+    /**
+     * Mirror a local boost only after the account has opted in.
+     */
+    public function mirrorBoost(string $viewerId, string $postId, bool $boosted): void
+    {
+        if ($this->atproto === null || !$this->atproto->isEnabled()
+            || $this->preferences?->forAccount($viewerId)['mirror_boosts_to_atproto'] !== true
+        ) {
+            return;
+        }
+
+        try {
+            if ($boosted) {
+                $this->atproto->repost($viewerId, $postId);
+            } else {
+                $this->atproto->undoRepost($viewerId, $postId);
+            }
+        } catch (\Throwable) {
+            // The local boost is authoritative; a PDS failure is retried on
+            // the next idempotent local action.
         }
     }
 
