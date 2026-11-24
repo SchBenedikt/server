@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Atproto\AtprotoFollowSchema;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
@@ -40,9 +41,9 @@ use function usort;
  * posts. This host service only reads them: it scores recent public posts by
  * engagement, freshness, followed authors and followed hashtags, then removes
  * muted and blocked authors and damps repeated authors so one account cannot
- * fill the page. Remote candidates are posts that local accounts actually
- * follow, so the feed reaches the fediverse without turning into a public
- * firehose.
+ * fill the page. Remote candidates come from accepted ActivityPub and active
+ * AT Protocol follows, so the feed reaches connected networks without turning
+ * into a public firehose.
  *
  * The rank is deterministic for a given database state, which keeps cursor
  * paging stable within one session. No remote call is made, so the feed still
@@ -110,14 +111,12 @@ final class ForYouFeed
             $score = log(1 + $engagement) * 3.2;
             $score += max(0, 6.0 * (1 - $ageHours / 168));
             $reason = $remote
-                ? 'From a fediverse account you follow'
+                ? 'From an account you follow on a connected network'
                 : 'From the instance and your circles';
 
             if (isset($followedAuthors[$authorId])) {
                 $score += 5.0;
-                $reason = $remote
-                    ? 'Because you follow this account on the fediverse'
-                    : 'Because you follow this account';
+                $reason = 'Because you follow this account';
             }
             $tags = $remote
                 ? $this->tagsFromText((string) ($candidate['content'] ?? ''))
@@ -231,7 +230,7 @@ final class ForYouFeed
                 'author_id' => (string) $candidate['author_id'],
                 'score' => log(1 + $engagement) * 4.0 + max(0, 4.0 * (1 - $ageHours / 168)),
                 'reason' => $remotePost
-                    ? 'Recent from the fediverse'
+                    ? 'Recent from federated networks'
                     : ($engagement > 0 ? 'Popular on this instance' : 'Recent on this instance'),
             ];
         }
@@ -467,9 +466,10 @@ final class ForYouFeed
             . ' r.content, r.published_at, 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
             . ' FROM social_remote_post r'
             . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.in_reply_to_id IS NULL AND r.published_at >= :since"
-            . ' AND r.actor_id IN ('
+            . ' AND (r.actor_id IN ('
             . " SELECT f.actor_id FROM social_following f WHERE f.local_user_id = :remote_viewer AND f.state = 'accepted'"
-            . ')'
+            . ') OR EXISTS (SELECT 1 FROM ' . AtprotoFollowSchema::TABLE . ' af'
+            . " WHERE af.local_user_id = :atproto_viewer AND af.subject_did = r.actor_id AND af.state = 'active'))"
             . ' AND NOT EXISTS ('
             . ' SELECT 1 FROM social_mute m WHERE m.user_id = :remote_mute_viewer'
             . ' AND (m.actor_id = r.actor_id OR m.actor_id = r.object_author_id)'
@@ -483,6 +483,7 @@ final class ForYouFeed
             [
                 'since' => $since,
                 'remote_viewer' => $accountId,
+                'atproto_viewer' => $accountId,
                 'remote_mute_viewer' => $accountId,
                 'remote_block_viewer' => $accountId,
                 'mute_now' => Time::format($now),
@@ -504,13 +505,16 @@ final class ForYouFeed
     private function followedAuthors(string $accountId): array
     {
         $rows = $this->db->fetchAll(
-            "SELECT actor_id FROM social_following WHERE local_user_id = :account_id AND state = 'accepted'",
-            ['account_id' => $accountId],
+            'SELECT actor_id AS id FROM social_following'
+            . " WHERE local_user_id = :account_id AND state = 'accepted'"
+            . ' UNION SELECT subject_did AS id FROM ' . AtprotoFollowSchema::TABLE
+            . " WHERE local_user_id = :atproto_account_id AND state = 'active'",
+            ['account_id' => $accountId, 'atproto_account_id' => $accountId],
         );
 
         $result = [];
         foreach ($rows as $row) {
-            $actor = (string) ($row['actor_id'] ?? '');
+            $actor = (string) ($row['id'] ?? '');
             if ($actor !== '') {
                 $result[$actor] = true;
             }

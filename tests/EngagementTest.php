@@ -414,7 +414,7 @@ final class EngagementTest extends TestCase
 
         $this->server->runtime->interactions->like('alice', $localParent);
         $trendingWithEngagement = $this->decoded($this->server->send('GET', '/api/v1/host/trending'));
-        self::assertSame('Recent from the fediverse', $trendingWithEngagement['reasons'][$remoteParent]);
+        self::assertSame('Recent from federated networks', $trendingWithEngagement['reasons'][$remoteParent]);
         self::assertSame('Popular on this instance', $trendingWithEngagement['reasons'][$localParent]);
     }
 
