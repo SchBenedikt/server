@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Federation;
 
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccount;
-use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
+use AlohaSocial\Core\Domain\Atproto\AtprotoAccountCollectionResolver;
 use AlohaSocial\Core\Domain\Atproto\AtprotoOAuthSession;
 use AlohaSocial\Core\Domain\Atproto\AtprotoSessionRefreshException;
 use AlohaSocial\Core\Platform\Clock\Clock;
@@ -65,7 +65,7 @@ use const STR_PAD_RIGHT;
  * time, it works against any PDS, and it needs no browser callback, which
  * keeps a self-hosted instance reachable from behind any domain.
  */
-final class BlueskyAccounts implements AtprotoAccountResolver
+final class BlueskyAccounts implements AtprotoAccountCollectionResolver
 {
     public const PUBLIC_API = 'https://public.api.bsky.app';
 
@@ -124,6 +124,14 @@ final class BlueskyAccounts implements AtprotoAccountResolver
         } catch (\InvalidArgumentException) {
             return null;
         }
+    }
+
+    /** @return list<AtprotoAccount> */
+    public function resolveAll(string $localUserId): array
+    {
+        $account = $this->resolve($localUserId);
+
+        return $account === null ? [] : [$account];
     }
 
     /**

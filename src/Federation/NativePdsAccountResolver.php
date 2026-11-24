@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Federation;
 
 use AlohaSocial\Core\Domain\Atproto\AtprotoAccount;
-use AlohaSocial\Core\Domain\Atproto\AtprotoAccountResolver;
+use AlohaSocial\Core\Domain\Atproto\AtprotoAccountCollectionResolver;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdsRepository;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Server\Config\HostConfig;
@@ -24,7 +24,7 @@ use AlohaSocial\Server\Config\HostConfig;
  * non-secret marker rather than a credential. A member without a native
  * identity simply falls through to the Bluesky resolver.
  */
-final class NativePdsAccountResolver implements AtprotoAccountResolver
+final class NativePdsAccountResolver implements AtprotoAccountCollectionResolver
 {
     public function __construct(
         private readonly HostConfig $config,
@@ -61,5 +61,13 @@ final class NativePdsAccountResolver implements AtprotoAccountResolver
         } catch (\InvalidArgumentException) {
             return null;
         }
+    }
+
+    /** @return list<AtprotoAccount> */
+    public function resolveAll(string $localUserId): array
+    {
+        $account = $this->resolve($localUserId);
+
+        return $account === null ? [] : [$account];
     }
 }

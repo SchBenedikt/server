@@ -249,7 +249,7 @@ final class NativePdsTest extends TestCase
             $server->runtime->database,
         );
 
-        self::assertNotNull($resolver->resolve('alice'));
+        self::assertCount(1, $resolver->resolveAll('alice'));
         $server->runtime->accounts->disable('alice');
         self::assertNull($resolver->resolve('alice'));
     }
