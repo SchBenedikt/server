@@ -17,6 +17,54 @@ use PHPUnit\Framework\TestCase;
 
 final class AccountLifecycleTest extends TestCase
 {
+    public function testFrozenDeletionBlocksHostWritesAndLoginButCanBeRetried(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $login = $server->signIn('alice');
+        $server->runtime->database->execute(
+            'INSERT INTO social_account_deletion'
+            . ' (user_id, state, requested_at, updated_at, completed_at, deleted_counts,'
+            . ' blobs_deleted, blob_failures, attempts, lease_until)'
+            . ' VALUES (:user, :state, :requested, :updated, NULL, :counts, 0, :failures, 0, NULL)',
+            [
+                'user' => 'alice',
+                'state' => 'frozen',
+                'requested' => '2026-11-24T00:00:00Z',
+                'updated' => '2026-11-24T00:00:00Z',
+                'counts' => '{}',
+                'failures' => '[]',
+            ],
+        );
+
+        $profile = $server->json(
+            'PATCH',
+            '/api/v1/host/profile',
+            ['display_name' => 'Must remain unchanged'],
+            $login['cookies'],
+            $login['csrf'],
+        );
+        self::assertSame(403, $profile->status, $profile->body);
+        self::assertSame(
+            'account_deletion_in_progress',
+            json_decode($profile->body, true, 512, JSON_THROW_ON_ERROR)['error']['code'],
+        );
+        self::assertNull($server->runtime->accounts->find('alice')?->displayName);
+
+        $newLogin = $server->login('alice', TestServer::PASSWORD);
+        self::assertNotSame(303, $newLogin['response']->status);
+
+        $retry = $server->json(
+            'DELETE',
+            '/api/v1/account/data',
+            [],
+            $login['cookies'],
+            $login['csrf'],
+        );
+        self::assertSame(200, $retry->status, $retry->body);
+        self::assertSame('erased', $server->runtime->app->accountData?->deletionStatus('alice')->state);
+    }
+
     public function testAccountDeletionErasesCoreDataAndRetiresHostCredentials(): void
     {
         $server = new TestServer();

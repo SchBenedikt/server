@@ -106,7 +106,7 @@ final class AtprotoSessionController
         }
 
         $account = $this->runtime->accounts->find($accountId);
-        if ($account === null || $account->isDisabled()) {
+        if ($account === null || $this->accountIsUnavailable($account)) {
             return $request;
         }
 
@@ -140,7 +140,7 @@ final class AtprotoSessionController
         $account = $this->runtime->accounts->findByHandle($identifier)
             ?? $this->runtime->accounts->findByEmail($identifier);
         if ($account === null
-            || $account->isDisabled()
+            || $this->accountIsUnavailable($account)
             || !$this->hasher->verify($password, $account->passwordHash)
         ) {
             $this->runtime->throttle->recordFailure($identifier, $request->remoteAddress);
@@ -177,7 +177,7 @@ final class AtprotoSessionController
         }
 
         $account = $this->runtime->accounts->find($accountId);
-        if ($account === null || $account->isDisabled()) {
+        if ($account === null || $this->accountIsUnavailable($account)) {
             return $this->error(401, 'AuthenticationRequired', 'The account is not active.');
         }
 
@@ -219,7 +219,7 @@ final class AtprotoSessionController
         }
 
         $account = $this->runtime->accounts->find($accountId);
-        if ($account === null || $account->isDisabled()) {
+        if ($account === null || $this->accountIsUnavailable($account)) {
             return $this->error(401, 'AuthenticationRequired', 'The account is not active.');
         }
 
@@ -245,6 +245,12 @@ final class AtprotoSessionController
         }
 
         return Response::json([]);
+    }
+
+    private function accountIsUnavailable(Account $account): bool
+    {
+        return $account->isDisabled()
+            || $this->runtime->app->accountData?->deletionStatus($account->id)->blockedStatus() !== null;
     }
 
     /**
