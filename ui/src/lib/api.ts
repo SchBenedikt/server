@@ -83,6 +83,12 @@ export interface AccountStatusesData {
 	next_before: string | null;
 }
 
+export interface TimelinePageData {
+	posts: TimelineItem[];
+	nextCursor: { before: string; beforeId: string } | null;
+	hasMore: boolean;
+}
+
 export interface AtprotoIdentityData {
 	enabled: boolean;
 	publish: boolean;
@@ -112,6 +118,7 @@ export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	homeTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
+	homeTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	tagTimeline(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	followedTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
@@ -1000,6 +1007,39 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		return normalizePosts(data?.posts);
 	}
 
+	async function homeTimelinePage(
+		limit: number,
+		before?: string | null,
+		beforeId?: string | null,
+	): Promise<TimelinePageData> {
+		const query: Record<string, string> = { limit: String(limit) };
+		if (before !== undefined && before !== null && before !== '') {
+			query.before = before;
+		}
+		if (beforeId !== undefined && beforeId !== null && beforeId !== '') {
+			query.before_id = beforeId;
+		}
+
+		const data = await request<{
+			posts?: unknown;
+			has_more?: unknown;
+			next_before?: unknown;
+			next_before_id?: unknown;
+		}>('GET', '/api/v1/timelines/home', query);
+		const nextCursor = typeof data?.next_before === 'string'
+			&& data.next_before !== ''
+			&& typeof data.next_before_id === 'string'
+			&& data.next_before_id !== ''
+			? { before: data.next_before, beforeId: data.next_before_id }
+			: null;
+
+		return {
+			posts: normalizePosts(data?.posts),
+			nextCursor,
+			hasMore: data?.has_more === true && nextCursor !== null,
+		};
+	}
+
 	return {
 		async instance(): Promise<InstanceInfo> {
 			const data = await request<{ instance?: unknown }>('GET', '/api/v1/instance');
@@ -1033,7 +1073,11 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		},
 
 		homeTimeline(limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
-			return timeline('/api/v1/timelines/home', limit, before, beforeId);
+			return homeTimelinePage(limit, before, beforeId).then((page) => page.posts);
+		},
+
+		homeTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
+			return homeTimelinePage(limit, before, beforeId);
 		},
 
 		tagTimeline(tag: string, limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {
