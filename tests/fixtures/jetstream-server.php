@@ -17,6 +17,7 @@ declare(strict_types=1);
 $port = (int) ($argv[1] ?? 0);
 $connections = max(1, (int) ($argv[2] ?? 1));
 $legacy = ($argv[3] ?? '') === 'legacy';
+$infoOnly = ($argv[3] ?? '') === 'info';
 $expectedResumeCursor = is_string($argv[4] ?? null) ? $argv[4] : null;
 
 $server = @stream_socket_server('tcp://127.0.0.1:' . $port, $errorNumber, $errorMessage);
@@ -103,8 +104,17 @@ if (!$legacy) {
         // Display timestamps can collide; sequence cursors must still advance.
         $event['time_us'] = 1_700_000_000_000_001;
         $event['cursor'] = 900 + $index;
+        $event['witnessed_at_us'] = 1_790_000_000_000_001 + $index;
         $messages[$index] = json_encode($event, JSON_THROW_ON_ERROR);
     }
+}
+
+if ($infoOnly) {
+    array_unshift($messages, json_encode([
+        '$type' => '#info',
+        'name' => 'OutdatedCursor',
+        'message' => 'The requested cursor is older than the replay window.',
+    ], JSON_THROW_ON_ERROR));
 }
 
 for ($served = 0; $served < $connections; ++$served) {

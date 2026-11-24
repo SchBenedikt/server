@@ -68,7 +68,8 @@ use function unpack;
  * Jetstream sequence cursor, keeps a bounded number of events and closes
  * again. The sequence cursor resumes v2 streams without conflating multiple
  * events that share the same display timestamp. Legacy events without a
- * sequence cursor fall back to their `time_us` timestamp.
+ * sequence cursor fall back to their `time_us` timestamp. Event freshness
+ * uses `witnessed_at_us` when available because `time_us` can be imported.
  *
  * Jetstream is a global firehose, so the source filters by the accounts this
  * instance actually follows and by records that reference one of its own
@@ -131,6 +132,7 @@ final class JetstreamEventSource implements AtprotoEventSource
         $events = [];
         $lastSeen = $cursor;
         $hasMore = false;
+        $gapDetected = false;
         $fragment = '';
         $fragmentOpcode = 0;
 
@@ -193,6 +195,16 @@ final class JetstreamEventSource implements AtprotoEventSource
                     continue;
                 }
 
+                $kind = strtolower((string) ($data['kind'] ?? ''));
+                $type = strtolower((string) ($data['$type'] ?? $data['type'] ?? ''));
+                $info = is_array($data['info'] ?? null) ? $data['info'] : $data;
+                if (($kind === 'info' || $type === '#info' || $type === 'info')
+                    && ($info['name'] ?? null) === 'OutdatedCursor'
+                ) {
+                    $gapDetected = true;
+                    continue;
+                }
+
                 $sequence = $data['cursor'] ?? null;
                 if (is_int($sequence) && $sequence >= 0) {
                     $lastSeen = (string) $sequence;
@@ -220,7 +232,7 @@ final class JetstreamEventSource implements AtprotoEventSource
             fclose($socket);
         }
 
-        return new AtprotoEventPage($events, $lastSeen, $hasMore);
+        return new AtprotoEventPage($events, $lastSeen, $hasMore, $gapDetected);
     }
 
     /**
@@ -538,11 +550,14 @@ final class JetstreamEventSource implements AtprotoEventSource
     {
         $did = is_string($data['did'] ?? null) ? trim($data['did']) : '';
         $timeUs = is_int($data['time_us'] ?? null) ? $data['time_us'] : null;
-        if ($did === '' || $timeUs === null || !AtprotoIdentifiers::isDid($did)) {
+        $witnessedAtUs = is_int($data['witnessed_at_us'] ?? null) ? $data['witnessed_at_us'] : null;
+        $receivedAtUs = $witnessedAtUs ?? $timeUs;
+        $sequence = is_int($data['cursor'] ?? null) && $data['cursor'] >= 0 ? $data['cursor'] : null;
+        if ($did === '' || $receivedAtUs === null || !AtprotoIdentifiers::isDid($did)) {
             return null;
         }
 
-        $receivedAt = new DateTimeImmutable('@' . intdiv($timeUs, 1_000_000), new DateTimeZone('UTC'));
+        $receivedAt = new DateTimeImmutable('@' . intdiv($receivedAtUs, 1_000_000), new DateTimeZone('UTC'));
 
         try {
             $kind = strtolower((string) ($data['kind'] ?? ''));
@@ -579,7 +594,7 @@ final class JetstreamEventSource implements AtprotoEventSource
                     rkey: is_string($commit['rkey'] ?? null) ? trim($commit['rkey']) : '',
                     cid: $cid === '' ? null : $cid,
                     rev: is_string($commit['rev'] ?? null) ? trim($commit['rev']) : null,
-                    sequence: $timeUs,
+                    sequence: $sequence,
                     record: $operation === AtprotoRecordOperation::Delete ? [] : (array) $record,
                 );
             }
@@ -596,7 +611,7 @@ final class JetstreamEventSource implements AtprotoEventSource
                     kind: AtprotoEventKind::Account,
                     did: $did,
                     receivedAt: $receivedAt,
-                    sequence: $timeUs,
+                    sequence: $sequence,
                     active: true,
                     accountStatus: AtprotoAccountStatus::Active,
                     handle: $handle,
@@ -620,7 +635,7 @@ final class JetstreamEventSource implements AtprotoEventSource
                     kind: AtprotoEventKind::Account,
                     did: $did,
                     receivedAt: $receivedAt,
-                    sequence: $timeUs,
+                    sequence: $sequence,
                     active: $active,
                     accountStatus: $status,
                 );

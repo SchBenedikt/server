@@ -113,14 +113,18 @@ final class JetstreamEventSourceTest extends TestCase
 
             self::assertNotNull($post, 'The followed post was not delivered.');
             self::assertSame('did:plc:followed', $post->did);
+            self::assertSame(900, $post->sequence);
+            self::assertSame(intdiv(1_790_000_000_000_001, 1_000_000), $post->receivedAt->getTimestamp());
             self::assertSame(AtprotoRecordOperation::Create, $post->operation);
             self::assertSame('bafypost', $post->cid);
             self::assertSame('app.bsky.feed.post', $post->collection);
 
             self::assertNotNull($like, 'The like on a local record was not delivered.');
+            self::assertSame(901, $like->sequence);
             self::assertSame('at://did:plc:local/app.bsky.feed.post/3klocal', $like->record['subject']['uri'] ?? null);
 
             self::assertNotNull($identity, 'The identity event was not delivered.');
+            self::assertSame(903, $identity->sequence);
             self::assertSame('followed.test', $identity->handle);
 
             foreach ($page->events as $event) {
@@ -137,6 +141,7 @@ final class JetstreamEventSourceTest extends TestCase
             );
             $first = $sync->sync(10);
             self::assertSame(3, $first->applied);
+            self::assertFalse($first->reconcileRequired(), 'Filtered relay events must not look like missing source events.');
 
             $second = $sync->sync(10);
             self::assertLessThanOrEqual(1, $second->applied);
@@ -147,6 +152,47 @@ final class JetstreamEventSourceTest extends TestCase
                 'SELECT COUNT(*) FROM social_atproto_remote_record WHERE uri = :uri',
                 ['uri' => 'at://did:plc:followed/app.bsky.feed.post/3kpost'],
             ));
+        } finally {
+            proc_terminate($process);
+            @proc_close($process);
+        }
+    }
+
+    public function testOutdatedCursorInfoMarksThePageForReconciliation(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $alice = $server->createAccount('alice');
+        (new PdoAtprotoFollowRepository($database))->save(new AtprotoFollow(
+            localUserId: $alice->id,
+            accountDid: 'did:plc:localalice',
+            subjectDid: 'did:plc:followed',
+            rkey: '3kfollow',
+            uri: 'at://did:plc:localalice/app.bsky.graph.follow/3kfollow',
+            cid: 'bafyfollow',
+            state: AtprotoFollow::ACTIVE,
+            followedAt: $server->runtime->clock->now(),
+        ));
+
+        $port = $this->freePort();
+        $process = proc_open(
+            [PHP_BINARY, __DIR__ . '/fixtures/jetstream-server.php', (string) $port, '1', 'info'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+
+        try {
+            usleep(350_000);
+            $source = new JetstreamEventSource(
+                'ws://127.0.0.1:' . $port . '/subscribe',
+                $database,
+                $server->runtime->clock,
+            );
+            $page = $source->pull(null, 10);
+
+            self::assertTrue($page->gapDetected);
+            self::assertSame('903', $page->cursor);
         } finally {
             proc_terminate($process);
             @proc_close($process);
@@ -195,6 +241,8 @@ final class JetstreamEventSourceTest extends TestCase
 
             self::assertSame('1700000000000004', $page->cursor);
             self::assertCount(2, $page->events);
+            self::assertNull($page->events[0]->sequence);
+            self::assertSame(1_700_000_000, $page->events[0]->receivedAt->getTimestamp());
         } finally {
             proc_terminate($process);
             @proc_close($process);
