@@ -26,6 +26,15 @@ services:
       app:
         condition: service_healthy
 
+  firehose:
+    environment:
+      ALOHASOCIAL_DB_DSN: pgsql:host=db;port=5432;dbname=alohasocial
+      ALOHASOCIAL_DB_USER: alohasocial
+      ALOHASOCIAL_DB_PASSWORD: ${ALOHASOCIAL_DB_PASSWORD:-alohasocial}
+    depends_on:
+      app:
+        condition: service_healthy
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped

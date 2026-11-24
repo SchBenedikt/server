@@ -41,7 +41,7 @@ RUN apt-get update \
         libpq-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" gd pdo_pgsql opcache \
-    && a2enmod expires headers rewrite \
+    && a2enmod expires headers rewrite proxy proxy_wstunnel \
     && rm -rf /var/lib/apt/lists/*
 
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public \

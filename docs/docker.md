@@ -5,8 +5,9 @@ checkout starts with one command; migrations and the first admin account are
 created by the container entrypoint.
 
 Docker runs the same PHP code as the manual installation. The image contains
-Apache with `mod_php`, the compiled Vue bundle, both PDO drivers and the
-worker command. Node.js is only needed to rebuild the UI, never to run it.
+Apache with `mod_php`, the compiled Vue bundle, both PDO drivers, the worker and
+the native PDS firehose process. Node.js is only needed to rebuild the UI,
+never to run it.
 
 The image is published to GitHub Container Registry on every push to `main`:
 
@@ -61,8 +62,12 @@ curl -fsS http://localhost:3000/api/v1/instance
 docker compose logs -f app worker
 ```
 
-Both services should report `healthy`/`running`. The worker waits for the app
-healthcheck before it starts, so migrations never run twice.
+The app should report `healthy`; the worker and firehose should be `running`.
+Both background services wait for the app healthcheck, so migrations never run
+twice. When native PDS is enabled, the app proxies
+`/xrpc/com.atproto.sync.subscribeRepos` to the firehose process. It shares the
+same configured database as the app, including setup-managed database settings
+and the PostgreSQL overlay.
 
 ## Images and tags
 
