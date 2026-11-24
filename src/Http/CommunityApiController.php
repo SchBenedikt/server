@@ -672,10 +672,11 @@ final class CommunityApiController
 
                 $body = $this->jsonBody($request);
                 $postId = is_string($body['post_id'] ?? null) ? $body['post_id'] : '';
+                $accountDid = is_string($body['account_did'] ?? null) ? $body['account_did'] : null;
 
                 try {
                     return Response::json([
-                        'publication' => $service->publish($userId, $postId)->toArray(),
+                        'publication' => $service->publish($userId, $postId, accountDid: $accountDid)->toArray(),
                     ], 201);
                 } catch (PostNotFoundException) {
                     return $this->error(404, 'not_found', 'This post does not exist.');

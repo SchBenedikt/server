@@ -443,12 +443,13 @@ final class BlueskyAccountTest extends TestCase
         $response = $this->server->json(
             'POST',
             '/api/v1/host/bluesky/publish',
-            ['post_id' => $post->id],
+            ['post_id' => $post->id, 'account_did' => 'did:plc:alice123'],
             $auth['cookies'],
             $auth['csrf'],
         );
 
         self::assertSame(201, $response->status, $response->body);
+        self::assertSame('did:plc:alice123', json_decode($response->body, true, 64, JSON_THROW_ON_ERROR)['publication']['account_did']);
         $request = array_values(array_filter(
             $this->http->requests,
             static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.putRecord'),
@@ -694,10 +695,11 @@ final class BlueskyAccountTest extends TestCase
         $post = $disabled->runtime->app->posts->create(new CreatePost('alice', 'previously published'));
         $disabled->runtime->database->execute(
             'INSERT INTO social_atproto_publication'
-            . ' (local_user_id, post_id, rkey, uri, pds_url, published_at)'
-            . ' VALUES (:user, :post, :rkey, :uri, :pds, :published)',
+            . ' (local_user_id, account_did, post_id, rkey, uri, pds_url, published_at)'
+            . ' VALUES (:user, :did, :post, :rkey, :uri, :pds, :published)',
             [
                 'user' => 'alice',
+                'did' => 'did:plc:alice123',
                 'post' => $post->id,
                 'rkey' => 'post1',
                 'uri' => 'at://did:plc:alice123/app.bsky.feed.post/post1',
