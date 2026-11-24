@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Federation\Atproto;
 
 use AlohaSocial\Core\Domain\Atproto\AtprotoPostProjection;
 use AlohaSocial\Core\Domain\Atproto\AtprotoRemoteRecord;
+use AlohaSocial\Core\Domain\Atproto\AtprotoIdentifiers;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
@@ -39,6 +40,8 @@ use function trim;
  *    indexed for the reply counter
  *  - a like on one of this instance's published records becomes an inbound
  *    reaction, so the card counter includes Bluesky likes
+ *  - a repost of one of this instance's published records contributes to its
+ *    reblog counter
  *
  * Every step is an idempotent upsert keyed on the AT record URI, and a
  * tombstone removes exactly the rows that record created. That makes the pass
@@ -85,6 +88,7 @@ final class AtprotoReconciler
 
         $publications = $this->publications();
         $followed = $this->followedDids();
+        $localDids = $this->localDids();
         $projected = 0;
         $removed = 0;
         $skipped = 0;
@@ -108,7 +112,12 @@ final class AtprotoReconciler
             }
 
             if ($collection === self::LIKE) {
-                $projected += $this->projectLike($row, $publications);
+                $projected += $this->projectLike($row, $publications, $localDids);
+                continue;
+            }
+
+            if ($collection === self::REPOST) {
+                $projected += $this->projectRepost($row, $publications, $localDids);
                 continue;
             }
 
@@ -166,8 +175,9 @@ final class AtprotoReconciler
     /**
      * @param array<string, mixed> $row
      * @param array<string, string> $publications
+     * @param array<string, true> $localDids
      */
-    private function projectLike(array $row, array $publications): int
+    private function projectLike(array $row, array $publications, array $localDids): int
     {
         $record = $this->recordBody($row);
         if ($record === null) {
@@ -190,6 +200,14 @@ final class AtprotoReconciler
             return 0;
         }
 
+        // A mirrored local favourite already contributes to the local count;
+        // its Jetstream echo must not appear as a second inbound reaction.
+        if (isset($localDids[$did])) {
+            $this->db->execute('DELETE FROM social_reaction WHERE activity_id = :activity_id', ['activity_id' => $uri]);
+
+            return 0;
+        }
+
         $createdAt = $this->timestamp($record['createdAt'] ?? null) ?? $this->clock->now();
         $id = 'atp_' . substr(hash('sha256', $uri), 0, 32);
 
@@ -204,6 +222,58 @@ final class AtprotoReconciler
                 'object' => trim($subject['uri']),
                 'local_post_id' => $parentId,
                 'activity_id' => $uri,
+                'created_at' => Time::format($createdAt),
+            ],
+        );
+
+        return 1;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, string> $publications
+     * @param array<string, true> $localDids
+     */
+    private function projectRepost(array $row, array $publications, array $localDids): int
+    {
+        $record = $this->recordBody($row);
+        if ($record === null) {
+            return 0;
+        }
+
+        $subject = $record['subject'] ?? null;
+        if (!is_array($subject)
+            || !is_string($subject['uri'] ?? null)
+            || !is_string($subject['cid'] ?? null)
+            || trim($subject['cid']) === ''
+        ) {
+            return 0;
+        }
+
+        $parentId = $publications[trim($subject['uri'])] ?? null;
+        $uri = (string) ($row['uri'] ?? '');
+        $did = (string) ($row['did'] ?? '');
+        if ($parentId === null || $uri === '' || !AtprotoIdentifiers::isDid($did)
+            || mb_strlen($did) > self::MAX_DID_LENGTH
+        ) {
+            return 0;
+        }
+
+        $id = 'atp_' . substr(hash('sha256', $uri), 0, 32);
+        if (isset($localDids[$did])) {
+            $this->db->execute('DELETE FROM social_boost WHERE id = :id', ['id' => $id]);
+
+            return 0;
+        }
+
+        $createdAt = $this->timestamp($record['createdAt'] ?? null) ?? $this->clock->now();
+        $this->db->execute(
+            'INSERT INTO social_boost (id, user_id, post_id, created_at)'
+            . ' VALUES (:id, :user_id, :post_id, :created_at) ON CONFLICT DO NOTHING',
+            [
+                'id' => $id,
+                'user_id' => $this->remoteBoostActorKey($did),
+                'post_id' => $parentId,
                 'created_at' => Time::format($createdAt),
             ],
         );
@@ -297,6 +367,11 @@ final class AtprotoReconciler
         );
 
         $removed += $this->db->execute(
+            'DELETE FROM social_boost WHERE id = :id',
+            ['id' => 'atp_' . substr(hash('sha256', $uri), 0, 32)],
+        );
+
+        $removed += $this->db->execute(
             'DELETE FROM social_remote_reply WHERE activity_id = :activity_id',
             ['activity_id' => $uri],
         );
@@ -371,6 +446,41 @@ final class AtprotoReconciler
         }
 
         return $result;
+    }
+
+    /** @return array<string, true> */
+    private function localDids(): array
+    {
+        $result = [];
+        foreach ([
+            'SELECT did FROM atproto_account',
+            'SELECT did FROM social_pds_identity',
+            // Keep echo suppression after an external account is disconnected;
+            // its durable interaction ledger retains the identity that wrote it.
+            'SELECT DISTINCT account_did AS did FROM social_atproto_interaction',
+        ] as $query) {
+            try {
+                $rows = $this->db->fetchAll($query);
+            } catch (Throwable) {
+                continue;
+            }
+
+            foreach ($rows as $row) {
+                $did = is_string($row['did'] ?? null) ? trim($row['did']) : '';
+                if (AtprotoIdentifiers::isDid($did)) {
+                    $result[$did] = true;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function remoteBoostActorKey(string $did): string
+    {
+        // social_boost.user_id is limited to 64 characters; keep arbitrary
+        // valid DIDs collision-resistant without truncating or invalidating them.
+        return 'atp_' . substr(hash('sha256', 'atproto-did|' . $did), 0, 56);
     }
 
     /**
