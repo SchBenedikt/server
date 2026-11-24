@@ -39,6 +39,10 @@ final class AtprotoSessionController
 
     private const REFRESH_LIFETIME_SECONDS = 2_592_000;
 
+    private const CREATE_SESSION_LIMIT = 20;
+
+    private const CREATE_SESSION_WINDOW_SECONDS = 900;
+
     private readonly AtprotoSessionRepository $sessions;
 
     private readonly PasswordHasher $hasher;
@@ -117,6 +121,16 @@ final class AtprotoSessionController
 
         if ($identifier === '' || $password === '' || mb_strlen($identifier) > 255 || mb_strlen($password) > 1024) {
             return $this->error(400, 'InvalidRequest', 'identifier and password are required.');
+        }
+
+        $ip = $request->remoteAddress ?? 'unknown';
+        if ($this->runtime->rateLimiter->attempt(
+            'host.atproto.create_session',
+            $ip,
+            self::CREATE_SESSION_LIMIT,
+            self::CREATE_SESSION_WINDOW_SECONDS,
+        ) !== null) {
+            return $this->error(429, 'RateLimitExceeded', 'Too many sign-in attempts. Try again later.');
         }
 
         if ($this->runtime->throttle->isLimited($identifier, $request->remoteAddress)) {
