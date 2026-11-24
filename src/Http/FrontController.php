@@ -747,12 +747,13 @@ final class FrontController
             }
 
             try {
+                $atprotoMirror = null;
                 if ($request->method === 'POST') {
                     $boosts->boost($userId, $postId);
-                    $this->runtime->interactions->mirrorBoost($userId, $postId, true, $accountDid);
+                    $atprotoMirror = $this->runtime->interactions->mirrorBoost($userId, $postId, true, $accountDid);
                 } else {
                     $boosts->unboost($userId, $postId);
-                    $this->runtime->interactions->mirrorBoost($userId, $postId, false, $accountDid);
+                    $atprotoMirror = $this->runtime->interactions->mirrorBoost($userId, $postId, false, $accountDid);
                 }
             } catch (PostNotFoundException) {
                 return $this->apiError(404, 'post_not_found', 'This post is not available.');
@@ -760,7 +761,9 @@ final class FrontController
                 return $this->apiError(422, 'validation_failed', $exception->getMessage());
             }
 
-            return Response::json(['ok' => true]);
+            return Response::json($atprotoMirror === null
+                ? ['ok' => true]
+                : ['ok' => true, 'atproto_mirror' => $atprotoMirror]);
         }
 
         if (preg_match('#^/api/v1/posts/([^/]+)/like$#', $request->path, $matches) === 1
