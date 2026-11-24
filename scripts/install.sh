@@ -791,15 +791,26 @@ fi
 # Write .env
 # ---------------------------------------------------------------------------
 
+ENV_STAGE="$(mktemp ./.env.tmp.XXXXXX)"
+chmod 0600 "$ENV_STAGE"
+cleanup_env_stage() {
+    if [ -n "$ENV_STAGE" ] && [ -f "$ENV_STAGE" ]; then
+        rm -f -- "$ENV_STAGE"
+    fi
+}
+trap cleanup_env_stage EXIT
+
 if [ ! -f .env ]; then
     log "writing .env from .env.example"
-    cp .env.example .env
+    cp .env.example "$ENV_STAGE"
 elif [ "$FORCE_ENV" -eq 1 ]; then
     backup=".env.backup-$(date '+%Y%m%d-%H%M%S')-$$"
     cp .env "$backup"
     chmod 0600 "$backup" 2>/dev/null || true
     log "kept the old configuration as ${backup}"
-    cp .env.example .env
+    cp .env.example "$ENV_STAGE"
+else
+    cp .env "$ENV_STAGE"
 fi
 
 set_env() {
@@ -834,7 +845,7 @@ set_env() {
             fwrite(STDERR, "cannot write {$file}\n");
             exit(1);
         }
-    ' .env "$key"
+    ' "$ENV_STAGE" "$key"
 }
 
 if [ -n "$URL" ]; then
@@ -895,7 +906,10 @@ if [ "$MAIL_TRANSPORT" = "smtp" ]; then
 fi
 
 # .env holds the database password and SMTP credentials.
-chmod 0600 .env 2>/dev/null || true
+chmod 0600 "$ENV_STAGE"
+mv -f -- "$ENV_STAGE" .env
+ENV_STAGE=""
+trap - EXIT
 
 # ---------------------------------------------------------------------------
 # Resolve and prepare the real runtime paths
