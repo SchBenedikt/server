@@ -70,10 +70,13 @@ final class MastodonOAuthController
         return null;
     }
 
-    /** Authenticate only the Mastodon API prefix, preserving the granted scopes. */
+    /** Authenticate the compatibility prefix and standard API aliases, preserving granted scopes. */
     public function authenticate(Request $request): Request
     {
-        if (!$this->runtime->config->mastodonApi || !str_starts_with($request->path, '/api/mastodon/v1/')) {
+        $mastodonPrefix = rtrim($this->runtime->config->mastodonPrefix, '/');
+        $isMastodonApiPath = str_starts_with($request->path, $mastodonPrefix . '/')
+            || $request->path === '/api/v1/timelines/home';
+        if (!$this->runtime->config->mastodonApi || !$isMastodonApiPath) {
             return $request;
         }
         $authorization = trim((string) $request->header('authorization'));
@@ -93,7 +96,10 @@ final class MastodonOAuthController
             return $request;
         }
 
-        return $request->withUserId($grant['account_id'])->withScopes($grant['scopes']);
+        return $request
+            ->withUserId($grant['account_id'])
+            ->withScopes($grant['scopes'])
+            ->withAttribute('mastodon_oauth', true);
     }
 
     private function registerApp(Request $request): Response
