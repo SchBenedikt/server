@@ -156,7 +156,9 @@ a `bsky.app/profile/…` URL. The lookup is outbound and read-only:
   the account's authorization server; if refresh is refused, reconnect the
   account in Settings. This uses the account's discovered PDS and
   does not require the instance to run its optional native PDS. Local likes
-  and reposts are mirrored when an account is linked.
+  and reposts remain local until the member opts in from Settings; Settings
+  also lets members choose whether those interactions use their hosted or
+  linked external identity.
 
 A remote post opens in the same detail view as a local post. The canonical
 ActivityPub object id or AT Protocol URI is encoded into `#/p/…`; the host

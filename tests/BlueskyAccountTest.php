@@ -549,11 +549,14 @@ final class BlueskyAccountTest extends TestCase
         self::assertSame(200, $localLike->status, $localLike->body);
         self::assertSame([], $this->http->requests, 'A local like must stay local before opt-in.');
 
-        $this->server->runtime->preferences->update('alice', ['mirror_likes_to_atproto' => true]);
+        $this->server->runtime->preferences->update('alice', [
+            'mirror_likes_to_atproto' => true,
+            'mirror_atproto_account_did' => 'did:plc:alice123',
+        ]);
         $this->server->json(
             'POST',
             $likePath,
-            ['account_did' => 'did:plc:alice123'],
+            [],
             $auth['cookies'],
             $auth['csrf'],
         );
@@ -625,6 +628,72 @@ final class BlueskyAccountTest extends TestCase
             },
         ));
         self::assertCount(1, $repostDeletes);
+    }
+
+    public function testInteractionPreferenceSelectsExternalIdentityWhenNativeIdentityAlsoExists(): void
+    {
+        $this->server = new TestServer([
+            'atproto_pds' => true,
+            'atproto_publish' => true,
+            'atproto_pds_url' => 'https://social.example',
+            'atproto_pds_handle_domain' => 'social.example',
+            'atproto_plc_url' => 'https://plc.directory',
+        ], $this->http, new class implements HostResolver {
+            public function resolve(string $host): array
+            {
+                return match ($host) {
+                    'public.api.bsky.app' => ['8.8.8.8'],
+                    'plc.directory' => ['1.1.1.1'],
+                    'pds.example.test' => ['9.9.9.9'],
+                    default => [],
+                };
+            }
+        });
+        $this->server->createAccount('alice', 'alice@example.test');
+        $pds = new \AlohaSocial\Core\Domain\Atproto\Pds\NativePdsService(
+            $this->server->config->coreConfig(),
+            $this->server->runtime->pdsRepository,
+            \AlohaSocial\Core\Security\OpenSslSecretBox::fromBase64Key(
+                $this->server->config->secretKey ?? trim((string) file_get_contents($this->server->config->secretKeyFile)),
+            ),
+            $this->server->runtime->clock,
+            new \AlohaSocial\Core\Platform\Storage\LocalBlobStore($this->server->config->blobDirectory),
+            null,
+        );
+        $nativeIdentity = $pds->createIdentity('alice');
+        $this->server->runtime->blueskyAccounts->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $auth = $this->server->signIn('alice');
+        $post = $this->server->runtime->app->posts->create(new CreatePost('alice', 'identity selection target'));
+        $published = $this->server->json('POST', '/api/v1/host/bluesky/publish', [
+            'post_id' => $post->id,
+            'account_did' => 'did:plc:alice123',
+        ], $auth['cookies'], $auth['csrf']);
+        self::assertSame(201, $published->status, $published->body);
+        self::assertNotSame('did:plc:alice123', $nativeIdentity['did']);
+
+        $this->server->runtime->preferences->update('alice', [
+            'mirror_likes_to_atproto' => true,
+            'mirror_atproto_account_did' => 'did:plc:alice123',
+        ]);
+        $this->http->requests = [];
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($post->id) . '/like',
+            [],
+            $auth['cookies'],
+            $auth['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $likeWrites = array_filter($this->http->requests, static function (array $request): bool {
+            if (!str_contains($request['url'], 'com.atproto.repo.putRecord')) {
+                return false;
+            }
+            $payload = json_decode($request['body'], true);
+
+            return ($payload['collection'] ?? null) === 'app.bsky.feed.like';
+        });
+        self::assertCount(1, $likeWrites, 'The selected external DID must be used even though a native identity exists.');
     }
 
     public function testOptOutStaysPendingWhenAnIdentityWithInteractionsIsDisconnected(): void

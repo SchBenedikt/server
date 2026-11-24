@@ -948,6 +948,9 @@ function normalizePreferences(value: unknown): AccountPreferences {
 		notify_mentions: value.notify_mentions !== false,
 		mirror_likes_to_atproto: value.mirror_likes_to_atproto === true,
 		mirror_boosts_to_atproto: value.mirror_boosts_to_atproto === true,
+		mirror_atproto_account_did: typeof value.mirror_atproto_account_did === 'string'
+			? value.mirror_atproto_account_did
+			: null,
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }

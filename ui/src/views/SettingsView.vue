@@ -36,6 +36,16 @@ const blueskyBusy = ref(false);
 const atproto = ref<AtprotoIdentityData | null>(null);
 const atprotoHandle = ref('');
 const atprotoBusy = ref(false);
+const interactionAccounts = computed(() => {
+	const options: { did: string; label: string }[] = [];
+	if (atproto.value?.publish && atproto.value.identity !== null && atproto.value.identity.did !== '') {
+		options.push({ did: atproto.value.identity.did, label: `@${atproto.value.identity.handle} (hosted)` });
+	}
+	if (atproto.value?.publish && atproto.value.external.connected && atproto.value.external.did) {
+		options.push({ did: atproto.value.external.did, label: `@${atproto.value.external.handle} (connected)` });
+	}
+	return options;
+});
 const accountMove = ref<AccountMoveStatus | null>(null);
 const moveTarget = ref('');
 const moveBusy = ref(false);
@@ -237,12 +247,20 @@ async function save(): Promise<void> {
 			notify_mentions: current.notify_mentions,
 			mirror_likes_to_atproto: current.mirror_likes_to_atproto,
 			mirror_boosts_to_atproto: current.mirror_boosts_to_atproto,
+			mirror_atproto_account_did: current.mirror_atproto_account_did,
 		});
 		showToast('Settings saved.', 'success');
 	} catch (caught) {
 		showToast(caught instanceof Error ? caught.message : 'Settings could not be saved.', 'error');
 	} finally {
 		saving.value = false;
+	}
+}
+
+function setInteractionAccount(event: Event): void {
+	if (preferences.value !== null) {
+		const did = (event.target as HTMLSelectElement).value;
+		preferences.value.mirror_atproto_account_did = did === '' ? null : did;
 	}
 }
 
@@ -520,6 +538,16 @@ watch(signedIn, (value) => {
 						<small>Publish and remove a Bluesky repost when you boost or unboost an eligible post here.</small>
 					</span>
 					<input type="checkbox" :checked="preferences.mirror_boosts_to_atproto" @change="toggleFlag('mirror_boosts_to_atproto')">
+				</label>
+				<label v-if="interactionAccounts.length > 0" class="a-settings__row">
+					<span>
+						<strong>Publish from</strong>
+						<small>Choose which of your connected identities publishes likes and reposts.</small>
+					</span>
+					<select :value="preferences.mirror_atproto_account_did ?? ''" @change="setInteractionAccount">
+						<option value="">Default identity</option>
+						<option v-for="account in interactionAccounts" :key="account.did" :value="account.did">{{ account.label }}</option>
+					</select>
 				</label>
 			</section>
 

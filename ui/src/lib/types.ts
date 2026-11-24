@@ -595,6 +595,7 @@ export interface AccountPreferences {
 	notify_mentions: boolean;
 	mirror_likes_to_atproto: boolean;
 	mirror_boosts_to_atproto: boolean;
+	mirror_atproto_account_did: string | null;
 	updated_at: string | null;
 }
 

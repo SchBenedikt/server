@@ -67,6 +67,7 @@ final class MigrationTest extends TestCase
         $columnNames = array_map(static fn (array $row): string => (string) $row['name'], $preferenceColumns);
         self::assertContains('mirror_likes_to_atproto', $columnNames);
         self::assertContains('mirror_boosts_to_atproto', $columnNames);
+        self::assertContains('mirror_atproto_account_did', $columnNames);
 
         $publicationColumns = $server->runtime->database->fetchAll('PRAGMA table_info(social_atproto_publication)');
         $publicationColumnNames = array_map(static fn (array $row): string => (string) $row['name'], $publicationColumns);
