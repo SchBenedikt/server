@@ -59,17 +59,21 @@ final class AtprotoRemoteInteractions
 	/** @return array{interaction: array<string, mixed>} */
 	public function change(string $userId, string $uri, string $kind, bool $enabled, ?string $accountDid = null): array
 	{
-		$target = $this->target($uri);
-		if ($kind === AtprotoInteractionRecord::LIKE) {
-			if ($enabled) {
+		if (!$enabled) {
+			// The inbound record may already be tombstoned. The Core ledger
+			// retains our PDS record key, which is enough to remove our record.
+			if ($kind === AtprotoInteractionRecord::LIKE) {
+				$this->interactions->unlikeRemoteUri($userId, $uri, $accountDid);
+			} else {
+				$this->interactions->undoRemoteRepostUri($userId, $uri, $accountDid);
+			}
+		} else {
+			$target = $this->target($uri);
+			if ($kind === AtprotoInteractionRecord::LIKE) {
 				$this->interactions->likeRemote($userId, $target, $accountDid);
 			} else {
-				$this->interactions->unlikeRemote($userId, $target, $accountDid);
+				$this->interactions->repostRemote($userId, $target, $accountDid);
 			}
-		} elseif ($enabled) {
-			$this->interactions->repostRemote($userId, $target, $accountDid);
-		} else {
-			$this->interactions->undoRemoteRepost($userId, $target, $accountDid);
 		}
 
 		return ['interaction' => $this->snapshot($userId, $uri)];
