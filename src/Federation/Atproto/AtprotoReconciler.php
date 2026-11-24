@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Federation\Atproto;
 use AlohaSocial\Core\Domain\Atproto\AtprotoPostProjection;
 use AlohaSocial\Core\Domain\Atproto\AtprotoRemoteRecord;
 use AlohaSocial\Core\Domain\Atproto\AtprotoIdentifiers;
+use AlohaSocial\Core\Domain\Federation\RemoteObjectType;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
@@ -117,7 +118,7 @@ final class AtprotoReconciler
             }
 
             if ($collection === self::REPOST) {
-                $projected += $this->projectRepost($row, $publications, $localDids);
+                $projected += $this->projectRepost($row, $publications, $localDids, $followed);
                 continue;
             }
 
@@ -233,8 +234,9 @@ final class AtprotoReconciler
      * @param array<string, mixed> $row
      * @param array<string, string> $publications
      * @param array<string, true> $localDids
+     * @param array<string, true> $followed
      */
-    private function projectRepost(array $row, array $publications, array $localDids): int
+    private function projectRepost(array $row, array $publications, array $localDids, array $followed): int
     {
         $record = $this->recordBody($row);
         if ($record === null) {
@@ -253,7 +255,7 @@ final class AtprotoReconciler
         $parentId = $publications[trim($subject['uri'])] ?? null;
         $uri = (string) ($row['uri'] ?? '');
         $did = (string) ($row['did'] ?? '');
-        if ($parentId === null || $uri === '' || !AtprotoIdentifiers::isDid($did)
+        if ($uri === '' || !AtprotoIdentifiers::isDid($did)
             || mb_strlen($did) > self::MAX_DID_LENGTH
         ) {
             return 0;
@@ -262,11 +264,16 @@ final class AtprotoReconciler
         $id = 'atp_' . substr(hash('sha256', $uri), 0, 32);
         if (isset($localDids[$did])) {
             $this->db->execute('DELETE FROM social_boost WHERE id = :id', ['id' => $id]);
+            $this->db->execute('DELETE FROM social_remote_post WHERE activity_id = :activity_id', ['activity_id' => $uri]);
 
             return 0;
         }
 
         $createdAt = $this->timestamp($record['createdAt'] ?? null) ?? $this->clock->now();
+        if ($parentId === null) {
+            return $this->projectRemoteRepost(trim($subject['uri']), $did, $uri, $createdAt, $followed);
+        }
+
         $this->db->execute(
             'INSERT INTO social_boost (id, user_id, post_id, created_at)'
             . ' VALUES (:id, :user_id, :post_id, :created_at) ON CONFLICT DO NOTHING',
@@ -275,6 +282,71 @@ final class AtprotoReconciler
                 'user_id' => $this->remoteBoostActorKey($did),
                 'post_id' => $parentId,
                 'created_at' => Time::format($createdAt),
+            ],
+        );
+
+        return 1;
+    }
+
+    /**
+     * Project a followed account's repost of an imported ATProto post into
+     * the home timeline. The original subject is fetched only from the
+     * already validated inbound-record store.
+     *
+     * @param array<string, true> $followed
+     */
+    private function projectRemoteRepost(
+        string $subjectUri,
+        string $reposterDid,
+        string $repostUri,
+        DateTimeImmutable $createdAt,
+        array $followed,
+    ): int {
+        if (!isset($followed[$reposterDid])) {
+            return 0;
+        }
+
+        $subjectRow = $this->db->fetchOne(
+            'SELECT uri, did, collection, rkey, cid, rev, deleted, record_json, sequence, received_at'
+            . ' FROM social_atproto_remote_record'
+            . ' WHERE source = :source AND uri = :uri AND collection = :collection AND deleted = 0',
+            ['source' => $this->source, 'uri' => $subjectUri, 'collection' => self::POST],
+        );
+        if ($subjectRow === null) {
+            return 0;
+        }
+
+        $subjectBody = $this->recordBody($subjectRow);
+        if ($subjectBody === null) {
+            return 0;
+        }
+
+        $subject = AtprotoPostProjection::fromRecord($this->record($subjectRow, $subjectBody));
+        if ($subject === null) {
+            return 0;
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, object_metadata,'
+            . ' quoted_object_id, content, content_warning, published_at, updated_at, deleted_at)'
+            . ' VALUES (:activity_id, :object_id, :object_author, :actor, :kind, :object_type, NULL,'
+            . ' NULL, :content, NULL, :published_at, :updated_at, NULL)'
+            . ' ON CONFLICT (activity_id) DO UPDATE SET object_id = excluded.object_id,'
+            . ' object_author_id = excluded.object_author_id, actor_id = excluded.actor_id,'
+            . ' kind = excluded.kind, object_type = excluded.object_type, content = excluded.content,'
+            . ' published_at = excluded.published_at, updated_at = excluded.updated_at, deleted_at = NULL',
+            [
+                'activity_id' => $repostUri,
+                'object_id' => $subjectUri,
+                'object_author' => $subject->did,
+                'actor' => $reposterDid,
+                'kind' => 'boost',
+                'object_type' => RemoteObjectType::Note->value,
+                'content' => $subject->text,
+                'published_at' => Time::format($createdAt),
+                'updated_at' => $now,
             ],
         );
 
