@@ -19,6 +19,9 @@ use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Service\ReactionException;
 use AlohaSocial\Core\Service\ValidationException;
+use AlohaSocial\Core\Domain\Atproto\AtprotoInteractionRecord;
+use AlohaSocial\Core\Service\Atproto\AtprotoInteractionRejectedException;
+use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Accounts\RegistrationException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Auth\PasswordResetException;
@@ -391,6 +394,17 @@ final class FrontController
                     continue;
                 }
 
+                if (AtprotoRemoteInteractions::supports($id)) {
+                    if ($viewerId !== null && $this->runtime->atprotoRemoteInteractions !== null) {
+                        try {
+                            $remote[$id] = $this->runtime->atprotoRemoteInteractions->forUser($viewerId, $id);
+                        } catch (AtprotoInteractionRejectedException) {
+                            // Only currently followed, live and unblocked AT records are visible here.
+                        }
+                    }
+                    continue;
+                }
+
                 if ($this->isRemoteObjectTarget($id)) {
                     $reactions = $this->runtime->app->reactions;
                     if ($viewerId !== null && mb_strlen($id) <= 2048 && $reactions !== null) {
@@ -627,6 +641,27 @@ final class FrontController
             }
 
             $postId = rawurldecode($matches[1]);
+            if (AtprotoRemoteInteractions::supports($postId)) {
+                if ($this->runtime->atprotoRemoteInteractions === null) {
+                    return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
+                }
+
+                try {
+                    $this->runtime->atprotoRemoteInteractions->change(
+                        $userId,
+                        $postId,
+                        AtprotoInteractionRecord::REPOST,
+                        $request->method === 'POST',
+                    );
+
+                    return Response::json(['ok' => true]);
+                } catch (AtprotoInteractionRejectedException $exception) {
+                    return $this->atprotoInteractionError($exception);
+                } catch (Throwable) {
+                    return $this->apiError(502, 'atproto_interaction_failed', 'The AT Protocol interaction could not be published.');
+                }
+            }
+
             if ($this->isRemoteObjectTarget($postId)) {
                 $reactions = $this->runtime->app->reactions;
                 if ($reactions === null) {
@@ -685,6 +720,27 @@ final class FrontController
             }
 
             $postId = rawurldecode($matches[1]);
+            if (AtprotoRemoteInteractions::supports($postId)) {
+                if ($this->runtime->atprotoRemoteInteractions === null) {
+                    return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
+                }
+
+                try {
+                    $result = $this->runtime->atprotoRemoteInteractions->change(
+                        $userId,
+                        $postId,
+                        AtprotoInteractionRecord::LIKE,
+                        $request->method === 'POST',
+                    );
+
+                    return Response::json($result);
+                } catch (AtprotoInteractionRejectedException $exception) {
+                    return $this->atprotoInteractionError($exception);
+                } catch (Throwable) {
+                    return $this->apiError(502, 'atproto_interaction_failed', 'The AT Protocol interaction could not be published.');
+                }
+            }
+
             if ($this->isRemoteObjectTarget($postId)) {
                 $reactions = $this->runtime->app->reactions;
                 if ($reactions === null) {
@@ -804,6 +860,15 @@ final class FrontController
         return is_array($parts)
             && in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
             && isset($parts['host']);
+    }
+
+    private function atprotoInteractionError(AtprotoInteractionRejectedException $exception): Response
+    {
+        if ($exception->reason === AtprotoInteractionRejectedException::BLOCKED_ACTOR) {
+            return $this->apiError(403, 'blocked_actor', $exception->getMessage());
+        }
+
+        return $this->apiError(404, 'atproto_post_unavailable', 'This AT Protocol post is not available.');
     }
 
     /**

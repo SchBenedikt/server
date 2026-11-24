@@ -13,6 +13,8 @@ use AlohaSocial\Core\Application;
 use AlohaSocial\Core\Domain\Atproto\Pds\NativePdsService;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
 use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
+use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
+use AlohaSocial\Core\Domain\Federation\PdoBlockRepository;
 use AlohaSocial\Core\Protocol\Atproto\PlcDirectoryClient;
 use AlohaSocial\Core\Protocol\Atproto\XrpcAtprotoPublisher;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
@@ -38,6 +40,7 @@ use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
+use AlohaSocial\Server\Federation\Atproto\RemoteInteractionTargetPolicy;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
@@ -75,6 +78,7 @@ use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
+use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\LogMailer;
 use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
@@ -179,6 +183,14 @@ final class ApplicationFactory
         $atprotoBackoff = $atprotoJetstream === null
             ? null
             : new AtprotoBackoff($this->config->varDirectory . '/atproto-sync.json', $clock);
+        $atprotoFollowRepository = new PdoAtprotoFollowRepository($database);
+        $atprotoInboundRepository = new PdoAtprotoInboundRepository($database);
+        $atprotoTargetPolicy = new RemoteInteractionTargetPolicy(
+            $atprotoInboundRepository,
+            $atprotoFollowRepository,
+            new PdoBlockRepository($database),
+            $atprotoJetstream?->name() ?? JetstreamEventSource::NAME,
+        );
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -197,7 +209,9 @@ final class ApplicationFactory
             hostResolver: $hostResolver,
             atprotoAccounts: $atprotoAccounts,
             atprotoPublisher: $atprotoPublisher,
-            atprotoFollowRepository: new PdoAtprotoFollowRepository($database),
+            atprotoFollowRepository: $atprotoFollowRepository,
+            atprotoInbound: $atprotoInboundRepository,
+            atprotoRemoteTargetPolicy: $atprotoTargetPolicy,
             localProfiles: new AccountProfileProvider($accounts, $preferences),
             pdsRepository: $pdsRepository,
             pdsSecrets: $this->secretBox(),
@@ -299,6 +313,13 @@ final class ApplicationFactory
                 ? null
                 : new AtprotoReconciler($database, $clock, $atprotoJetstream->name()),
             atprotoBackoff: $atprotoBackoff,
+            atprotoRemoteInteractions: $app->atprotoInteractions === null ? null : new AtprotoRemoteInteractions(
+                $database,
+                $atprotoInboundRepository,
+                $app->atprotoInteractions,
+                $atprotoTargetPolicy,
+                $atprotoJetstream?->name() ?? JetstreamEventSource::NAME,
+            ),
         );
     }
 
