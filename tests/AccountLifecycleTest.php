@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Domain\Post\Visibility;
+use AlohaSocial\Core\Domain\Atproto\Pds\PdsSchema;
+use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
 use AlohaSocial\Core\Service\CreatePost;
 use AlohaSocial\Core\Jobs\JobType;
 use AlohaSocial\Server\Tests\Support\TestServer;
@@ -191,5 +193,71 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame(409, $response->status);
         self::assertFalse($server->runtime->accounts->find('admin')?->isDisabled());
         self::assertSame('active', $server->runtime->app->accountData?->deletionStatus('admin')->state);
+    }
+
+    public function testAccountErasurePublishesNativePdsDeletionStatus(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $login = $server->signIn('alice');
+        $did = 'did:plc:alice';
+        $server->runtime->database->execute(
+            'INSERT INTO ' . PdsSchema::IDENTITY_TABLE
+            . ' (local_user_id, did, handle, signing_key_id, rotation_key_id, head_cid, head_rev, seq, created_at, updated_at)'
+            . ' VALUES (:user, :did, :handle, :signing, :rotation, NULL, NULL, 1, :created, :updated)',
+            [
+                'user' => 'alice',
+                'did' => $did,
+                'handle' => 'alice.social.test',
+                'signing' => 'signing-key',
+                'rotation' => 'rotation-key',
+                'created' => '2026-11-24T00:00:00Z',
+                'updated' => '2026-11-24T00:00:00Z',
+            ],
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO ' . PdsSchema::EVENT_TABLE
+            . ' (seq, did, commit_cid, rev, since_rev, ops_json, blocks_car, blobs_json, created_at)'
+            . ' VALUES (1, :did, :commit, :rev, :since, :ops, :blocks, :blobs, :created)',
+            [
+                'did' => $did,
+                'commit' => 'old-commit',
+                'rev' => 'old-rev',
+                'since' => '',
+                'ops' => '[]',
+                'blocks' => '',
+                'blobs' => '[]',
+                'created' => '2026-11-24T00:01:00Z',
+            ],
+        );
+        $server->runtime->database->execute(
+            'UPDATE ' . PdsSchema::SEQUENCE_TABLE . ' SET value = 1 WHERE name = :name',
+            ['name' => 'firehose'],
+        );
+
+        $response = $server->json(
+            'DELETE',
+            '/api/v1/account/data',
+            [],
+            $login['cookies'],
+            $login['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM ' . PdsSchema::IDENTITY_TABLE . ' WHERE local_user_id = :user',
+            ['user' => 'alice'],
+        ));
+        $events = (new PdoPdsRepository($server->runtime->database))->eventsAfter(1, 10);
+        self::assertCount(1, $events);
+        self::assertSame([
+            '$type' => '#account',
+            'seq' => 2,
+            'did' => $did,
+            'time' => $body['deletion']['requested_at'],
+            'active' => false,
+            'status' => 'deleted',
+        ], $events[0]->toArray());
     }
 }
