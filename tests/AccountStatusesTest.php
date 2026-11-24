@@ -42,6 +42,35 @@ final class AccountStatusesTest extends TestCase
         self::assertNull($body['next_before']);
     }
 
+    public function testMastodonHashtagTimelineIsExposedThroughTheStandaloneHost(): void
+    {
+        $newest = $this->server->runtime->app->posts
+            ->create(new CreatePost('alice', 'Newest #Aloha', postId: 'z-newest'))
+            ->id;
+        $older = $this->server->runtime->app->posts
+            ->create(new CreatePost('alice', 'Older #aloha', postId: 'a-older'))
+            ->id;
+        $private = $this->server->runtime->app->posts
+            ->create(new CreatePost('alice', 'Private #aloha', Visibility::Followers, postId: 'private-tag'))
+            ->id;
+
+        $first = $this->server->send('GET', '/api/mastodon/v1/timelines/tag/aloha', [
+            'query' => ['limit' => '1'],
+        ]);
+
+        self::assertSame(200, $first->status);
+        self::assertSame([$newest], array_column($this->decoded($first), 'id'));
+        self::assertStringContainsString('max_id=' . $newest, (string) $first->header('Link'));
+
+        $second = $this->server->send('GET', '/api/mastodon/v1/timelines/tag/aloha', [
+            'query' => ['limit' => '1', 'max_id' => $newest],
+        ]);
+
+        self::assertSame(200, $second->status);
+        self::assertSame([$older], array_column($this->decoded($second), 'id'));
+        self::assertNotContains($private, array_column($this->decoded($first), 'id'));
+    }
+
     public function testAnAcceptedFollowerSeesFollowersOnlyPosts(): void
     {
         $public = $this->post('alice', 'public');
