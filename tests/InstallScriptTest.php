@@ -343,11 +343,59 @@ final class InstallScriptTest extends TestCase
         self::assertDirectoryDoesNotExist($this->directory . '/var');
     }
 
+    public function testFailedEnvironmentUpdateLeavesTheExistingConfigurationUntouched(): void
+    {
+        $original = file_get_contents($this->root . '/.env.example');
+        self::assertIsString($original);
+        $original = str_replace(
+            ['ALOHASOCIAL_INSTANCE_URL=http://localhost:3000', 'ALOHASOCIAL_INSTANCE_NAME=Aloha Social'],
+            ['ALOHASOCIAL_INSTANCE_URL=https://old.example', 'ALOHASOCIAL_INSTANCE_NAME=Old Instance'],
+            $original,
+        );
+        file_put_contents($this->directory . '/.env', $original);
+        chmod($this->directory . '/.env', 0o600);
+
+        $bin = $this->directory . '/fake-bin';
+        mkdir($bin);
+        $counter = $this->directory . '/env-write-count';
+        $wrapper = "#!/bin/sh\n"
+            . "if [ \"\${1:-}\" = '-r' ]; then\n"
+            . "  case \"\${2:-}\" in\n"
+            . "    *'stream_get_contents(STDIN)'*)\n"
+            . "      count=0\n"
+            . "      [ ! -f \"\$INSTALLER_ENV_WRITE_COUNT\" ] || count=\$(cat \"\$INSTALLER_ENV_WRITE_COUNT\")\n"
+            . "      count=\$((count + 1))\n"
+            . "      printf '%s' \"\$count\" > \"\$INSTALLER_ENV_WRITE_COUNT\"\n"
+            . "      [ \"\$count\" -lt 2 ] || exit 73\n"
+            . "      ;;\n"
+            . "  esac\n"
+            . "fi\n"
+            . 'exec ' . escapeshellarg(PHP_BINARY) . " \"\$@\"\n";
+        file_put_contents($bin . '/php', $wrapper);
+        chmod($bin . '/php', 0o755);
+
+        [$status, , $error] = $this->runInstaller([
+            '--non-interactive',
+            '--skip-composer',
+            '--no-admin',
+            '--no-verify',
+            '--url=https://new.example',
+            '--name=New Instance',
+        ], environmentOverrides: [
+            'PATH' => $bin . ':' . (getenv('PATH') ?: '/usr/bin:/bin'),
+            'INSTALLER_ENV_WRITE_COUNT' => $counter,
+        ]);
+
+        self::assertSame(73, $status, $error);
+        self::assertSame($original, file_get_contents($this->directory . '/.env'));
+        self::assertSame([], glob($this->directory . '/.env.tmp.*') ?: []);
+    }
+
     /**
      * @param list<string> $arguments
      * @return array{0: int, 1: string, 2: string}
      */
-    private function runInstaller(array $arguments, string $input = ''): array
+    private function runInstaller(array $arguments, string $input = '', array $environmentOverrides = []): array
     {
         $command = [
             'bash',
@@ -364,6 +412,7 @@ final class InstallScriptTest extends TestCase
                 unset($environment[$key]);
             }
         }
+        $environment = array_merge($environment, $environmentOverrides);
 
         $descriptors = [
             0 => ['pipe', 'r'],
