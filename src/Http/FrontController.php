@@ -769,9 +769,10 @@ final class FrontController
                 }
 
                 try {
+                    $objectId = $this->remoteObjectId($postId);
                     $interaction = $request->method === 'POST'
-                        ? $reactions->boostRemote($userId, $postId)
-                        : $reactions->unboostRemote($userId, $postId);
+                        ? $reactions->boostRemote($userId, $objectId)
+                        : $reactions->unboostRemote($userId, $objectId);
 
                     return Response::json(['interaction' => $this->remoteInteraction($interaction)]);
                 } catch (ReactionException $exception) {
@@ -860,9 +861,10 @@ final class FrontController
                 }
 
                 try {
+                    $objectId = $this->remoteObjectId($postId);
                     $interaction = $request->method === 'POST'
-                        ? $reactions->likeRemote($userId, $postId)
-                        : $reactions->unlikeRemote($userId, $postId);
+                        ? $reactions->likeRemote($userId, $objectId)
+                        : $reactions->unlikeRemote($userId, $objectId);
 
                     return Response::json(['interaction' => $this->remoteInteraction($interaction)]);
                 } catch (ReactionException $exception) {
@@ -959,6 +961,25 @@ final class FrontController
         $presented['is_remote'] = true;
 
         return $presented;
+    }
+
+    /**
+     * Timelines address a cached remote post by its activity id, while the
+     * core reaction service looks it up by object id. Both are the same post
+     * to the reader, so resolve the alias before reacting.
+     */
+    private function remoteObjectId(string $id): string
+    {
+        if (str_starts_with($id, 'at://')
+            || (!str_starts_with($id, 'http://') && !str_starts_with($id, 'https://'))
+        ) {
+            return $id;
+        }
+
+        $post = (new PdoRemotePostRepository($this->runtime->database))->findByActivityId($id);
+        $objectId = $post?->objectId ?? '';
+
+        return $objectId !== '' ? $objectId : $id;
     }
 
     private function isRemoteObjectTarget(string $id): bool

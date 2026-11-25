@@ -125,9 +125,15 @@ final class PostInteractions
             return [];
         }
 
+        // A cached post is addressed by its activity id on a card and by its
+        // object id in the cache. Load both and key the result by what the
+        // caller passed in.
+        $aliases = $this->remoteObjectIds($federated);
+        $lookup = array_values(array_unique(array_merge($federated, array_values($aliases))));
+
         $placeholders = [];
         $parameters = [];
-        foreach ($federated as $index => $postId) {
+        foreach ($lookup as $index => $postId) {
             $key = 'engagement_' . $index;
             $placeholders[] = ':' . $key;
             $parameters[$key] = $postId;
@@ -143,20 +149,64 @@ final class PostInteractions
             return [];
         }
 
-        $counts = [];
+        $byObjectId = [];
         foreach ($rows as $row) {
             $objectId = is_string($row['object_id'] ?? null) ? $row['object_id'] : '';
             if ($objectId === '') {
                 continue;
             }
-            $counts[$objectId] = [
+            $byObjectId[$objectId] = [
                 'likes' => max(0, (int) ($row['likes'] ?? 0)),
                 'boosts' => max(0, (int) ($row['boosts'] ?? 0)),
                 'replies' => max(0, (int) ($row['replies'] ?? 0)),
             ];
         }
 
+        $counts = [];
+        foreach ($federated as $postId) {
+            $match = $byObjectId[$postId] ?? $byObjectId[$aliases[$postId] ?? ''] ?? null;
+            if ($match !== null) {
+                $counts[$postId] = $match;
+            }
+        }
+
         return $counts;
+    }
+
+    /**
+     * @param list<string> $postIds
+     * @return array<string, string> activity id to object id
+     */
+    private function remoteObjectIds(array $postIds): array
+    {
+        $placeholders = [];
+        $parameters = [];
+        foreach ($postIds as $index => $postId) {
+            $key = 'alias_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT activity_id, object_id FROM social_remote_post'
+                . ' WHERE activity_id IN (' . implode(', ', $placeholders) . ')',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            return [];
+        }
+
+        $aliases = [];
+        foreach ($rows as $row) {
+            $activityId = is_string($row['activity_id'] ?? null) ? $row['activity_id'] : '';
+            $objectId = is_string($row['object_id'] ?? null) ? $row['object_id'] : '';
+            if ($activityId !== '' && $objectId !== '' && $activityId !== $objectId) {
+                $aliases[$activityId] = $objectId;
+            }
+        }
+
+        return $aliases;
     }
 
     /**
