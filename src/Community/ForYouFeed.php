@@ -79,6 +79,13 @@ final class ForYouFeed
 
     private const TAG_SNAPSHOT_LIMIT = 10;
 
+    /**
+     * How many older archive slices one scroll session may continue into.
+     * Each round ranks the posts older than the previous round's oldest post,
+     * so the feed keeps producing material instead of ending.
+     */
+    private const MAX_ROUNDS = 4;
+
     private readonly FeedInterests $interests;
 
     public function __construct(
@@ -97,7 +104,14 @@ final class ForYouFeed
      *     total: int
      * }
      */
-    public function page(string $accountId, int $limit = 20, int $offset = 0, ?string $cursor = null): array
+    public function page(
+        string $accountId,
+        int $limit = 20,
+        int $offset = 0,
+        ?string $cursor = null,
+        int $round = 0,
+        ?string $olderThan = null,
+    ): array
     {
         $limit = max(1, min(self::MAX_LIMIT, $limit));
         $offset = max(0, $offset);
@@ -106,7 +120,7 @@ final class ForYouFeed
             return $this->continueSnapshot('for-you', $accountId, $cursor, $limit);
         }
 
-        $candidates = $this->candidates($accountId);
+        $candidates = $this->candidates($accountId, $olderThan);
         if ($candidates === []) {
             return ['posts' => [], 'reasons' => [], 'next' => null, 'total' => 0];
         }
@@ -251,7 +265,15 @@ final class ForYouFeed
             $scored = $unseen;
         }
 
-        $page = $this->rankedPage('for-you', $accountId, $scored, $limit, $offset);
+        $page = $this->rankedPage(
+            'for-you',
+            $accountId,
+            $scored,
+            $limit,
+            $offset,
+            $round,
+            $this->oldestPublished($candidates, $olderThan),
+        );
         $page['interests'] = $model['top'];
 
         return $page;
@@ -273,7 +295,13 @@ final class ForYouFeed
      *     total: int
      * }
      */
-    public function trending(int $limit = 20, int $offset = 0, ?string $cursor = null): array
+    public function trending(
+        int $limit = 20,
+        int $offset = 0,
+        ?string $cursor = null,
+        int $round = 0,
+        ?string $olderThan = null,
+    ): array
     {
         $limit = max(1, min(self::MAX_LIMIT, $limit));
         $offset = max(0, $offset);
@@ -284,24 +312,35 @@ final class ForYouFeed
         $now = $this->clock->now();
         $since = Time::format($now->modify('-7 days'));
 
+        $localWindow = $olderThan === null
+            ? ' AND p.published_at >= :since'
+            : ' AND p.published_at < :older_local';
+        $remoteWindow = $olderThan === null
+            ? ' AND r.published_at >= :since'
+            : ' AND r.published_at < :older_remote';
+        $localParameters = $olderThan === null ? ['since' => $since] : ['older_local' => $olderThan];
+        $remoteParameters = $olderThan === null ? ['since' => $since] : ['older_remote' => $olderThan];
+
         $local = $this->db->fetchAll(
             'SELECT p.id, p.author_id, p.published_at, 0 AS remote,'
             . ' (SELECT COUNT(*) FROM social_favourite f WHERE f.post_id = p.id) AS favourites,'
             . ' (SELECT COUNT(*) FROM social_boost b WHERE b.post_id = p.id) AS boosts,'
             . ' (SELECT COUNT(*) FROM social_post r WHERE r.in_reply_to_id = p.id AND r.deleted_at IS NULL) AS replies'
             . ' FROM social_post p'
-            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.in_reply_to_id IS NULL AND p.published_at >= :since"
+            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.in_reply_to_id IS NULL"
+            . $localWindow
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
-            ['since' => $since],
+            $localParameters,
         );
 
         $remote = $this->db->fetchAll(
             'SELECT r.activity_id AS id, r.actor_id AS author_id, r.content, r.published_at,'
             . ' 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
             . ' FROM social_remote_post r'
-            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.in_reply_to_id IS NULL AND r.published_at >= :since"
+            . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.in_reply_to_id IS NULL"
+            . $remoteWindow
             . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
-            ['since' => $since],
+            $remoteParameters,
         );
 
         $tagsByPost = $this->postTagsForPosts(array_map(
@@ -354,7 +393,15 @@ final class ForYouFeed
 
         $scored = $this->spreadAuthorsAndTags($scored);
 
-        return $this->rankedPage('trending', null, $scored, $limit, $offset);
+        return $this->rankedPage(
+            'trending',
+            null,
+            $scored,
+            $limit,
+            $offset,
+            $round,
+            $this->oldestPublished(array_merge($local, $remote), $olderThan),
+        );
     }
 
     /**
@@ -439,14 +486,22 @@ final class ForYouFeed
     /** @param list<array{id:string, author_id?:string, score?:float, reason:string}> $scored
      *  @return array{posts:list<string>, reasons:array<string,string>, next:string|int|null, total:int}
      */
-    private function rankedPage(string $kind, ?string $accountId, array $scored, int $limit, int $offset): array
+    private function rankedPage(
+        string $kind,
+        ?string $accountId,
+        array $scored,
+        int $limit,
+        int $offset,
+        int $round = 0,
+        ?string $oldest = null,
+    ): array
     {
         $entries = array_map(
             static fn (array $entry): array => ['id' => (string) $entry['id'], 'reason' => (string) $entry['reason']],
             array_slice($scored, 0, self::CANDIDATE_LIMIT),
         );
 
-        return $this->pageEntries($entries, $kind, $accountId, $limit, $offset, $offset > 0);
+        return $this->pageEntries($entries, $kind, $accountId, $limit, $offset, $offset > 0, null, $round, $oldest);
     }
 
     /**
@@ -461,6 +516,8 @@ final class ForYouFeed
         int $offset,
         bool $legacyOffset,
         ?string $snapshotToken = null,
+        int $round = 0,
+        ?string $oldest = null,
     ): array
     {
         $total = count($entries);
@@ -477,8 +534,8 @@ final class ForYouFeed
             $next = $legacyOffset
                 ? $nextOffset
                 : ($snapshotToken === null
-                    ? $this->storeSnapshot($kind, $accountId, $entries, $nextOffset)
-                    : $this->encodeCursor($snapshotToken, $nextOffset));
+                    ? $this->storeSnapshot($kind, $accountId, $entries, $nextOffset, $round, $oldest)
+                    : $this->encodeCursor($snapshotToken, $nextOffset, $round, $oldest));
         }
 
         return [
@@ -491,7 +548,14 @@ final class ForYouFeed
     }
 
     /** @param list<array{id:string,reason:string}> $entries */
-    private function storeSnapshot(string $kind, ?string $accountId, array $entries, int $offset): string
+    private function storeSnapshot(
+        string $kind,
+        ?string $accountId,
+        array $entries,
+        int $offset,
+        int $round = 0,
+        ?string $oldest = null,
+    ): string
     {
         $now = $this->clock->now();
         $createdAt = Time::format($now);
@@ -536,12 +600,21 @@ final class ForYouFeed
             );
         });
 
-        return $this->encodeCursor($token, $offset);
+        return $this->encodeCursor($token, $offset, $round, $oldest);
     }
 
-    private function encodeCursor(string $token, int $offset): string
+    private function encodeCursor(string $token, int $offset, int $round = 0, ?string $oldest = null): string
     {
-        $cursor = json_encode(['snapshot' => $token, 'offset' => $offset], JSON_THROW_ON_ERROR);
+        $payload = ['snapshot' => $token, 'offset' => $offset];
+        if ($round > 0) {
+            $payload['round'] = $round;
+        }
+        if ($oldest !== null && $oldest !== '') {
+            $payload['oldest'] = $oldest;
+        }
+
+        $cursor = json_encode($payload, JSON_THROW_ON_ERROR);
+
         return 'r1.' . rtrim(strtr(base64_encode($cursor), '+/', '-_'), '=');
     }
 
@@ -580,7 +653,35 @@ final class ForYouFeed
             }
         }
 
-        return $this->pageEntries($entries, $kind, $accountId, $limit, $decoded['offset'], false, $decoded['snapshot']);
+        $page = $this->pageEntries(
+            $entries,
+            $kind,
+            $accountId,
+            $limit,
+            $decoded['offset'],
+            false,
+            $decoded['snapshot'],
+            $decoded['round'],
+            $decoded['oldest'],
+        );
+
+        if ($page['next'] !== null
+            || $decoded['round'] >= self::MAX_ROUNDS
+            || $decoded['oldest'] === null
+        ) {
+            return $page;
+        }
+
+        // This ranking snapshot is used up. Rank an older slice of the archive
+        // and return it as the next page, so scrolling continues with older
+        // posts instead of stopping at "You're all caught up".
+        $next = $kind === 'for-you' && $accountId !== null
+            ? $this->page($accountId, $limit, 0, null, $decoded['round'] + 1, $decoded['oldest'])
+            : $this->trending($limit, 0, null, $decoded['round'] + 1, $decoded['oldest']);
+
+        // An empty older slice means the archive really is exhausted; keep the
+        // last page's own counters and end state.
+        return $next['posts'] === [] ? $page : $next;
     }
 
     /** @return array{snapshot:string,offset:int} */
@@ -611,14 +712,30 @@ final class ForYouFeed
             throw CommunityException::invalid('The ranked feed cursor is malformed.');
         }
 
-        return ['snapshot' => $value['snapshot'], 'offset' => $value['offset']];
+        $round = $value['round'] ?? 0;
+        $oldest = $value['oldest'] ?? null;
+        if (!is_int($round)
+            || $round < 0
+            || $round > self::MAX_ROUNDS
+            || ($oldest !== null && (!is_string($oldest) || strlen($oldest) > 32))
+        ) {
+            throw CommunityException::invalid('The ranked feed cursor is malformed.');
+        }
+
+        return ['snapshot' => $value['snapshot'], 'offset' => $value['offset'], 'round' => $round, 'oldest' => $oldest];
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    private function candidates(string $accountId): array
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function candidates(string $accountId, ?string $olderThan = null): array
     {
+        $olderLocal = $olderThan === null ? '' : ' AND p.published_at < :older_local';
+        $olderRemote = $olderThan === null ? '' : ' AND r.published_at < :older_remote';
+
         $now = $this->clock->now();
         $since = Time::format($now->modify('-7 days'));
 
@@ -638,12 +755,16 @@ final class ForYouFeed
             . 'SELECT actor_id FROM social_mute WHERE user_id = :muted_viewer'
             . ' AND (expires_at IS NULL OR expires_at > :local_mute_now))'
             . ' AND p.author_id NOT IN (SELECT actor_id FROM social_block WHERE local_user_id = :blocked_viewer)'
+            . $olderLocal
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
-            [
-                'muted_viewer' => $accountId,
-                'local_mute_now' => Time::format($now),
-                'blocked_viewer' => $accountId,
-            ],
+            array_merge(
+                [
+                    'muted_viewer' => $accountId,
+                    'local_mute_now' => Time::format($now),
+                    'blocked_viewer' => $accountId,
+                ],
+                $olderThan === null ? [] : ['older_local' => $olderThan],
+            ),
         );
 
         $remote = $this->db->fetchAll(
@@ -664,15 +785,19 @@ final class ForYouFeed
             . ' SELECT 1 FROM social_block b WHERE b.local_user_id = :remote_block_viewer'
             . ' AND (b.actor_id = r.actor_id OR b.actor_id = r.object_author_id)'
             . ')'
+            . $olderRemote
             . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
-            [
-                'since' => $since,
-                'remote_viewer' => $accountId,
-                'atproto_viewer' => $accountId,
-                'remote_mute_viewer' => $accountId,
-                'remote_block_viewer' => $accountId,
-                'mute_now' => Time::format($now),
-            ],
+            array_merge(
+                [
+                    'since' => $since,
+                    'remote_viewer' => $accountId,
+                    'atproto_viewer' => $accountId,
+                    'remote_mute_viewer' => $accountId,
+                    'remote_block_viewer' => $accountId,
+                    'mute_now' => Time::format($now),
+                ],
+                $olderThan === null ? [] : ['older_remote' => $olderThan],
+            ),
         );
 
         $candidates = array_merge($local, $remote);
@@ -682,6 +807,28 @@ final class ForYouFeed
         ));
 
         return array_slice($candidates, 0, self::CANDIDATE_LIMIT);
+    }
+
+    /**
+     * The oldest publish timestamp in a candidate set, used as the boundary of
+     * the next archive round.
+     *
+     * @param list<array<string, mixed>> $candidates
+     */
+    private function oldestPublished(array $candidates, ?string $fallback = null): ?string
+    {
+        $oldest = $fallback;
+        foreach ($candidates as $candidate) {
+            $published = (string) ($candidate['published_at'] ?? '');
+            if ($published === '') {
+                continue;
+            }
+            if ($oldest === null || strcmp($published, $oldest) < 0) {
+                $oldest = $published;
+            }
+        }
+
+        return $oldest;
     }
 
     /**
