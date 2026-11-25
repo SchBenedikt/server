@@ -172,7 +172,7 @@ final class PdoEventBroker implements EventBroker
     {
         $now = $this->clock->now();
         if ($this->lastPrunedAt !== null
-            && $now < new \DateTimeImmutable($this->lastPrunedAt)->modify('+1 minute')
+            && $now < (new \DateTimeImmutable($this->lastPrunedAt))->modify('+1 minute')
         ) {
             return;
         }
