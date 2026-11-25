@@ -166,6 +166,7 @@ final class MastodonEventBrokerTest extends TestCase
         $server = new TestServer(['mastodon_api' => true]);
         $server->createAccount('alice');
         $server->runtime->app->posts->create(new CreatePost('alice', 'hello'));
+        $server->runtime->app->posts->create(new CreatePost('alice', 'second buffered event'));
 
         $unauthenticated = (new FrontController($server->runtime))->handle(
             new Request('GET', '/api/mastodon/v1/streaming', query: ['stream' => 'public']),
