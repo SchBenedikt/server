@@ -7,7 +7,9 @@ declare(strict_types=1);
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
+use AlohaSocial\Core\Platform\Network\DnsHostResolver;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Support\PdsDiscoveryTargetGuard;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -46,6 +48,7 @@ try {
     if (!$config->atprotoPds) {
         throw new RuntimeException('The native AT Protocol PDS is disabled in this configuration.');
     }
+    $targetGuard = new PdsDiscoveryTargetGuard(new DnsHostResolver());
     $pdsOrigin = parse_url($config->atprotoPdsUrl);
     if (!is_array($pdsOrigin) || ($pdsOrigin['scheme'] ?? '') !== 'https'
         || !isset($pdsOrigin['host']) || isset($pdsOrigin['user']) || isset($pdsOrigin['pass'])
@@ -55,7 +58,7 @@ try {
     }
 
     $wellKnownUrl = 'https://' . $handle . '/.well-known/atproto-did';
-    $did = trim(pdsDiscoveryRequest($wellKnownUrl, 'text/plain'));
+    $did = trim(pdsDiscoveryRequest($wellKnownUrl, 'text/plain', $targetGuard));
     if (preg_match('/^did:plc:[a-z2-7]+$/D', $did) !== 1) {
         throw new RuntimeException('The handle well-known endpoint did not return a valid PLC DID.');
     }
@@ -66,7 +69,7 @@ try {
     }
 
     $plcBase = rtrim($config->atprotoPlcUrl, '/');
-    $didDocument = pdsDiscoveryJson($plcBase . '/' . $did);
+    $didDocument = pdsDiscoveryJson($plcBase . '/' . $did, $targetGuard);
     if (($didDocument['id'] ?? null) !== $did) {
         throw new RuntimeException('The PLC DID document id does not match the resolved DID.');
     }
@@ -92,6 +95,7 @@ try {
 
     $description = pdsDiscoveryJson(
         rtrim($config->atprotoPdsUrl, '/') . '/xrpc/com.atproto.server.describeServer',
+        $targetGuard,
     );
     if (!isset($description['did']) || !is_string($description['did'])) {
         throw new RuntimeException('The configured PDS did not return a valid describeServer response.');
@@ -103,7 +107,7 @@ try {
         '',
         '&',
         PHP_QUERY_RFC3986,
-    ));
+    ), $targetGuard);
     if (($resolved['did'] ?? null) !== $did) {
         throw new RuntimeException('The external AppView resolves the handle to a different DID.');
     }
@@ -115,7 +119,7 @@ try {
         '&',
         PHP_QUERY_RFC3986,
     );
-    $thread = pdsDiscoveryJson($threadUrl);
+    $thread = pdsDiscoveryJson($threadUrl, $targetGuard);
     $indexedUri = $thread['thread']['post']['uri'] ?? null;
     if ($indexedUri !== $postUri) {
         throw new RuntimeException('The external AppView has not indexed the supplied post URI.');
@@ -128,8 +132,9 @@ try {
 
 fwrite(STDOUT, "PDS external discovery smoke passed.\n");
 
-function pdsDiscoveryRequest(string $url, string $accept): string
+function pdsDiscoveryRequest(string $url, string $accept, PdsDiscoveryTargetGuard $targetGuard): string
 {
+    $resolveEntries = $targetGuard->curlResolveEntries($url);
     $handle = curl_init($url);
     if ($handle === false) {
         throw new RuntimeException('Could not initialize the HTTP client.');
@@ -143,6 +148,7 @@ function pdsDiscoveryRequest(string $url, string $accept): string
         CURLOPT_TIMEOUT => 20,
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+        CURLOPT_RESOLVE => $resolveEntries,
         CURLOPT_HTTPHEADER => ['Accept: ' . $accept],
         CURLOPT_USERAGENT => 'AlohaSocial-PDS-Discovery-Smoke/1.0',
         CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk) use (&$body, &$tooLarge): int {
@@ -175,10 +181,10 @@ function pdsDiscoveryRequest(string $url, string $accept): string
 }
 
 /** @return array<string, mixed> */
-function pdsDiscoveryJson(string $url): array
+function pdsDiscoveryJson(string $url, PdsDiscoveryTargetGuard $targetGuard): array
 {
     try {
-        $decoded = json_decode(pdsDiscoveryRequest($url, 'application/json'), true, 64, JSON_THROW_ON_ERROR);
+        $decoded = json_decode(pdsDiscoveryRequest($url, 'application/json', $targetGuard), true, 64, JSON_THROW_ON_ERROR);
     } catch (JsonException $exception) {
         throw new RuntimeException('Response was not valid JSON: ' . $url, previous: $exception);
     }
