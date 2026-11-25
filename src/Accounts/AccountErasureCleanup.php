@@ -137,6 +137,33 @@ final readonly class AccountErasureCleanup
                 'DELETE FROM mastodon_oauth_token WHERE account_id = :account_id',
                 $user,
             );
+            $notificationIds = array_fill_keys(array_map(
+                static fn (array $row): string => (string) $row['id'],
+                $db->fetchAll(
+                    'SELECT id FROM social_notification WHERE recipient_id = :recipient_id OR actor_id = :actor_id'
+                        . ' OR post_id IN (SELECT id FROM social_post WHERE author_id = :post_author_id)',
+                    ['recipient_id' => $accountId, 'actor_id' => $accountId, 'post_author_id' => $accountId],
+                ),
+            ), true);
+            if ($notificationIds !== []) {
+                foreach ($db->fetchAll(
+                    "SELECT sequence, payload_json FROM mastodon_stream_event WHERE event_name = 'notification.created'",
+                ) as $event) {
+                    $payload = json_decode((string) $event['payload_json'], true);
+                    if (is_array($payload) && isset($notificationIds[$payload['notification_id'] ?? ''])) {
+                        $db->execute(
+                            'DELETE FROM mastodon_stream_event WHERE sequence = :sequence',
+                            ['sequence' => (int) $event['sequence']],
+                        );
+                    }
+                }
+            }
+            $delete(
+                'mastodon_stream_events',
+                'DELETE FROM mastodon_stream_event WHERE actor_id = :actor_id OR sequence IN'
+                    . ' (SELECT event_sequence FROM mastodon_stream_event_recipient WHERE account_id = :recipient_account_id)',
+                ['actor_id' => $accountId, 'recipient_account_id' => $accountId],
+            );
 
             $db->execute(
                 'UPDATE account SET handle = :handle, email = :email, display_name = NULL, password_hash = :password_hash,'

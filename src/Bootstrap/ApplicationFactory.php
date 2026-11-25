@@ -48,6 +48,7 @@ use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
 use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
+use AlohaSocial\Server\Federation\Mastodon\PdoEventBroker;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Accounts\AccountDirectory;
@@ -193,6 +194,7 @@ final class ApplicationFactory
             new PdoBlockRepository($database),
             $atprotoJetstream?->name() ?? JetstreamEventSource::NAME,
         );
+        $mastodonEventBroker = new PdoEventBroker($database, $clock);
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -219,6 +221,7 @@ final class ApplicationFactory
             pdsSecrets: $this->secretBox(),
             pdsDirectory: $pdsDirectory,
             atprotoEventSource: $atprotoJetstream,
+            eventBroker: $mastodonEventBroker,
         );
 
         $mailer = $this->config->mailTransport === 'smtp'

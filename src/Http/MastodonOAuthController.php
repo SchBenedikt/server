@@ -75,7 +75,8 @@ final class MastodonOAuthController
     {
         $mastodonPrefix = rtrim($this->runtime->config->mastodonPrefix, '/');
         $isMastodonApiPath = str_starts_with($request->path, $mastodonPrefix . '/')
-            || $request->path === '/api/v1/timelines/home';
+            || $request->path === '/api/v1/timelines/home'
+            || $request->path === '/api/v1/streaming';
         if (!$this->runtime->config->mastodonApi || !$isMastodonApiPath) {
             return $request;
         }

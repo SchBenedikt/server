@@ -60,6 +60,8 @@ final class FrontController
 
     private readonly MastodonOAuthController $mastodonOAuth;
 
+    private readonly MastodonStreamingController $mastodonStreaming;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
@@ -70,6 +72,7 @@ final class FrontController
         $this->atprotoSession = new AtprotoSessionController($runtime);
         $this->atprotoOAuth = new AtprotoOAuthController($runtime);
         $this->mastodonOAuth = new MastodonOAuthController($runtime);
+        $this->mastodonStreaming = new MastodonStreamingController($runtime);
     }
 
     /**
@@ -121,6 +124,11 @@ final class FrontController
         $sessionUserId = $session?->userId();
 
         $request = $this->mastodonOAuth->authenticate($request);
+
+        $streamingResponse = $this->mastodonStreaming->handle($request);
+        if ($streamingResponse !== null) {
+            return $streamingResponse;
+        }
 
         // The native API owns this path for first-party clients, but a
         // Mastodon OAuth client expects the Mastodon status-list response.
