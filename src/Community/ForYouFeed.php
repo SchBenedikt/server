@@ -84,7 +84,7 @@ final class ForYouFeed
      * Each round ranks the posts older than the previous round's oldest post,
      * so the feed keeps producing material instead of ending.
      */
-    private const MAX_ROUNDS = 4;
+    private const MAX_ROUNDS = 20;
 
     private readonly FeedInterests $interests;
 
@@ -725,9 +725,6 @@ final class ForYouFeed
         return ['snapshot' => $value['snapshot'], 'offset' => $value['offset'], 'round' => $round, 'oldest' => $oldest];
     }
 
-    /**
-     * @return list<array<string, mixed>>
-     */
     /**
      * @return list<array<string, mixed>>
      */
