@@ -11,6 +11,8 @@ namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Service\CreatePost;
+use AlohaSocial\Server\Community\ForYouFeed;
+use AlohaSocial\Server\Tests\Support\CountingConnection;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -274,6 +276,27 @@ final class EngagementTest extends TestCase
         $secondBody = $this->decoded($secondPage);
         self::assertContains($own, $secondBody['posts']);
         self::assertNull($secondBody['next']);
+    }
+
+    public function testForYouLoadsLocalCandidateTagsWithOneBatchQuery(): void
+    {
+        $this->post('bob', 'A post about #aloha');
+        $this->post('carol', 'Another note on #aloha');
+        $this->post('bob', 'One more #aloha thought');
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_followed_hashtag (user_id, hashtag, created_at)'
+            . " VALUES ('alice', 'aloha', '2026-11-16T00:00:00Z')",
+        );
+
+        $database = new CountingConnection($this->server->runtime->database);
+        (new ForYouFeed($database, $this->server->runtime->clock))->page('alice', 20);
+        $tagQueries = array_values(array_filter(
+            $database->queries,
+            static fn (string $query): bool => str_contains($query, 'FROM social_post_hashtag'),
+        ));
+
+        self::assertCount(1, $tagQueries);
+        self::assertStringContainsString('post_id IN (', $tagQueries[0]);
     }
 
     public function testForYouCursorKeepsTheRankedOrderWhenTheFeedChanges(): void
