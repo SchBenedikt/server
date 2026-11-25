@@ -135,26 +135,37 @@ function pdsDiscoveryRequest(string $url, string $accept): string
         throw new RuntimeException('Could not initialize the HTTP client.');
     }
 
+    $body = '';
+    $tooLarge = false;
     curl_setopt_array($handle, [
         CURLOPT_HTTPGET => true,
-        CURLOPT_RETURNTRANSFER => true,
         CURLOPT_CONNECTTIMEOUT => 8,
         CURLOPT_TIMEOUT => 20,
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
         CURLOPT_HTTPHEADER => ['Accept: ' . $accept],
         CURLOPT_USERAGENT => 'AlohaSocial-PDS-Discovery-Smoke/1.0',
+        CURLOPT_WRITEFUNCTION => static function ($curl, string $chunk) use (&$body, &$tooLarge): int {
+            if (strlen($body) + strlen($chunk) > 2_097_152) {
+                $tooLarge = true;
+
+                return 0;
+            }
+            $body .= $chunk;
+
+            return strlen($chunk);
+        },
     ]);
-    $body = curl_exec($handle);
+    $completed = curl_exec($handle);
     $error = curl_error($handle);
     $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
     curl_close($handle);
 
-    if (!is_string($body)) {
-        throw new RuntimeException('Request failed for ' . $url . ': ' . $error);
-    }
-    if (strlen($body) > 2_097_152) {
+    if ($tooLarge) {
         throw new RuntimeException('Response exceeded the 2 MiB safety limit: ' . $url);
+    }
+    if ($completed !== true) {
+        throw new RuntimeException('Request failed for ' . $url . ': ' . $error);
     }
     if ($status < 200 || $status >= 300) {
         throw new RuntimeException('Request returned HTTP ' . $status . ': ' . $url);
