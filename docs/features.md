@@ -314,17 +314,28 @@ server and proxy logs follow their own retention policy. Remote copies and
 remote AT Protocol data are outside this instance's control and may remain on
 peer servers.
 
-## Host-only reading lists and text stories
+## Reading lists and text stories
 
-Two community surfaces are deliberately local to this host and are not the
-core's ActivityPub media collections or Pixelfed stories. **Reading lists**
-(`collection` / `collection_item`) are private or owner-published lists of any
-post the owner can read; they power `#/collections` and `#/c/:id` only. The
-core's `social_media_collection` tables and `/api/v1/collections` expose media
-albums and `/@handle/collections`; the two models are not advertised as the
-same object. **Text stories** (`story` / `story_seen`) are 24-hour local
-stories with a colour background, visible to the author and local followers.
-They are not federated. The core's media stories (`social_story`) remain a
-separate Pixelfed-compatible surface. This boundary is intentional: a future
-move to media stories or federated reading lists needs a data migration, not
-a second hidden write path.
+Both surfaces now persist in the core tables; there is no second host table
+to drift. **Reading lists** use `social_media_collection` and
+`social_media_collection_item`, powering `#/collections` and `#/c/:id`.
+Public lists use the real account as `owner_id` and `audience = public`.
+Private lists use the reserved `host-private:` owner namespace with
+`audience = followers`; the core services cannot enumerate or dereference
+that namespace, and the adapter maps it back to the real owner on every read.
+This adapter is necessary because the core media-collection service is
+strictly media-only (own image/video posts), while a reading list may contain
+any post the owner can read, including text and posts by other authors. The
+adapter keeps the core `PostService` as the visibility authority and rechecks
+every item on read. Migration `202611280008` copies every collection, item,
+title, description, visibility, timestamp and position into the core tables
+and drops `collection`/`collection_item`.
+
+**Text stories** use `social_story` and `social_story_view`: the text is the
+core caption, the colour background is a generated background URL, and the
+view marker is the core story view. The core story entity and repository are
+used for writes; the adapter supplies the text/background behaviour that the
+core media-story service does not model. Stories remain 24-hour local stories
+visible to the author and local followers; they are not federated. Migration
+`202611280008` copies every story and view marker into the core tables and
+drops `story`/`story_seen`.

@@ -65,6 +65,9 @@ final class MigrationTest extends TestCase
         ] as $expected) {
             self::assertContains($expected, $tables, 'Missing table: ' . $expected);
         }
+        foreach (['collection', 'collection_item', 'story', 'story_seen'] as $legacy) {
+            self::assertNotContains($legacy, $tables, 'Legacy table should have been consolidated: ' . $legacy);
+        }
 
         $preferenceColumns = $server->runtime->database->fetchAll('PRAGMA table_info(account_preference)');
         $columnNames = array_map(static fn (array $row): string => (string) $row['name'], $preferenceColumns);

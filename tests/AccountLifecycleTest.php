@@ -279,27 +279,54 @@ final class AccountLifecycleTest extends TestCase
             ['account' => 'alice', 'tag' => 'private-topic', 'created' => $stamp],
         );
         $db->execute(
-            'INSERT INTO collection (id, account_id, title, created_at, updated_at)'
-            . ' VALUES (:id, :account, :title, :created, :updated)',
-            ['id' => 'collection-1', 'account' => 'alice', 'title' => 'Private list', 'created' => $stamp, 'updated' => $stamp],
+            'INSERT INTO social_media_collection'
+            . ' (id, owner_id, title, description, audience, created_at, updated_at)'
+            . ' VALUES (:id, :owner, :title, :description, :audience, :created, :updated)',
+            [
+                'id' => 'collection-1',
+                'owner' => 'host-private:alice',
+                'title' => 'Private list',
+                'description' => '',
+                'audience' => 'followers',
+                'created' => $stamp,
+                'updated' => $stamp,
+            ],
         );
         $db->execute(
-            'INSERT INTO collection_item (collection_id, post_id, position, created_at)'
-            . ' VALUES (:collection, :post, 0, :created)',
-            ['collection' => 'collection-1', 'post' => 'post-1', 'created' => $stamp],
+            'INSERT INTO social_media_collection_item (collection_id, post_id, position, added_at)'
+            . ' VALUES (:collection, :post, 1, :added)',
+            ['collection' => 'collection-1', 'post' => 'post-1', 'added' => $stamp],
         );
         $db->execute(
-            'INSERT INTO story (id, account_id, content, created_at, expires_at)'
-            . ' VALUES (:id, :account, :content, :created, :expires)',
-            ['id' => 'story-1', 'account' => 'alice', 'content' => 'temporary story', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
+            'INSERT INTO social_story'
+            . ' (id, owner_id, is_local, object_id, caption, remote_media_url, created_at, expires_at)'
+            . ' VALUES (:id, :account, 1, :object_id, :caption, :media, :created, :expires)',
+            [
+                'id' => 'story-1',
+                'account' => 'alice',
+                'object_id' => 'host-story:story-1',
+                'caption' => 'temporary story',
+                'media' => '/api/v1/host/stories/story-1/background?background=ocean',
+                'created' => $stamp,
+                'expires' => '2026-11-25T12:00:00Z',
+            ],
         );
         $db->execute(
-            'INSERT INTO story (id, account_id, content, created_at, expires_at)'
-            . ' VALUES (:id, :account, :content, :created, :expires)',
-            ['id' => 'story-bob', 'account' => 'bob', 'content' => 'Bob story', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
+            'INSERT INTO social_story'
+            . ' (id, owner_id, is_local, object_id, caption, remote_media_url, created_at, expires_at)'
+            . ' VALUES (:id, :account, 1, :object_id, :caption, :media, :created, :expires)',
+            [
+                'id' => 'story-bob',
+                'account' => 'bob',
+                'object_id' => 'host-story:story-bob',
+                'caption' => 'Bob story',
+                'media' => '/api/v1/host/stories/story-bob/background?background=ocean',
+                'created' => $stamp,
+                'expires' => '2026-11-25T12:00:00Z',
+            ],
         );
         $db->execute(
-            'INSERT INTO story_seen (story_id, account_id, seen_at) VALUES (:story, :account, :seen)',
+            'INSERT INTO social_story_view (story_id, viewer_id, viewed_at) VALUES (:story, :account, :seen)',
             ['story' => 'story-1', 'account' => 'alice', 'seen' => $stamp],
         );
         $db->execute(
@@ -381,7 +408,11 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame(200, $response->status, $response->body);
         $payload = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertSame(1, $payload['host_data_deleted']['drafts']);
-        self::assertSame(1, $payload['host_data_deleted']['stories']);
+        // Core erasure already removed the local story; the host cleanup is
+        // idempotent and must not leave a private-prefix collection behind.
+        self::assertSame(0, $payload['host_data_deleted']['stories']);
+        self::assertSame(1, $payload['host_data_deleted']['collections']);
+        self::assertSame(1, $payload['host_data_deleted']['collection_items']);
         self::assertSame(1, $payload['host_data_deleted']['kokua_posts']);
         self::assertSame(1, $payload['host_data_deleted']['kokua_replies']);
         self::assertSame(1, $payload['host_data_deleted']['announcements']);
@@ -403,7 +434,7 @@ final class AccountLifecycleTest extends TestCase
         ));
         foreach ([
             'draft', 'account_preference', 'recommendation_feedback',
-            'featured_tag', 'collection', 'story', 'kokua',
+            'featured_tag', 'kokua',
         ] as $table) {
             self::assertSame(0, (int) $db->fetchValue(
                 'SELECT COUNT(*) FROM ' . $table . ' WHERE account_id = :account_id',
@@ -411,11 +442,17 @@ final class AccountLifecycleTest extends TestCase
             ), $table . ' should be purged');
         }
         self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM recommendation_snapshot'));
-        foreach (['collection_item', 'story_seen', 'kokua_help'] as $table) {
-            self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM ' . $table), $table . ' should be purged');
-        }
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM social_media_collection WHERE owner_id IN (:owner, :private_owner)',
+            ['owner' => 'alice', 'private_owner' => 'host-private:alice'],
+        ));
+        self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM social_media_collection_item'));
+        self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM social_story WHERE owner_id = :account_id', [
+            'account_id' => 'alice',
+        ]));
+        self::assertSame(0, (int) $db->fetchValue('SELECT COUNT(*) FROM social_story_view'));
         self::assertSame(1, (int) $db->fetchValue(
-            'SELECT COUNT(*) FROM story WHERE account_id = :account_id',
+            'SELECT COUNT(*) FROM social_story WHERE owner_id = :account_id',
             ['account_id' => 'bob'],
         ));
         self::assertSame(1, (int) $db->fetchValue(

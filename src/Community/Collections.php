@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Collection\MediaCollectionItem;
+use AlohaSocial\Core\Domain\Collection\MediaCollectionSchema;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
@@ -16,24 +18,35 @@ use AlohaSocial\Core\Service\PostService;
 use AlohaSocial\Core\Support\Time;
 
 use function array_map;
+use function count;
 use function max;
 use function mb_strlen;
-use function min;
+use function str_starts_with;
+use function substr;
 use function trim;
 
 /**
- * Host-local reading lists.
+ * Reading lists backed by the core media-collection tables.
  *
- * A collection is a named, ordered list of posts. The items reference core
- * post ids; the posts themselves are never copied. Public collections are
- * readable by anyone, private ones only by their owner. This is deliberately
- * not the core's `social_media_collection`: that model is a media album with
- * an ActivityPub audience, while a reading list may contain any readable post
- * and is only rendered by this host. Both concepts therefore keep separate
- * ids and routes.
+ * The core's {@see \AlohaSocial\Core\Service\Collection\MediaCollectionService}
+ * intentionally models media albums: every item must be an own image/video
+ * post and every collection has an ActivityPub audience. A host reading list
+ * is deliberately broader: it may reference any post the owner can read,
+ * including text posts and posts by other authors, and it has a strict
+ * owner-only mode.
+ *
+ * This adapter keeps one storage path in the core tables. Public lists use the
+ * real account as `owner_id` and `audience = public`. Private lists use the
+ * reserved `host-private:` owner namespace and `audience = followers`; no
+ * account has a follower edge to that namespace, so the core service cannot
+ * enumerate or dereference a private list. The adapter maps the namespace back
+ * to the real owner on every read and keeps the item visibility check on the
+ * core {@see PostService}, not on a copied snapshot.
  */
 final class Collections
 {
+    public const PRIVATE_OWNER_PREFIX = 'host-private:';
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
@@ -46,15 +59,24 @@ final class Collections
      */
     public function forAccount(string $accountId, bool $includePrivate = true, ?string $viewerId = null): array
     {
-        $sql = 'SELECT c.*, (SELECT COUNT(*) FROM collection_item i WHERE i.collection_id = c.id) AS item_count'
-            . ' FROM collection c WHERE c.account_id = :account_id';
-        if (!$includePrivate) {
-            $sql .= ' AND c.is_public = 1';
+        $parameters = ['account_id' => $accountId];
+        if ($includePrivate) {
+            $where = '(c.owner_id = :account_id OR c.owner_id = :private_owner)';
+            $parameters['private_owner'] = self::PRIVATE_OWNER_PREFIX . $accountId;
+        } else {
+            $where = 'c.owner_id = :account_id AND c.audience = :public';
+            $parameters['public'] = 'public';
         }
-        $sql .= ' ORDER BY c.updated_at DESC, c.created_at DESC LIMIT 100';
 
-        $rows = $this->db->fetchAll($sql, ['account_id' => $accountId]);
-        $collections = array_map([$this, 'hydrate'], $rows);
+        $rows = $this->db->fetchAll(
+            'SELECT c.*, (SELECT COUNT(*) FROM ' . MediaCollectionSchema::ITEM_TABLE
+            . ' i WHERE i.collection_id = c.id) AS item_count'
+            . ' FROM ' . MediaCollectionSchema::TABLE . ' c WHERE ' . $where
+            . ' ORDER BY c.updated_at DESC, c.created_at DESC, c.id DESC LIMIT 100',
+            $parameters,
+        );
+
+        $collections = array_map(fn (array $row): array => $this->hydrate($row), $rows);
 
         // A public listing must not reveal how many inaccessible posts an
         // owner has collected. The owner and private views keep the total.
@@ -89,18 +111,20 @@ final class Collections
     {
         $name = $this->title($title);
         $text = $this->description($description);
+        $public = $this->boolean($isPublic);
         $now = Time::format($this->clock->now());
         $id = bin2hex(random_bytes(12));
 
         $this->db->execute(
-            'INSERT INTO collection (id, account_id, title, description, is_public, created_at, updated_at)'
-            . ' VALUES (:id, :account_id, :title, :description, :is_public, :now, :now)',
+            'INSERT INTO ' . MediaCollectionSchema::TABLE
+            . ' (id, owner_id, title, description, audience, created_at, updated_at)'
+            . ' VALUES (:id, :owner_id, :title, :description, :audience, :now, :now)',
             [
                 'id' => $id,
-                'account_id' => $accountId,
+                'owner_id' => $this->ownerId($accountId, $public),
                 'title' => $name,
                 'description' => $text,
-                'is_public' => $this->boolean($isPublic) ? 1 : 0,
+                'audience' => $public ? 'public' : 'followers',
                 'now' => $now,
             ],
         );
@@ -124,13 +148,17 @@ final class Collections
         }
         $this->assertOwner($current, $accountId);
 
+        $public = $isPublic === null ? (bool) $current['is_public'] : $this->boolean($isPublic);
+
         $this->db->execute(
-            'UPDATE collection SET title = :title, description = :description, is_public = :is_public, updated_at = :updated_at'
-            . ' WHERE id = :id',
+            'UPDATE ' . MediaCollectionSchema::TABLE
+            . ' SET owner_id = :owner_id, title = :title, description = :description,'
+            . ' audience = :audience, updated_at = :updated_at WHERE id = :id',
             [
+                'owner_id' => $this->ownerId($accountId, $public),
                 'title' => $title === null ? $current['title'] : $this->title($title),
                 'description' => $description === null ? $current['description'] : $this->description($description),
-                'is_public' => $isPublic === null ? ((bool) $current['is_public'] ? 1 : 0) : ($this->boolean($isPublic) ? 1 : 0),
+                'audience' => $public ? 'public' : 'followers',
                 'updated_at' => Time::format($this->clock->now()),
                 'id' => $id,
             ],
@@ -148,8 +176,14 @@ final class Collections
         $this->assertOwner($collection, $accountId);
 
         $this->db->transaction(function () use ($id): void {
-            $this->db->execute('DELETE FROM collection_item WHERE collection_id = :id', ['id' => $id]);
-            $this->db->execute('DELETE FROM collection WHERE id = :id', ['id' => $id]);
+            $this->db->execute(
+                'DELETE FROM ' . MediaCollectionSchema::ITEM_TABLE . ' WHERE collection_id = :id',
+                ['id' => $id],
+            );
+            $this->db->execute(
+                'DELETE FROM ' . MediaCollectionSchema::TABLE . ' WHERE id = :id',
+                ['id' => $id],
+            );
         });
     }
 
@@ -181,22 +215,26 @@ final class Collections
         }
 
         $existing = $this->db->fetchOne(
-            'SELECT 1 FROM collection_item WHERE collection_id = :collection_id AND post_id = :post_id',
+            'SELECT 1 FROM ' . MediaCollectionSchema::ITEM_TABLE
+            . ' WHERE collection_id = :collection_id AND post_id = :post_id',
             ['collection_id' => $id, 'post_id' => $postId],
         );
         if ($existing === null) {
             $position = (int) $this->db->fetchValue(
-                'SELECT COALESCE(MAX(position), -1) + 1 FROM collection_item WHERE collection_id = :collection_id',
+                'SELECT COALESCE(MAX(position), 0) + 1 FROM ' . MediaCollectionSchema::ITEM_TABLE
+                . ' WHERE collection_id = :collection_id',
                 ['collection_id' => $id],
             );
+            $item = new MediaCollectionItem($id, $postId, $position, $this->clock->now());
             $this->db->execute(
-                'INSERT INTO collection_item (collection_id, post_id, position, created_at)'
-                . ' VALUES (:collection_id, :post_id, :position, :created_at)',
+                'INSERT INTO ' . MediaCollectionSchema::ITEM_TABLE
+                . ' (collection_id, post_id, position, added_at)'
+                . ' VALUES (:collection_id, :post_id, :position, :added_at)',
                 [
-                    'collection_id' => $id,
-                    'post_id' => $postId,
-                    'position' => $position,
-                    'created_at' => Time::format($this->clock->now()),
+                    'collection_id' => $item->collectionId,
+                    'post_id' => $item->postId,
+                    'position' => $item->position,
+                    'added_at' => Time::format($item->addedAt),
                 ],
             );
             $this->touch($id);
@@ -217,7 +255,8 @@ final class Collections
         $this->assertOwner($collection, $accountId);
 
         $this->db->execute(
-            'DELETE FROM collection_item WHERE collection_id = :collection_id AND post_id = :post_id',
+            'DELETE FROM ' . MediaCollectionSchema::ITEM_TABLE
+            . ' WHERE collection_id = :collection_id AND post_id = :post_id',
             ['collection_id' => $id, 'post_id' => $postId],
         );
         $this->touch($id);
@@ -231,8 +270,9 @@ final class Collections
     public function find(string $id, ?string $viewerId = null): ?array
     {
         $row = $this->db->fetchOne(
-            'SELECT c.*, (SELECT COUNT(*) FROM collection_item i WHERE i.collection_id = c.id) AS item_count'
-            . ' FROM collection c WHERE c.id = :id',
+            'SELECT c.*, (SELECT COUNT(*) FROM ' . MediaCollectionSchema::ITEM_TABLE
+            . ' i WHERE i.collection_id = c.id) AS item_count'
+            . ' FROM ' . MediaCollectionSchema::TABLE . ' c WHERE c.id = :id',
             ['id' => $id],
         );
         if ($row === null) {
@@ -260,9 +300,9 @@ final class Collections
     private function visiblePostIds(string $id, ?string $viewerId, bool $isOwner = false): array
     {
         $items = $this->db->fetchAll(
-            'SELECT i.post_id FROM collection_item i'
+            'SELECT i.post_id FROM ' . MediaCollectionSchema::ITEM_TABLE . ' i'
             . ' JOIN social_post p ON p.id = i.post_id AND p.deleted_at IS NULL'
-            . ' WHERE i.collection_id = :id ORDER BY i.position ASC, i.created_at ASC LIMIT 200',
+            . ' WHERE i.collection_id = :id ORDER BY i.position ASC, i.added_at ASC LIMIT 200',
             ['id' => $id],
         );
 
@@ -288,7 +328,7 @@ final class Collections
     private function touch(string $id): void
     {
         $this->db->execute(
-            'UPDATE collection SET updated_at = :updated_at WHERE id = :id',
+            'UPDATE ' . MediaCollectionSchema::TABLE . ' SET updated_at = :updated_at WHERE id = :id',
             ['updated_at' => Time::format($this->clock->now()), 'id' => $id],
         );
     }
@@ -301,6 +341,11 @@ final class Collections
         if ((string) $collection['account_id'] !== $accountId) {
             throw CommunityException::forbidden('You can only change your own collections.');
         }
+    }
+
+    private function ownerId(string $accountId, bool $public): string
+    {
+        return $public ? $accountId : self::PRIVATE_OWNER_PREFIX . $accountId;
     }
 
     private function title(mixed $value): string
@@ -338,12 +383,16 @@ final class Collections
      */
     private function hydrate(array $row): array
     {
+        $owner = (string) $row['owner_id'];
+        $private = str_starts_with($owner, self::PRIVATE_OWNER_PREFIX);
+        $accountId = $private ? substr($owner, strlen(self::PRIVATE_OWNER_PREFIX)) : $owner;
+
         return [
             'id' => (string) $row['id'],
-            'account_id' => (string) $row['account_id'],
+            'account_id' => $accountId,
             'title' => (string) $row['title'],
             'description' => (string) ($row['description'] ?? ''),
-            'is_public' => (int) ($row['is_public'] ?? 1) === 1,
+            'is_public' => !$private && (string) ($row['audience'] ?? '') === 'public',
             'item_count' => (int) ($row['item_count'] ?? 0),
             'created_at' => (string) $row['created_at'],
             'updated_at' => (string) $row['updated_at'],

@@ -333,6 +333,18 @@ final class CommunityApiController
                 ], 201);
             }
 
+            if (preg_match('#^/api/v1/host/stories/([^/]+)/background$#', $path, $matches) === 1 && $method === 'GET') {
+                $story = $this->runtime->stories->find(rawurldecode($matches[1]));
+                if ($story === null) {
+                    return $this->error(404, 'not_found', 'This story no longer exists.');
+                }
+
+                return new Response(200, [
+                    'Content-Type' => 'image/svg+xml; charset=utf-8',
+                    'Cache-Control' => 'private, max-age=3600',
+                ], $this->runtime->stories->backgroundSvg((string) $story['background']));
+            }
+
             if (preg_match('#^/api/v1/host/stories/([^/]+)$#', $path, $matches) === 1 && $method === 'DELETE') {
                 if ($userId === null) {
                     return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');

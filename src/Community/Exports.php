@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Collection\MediaCollectionSchema;
+use AlohaSocial\Core\Domain\Story\StorySchema;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
@@ -20,6 +22,8 @@ use function is_array;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function parse_str;
+use function parse_url;
 use function rawurlencode;
 
 use const JSON_PRETTY_PRINT;
@@ -114,14 +118,10 @@ final class Exports
                 . ' WHERE author_id = :account_id ORDER BY created_at ASC, id ASC',
                 ['account_id' => $accountId],
             ),
-            'stories' => $this->rows(
-                'SELECT id, content, background, created_at, expires_at FROM story'
-                . ' WHERE account_id = :account_id ORDER BY created_at ASC, id ASC',
-                ['account_id' => $accountId],
-            ),
+            'stories' => $this->stories($accountId),
             'story_views' => $this->rows(
-                'SELECT story_id, seen_at FROM story_seen'
-                . ' WHERE account_id = :account_id ORDER BY seen_at ASC, story_id ASC',
+                'SELECT story_id, viewed_at AS seen_at FROM ' . StorySchema::VIEW_TABLE
+                . ' WHERE viewer_id = :account_id ORDER BY viewed_at ASC, story_id ASC',
                 ['account_id' => $accountId],
             ),
             'lists' => $this->lists($accountId),
@@ -266,17 +266,60 @@ final class Exports
     /**
      * @return list<array<string, mixed>>
      */
-    private function collections(string $accountId): array
+    private function stories(string $accountId): array
     {
-        $collections = $this->rows(
-            'SELECT id, title, description, is_public, created_at, updated_at FROM collection'
-            . ' WHERE account_id = :account_id ORDER BY created_at ASC',
+        $rows = $this->rows(
+            'SELECT id, owner_id, caption, remote_media_url, created_at, expires_at FROM ' . StorySchema::TABLE
+            . " WHERE owner_id = :account_id AND object_id LIKE 'host-story:%' AND deleted_at IS NULL"
+            . ' ORDER BY created_at ASC, id ASC',
             ['account_id' => $accountId],
         );
 
+        return array_map(static function (array $row): array {
+            $query = parse_url((string) ($row['remote_media_url'] ?? ''), PHP_URL_QUERY);
+            $parameters = [];
+            if (is_string($query)) {
+                parse_str($query, $parameters);
+            }
+
+            return [
+                'id' => (string) $row['id'],
+                'account_id' => (string) $row['owner_id'],
+                'content' => (string) $row['caption'],
+                'background' => is_string($parameters['background'] ?? null)
+                    ? (string) $parameters['background']
+                    : 'ocean',
+                'created_at' => (string) $row['created_at'],
+                'expires_at' => (string) $row['expires_at'],
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function collections(string $accountId): array
+    {
+        $collections = $this->rows(
+            'SELECT id, owner_id, title, description, audience, created_at, updated_at FROM '
+            . MediaCollectionSchema::TABLE
+            . ' WHERE owner_id = :account_id OR owner_id = :private_owner ORDER BY created_at ASC',
+            [
+                'account_id' => $accountId,
+                'private_owner' => Collections::PRIVATE_OWNER_PREFIX . $accountId,
+            ],
+        );
+
         foreach ($collections as $index => $collection) {
+            $owner = (string) $collection['owner_id'];
+            $private = str_starts_with($owner, Collections::PRIVATE_OWNER_PREFIX);
+            $collections[$index]['account_id'] = $private
+                ? substr($owner, strlen(Collections::PRIVATE_OWNER_PREFIX))
+                : $owner;
+            $collections[$index]['is_public'] = !$private && (string) $collection['audience'] === 'public';
+            unset($collections[$index]['owner_id'], $collections[$index]['audience']);
             $collections[$index]['items'] = $this->rows(
-                'SELECT post_id, position, created_at FROM collection_item'
+                'SELECT post_id, position, added_at AS created_at FROM ' . MediaCollectionSchema::ITEM_TABLE
                 . ' WHERE collection_id = :collection_id ORDER BY position ASC',
                 ['collection_id' => (string) $collection['id']],
             );

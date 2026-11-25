@@ -272,6 +272,13 @@ final class CommunityTest extends TestCase
         $story = $this->server->runtime->stories->create($this->alice, 'Sunset walk', 'sunset');
         self::assertSame('sunset', $story['background']);
         self::assertSame($this->alice, $story['account_id']);
+        self::assertSame(
+            'host-story:' . $story['id'],
+            (string) $this->server->runtime->database->fetchValue(
+                'SELECT object_id FROM social_story WHERE id = :id',
+                ['id' => $story['id']],
+            ),
+        );
 
         $active = $this->server->runtime->stories->active();
         self::assertCount(1, $active['stories']);
@@ -285,7 +292,7 @@ final class CommunityTest extends TestCase
         }
 
         $this->server->runtime->database->execute(
-            'UPDATE story SET expires_at = :at WHERE id = :id',
+            'UPDATE social_story SET expires_at = :at WHERE id = :id',
             ['at' => Time::format($this->server->runtime->clock->now()->modify('-1 minute')), 'id' => $story['id']],
         );
 
@@ -318,6 +325,12 @@ final class CommunityTest extends TestCase
         $collection = $this->decoded($created)['collection'];
         self::assertSame('Reading list', $collection['title']);
         self::assertTrue($collection['is_public']);
+        $storedCollection = $this->server->runtime->database->fetchOne(
+            'SELECT owner_id, audience FROM social_media_collection WHERE id = :id',
+            ['id' => $collection['id']],
+        );
+        self::assertSame('alice', (string) $storedCollection['owner_id']);
+        self::assertSame('public', (string) $storedCollection['audience']);
 
         $added = $this->server->json(
             'POST',
@@ -354,6 +367,13 @@ final class CommunityTest extends TestCase
         self::assertSame([$first, $second], $this->decoded($public)['collection']['post_ids']);
 
         $private = $this->server->runtime->collections->create($this->alice, 'Private notes', '', false);
+        self::assertSame(
+            'host-private:alice',
+            (string) $this->server->runtime->database->fetchValue(
+                'SELECT owner_id FROM social_media_collection WHERE id = :id',
+                ['id' => $private['id']],
+            ),
+        );
         $hidden = $this->server->send('GET', '/api/v1/host/collection', [
             'query' => ['id' => $private['id']],
         ]);

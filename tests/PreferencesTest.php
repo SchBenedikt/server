@@ -189,16 +189,25 @@ final class PreferencesTest extends TestCase
             . ' VALUES (:id, :target, :actor, :handle, :created)',
             ['id' => 'request-alice', 'target' => 'alice', 'actor' => 'https://remote.example/@person', 'handle' => 'person@remote.example', 'created' => $stamp],
         );
-        $this->server->runtime->database->execute(
-            'INSERT INTO story (id, account_id, content, created_at, expires_at)'
-            . ' VALUES (:id, :account, :content, :created, :expires)',
-            ['id' => 'story-alice', 'account' => 'alice', 'content' => 'Alice story', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
-        );
-        $this->server->runtime->database->execute(
-            'INSERT INTO story (id, account_id, content, created_at, expires_at)'
-            . ' VALUES (:id, :account, :content, :created, :expires)',
-            ['id' => 'story-bob', 'account' => 'bob', 'content' => 'Bob story', 'created' => $stamp, 'expires' => '2026-11-25T12:00:00Z'],
-        );
+        foreach ([
+            ['id' => 'story-alice', 'account' => 'alice', 'content' => 'Alice story'],
+            ['id' => 'story-bob', 'account' => 'bob', 'content' => 'Bob story'],
+        ] as $story) {
+            $this->server->runtime->database->execute(
+                'INSERT INTO social_story'
+                . ' (id, owner_id, is_local, object_id, caption, remote_media_url, created_at, expires_at)'
+                . ' VALUES (:id, :account, 1, :object_id, :content, :media, :created, :expires)',
+                [
+                    'id' => $story['id'],
+                    'account' => $story['account'],
+                    'object_id' => 'host-story:' . $story['id'],
+                    'content' => $story['content'],
+                    'media' => '/api/v1/host/stories/' . $story['id'] . '/background?background=ocean',
+                    'created' => $stamp,
+                    'expires' => '2026-11-25T12:00:00Z',
+                ],
+            );
+        }
 
         $anonymous = $this->server->send('GET', '/api/v1/host/export');
         self::assertSame(401, $anonymous->status);

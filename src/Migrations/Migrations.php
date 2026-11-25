@@ -62,6 +62,7 @@ final class Migrations
             new Version202611280005RemoteActorProfileCache(),
             new Version202611280006RemoteReplyTargetWidth(),
             new Version202611280007ConsolidatePinsAndArchive(),
+            new Version202611280008ConsolidateCollectionsAndStories(),
         ];
     }
 }

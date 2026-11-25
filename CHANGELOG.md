@@ -63,6 +63,13 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 - **Complete account export:** export now includes core pins, archived posts
   and the For You impressions (seen time, dwell time and count) that erasure
   already deleted.
+- **One storage path for reading lists and text stories:** reading lists moved
+  from `collection`/`collection_item` to the core `social_media_collection`
+  tables, and text stories moved from `story`/`story_seen` to
+  `social_story`/`social_story_view`. The adapter preserves arbitrary-post and
+  owner-only reading lists, and text/background stories, without the core's
+  media-only restrictions. Migration `202611280008` copies every row, item
+  position and view marker and drops the duplicate tables.
 - **Installer on statically built PHP:** the preflight and DSN checks accept
   PDO drivers reported by `PDO::getAvailableDrivers()`, not only a separately
   loadable `pdo_sqlite`/`pdo_pgsql` extension.
@@ -72,10 +79,6 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Changed
 
-- Reading lists (`collection`) and text stories (`story`) are documented as
-  host-local surfaces. They are not the core's ActivityPub media collections
-  or Pixelfed stories and do not pretend to be; a future migration would need
-  a real media/audience model.
 - The development and frontend guides now name the actual core line (`0.8.0`)
   and the current server release instead of the stale `0.7.0`/`0.11.0` pair.
 

@@ -14,6 +14,7 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Server\Community\Collections;
 
 /**
  * Removes host-owned private account data after Core has frozen the account.
@@ -88,18 +89,41 @@ final readonly class AccountErasureCleanup
             $delete('announcements', 'DELETE FROM announcement WHERE author_id = :account_id', $user);
             $delete(
                 'story_views',
-                'DELETE FROM story_seen WHERE account_id = :viewer_id OR story_id IN'
-                    . ' (SELECT id FROM story WHERE account_id = :owner_id)',
+                'DELETE FROM social_story_view WHERE viewer_id = :viewer_id OR story_id IN'
+                    . ' (SELECT id FROM social_story WHERE owner_id = :owner_id)',
                 ['viewer_id' => $accountId, 'owner_id' => $accountId],
             );
-            $delete('stories', 'DELETE FROM story WHERE account_id = :account_id', $user);
             $delete(
-                'collection_items',
-                'DELETE FROM collection_item WHERE collection_id IN'
-                    . ' (SELECT id FROM collection WHERE account_id = :account_id)',
+                'story_reactions',
+                'DELETE FROM social_story_reaction WHERE user_id = :viewer_id OR story_id IN'
+                    . ' (SELECT id FROM social_story WHERE owner_id = :owner_id)',
+                ['viewer_id' => $accountId, 'owner_id' => $accountId],
+            );
+            $delete(
+                'story_replies',
+                'DELETE FROM social_story_reply WHERE author_id = :viewer_id OR story_id IN'
+                    . ' (SELECT id FROM social_story WHERE owner_id = :owner_id)',
+                ['viewer_id' => $accountId, 'owner_id' => $accountId],
+            );
+            $delete('stories', 'DELETE FROM social_story WHERE owner_id = :account_id', $user);
+            $delete(
+                'story_tombstones',
+                'DELETE FROM social_story_tombstone WHERE owner_id = :account_id',
                 $user,
             );
-            $delete('collections', 'DELETE FROM collection WHERE account_id = :account_id', $user);
+            $delete(
+                'collection_items',
+                'DELETE FROM social_media_collection_item WHERE collection_id IN'
+                    . ' (SELECT id FROM social_media_collection'
+                    . ' WHERE owner_id = :account_id OR owner_id = :private_owner)',
+                ['account_id' => $accountId, 'private_owner' => Collections::PRIVATE_OWNER_PREFIX . $accountId],
+            );
+            $delete(
+                'collections',
+                'DELETE FROM social_media_collection'
+                    . ' WHERE owner_id = :account_id OR owner_id = :private_owner',
+                ['account_id' => $accountId, 'private_owner' => Collections::PRIVATE_OWNER_PREFIX . $accountId],
+            );
             $delete(
                 'kokua_replies',
                 'DELETE FROM kokua_help WHERE account_id = :helper_id OR kokua_id IN'
