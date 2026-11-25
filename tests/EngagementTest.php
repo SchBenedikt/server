@@ -519,6 +519,7 @@ final class EngagementTest extends TestCase
         $remoteId = 'https://remote.test/activities/111';
         $objectId = 'https://remote.test/objects/111';
         $actorId = 'https://remote.test/users/bob';
+        $publishedAt = $this->server->runtime->clock->now()->format('Y-m-d\\TH:i:s\\Z');
 
         $this->server->runtime->database->execute(
             'INSERT INTO social_remote_post'
@@ -531,17 +532,18 @@ final class EngagementTest extends TestCase
                 'actor_id' => $actorId,
                 'kind' => 'post',
                 'content' => 'Hallo aus dem Fediverse #aloha',
-                'published_at' => '2026-11-18T10:00:00Z',
+                'published_at' => $publishedAt,
             ],
         );
         $this->server->runtime->database->execute(
             'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
-            . " VALUES ('f-remote', 'alice', :actor_id, 'https://remote.test/inbox', '2026-11-18T10:00:00Z', 'accepted')",
-            ['actor_id' => $actorId],
+            . " VALUES ('f-remote', 'alice', :actor_id, 'https://remote.test/inbox', :followed_at, 'accepted')",
+            ['actor_id' => $actorId, 'followed_at' => $publishedAt],
         );
         $this->server->runtime->database->execute(
             'INSERT INTO social_followed_hashtag (user_id, hashtag, created_at)'
-            . " VALUES ('alice', 'aloha', '2026-11-18T10:00:00Z')",
+            . ' VALUES (:user_id, :hashtag, :created_at)',
+            ['user_id' => 'alice', 'hashtag' => 'aloha', 'created_at' => $publishedAt],
         );
 
         $response = $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]);
