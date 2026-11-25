@@ -26,7 +26,14 @@ final class AwsS3CompatibleClientTest extends TestCase
         $commands = [];
         $handler = new MockHandler([
             static function (CommandInterface $command, RequestInterface $request) use (&$commands): Result {
-                $commands[] = ['name' => $command->getName(), 'args' => $command->toArray(), 'request' => $request];
+                $commands[] = [
+                    'name' => $command->getName(),
+                    'args' => $command->toArray(),
+                    'headers' => [
+                        'acl' => $request->getHeaderLine('x-amz-acl'),
+                        'content_length' => $request->getHeaderLine('Content-Length'),
+                    ],
+                ];
                 return new Result(['ETag' => '"stored"']);
             },
         ]);
@@ -42,8 +49,8 @@ final class AwsS3CompatibleClientTest extends TestCase
             self::assertSame('aws:kms', $commands[0]['args']['ServerSideEncryption']);
             self::assertSame('alias/media', $commands[0]['args']['SSEKMSKeyId']);
             self::assertArrayNotHasKey('ACL', $commands[0]['args']);
-            self::assertSame('', $commands[0]['request']->getHeaderLine('x-amz-acl'));
-            self::assertSame('11', $commands[0]['request']->getHeaderLine('Content-Length'));
+            self::assertSame('', $commands[0]['headers']['acl']);
+            self::assertSame('11', $commands[0]['headers']['content_length']);
             self::assertTrue(is_resource($body), 'The upload caller retains ownership of its stream.');
         } finally {
             if (is_resource($body)) {
