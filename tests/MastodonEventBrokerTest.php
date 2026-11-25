@@ -408,6 +408,31 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertStringContainsString("event: notification\ndata: {\"id\":", $chunks[0]);
     }
 
+    public function testUserStreamIncludesNotificationsWhenGrantedNotificationScope(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $server->createAccount('bob');
+        $server->runtime->app->notifications?->recordFollow('alice', 'bob');
+        $token = $this->issueToken($server, 'alice', ['read:statuses', 'read:notifications']);
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'user'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses', 'read:notifications'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        self::assertSame(200, $response->status);
+        $chunks = iterator_to_array($response->chunks(), false);
+        self::assertNotEmpty($chunks);
+        self::assertStringContainsString("event: notification\ndata: {\"id\":", implode('', $chunks));
+    }
+
     private function issueToken(TestServer $server, string $accountId, array $scopes = ['read:statuses']): string
     {
         $token = bin2hex(random_bytes(32));

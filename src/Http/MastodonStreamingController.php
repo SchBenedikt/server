@@ -85,7 +85,12 @@ final class MastodonStreamingController
         }
 
         try {
-            $subscription = new StreamSubscription($userId, [$stream]);
+            $channels = [$stream];
+            if ($stream === 'user'
+                && (in_array('read', $request->scopes, true) || in_array('read:notifications', $request->scopes, true))) {
+                $channels[] = 'user:notification';
+            }
+            $subscription = new StreamSubscription($userId, $channels);
             $initial = $broker->read($subscription, $cursor === '' ? null : $cursor, 100);
         } catch (\InvalidArgumentException) {
             return $this->error(410, 'cursor_expired', 'The stream cursor is no longer available; resync over REST.');
