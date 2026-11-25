@@ -17,10 +17,10 @@ use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Opt-in live MinIO/S3 request-path checks. Configure a dedicated disposable
+ * Opt-in live S3-compatible request-path checks. Configure a dedicated disposable
  * bucket with ALOHASOCIAL_S3_TEST_* variables before running this class.
  */
-final class MinioMediaIntegrationTest extends TestCase
+final class S3CompatibleMediaIntegrationTest extends TestCase
 {
     private const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
@@ -31,7 +31,7 @@ final class MinioMediaIntegrationTest extends TestCase
         foreach ($required as $name) {
             $value = getenv('ALOHASOCIAL_S3_TEST_' . $name);
             if (!is_string($value) || $value === '') {
-                self::markTestSkipped('Set ALOHASOCIAL_S3_TEST_* to run the live MinIO media integration.');
+                self::markTestSkipped('Set ALOHASOCIAL_S3_TEST_* to run the live S3 media integration.');
             }
             $credentials[$name] = $value;
         }
