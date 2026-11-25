@@ -18,6 +18,7 @@ use function array_filter;
 use function array_values;
 use function implode;
 use function is_array;
+use function is_numeric;
 use function is_string;
 use function max;
 use function mb_strlen;
@@ -34,7 +35,8 @@ use function trim;
  * card for the same post costs no request.
  *
  * Counts are read-only snapshots: they are never used for access decisions,
- * only for display. A stale snapshot is refreshed by the next post view.
+ * only for display. A stale snapshot is refreshed by the worker and by the
+ * next post view.
  */
 final class RemoteEngagement
 {
@@ -112,22 +114,65 @@ final class RemoteEngagement
             return;
         }
 
-        $stamp = Time::format($this->clock->now());
+        $counts = [];
+        foreach (['likes' => 'favourites_count', 'boosts' => 'reblogs_count', 'replies' => 'replies_count'] as $key => $field) {
+            $value = $post[$field] ?? null;
+            if (is_int($value) || (is_string($value) && is_numeric($value))) {
+                $counts[$key] = (int) $value;
+            }
+        }
+
+        // A server that publishes no totals must not be cached as "zero
+        // likes". Leaving the row untouched lets the next refresh ask again
+        // instead of presenting a number the origin never reported.
+        $this->rememberCounts($objectId, $counts);
+    }
+
+    /**
+     * Stores a counter snapshot, preserving fields the origin did not send.
+     *
+     * A partial refresh (for example replies without like totals) must not
+     * reset the other numbers to zero. Only the keys present in `$counts`
+     * are overwritten.
+     *
+     * @param array{likes?: int, boosts?: int, replies?: int} $counts
+     */
+    public function rememberCounts(string $objectId, array $counts): void
+    {
+        $objectId = trim($objectId);
+        if ($objectId === '' || mb_strlen($objectId) > 512) {
+            return;
+        }
+
+        $updates = [];
+        $parameters = [
+            'object_id' => $objectId,
+            'likes' => 0,
+            'boosts' => 0,
+            'replies' => 0,
+            'fetched_at' => Time::format($this->clock->now()),
+        ];
+        foreach (['likes', 'boosts', 'replies'] as $key) {
+            $value = $counts[$key] ?? null;
+            if (!is_int($value)) {
+                continue;
+            }
+
+            $parameters[$key] = max(0, $value);
+            $updates[] = $key . ' = excluded.' . $key;
+        }
+
+        if ($updates === []) {
+            return;
+        }
 
         try {
             $this->db->execute(
                 'INSERT INTO social_remote_engagement (object_id, likes, boosts, replies, fetched_at)'
                 . ' VALUES (:object_id, :likes, :boosts, :replies, :fetched_at)'
-                . ' ON CONFLICT (object_id) DO UPDATE SET'
-                . ' likes = excluded.likes, boosts = excluded.boosts,'
-                . ' replies = excluded.replies, fetched_at = excluded.fetched_at',
-                [
-                    'object_id' => $objectId,
-                    'likes' => max(0, (int) ($post['favourites_count'] ?? 0)),
-                    'boosts' => max(0, (int) ($post['reblogs_count'] ?? 0)),
-                    'replies' => max(0, (int) ($post['replies_count'] ?? 0)),
-                    'fetched_at' => $stamp,
-                ],
+                . ' ON CONFLICT (object_id) DO UPDATE SET '
+                . implode(', ', $updates) . ', fetched_at = excluded.fetched_at',
+                $parameters,
             );
         } catch (DatabaseException) {
             // A display counter must never turn a readable post into an error.

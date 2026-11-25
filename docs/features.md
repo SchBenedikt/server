@@ -37,7 +37,7 @@ the core route contract:
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Add or remove a local favourite, or queue an ActivityPub Like/Undo for a cached remote post from an accepted follow. |
 | `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
 | `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
-| `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. The counters are cached for later cards.
+| `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. The counters are cached for later cards; `bin/worker.php` refreshes them for followed posts (newest first, 15-minute TTL, bounded per tick) so a card never has to fetch the origin itself. |
 | `GET /api/v1/host/updates?since=…` | Cheap change cursor for an open page: ids of posts the viewer may see that appeared or were deleted since the given timestamp, limited to the last 30 minutes. The UI polls this and hydrates only new ids. |
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |

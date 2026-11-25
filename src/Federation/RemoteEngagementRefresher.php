@@ -15,11 +15,11 @@ use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Support\Time;
 use Throwable;
 
-use function array_unique;
-use function is_array;
+use function count;
 use function is_string;
 use function max;
 use function min;
+use function time;
 use function trim;
 
 /**
@@ -35,6 +35,12 @@ use function trim;
 final class RemoteEngagementRefresher
 {
     private const MAX_LIMIT = 25;
+
+    /** Origins that failed recently are retried at most every ten minutes. */
+    private const FAILURE_BACKOFF_SECONDS = 600;
+
+    /** @var array<string, int> object id to the last failed attempt */
+    private array $failedAt = [];
 
     public function __construct(
         private readonly Connection $db,
@@ -54,6 +60,16 @@ final class RemoteEngagementRefresher
             '-' . $this->engagement->ttlSeconds() . ' seconds',
         ));
 
+        $now = time();
+        foreach ($this->failedAt as $id => $at) {
+            if ($now - $at >= self::FAILURE_BACKOFF_SECONDS) {
+                unset($this->failedAt[$id]);
+            }
+        }
+
+        // More candidates than attempts, so a post that is still in backoff
+        // does not starve the rest of the queue.
+        $candidates = min(self::MAX_LIMIT * 3, $limit + count($this->failedAt));
         try {
             $rows = $this->db->fetchAll(
                 'SELECT post.object_id FROM social_remote_post post'
@@ -63,7 +79,7 @@ final class RemoteEngagementRefresher
                 . " AND (post.object_id LIKE 'http://%'"
                 . " OR post.object_id LIKE 'https://%'"
                 . " OR post.object_id LIKE 'at://%')"
-                . ' ORDER BY post.published_at DESC LIMIT ' . $limit,
+                . ' ORDER BY post.published_at DESC LIMIT ' . max($limit, $candidates),
                 ['stale' => $stale],
             );
         } catch (DatabaseException) {
@@ -71,27 +87,34 @@ final class RemoteEngagementRefresher
         }
 
         $refreshed = 0;
+        $attempts = 0;
         $seen = [];
         foreach ($rows as $row) {
+            if ($attempts >= $limit) {
+                break;
+            }
+
             $objectId = is_string($row['object_id'] ?? null) ? trim($row['object_id']) : '';
-            if ($objectId === '' || isset($seen[$objectId])) {
+            if ($objectId === '' || isset($seen[$objectId]) || isset($this->failedAt[$objectId])) {
                 continue;
             }
             $seen[$objectId] = true;
+            $attempts++;
 
             try {
-                $thread = $this->directory->remotePost($objectId);
+                $counts = $this->directory->remoteCounts($objectId);
             } catch (Throwable) {
-                // A removed, private or unreachable post keeps its old
-                // snapshot; the next tick retries with the next candidates.
+                $counts = null;
+            }
+
+            if ($counts === null) {
+                // Unknown or unreachable: back off instead of asking the same
+                // dead origin every tick. Existing counts stay on the card.
+                $this->failedAt[$objectId] = $now;
                 continue;
             }
 
-            if (!is_array($thread['post'] ?? null)) {
-                continue;
-            }
-
-            $this->engagement->remember($objectId, $thread);
+            $this->engagement->rememberCounts($objectId, $counts);
             $refreshed++;
         }
 

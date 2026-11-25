@@ -485,6 +485,73 @@ final class RemoteDirectoryTest extends TestCase
         self::assertSame('Verschachtelt', $result['replies'][1]['content']);
     }
 
+    public function testRemoteCountsUsesTheMastodonStatusEndpoint(): void
+    {
+        $this->http->json('https://mastodon.test/api/v1/statuses/123', [
+            'id' => '123',
+            'replies_count' => 4,
+            'reblogs_count' => 3,
+            'favourites_count' => 12,
+            'account' => ['acct' => 'alice'],
+        ]);
+
+        $counts = $this->directory->remoteCounts('https://mastodon.test/@alice/123');
+
+        self::assertSame(['likes' => 12, 'replies' => 4, 'boosts' => 3], $counts);
+    }
+
+    public function testRemoteCountsReadsABlueskyPostWithoutItsThread(): void
+    {
+        $uri = 'at://did:plc:abc/app.bsky.feed.post/3kabc';
+        $url = 'https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri='
+            . rawurlencode($uri) . '&depth=0&parentHeight=0';
+        $this->http->json($url, [
+            'thread' => [
+                'post' => [
+                    'uri' => $uri,
+                    'likeCount' => 5,
+                    'replyCount' => 1,
+                    'repostCount' => 2,
+                ],
+            ],
+        ]);
+
+        $counts = $this->directory->remoteCounts($uri);
+
+        self::assertSame(['likes' => 5, 'replies' => 1, 'boosts' => 2], $counts);
+    }
+
+    public function testRemoteCountsFallsBackToActivityPubCollections(): void
+    {
+        $postUrl = 'https://pleroma.test/notes/abc';
+        $this->http->json($postUrl, [
+            'id' => $postUrl,
+            'type' => 'Note',
+            'likes' => $postUrl . '/likes',
+            'replies' => $postUrl . '/replies',
+            'shares' => $postUrl . '/shares',
+        ]);
+        $this->http->json($postUrl . '/likes', ['totalItems' => 8]);
+        $this->http->json($postUrl . '/replies', ['totalItems' => 2]);
+        $this->http->json($postUrl . '/shares', ['totalItems' => 1]);
+
+        $counts = $this->directory->remoteCounts($postUrl);
+
+        self::assertSame(['likes' => 8, 'replies' => 2, 'boosts' => 1], $counts);
+    }
+
+    public function testRemoteCountsReturnsNullWhenTheOriginPublishesNoTotals(): void
+    {
+        $postUrl = 'https://pleroma.test/notes/none';
+        $this->http->json($postUrl, [
+            'id' => $postUrl,
+            'type' => 'Note',
+            'content' => '<p>Ohne Zähler</p>',
+        ]);
+
+        self::assertNull($this->directory->remoteCounts($postUrl));
+    }
+
     public function testActivityPubConnectionsUseTheMastodonApi(): void
     {
         $lookup = 'https://social.test/api/v1/accounts/lookup?acct=alice';

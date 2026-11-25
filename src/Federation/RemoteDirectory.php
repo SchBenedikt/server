@@ -165,6 +165,107 @@ final class RemoteDirectory
     }
 
     /**
+     * Reads only the public counters of one federated post.
+     *
+     * The worker refreshes many cards per minute, and a full thread with its
+     * parent and replies is far more work than three numbers. A Mastodon-style
+     * status or a Bluesky post needs one request; other ActivityPub servers
+     * fall back to their object document.
+     *
+     * @return array{likes?: int, boosts?: int, replies?: int}|null null when
+     *         the origin publishes no countable total at all
+     */
+    public function remoteCounts(string $id): ?array
+    {
+        $id = trim($id);
+        if ($id === '') {
+            return null;
+        }
+
+        if (str_starts_with($id, 'at://')) {
+            try {
+                $data = $this->fetchJson(
+                    self::BSKY_APPVIEW . 'app.bsky.feed.getPostThread?uri='
+                        . rawurlencode($id) . '&depth=0&parentHeight=0',
+                    self::JSON_ACCEPT,
+                );
+            } catch (RemoteDirectoryException) {
+                return null;
+            }
+
+            $post = is_array($data['thread']['post'] ?? null) ? $data['thread']['post'] : [];
+
+            return $this->countPayload([
+                'likes' => $this->integer($post['likeCount'] ?? null),
+                'replies' => $this->integer($post['replyCount'] ?? null),
+                'boosts' => $this->integer($post['repostCount'] ?? null),
+            ]);
+        }
+
+        if (!preg_match('#^https?://#i', $id) || filter_var($id, FILTER_VALIDATE_URL) === false) {
+            return null;
+        }
+
+        $host = parse_url($id, PHP_URL_HOST);
+        $statusId = $this->mastodonStatusId($id);
+        if ($statusId !== null && is_string($host) && $host !== '') {
+            try {
+                $status = $this->fetchJson(
+                    'https://' . $host . '/api/v1/statuses/' . rawurlencode($statusId),
+                    self::JSON_ACCEPT,
+                );
+                if (isset($status['reblog']) && is_array($status['reblog'])) {
+                    $status = $status['reblog'];
+                }
+
+                $counts = $this->countPayload([
+                    'likes' => $this->integer($status['favourites_count'] ?? null),
+                    'replies' => $this->integer($status['replies_count'] ?? null),
+                    'boosts' => $this->integer($status['reblogs_count'] ?? null),
+                ]);
+                if ($counts !== null) {
+                    return $counts;
+                }
+            } catch (RemoteDirectoryException) {
+                // The status API is optional; read the object below instead.
+            }
+        }
+
+        try {
+            $note = $this->fetchJson($id, self::ACTIVITY_ACCEPT);
+        } catch (RemoteDirectoryException) {
+            return null;
+        }
+        if (isset($note['object']) && is_array($note['object'])) {
+            $note = $note['object'];
+        }
+
+        return $this->countPayload([
+            'likes' => $this->collectionCount($this->link($note['likes'] ?? null)),
+            'replies' => $this->collectionCount($this->link($note['replies'] ?? null)),
+            'boosts' => $this->collectionCount($this->link($note['shares'] ?? null)),
+        ]);
+    }
+
+    /**
+     * @param array{likes?: ?int, replies?: ?int, boosts?: ?int} $counts
+     *
+     * @return array{likes?: int, boosts?: int, replies?: int}|null
+     */
+    private function countPayload(array $counts): ?array
+    {
+        $known = [];
+        foreach (['likes', 'replies', 'boosts'] as $key) {
+            $value = $counts[$key] ?? null;
+            if (is_int($value)) {
+                $known[$key] = $value >= 0 ? $value : 0;
+            }
+        }
+
+        return $known === [] ? null : $known;
+    }
+
+    /**
      * Reads a remote profile's followers or following list.
      *
      * @return array{network: string, profiles: list<array<string, mixed>>, cursor: ?string}

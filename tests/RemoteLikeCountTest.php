@@ -127,6 +127,36 @@ final class RemoteLikeCountTest extends TestCase
         self::assertSame(0, $body['interactions'][$parent]['replies_count']);
     }
 
+    public function testMissingOriginCountsAreNotCachedAsZero(): void
+    {
+        $server = new TestServer();
+        $objectId = 'https://remote.example/objects/no-counts';
+
+        $server->runtime->remoteEngagement->remember($objectId, [
+            'post' => ['id' => $objectId, 'content' => 'No counters'],
+        ]);
+
+        self::assertSame([], $server->runtime->remoteEngagement->counts([$objectId]));
+    }
+
+    public function testPartialRefreshKeepsPreviouslyKnownCounters(): void
+    {
+        $server = new TestServer();
+        $objectId = 'https://remote.example/objects/partial';
+
+        $server->runtime->remoteEngagement->rememberCounts($objectId, [
+            'likes' => 7,
+            'boosts' => 2,
+            'replies' => 1,
+        ]);
+        $server->runtime->remoteEngagement->rememberCounts($objectId, ['replies' => 9]);
+
+        $counts = $server->runtime->remoteEngagement->counts([$objectId])[$objectId];
+        self::assertSame(7, $counts['likes']);
+        self::assertSame(2, $counts['boosts']);
+        self::assertSame(9, $counts['replies']);
+    }
+
     public function testCachedOriginCountersDecorateRemoteCardsAndInteractions(): void
     {
         $server = new TestServer();
