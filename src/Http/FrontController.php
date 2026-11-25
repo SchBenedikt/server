@@ -1609,7 +1609,9 @@ final class FrontController
         // Session fixation: the anonymous session is replaced, not upgraded.
         $issue = $this->runtime->sessions->issue($account, $rawCookie, $userAgent, $ip);
 
-        return $this->redirect($returnTo !== '' ? $returnTo : '/', $issue);
+        // A signed-in member expects the interface, not the technical
+        // overview page. Keep an explicit `next` target for deep links.
+        return $this->redirect($returnTo !== '' ? $returnTo : '/app', $issue);
     }
 
     private function logout(Request $request, ?AuthenticatedSession $session, ?string $rawCookie): Response
