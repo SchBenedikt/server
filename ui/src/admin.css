@@ -83,10 +83,8 @@
 	gap: 16px;
 	padding: 18px 20px;
 	border: 1px solid var(--a-border);
-	border-radius: 18px;
-	background:
-		radial-gradient(ellipse 70% 120% at 100% 0%, var(--a-glow-one), transparent 70%),
-		var(--a-surface);
+	border-radius: 12px;
+	background: var(--a-surface);
 }
 
 .a-admin-section__head > div {
@@ -477,8 +475,8 @@
 	flex: 0 0 auto;
 	width: 32px;
 	height: 32px;
-	border-radius: 10px;
-	background: linear-gradient(145deg, var(--a-primary), var(--a-violet));
+	border-radius: 8px;
+	background: var(--a-primary);
 	color: var(--a-primary-ink);
 	font-size: 10px;
 	font-weight: 800;
@@ -1218,7 +1216,7 @@
 	display: block;
 	height: 100%;
 	border-radius: inherit;
-	background: linear-gradient(90deg, var(--a-primary), var(--a-violet));
+	background: var(--a-primary);
 }
 
 .a-admin-details summary {
@@ -1464,4 +1462,13 @@
 	.a-admin-stat__value {
 		font-size: 20px;
 	}
+}
+
+/* Keep the standalone host and shared Vue components free of decorative shadows. */
+body.app-shell,
+body.app-shell *,
+body.app-shell *::before,
+body.app-shell *::after {
+	box-shadow: none !important;
+	text-shadow: none !important;
 }
