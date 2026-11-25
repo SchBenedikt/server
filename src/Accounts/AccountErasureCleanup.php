@@ -119,6 +119,11 @@ final readonly class AccountErasureCleanup
                 'DELETE FROM recommendation_snapshot WHERE account_id = :account_id',
                 $user,
             );
+            $delete(
+                'recommendation_impressions',
+                'DELETE FROM recommendation_impression WHERE account_id = :account_id',
+                $user,
+            );
             $delete('featured_tags', 'DELETE FROM featured_tag WHERE account_id = :account_id', $user);
             $delete('account_preferences', 'DELETE FROM account_preference WHERE account_id = :account_id', $user);
             $delete('password_resets', 'DELETE FROM password_reset WHERE account_id = :account_id', $user);

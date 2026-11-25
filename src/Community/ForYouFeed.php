@@ -45,6 +45,11 @@ use function usort;
  * accepted ActivityPub and active AT Protocol follows, so the feed reaches
  * connected networks without turning into a public firehose.
  *
+ * On top of those signals the learner in FeedInterests adds what the reader
+ * actually did: likes, boosts, bookmarks, replies and reading time. Posts that
+ * were already on screen are pushed down so the next page move on, and a
+ * stable per-post jitter makes two refreshes differ without breaking paging.
+ *
  * The rank is deterministic for a given database state, which keeps cursor
  * paging stable within one session. No remote call is made, so the feed still
  * works when a discovery instance is unavailable.
@@ -53,7 +58,12 @@ final class ForYouFeed
 {
     public const MAX_LIMIT = 40;
 
-    private const CANDIDATE_LIMIT = 500;
+    /**
+     * The pool one snapshot ranks. It is deliberately larger than what one
+     * page shows, so scrolling does not hit the end of the feed after a few
+     * pages on an instance with a long archive.
+     */
+    private const CANDIDATE_LIMIT = 800;
 
     private const SNAPSHOT_TTL_SECONDS = 1800;
 
@@ -69,10 +79,14 @@ final class ForYouFeed
 
     private const TAG_SNAPSHOT_LIMIT = 10;
 
+    private readonly FeedInterests $interests;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
+        ?FeedInterests $interests = null,
     ) {
+        $this->interests = $interests ?? new FeedInterests($this->db, $this->clock);
     }
 
     /**
@@ -107,6 +121,8 @@ final class ForYouFeed
         }
         $tagsByPost = $this->postTagsForPosts($localPostIds);
         $feedback = $this->feedback($accountId);
+        $model = $this->interests->model($accountId);
+        $seen = $this->interests->seen($accountId);
         $now = $this->clock->now()->getTimestamp();
 
         $scored = [];
@@ -151,6 +167,45 @@ final class ForYouFeed
                 $reason = 'Because you want to see more of this';
             }
 
+            $authorAffinity = $model['authors'][$authorId] ?? 0.0;
+            $tagAffinity = 0.0;
+            $bestTag = '';
+            foreach ($tags as $tag) {
+                $weight = $model['tags'][$tag] ?? 0.0;
+                if ($weight > $tagAffinity) {
+                    $tagAffinity = $weight;
+                    $bestTag = $tag;
+                }
+            }
+            if ($authorAffinity > 0.0) {
+                $score += 2.6 * $authorAffinity;
+            }
+            if ($tagAffinity > 0.0) {
+                $score += 2.0 * $tagAffinity;
+            }
+            // Explicit reasons (a follow, a followed tag, "show more") are
+            // what the reader asked for; the learned interest only explains a
+            // post that has no stronger reason.
+            $explicitReason = $matching !== []
+                || isset($followedAuthors[$authorId])
+                || ($feedback[$postId] ?? '') === 'more';
+            if (!$explicitReason && $tagAffinity >= 0.3) {
+                $reason = 'Because you engage with #' . $bestTag;
+            } elseif (!$explicitReason && $authorAffinity >= 0.35) {
+                $reason = 'Because you engage with this account';
+            }
+
+            // A post that was already on screen should not lead the next page.
+            // Recent impressions sink further than older ones, so a small
+            // instance recycles its archive instead of ending the feed.
+            $seenAt = $seen[$postId] ?? null;
+            if ($seenAt === null) {
+                $score += 1.2;
+            } else {
+                $daysSinceSeen = max(0.0, ($now - $seenAt) / 86400);
+                $score -= 2.4 / (1 + $daysSinceSeen);
+            }
+
             $scored[] = [
                 'id' => $postId,
                 'author_id' => $authorId,
@@ -185,7 +240,21 @@ final class ForYouFeed
 
         $scored = $this->spreadAuthorsAndTags($scored);
 
-        return $this->rankedPage('for-you', $accountId, $scored, $limit, $offset);
+        // Keep already-seen posts out while enough unseen material exists.
+        // Otherwise they come back, oldest impression first, so the feed keeps
+        // going instead of stopping at the last unseen post.
+        $unseen = array_values(array_filter(
+            $scored,
+            static fn (array $entry): bool => !isset($seen[(string) $entry['id']]),
+        ));
+        if (count($unseen) >= $limit * 2) {
+            $scored = $unseen;
+        }
+
+        $page = $this->rankedPage('for-you', $accountId, $scored, $limit, $offset);
+        $page['interests'] = $model['top'];
+
+        return $page;
     }
 
     /**
@@ -412,7 +481,13 @@ final class ForYouFeed
                     : $this->encodeCursor($snapshotToken, $nextOffset));
         }
 
-        return ['posts' => array_values($posts), 'reasons' => $reasons, 'next' => $next, 'total' => $total];
+        return [
+            'posts' => array_values($posts),
+            'reasons' => $reasons,
+            'next' => $next,
+            'total' => $total,
+            'interests' => [],
+        ];
     }
 
     /** @param list<array{id:string,reason:string}> $entries */
@@ -707,6 +782,16 @@ final class ForYouFeed
         }
 
         return array_keys($tags);
+    }
+
+    /**
+     * Records which posts the reader actually saw and for how long.
+     *
+     * @param list<mixed> $items
+     */
+    public function recordImpressions(string $accountId, array $items): int
+    {
+        return $this->interests->record($accountId, $items);
     }
 
     /**

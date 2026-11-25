@@ -910,6 +910,23 @@ final class CommunityApiController
                 ], 201);
             }
 
+            if ($method === 'POST' && $path === '/api/v1/host/for-you/impressions') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                $this->limit($request, $ip, $session);
+                $body = $this->jsonBody($request);
+                $impressions = is_array($body['impressions'] ?? null) ? $body['impressions'] : [];
+
+                return Response::json([
+                    'recorded' => $this->runtime->forYou->recordImpressions(
+                        $userId,
+                        array_values($impressions),
+                    ),
+                ], 202);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/trending') {
                 $this->limit($request, $ip, $session);
 

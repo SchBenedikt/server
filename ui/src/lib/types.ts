@@ -584,11 +584,18 @@ export interface ArchivedPost {
 	archived_at: string;
 }
 
+export interface FeedInterest {
+	kind: 'tag' | 'author';
+	key: string;
+	weight: number;
+}
+
 export interface ForYouData {
 	posts: string[];
 	reasons: Record<string, string>;
 	next: string | number | null;
 	total: number;
+	interests: FeedInterest[];
 }
 
 export interface AccountPreferences {

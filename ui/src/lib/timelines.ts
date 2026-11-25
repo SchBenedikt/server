@@ -5,7 +5,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { ApiError, getApi, hydrateTimelineBoosts } from './api';
 import { onPostCreated, onPostDeleted, onPostUpdated } from './events';
-import type { TimelineItem } from './types';
+import type { FeedInterest, TimelineItem } from './types';
 
 export type FeedKind = 'home' | 'for-you' | 'trending' | 'public' | 'tag' | 'followed';
 
@@ -53,6 +53,7 @@ export function useTimeline(source: () => TimelineSource) {
 	const error = ref('');
 	const hasMore = ref(true);
 	const loaded = ref(false);
+	const interests = ref<FeedInterest[]>([]);
 
 	let cursor: TimelineCursor | null = null;
 	let generation = 0;
@@ -108,6 +109,9 @@ export function useTimeline(source: () => TimelineSource) {
 					const posts = data.posts
 						.map((id) => loaded[id])
 						.filter((post): post is TimelineItem => post !== undefined);
+					if (data.interests.length > 0) {
+						interests.value = data.interests;
+					}
 					return {
 						posts,
 						consumed: data.posts.length,
@@ -158,6 +162,7 @@ export function useTimeline(source: () => TimelineSource) {
 
 		if (reset) {
 			loading.value = true;
+			interests.value = [];
 		} else {
 			loadingMore.value = true;
 		}
@@ -265,6 +270,7 @@ export function useTimeline(source: () => TimelineSource) {
 		error,
 		hasMore,
 		loaded,
+		interests,
 		refresh,
 		loadMore,
 	};

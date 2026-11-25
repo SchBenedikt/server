@@ -52,7 +52,7 @@ const subtitle = computed(() => {
 
 	switch (currentTab.value) {
 		case 'for-you':
-			return 'Recommended from this instance and the fediverse — based on who you follow, your tags, engagement and recency.';
+			return 'Recommended from this instance and the fediverse — learned from who you follow, your tags, your reactions and what you actually read.';
 		case 'trending':
 			return 'Local posts are ranked by known engagement and freshness; federated posts are ranked by recency.';
 		case 'home':

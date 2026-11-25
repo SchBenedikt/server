@@ -18,6 +18,11 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   routes and account security changes invalidate outstanding credentials.
   See [the OAuth guide](docs/mastodon-oauth.md) for supported flows and
   current client limitations.
+- **Learning For You feed:** the ranked timeline now learns from likes,
+  boosts, bookmarks, replies and the time posts stay on screen, decays old
+  interests, keeps already-seen posts out of later pages and reports which
+  tags it learned. The feed loads further pages while scrolling instead of
+  waiting for a button.
 
 ## [0.12.0] - 2026-11-18
 

@@ -286,6 +286,7 @@ export interface Api {
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
+	forYouImpressions(items: { post_id: string; dwell_ms: number }[]): Promise<void>;
 	logout(): Promise<void>;
 }
 
@@ -2742,6 +2743,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				reasons?: unknown;
 				next?: unknown;
 				total?: unknown;
+				interests?: unknown;
 			}>('GET', '/api/v1/host/for-you', query);
 
 			const reasons: Record<string, string> = {};
@@ -2753,6 +2755,23 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				}
 			}
 
+			const interests: ForYouData['interests'] = [];
+			if (Array.isArray(data?.interests)) {
+				for (const entry of data.interests) {
+					if (!isRecord(entry) || typeof entry.key !== 'string' || entry.key === '') {
+						continue;
+					}
+					if (entry.kind !== 'tag' && entry.kind !== 'author') {
+						continue;
+					}
+					interests.push({
+						kind: entry.kind,
+						key: entry.key,
+						weight: typeof entry.weight === 'number' ? entry.weight : 0,
+					});
+				}
+			}
+
 			return {
 				posts: Array.isArray(data?.posts)
 					? data.posts.filter((id): id is string => typeof id === 'string')
@@ -2760,6 +2779,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				reasons,
 				next: typeof data?.next === 'number' || typeof data?.next === 'string' ? data.next : null,
 				total: typeof data?.total === 'number' ? data.total : 0,
+				interests,
 			};
 		},
 
@@ -2820,6 +2840,16 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				undefined,
 				{ post_id: postId, kind },
 			);
+		},
+
+		async forYouImpressions(items: { post_id: string; dwell_ms: number }[]): Promise<void> {
+			if (items.length === 0) {
+				return;
+			}
+
+			await request<unknown>('POST', '/api/v1/host/for-you/impressions', undefined, {
+				impressions: items.slice(0, 60),
+			});
 		},
 
 		async exportAccount(): Promise<Blob> {

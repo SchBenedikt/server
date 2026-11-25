@@ -41,7 +41,8 @@ the core route contract:
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
 | `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |
-| `GET /api/v1/host/for-you?limit=…&cursor=…` | Page the signed-in account's ranked public feed. The opaque cursor continues the same ranking snapshot for 30 minutes; refresh the feed after it expires. |
+| `GET /api/v1/host/for-you?limit=…&cursor=…` | Page the signed-in account's ranked public feed. The score mixes follows, followed tags, reactions, reading time and recency, and already-seen posts sink so scrolling keeps producing new material. The response also carries the top interests learned so far. The opaque cursor continues the same ranking snapshot for 30 minutes; refresh the feed after it expires. |
+| `POST /api/v1/host/for-you/impressions` | Batched "I saw this" report with the milliseconds a post stayed on screen (max 60 per request). The ranker learns per-author interest from it and keeps seen posts out of later pages. |
 | `GET /api/v1/host/trending?limit=…&cursor=…` | Page the instance-wide ranked public feed using the same snapshot cursor behavior. |
 | `GET /api/v1/host/kokua?kind=all\|request\|offer&category=…&state=open\|done` | Read the Kokua mutual-aid board with open/request/offer filters. |
 | `POST /api/v1/host/kokua` | Ask for help or offer it. |

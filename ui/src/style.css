@@ -1752,6 +1752,33 @@ button.a-nav__item {
 	overflow-wrap: anywhere;
 }
 
+/* Endless feed: the sentinel loads the next page before it is on screen. */
+.a-feed__sentinel {
+	height: 1px;
+}
+
+.a-feed__interests {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 12px;
+	font-size: 12px;
+}
+
+.a-feed__interests-label {
+	margin-right: 2px;
+	opacity: 0.72;
+}
+
+.a-feed__interest {
+	padding: 3px 9px;
+	border: 1px solid var(--a-border);
+	border-radius: 999px;
+	background: var(--a-bg-soft);
+	font-weight: 600;
+}
+
 /* Every action gets the same share of the row, so icon and count sit on one
    line at every width instead of drifting apart. */
 .a-post__actions {
