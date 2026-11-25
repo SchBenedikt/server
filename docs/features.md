@@ -235,7 +235,11 @@ POST   /api/v1/host/reports
 
 The self-protection rules are intentional: an admin cannot disable their own
 account or remove the last active admin. Those requests answer `409`, as does
-any attempt to change state that a concurrent moderator already changed.The moderation tables (`moderation_report`, `admin_audit`) and the worker
+any attempt to change state that a concurrent moderator already changed.
+Disabling an account, resetting its password, or revoking its sessions also
+revokes native AT Protocol and Mastodon OAuth credentials; re-enabling an
+account does not restore previously revoked tokens. The moderation tables
+(`moderation_report`, `admin_audit`) and the worker
 heartbeat (`runtime_state`) are created by host migration `202611150001`.
 Warnings and failures from the worker and federation layer are mirrored into
 `runtime_error` by the runtime logger; the admin **Errors** tab shows them next

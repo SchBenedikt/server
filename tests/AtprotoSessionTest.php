@@ -140,4 +140,56 @@ final class AtprotoSessionTest extends TestCase
         ]);
         self::assertSame(200, $otherClient->status, $otherClient->body);
     }
+
+    public function testAdminDisableRevokesNativePdsSessionPermanently(): void
+    {
+        $server = new TestServer([
+            'atproto_pds' => true,
+            'atproto_pds_url' => 'https://social.example',
+            'atproto_pds_handle_domain' => 'social.example',
+            'atproto_plc_url' => 'https://plc.directory',
+        ]);
+        $server->createAccount('admin', 'admin@example.test', TestServer::PASSWORD, true);
+        $server->createAccount('bob', 'bob@example.test');
+        $admin = $server->signIn('admin');
+        $server->runtime->database->execute(
+            'INSERT INTO social_pds_identity'
+            . ' (local_user_id, did, handle, signing_key_id, rotation_key_id, head_cid, head_rev, seq, created_at, updated_at)'
+            . " VALUES ('bob', 'did:plc:bob', 'bob.social.example', 'sign', 'rotate', NULL, NULL, 0,"
+            . " '2026-11-18T10:00:00Z', '2026-11-18T10:00:00Z')",
+        );
+
+        $created = $server->json('POST', '/xrpc/com.atproto.server.createSession', [
+            'identifier' => 'bob',
+            'password' => TestServer::PASSWORD,
+        ]);
+        self::assertSame(200, $created->status, $created->body);
+        $accessToken = json_decode($created->body, true, 512, JSON_THROW_ON_ERROR)['accessJwt'];
+
+        $disabled = $server->json(
+            'POST',
+            '/api/v1/host/admin/users/bob/disable',
+            [],
+            $admin['cookies'],
+            $admin['csrf'],
+        );
+        self::assertSame(200, $disabled->status, $disabled->body);
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM atproto_session WHERE account_id = :account',
+            ['account' => 'bob'],
+        ));
+
+        $enabled = $server->json(
+            'POST',
+            '/api/v1/host/admin/users/bob/enable',
+            [],
+            $admin['cookies'],
+            $admin['csrf'],
+        );
+        self::assertSame(200, $enabled->status, $enabled->body);
+        $afterReactivation = $server->send('GET', '/xrpc/com.atproto.server.getSession', [
+            'headers' => ['Authorization' => 'Bearer ' . $accessToken],
+        ]);
+        self::assertSame(401, $afterReactivation->status, $afterReactivation->body);
+    }
 }
