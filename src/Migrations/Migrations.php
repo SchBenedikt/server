@@ -55,6 +55,7 @@ final class Migrations
             new Version202611260001AtprotoPublicationIdentity(),
             new Version202611260002RecommendationSnapshots(),
             new Version202611270001AtprotoInteractionAccount(),
+            new Version202611280001MastodonStreamEvents(),
         ];
     }
 }
