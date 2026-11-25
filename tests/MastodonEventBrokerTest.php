@@ -10,8 +10,12 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Domain\Post\Visibility;
+use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
+use AlohaSocial\Core\Domain\Federation\RemotePost;
+use AlohaSocial\Core\Domain\Federation\RemotePostKind;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Platform\Events\StreamAudience;
+use AlohaSocial\Core\Platform\Events\StreamEventDraft;
 use AlohaSocial\Core\Platform\Events\StreamSubscription;
 use AlohaSocial\Core\Platform\Clock\FrozenClock;
 use AlohaSocial\Core\Service\CreatePost;
@@ -200,6 +204,69 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertCount(1, $updates);
         self::assertStringContainsString('"id":"' . $secondPost->id . '"', $updates[0]);
         self::assertStringNotContainsString('"id":"' . $firstPost->id . '"', $updates[0]);
+    }
+
+    public function testHomeStreamRendersRemoteStatusesOnlyWhileTheFollowIsAccepted(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $actorId = 'https://peer.example/users/bob';
+        $objectId = 'https://peer.example/posts/remote-1';
+        $now = $server->runtime->clock->now();
+        $server->runtime->database->execute(
+            'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
+            . ' VALUES (:id, :local_user_id, :actor_id, :inbox_url, :followed_at, :state)',
+            [
+                'id' => 'follow-remote-bob',
+                'local_user_id' => 'alice',
+                'actor_id' => $actorId,
+                'inbox_url' => 'https://peer.example/inbox',
+                'followed_at' => Time::format($now),
+                'state' => 'accepted',
+            ],
+        );
+        (new PdoRemotePostRepository($server->runtime->database))->insert(new RemotePost(
+            activityId: 'https://peer.example/activities/remote-1',
+            objectId: $objectId,
+            actorId: $actorId,
+            kind: RemotePostKind::Post,
+            content: 'A remote status',
+            contentWarning: null,
+            publishedAt: $now,
+            objectAuthorId: $actorId,
+        ));
+        $broker = $server->runtime->app->eventBroker;
+        self::assertNotNull($broker);
+        $broker->publish(new StreamEventDraft(
+            name: 'status.created',
+            audience: StreamAudience::Followers,
+            actorId: $actorId,
+            recipientIds: ['alice'],
+            payload: ['status_id' => $objectId],
+            occurredAt: Time::format($now),
+        ));
+        $token = $this->issueToken($server, 'alice');
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'home'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        $frames = iterator_to_array($response->chunks(), false);
+        self::assertStringContainsString('event: update', implode('', $frames));
+        self::assertStringContainsString($objectId, implode('', $frames));
+
+        $server->runtime->database->execute('DELETE FROM social_following WHERE local_user_id = :user_id', ['user_id' => 'alice']);
+        $responseAfterUnfollow = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($responseAfterUnfollow);
+        $framesAfterUnfollow = iterator_to_array($responseAfterUnfollow->chunks(), false);
+        self::assertStringNotContainsString('event: update', implode('', $framesAfterUnfollow));
     }
 
     public function testNotificationStreamEmitsOnlyWithNotificationScope(): void

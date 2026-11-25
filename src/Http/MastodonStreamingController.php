@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Http;
 
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
+use AlohaSocial\Core\Domain\Federation\FollowState;
 use AlohaSocial\Core\Domain\Federation\PdoFollowerRepository;
 use AlohaSocial\Core\Domain\Federation\PdoMuteRepository;
 use AlohaSocial\Core\Http\Request;
@@ -201,11 +202,21 @@ final class MastodonStreamingController
                 return false;
             }
 
-            $authorActorId = $this->activities->actorId($event->actorId);
-            $followerActorId = $this->activities->actorId($userId);
-            if ($this->followers->findByActor($event->actorId, $followerActorId)?->local !== true
-                || $this->runtime->app->blocks->isBlocked($userId, $authorActorId)
-            ) {
+            $remoteActor = str_starts_with($event->actorId, 'https://')
+                || str_starts_with($event->actorId, 'http://');
+            if ($remoteActor) {
+                if ($this->runtime->app->following->find($userId, $event->actorId)?->state !== FollowState::Accepted) {
+                    return false;
+                }
+                $authorActorId = $event->actorId;
+            } else {
+                $authorActorId = $this->activities->actorId($event->actorId);
+                $followerActorId = $this->activities->actorId($userId);
+                if ($this->followers->findByActor($event->actorId, $followerActorId)?->local !== true) {
+                    return false;
+                }
+            }
+            if ($this->runtime->app->blocks->isBlocked($userId, $authorActorId)) {
                 return false;
             }
             $mute = $this->mutes->find($userId, $authorActorId);
