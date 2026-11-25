@@ -52,6 +52,7 @@ use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
 use AlohaSocial\Server\Federation\RemoteReactions;
+use AlohaSocial\Server\Federation\RemoteReplies;
 use AlohaSocial\Server\Federation\Mastodon\PdoEventBroker;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
@@ -314,6 +315,14 @@ final class ApplicationFactory
                 $database,
                 $app->reactions,
                 new ActivityFactory($this->config->coreConfig()),
+                $app->queue,
+                $remoteDirectory,
+                $clock,
+            ),
+            remoteReplies: new RemoteReplies(
+                $database,
+                $app->posts,
+                new ActivityFactory($this->config->coreConfig(), $app->media),
                 $app->queue,
                 $remoteDirectory,
                 $clock,

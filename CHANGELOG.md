@@ -13,6 +13,11 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Added
 
+- **Replies to remote posts:** federated posts can now be answered from the
+  composer. The reply is stored locally with the remote object URL as its
+  parent and delivered as a signed `Create` with `inReplyTo` to the parent
+  author, while the local thread view keeps showing it. The reply-target
+  column is widened for PostgreSQL; SQLite already stores the URL.
 - **Cached remote author profiles:** the federated timeline and its hashtag
   view show the origin display name and avatar of each author. A host-side
   cache (`social_remote_actor_profile`) is filled by the worker from one

@@ -167,6 +167,16 @@ export function postRouteId(post: TimelineItem): string | null {
 	return isLocalPostId(post.id) ? post.id : null;
 }
 
+export function postReplyTargetId(post: TimelineItem): string | null {
+	const local = postRouteId(post);
+	if (local !== null) {
+		return local;
+	}
+
+	const candidate = post.object_id ?? post.id;
+	return isRemoteId(candidate) ? candidate : null;
+}
+
 export function postHref(post: TimelineItem): string | null {
 	const id = postRouteId(post);
 	return id === null ? null : `#/p/${encodeURIComponent(id)}`;

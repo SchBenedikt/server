@@ -13,6 +13,7 @@ use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
 use AlohaSocial\Core\Domain\Federation\RemotePost;
 use AlohaSocial\Core\Domain\Federation\RemotePostKind;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
+use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Domain\Timeline\TimelineEntry;
 use AlohaSocial\Core\Http\HttpException;
 use AlohaSocial\Core\Http\Request;
@@ -28,8 +29,10 @@ use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\SessionIssue;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Federation\RemoteDirectoryException;
+use AlohaSocial\Server\Federation\RemoteReplyException;
 use AlohaSocial\Server\Mail\MailException;
 use AlohaSocial\Server\Setup\SetupException;
+use InvalidArgumentException;
 use Throwable;
 
 use function array_keys;
@@ -668,6 +671,19 @@ final class FrontController
             }
         }
 
+        // The core validates a reply target against its local post table. A
+        // remote inReplyTo therefore needs the host path, which stores the
+        // post first and retargets its already queued Create atomically.
+        if ($request->method === 'POST' && $request->path === '/api/v1/posts') {
+            $replyBody = json_decode($request->body, true);
+            if (is_array($replyBody)
+                && is_string($replyBody['in_reply_to_id'] ?? null)
+                && preg_match('#^https?://#i', trim($replyBody['in_reply_to_id'])) === 1
+            ) {
+                return $this->remoteReply($request, $userId);
+            }
+        }
+
         $mastodonOAuthResponse = $this->mastodonOAuth->handle($request, $session);
         if ($mastodonOAuthResponse !== null) {
             return $mastodonOAuthResponse;
@@ -1199,6 +1215,130 @@ final class FrontController
                     : 'This account is being deleted; access is temporarily blocked.',
             ],
         ], $status);
+    }
+
+    /**
+     * A reply whose parent lives on another server.
+     *
+     * The input contract mirrors the core's POST /api/v1/posts, so the UI and
+     * native clients keep sending the same body; only the parent resolution
+     * differs. Nothing is written when the remote author's inbox cannot be
+     * resolved, which keeps a comment from existing locally without reaching
+     * the conversation it belongs to.
+     */
+    private function remoteReply(Request $request, ?string $userId): Response
+    {
+        if ($userId === null) {
+            return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+        }
+
+        $limited = $this->enforceIdentityRateLimit('host.remote_reply', $userId, 30, 60);
+        if ($limited !== null) {
+            return $limited;
+        }
+
+        $body = json_decode($request->body, true);
+        if (!is_array($body)) {
+            return $this->apiError(422, 'validation_failed', 'The request body must be a JSON object.');
+        }
+
+        $target = $body['in_reply_to_id'] ?? null;
+        if (!is_string($target) || trim($target) === '') {
+            return $this->apiError(422, 'validation_failed', 'in_reply_to_id must be a remote post URL.', [
+                'in_reply_to_id' => 'Please provide the post you are replying to.',
+            ]);
+        }
+
+        $content = $body['content'] ?? '';
+        if (!is_string($content)) {
+            return $this->apiError(422, 'validation_failed', 'content must be a string.', [
+                'content' => 'content must be a string.',
+            ]);
+        }
+
+        $contentWarning = $body['content_warning'] ?? null;
+        if ($contentWarning !== null && !is_string($contentWarning)) {
+            return $this->apiError(422, 'validation_failed', 'content_warning must be a string or null.', [
+                'content_warning' => 'content_warning must be a string or null.',
+            ]);
+        }
+
+        $language = $body['language'] ?? null;
+        if ($language !== null && !is_string($language)) {
+            return $this->apiError(422, 'validation_failed', 'language must be a string or null.', [
+                'language' => 'language must be a string or null.',
+            ]);
+        }
+
+        $rawAttachmentIds = $body['attachment_ids'] ?? [];
+        if (!is_array($rawAttachmentIds) || !array_is_list($rawAttachmentIds)) {
+            return $this->apiError(422, 'validation_failed', 'attachment_ids must be a list of strings.', [
+                'attachment_ids' => 'attachment_ids must be a list of strings.',
+            ]);
+        }
+
+        $attachmentIds = [];
+        foreach ($rawAttachmentIds as $attachmentId) {
+            if (!is_string($attachmentId) || trim($attachmentId) === '') {
+                return $this->apiError(422, 'validation_failed', 'attachment_ids must be a list of strings.', [
+                    'attachment_ids' => 'attachment_ids must be a list of strings.',
+                ]);
+            }
+            $attachmentIds[] = $attachmentId;
+        }
+
+        $rawVisibility = $body['visibility'] ?? 'public';
+        if (!is_string($rawVisibility)) {
+            return $this->apiError(422, 'validation_failed', 'visibility must be a string.', [
+                'visibility' => 'visibility must be a string.',
+            ]);
+        }
+
+        try {
+            $visibility = Visibility::fromString($rawVisibility);
+        } catch (InvalidArgumentException $exception) {
+            return $this->apiError(422, 'validation_failed', $exception->getMessage(), [
+                'visibility' => $exception->getMessage(),
+            ]);
+        }
+
+        if ($visibility === Visibility::Direct) {
+            return $this->apiError(422, 'validation_failed', 'A reply to a remote post cannot be a direct message.', [
+                'visibility' => 'Choose public, unlisted or followers-only.',
+            ]);
+        }
+
+        $quotedPostId = $body['quoted_post_id'] ?? null;
+        if ($quotedPostId !== null && !is_string($quotedPostId)) {
+            return $this->apiError(422, 'validation_failed', 'quoted_post_id must be a string or null.', [
+                'quoted_post_id' => 'quoted_post_id must be a string or null.',
+            ]);
+        }
+
+        try {
+            $post = $this->runtime->remoteReplies->create(
+                $userId,
+                $target,
+                $content,
+                $visibility,
+                $contentWarning === null ? null : trim($contentWarning),
+                $attachmentIds,
+                $quotedPostId === null ? null : trim($quotedPostId),
+                $language === null ? null : trim($language),
+            );
+        } catch (ValidationException $exception) {
+            return $this->apiError(422, 'validation_failed', $exception->getMessage(), $exception->fields());
+        } catch (RemoteReplyException $exception) {
+            return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
+        } catch (Throwable) {
+            return $this->apiError(502, 'remote_reply_failed', 'The reply could not be delivered to the remote server.');
+        }
+
+        $shape = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
+
+        return Response::json(['post' => $shape], 201, [
+            'Location' => '/api/v1/posts/' . rawurlencode($post->id),
+        ]);
     }
 
     private function enforceIdentityRateLimit(string $route, string $identity, int $limit, int $window): ?Response

@@ -193,10 +193,12 @@ following count loads that list page by page: the Mastodon API when available,
 otherwise the actor's ActivityPub collection, or `app.bsky.graph.getFollowers`
 and `getFollows` for Bluesky. Remote profile and post counts are shown exactly
 as the origin reports them. Remote profiles, follows and replies remain
-read-only; cached posts from followed ActivityPub accounts support local likes
-and boosts using the local account's ActivityPub identity. These operations
-queue signed Like/Undo(Like) and Announce/Undo(Announce) deliveries; remote
-engagement totals remain as reported by the origin.
+read-only; cached posts from followed ActivityPub accounts support local likes,
+boosts and replies using the local account's ActivityPub identity. These
+operations queue signed Like/Undo(Like), Announce/Undo(Announce) and
+`Create`/`Note` deliveries. A reply stores the remote object as its parent and
+is threaded locally; remote engagement totals remain as reported by the
+origin.
 
 Every remote document is checked by `FederationTargetGuard` (SSRF, redirects,
 DNS) and fetched with a byte limit; remote HTML is converted to plain text

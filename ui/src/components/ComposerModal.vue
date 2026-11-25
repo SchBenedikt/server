@@ -7,7 +7,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { useHostBridge } from '@alohasocial/ui';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
-import { accountName, handleLabel, postRouteId, truncate } from '../lib/format';
+import { accountName, handleLabel, isRemoteId, postReplyTargetId, postRouteId, truncate } from '../lib/format';
 import { getApi } from '../lib/api';
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { announcePostCreated, announcePostUpdated } from '../lib/events';
@@ -149,7 +149,8 @@ const submitLabel = computed(() => {
 });
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
-const replyId = computed(() => replyTo.value === null ? null : postRouteId(replyTo.value));
+const replyId = computed(() => replyTo.value === null ? null : postReplyTargetId(replyTo.value));
+const isRemoteReply = computed(() => replyId.value !== null && isRemoteId(replyId.value));
 
 const length = computed(() => Array.from(content.value).length);
 const warningLength = computed(() => Array.from(contentWarning.value).length);
@@ -384,7 +385,7 @@ function removePollOption(index: number): void {
 }
 
 function togglePoll(): void {
-	if (isQuote.value) {
+	if (isQuote.value || isRemoteReply.value) {
 		return;
 	}
 
@@ -396,7 +397,7 @@ function togglePoll(): void {
 }
 
 function toggleSchedule(): void {
-	if (isQuote.value) {
+	if (isQuote.value || isRemoteReply.value) {
 		return;
 	}
 
@@ -504,6 +505,10 @@ function resetImages(): void {
 
 async function saveAsDraft(): Promise<void> {
 	if (savingDraft.value || appState.session.user === null) {
+		return;
+	}
+	if (isRemoteReply.value) {
+		showToast('Replies to external posts cannot be saved as drafts.', 'error');
 		return;
 	}
 	if (!canUploadMedia.value && hasMediaAttachments.value) {
@@ -974,7 +979,7 @@ async function submit(): Promise<void> {
 						<AppIcon name="info" :size="20" />
 					</button>
 					<button
-						v-if="!isEdit && !isQuote && !isDirect"
+						v-if="!isEdit && !isQuote && !isDirect && !isRemoteReply"
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showPoll }"
@@ -985,7 +990,7 @@ async function submit(): Promise<void> {
 						<AppIcon name="hash" :size="20" />
 					</button>
 					<button
-						v-if="!isEdit && !isQuote && !isDirect"
+						v-if="!isEdit && !isQuote && !isDirect && !isRemoteReply"
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': scheduleOpen }"
@@ -1024,7 +1029,7 @@ async function submit(): Promise<void> {
 						{{ length }} / {{ MAX_LENGTH }}
 					</span>
 					<button
-						v-if="!isEdit && !isDirect"
+						v-if="!isEdit && !isDirect && !isRemoteReply"
 						type="button"
 						class="a-btn a-btn--ghost a-btn--small"
 						:disabled="savingDraft || submitting"

@@ -110,6 +110,11 @@ const interactionId = computed(() => (
 const detailTarget = computed(() => localId.value ?? remoteTarget.value);
 const detailHref = computed(() => detailTarget.value === null ? null : `#/p/${encodeURIComponent(detailTarget.value)}`);
 const isRemotePost = computed(() => localId.value === null);
+const canReplyHere = computed(() => (
+	!isRemotePost.value
+	|| remoteTarget.value?.startsWith('http://') === true
+	|| remoteTarget.value?.startsWith('https://') === true
+));
 const reportTargetId = computed(() => localId.value ?? remoteTarget.value ?? '');
 const canReport = computed(() => (
 	appState.session.user !== null
@@ -1263,7 +1268,7 @@ onUnmounted(() => {
 
 		<footer class="a-post__actions">
 			<button
-				v-if="!isRemotePost"
+				v-if="canReplyHere"
 				type="button"
 				class="a-post__action"
 				:aria-label="`Replies${replyCount > 0 ? ` (${replyCount})` : ''}`"

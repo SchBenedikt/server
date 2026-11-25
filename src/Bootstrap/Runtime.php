@@ -51,6 +51,7 @@ use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
 use AlohaSocial\Server\Federation\RemoteReactions;
+use AlohaSocial\Server\Federation\RemoteReplies;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
@@ -88,6 +89,7 @@ final readonly class Runtime
         public RemoteEngagement $remoteEngagement,
         public RemoteEngagementRefresher $remoteEngagementRefresher,
         public RemoteReactions $remoteReactions,
+        public RemoteReplies $remoteReplies,
         public RemoteActorProfiles $remoteActorProfiles,
         public FederatedTimeline $federatedTimeline,
         public LiveUpdates $liveUpdates,

@@ -21,6 +21,7 @@ import type { Account, TimelineItem } from '../lib/types';
 const PAGE_SIZE = 40;
 const id = computed(() => route.value.name === 'post' ? route.value.id : '');
 const isRemoteTarget = computed(() => isRemoteId(id.value) || id.value.startsWith('at://'));
+const canReplyHere = computed(() => !isRemoteTarget.value || isRemoteId(id.value));
 
 const post = ref<TimelineItem | null>(null);
 const parent = ref<TimelineItem | null>(null);
@@ -182,11 +183,20 @@ async function load(): Promise<void> {
 		post.value = loaded;
 
 		if (loaded.in_reply_to_id) {
-			try {
-				parent.value = await getApi().post(loaded.in_reply_to_id);
-				void resolveAccount(parent.value.author_id);
-			} catch {
-				parent.value = null;
+			if (isRemoteId(loaded.in_reply_to_id)) {
+				try {
+					const remoteParent = await getApi().remotePost(loaded.in_reply_to_id);
+					parent.value = remoteParent.post;
+				} catch {
+					parent.value = null;
+				}
+			} else {
+				try {
+					parent.value = await getApi().post(loaded.in_reply_to_id);
+					void resolveAccount(parent.value.author_id);
+				} catch {
+					parent.value = null;
+				}
 			}
 		}
 
@@ -215,6 +225,9 @@ async function loadRemote(current: number): Promise<void> {
 		replies.value = data.replies;
 		remoteNetwork.value = data.network;
 		remoteProfile.value = data.profile;
+		// A local reply to this remote post is not part of the origin's public
+		// reply collection until it federates; merge it so a reload keeps it.
+		await loadReplies(current, true);
 	} catch (caught) {
 		if (current === generation) {
 			error.value = caught instanceof Error ? caught.message : 'The remote post could not be loaded.';
@@ -226,9 +239,10 @@ async function loadRemote(current: number): Promise<void> {
 	}
 }
 
-async function loadReplies(current: number): Promise<void> {
+async function loadReplies(current: number, merge = false): Promise<void> {
 	repliesLoading.value = true;
-	const seen = new Set<string>();
+	const existing = merge ? [...replies.value] : [];
+	const seen = new Set(existing.map((entry) => entry.id));
 	const found: TimelineItem[] = [];
 	let cursor: { before: string; beforeId: string } | null = null;
 
@@ -267,7 +281,7 @@ async function loadReplies(current: number): Promise<void> {
 			}
 		}
 
-		replies.value = found.sort((left, right) => (
+		replies.value = [...existing, ...found].sort((left, right) => (
 			new Date(left.published_at).getTime() - new Date(right.published_at).getTime()
 		));
 	} catch {
@@ -310,7 +324,7 @@ function itemHref(item: TimelineItem): string | null {
 }
 
 function reply(): void {
-	if (post.value === null || isRemoteTarget.value) {
+	if (post.value === null || !canReplyHere.value) {
 		return;
 	}
 	if (appState.session.user === null) {
@@ -492,7 +506,7 @@ onUnmounted(() => {
 					<span>{{ replyTotal }} {{ replyTotal === 1 ? 'Reply' : 'Replies' }}</span>
 				</header>
 
-				<button v-if="!isRemoteTarget" type="button" class="a-inline-reply" @click="reply">
+				<button v-if="canReplyHere" type="button" class="a-inline-reply" @click="reply">
 					<AppIcon name="reply" :size="18" />
 					<span>Write a reply to {{ itemHandle(post) }}…</span>
 				</button>
