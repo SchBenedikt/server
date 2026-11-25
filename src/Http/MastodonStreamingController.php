@@ -164,6 +164,13 @@ final class MastodonStreamingController
             $pending = [];
 
             foreach ($events as $event) {
+                // The iterator may be suspended while a frame is flushed. Recheck
+                // before every buffered event so revocation takes effect without
+                // waiting for the next broker poll.
+                if (!$this->tokenIsLive($token, $userId, $stream)) {
+                    return;
+                }
+
                 $cursor = $event->id;
                 if ($event->name === 'notification.created') {
                     if ($stream === 'user:notification' || ($stream === 'user' && $this->tokenHasScope($token, 'read:notifications'))) {
