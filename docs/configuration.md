@@ -298,6 +298,20 @@ password; the client receives Bearer tokens and can use the same
 as any other PDS. Public posts are also written into the native repository by
 the background worker, so the local post and its ATProto record stay in sync.
 
+After creating an identity and publishing a public post, verify discovery from
+outside the instance with:
+
+```bash
+php bin/pds-discovery-smoke.php alice.social.example 'at://did:plc:.../app.bsky.feed.post/...'
+```
+
+This read-only check follows the public HTTPS handle endpoint, confirms the PLC
+DID document points to this PDS, checks `com.atproto.server.describeServer`,
+and asks the public Bluesky AppView to resolve the handle and load the post.
+The final check demonstrates external relay/AppView indexing; local XRPC success
+alone does not. Pass a third argument with another AppView's XRPC base URL if
+you operate a separate integration target.
+
 ## Inbound AT Protocol ingestion
 
 Federated AT Protocol content arrives through a public Jetstream relay:
