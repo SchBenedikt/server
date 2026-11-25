@@ -107,6 +107,12 @@ final class PdoEventBroker implements EventBroker
                 'public:local' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'public'"
                     . ' AND EXISTS (SELECT 1 FROM account local_actor WHERE local_actor.id = e.actor_id)',
                 'home' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience IN ('public', 'followers') AND recipient.account_id IS NOT NULL",
+                'list' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted')"
+                    . " AND (e.audience = 'public' OR (e.audience = 'followers' AND recipient.account_id IS NOT NULL))"
+                    . ' AND EXISTS (SELECT 1 FROM social_account_list owned_list'
+                    . ' JOIN social_account_list_member list_member ON list_member.list_id = owned_list.id'
+                    . ' WHERE owned_list.id = :stream_list_id AND owned_list.user_id = :recipient_user_id'
+                    . ' AND list_member.account_id = e.actor_id)',
                 'user' => 'e.actor_id = :actor_user_id',
                 'user:notification' => "e.event_name = 'notification.created' AND recipient.account_id IS NOT NULL",
                 'direct' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'direct' AND recipient.account_id IS NOT NULL",
@@ -121,6 +127,9 @@ final class PdoEventBroker implements EventBroker
         ];
         if (isset($channels['user'])) {
             $parameters['actor_user_id'] = $subscription->userId;
+        }
+        if (isset($channels['list'])) {
+            $parameters['stream_list_id'] = $subscription->listId;
         }
         $rows = $this->db->fetchAll(
             'SELECT DISTINCT e.sequence, e.event_id, e.event_name, e.audience, e.actor_id, e.payload_json, e.occurred_at'
