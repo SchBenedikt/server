@@ -222,21 +222,6 @@ body.app-shell {
 }
 
 .a-shell__glow {
-	width: 560px;
-	height: 560px;
-	border-radius: 0;
-	background: url('/ui/brand/aloha-mark.svg') center / contain no-repeat;
-	filter: none;
-	opacity: 0.05;
-}
-
-.a-shell__glow--one {
-	top: -190px;
-	right: -120px;
-	left: auto;
-}
-
-.a-shell__glow--two {
 	display: none;
 }
 
@@ -970,18 +955,12 @@ body.app-shell {
 
 .a-profile__cover {
 	height: 150px;
-	background:
-		radial-gradient(circle at 18% 12%, rgb(255 255 255 / 0.28), transparent 38%),
-		linear-gradient(120deg, var(--a-coral-brand), var(--a-primary) 46%, var(--a-deepsea));
+	background: var(--a-deepsea);
 	opacity: 1;
 }
 
 .a-profile__cover::after {
-	background: linear-gradient(to bottom, transparent 35%, rgb(15 76 92 / 0.28));
-}
-
-:root[data-theme='dark'] .a-profile__cover::after {
-	background: linear-gradient(to bottom, transparent 35%, rgb(13 32 41 / 0.35));
+	background: none;
 }
 
 .a-profile__identity h1 {
