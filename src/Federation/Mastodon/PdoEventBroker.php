@@ -93,7 +93,9 @@ final class PdoEventBroker implements EventBroker
         $channels = [];
         foreach ($subscription->channels as $channel) {
             $channels[$channel] = match ($channel) {
-                'public', 'public:local' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'public'",
+                'public' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'public'",
+                'public:local' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'public'"
+                    . ' AND EXISTS (SELECT 1 FROM account local_actor WHERE local_actor.id = e.actor_id)',
                 'home' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience IN ('public', 'followers') AND recipient.account_id IS NOT NULL",
                 'user' => 'e.actor_id = :actor_user_id',
                 'user:notification' => "e.event_name = 'notification.created' AND recipient.account_id IS NOT NULL",

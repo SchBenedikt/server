@@ -69,6 +69,30 @@ final class MastodonEventBrokerTest extends TestCase
 		self::assertSame(['alice', 'bob'], $direct[0]->recipientIds);
 	}
 
+	public function testPublicLocalStreamExcludesRemotePublicStatuses(): void
+	{
+		$server = new TestServer();
+		$server->createAccount('alice');
+		$localPost = $server->runtime->app->posts->create(new CreatePost('alice', 'local status'));
+		$broker = $server->runtime->app->eventBroker;
+		self::assertNotNull($broker);
+		$broker->publish(new StreamEventDraft(
+			name: 'status.created',
+			audience: StreamAudience::Public,
+			actorId: 'https://remote.example/users/remy',
+			recipientIds: ['alice'],
+			payload: ['status_id' => 'https://remote.example/posts/1'],
+			occurredAt: '2026-11-25T00:00:00Z',
+		));
+
+		$localEvents = $broker->read(new StreamSubscription('alice', ['public:local']), null, 10);
+		$publicEvents = $broker->read(new StreamSubscription('alice', ['public']), null, 10);
+
+		self::assertCount(1, $localEvents);
+		self::assertSame(['status_id' => $localPost->id], $localEvents[0]->payload);
+		self::assertCount(2, $publicEvents);
+	}
+
 	public function testRejectsUnsupportedStreamChannelsInsteadOfSilentlyReturningEmpty(): void
 	{
 		$server = new TestServer();
