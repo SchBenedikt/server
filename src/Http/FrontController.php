@@ -311,11 +311,16 @@ final class FrontController
         }
 
         if ($request->method === 'GET' && $request->path === '/api/v1/host/updates') {
-            if ($userId === null) {
+            // This route is handled before the shared viewer assignment, so it
+            // must resolve the signed-in account itself. Reading `$userId`
+            // here used to emit an undefined-variable warning and answer 401
+            // even for a valid session, which disabled live updates entirely.
+            $viewerId = $session?->userId() ?? $request->userId;
+            if ($viewerId === null) {
                 return $this->apiError(401, 'not_authenticated', 'Sign in to follow live updates.');
             }
 
-            $retryAfter = $this->runtime->rateLimiter->attempt('host.updates', $userId, 240, 60);
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.updates', $viewerId, 240, 60);
             if ($retryAfter !== null) {
                 return Response::json(
                     [
@@ -332,7 +337,7 @@ final class FrontController
             $since = $request->queryParam('since');
 
             return Response::json($this->runtime->liveUpdates->changes(
-                $userId,
+                $viewerId,
                 is_string($since) ? $since : null,
             ));
         }

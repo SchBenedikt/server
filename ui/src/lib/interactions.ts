@@ -4,7 +4,7 @@
  */
 import { reactive } from 'vue';
 import { getApi } from './api';
-import type { PostInteraction } from './types';
+import type { PostInteraction, RemoteEngagementUpdate } from './types';
 
 /**
  * A small client-side cache for the viewer-specific post interaction data.
@@ -34,6 +34,26 @@ export function patchInteraction(id: string, patch: Partial<PostInteraction>): v
 	}
 
 	interactionStore[id] = { ...current, ...patch };
+}
+
+/**
+ * Apply a live counter refresh to every store key the card may use. The
+ * activity id and the object id address the same federated post.
+ */
+export function applyEngagementUpdate(update: RemoteEngagementUpdate): void {
+	for (const id of [update.id, update.object_id]) {
+		const current = interactionStore[id];
+		if (current === undefined) {
+			continue;
+		}
+
+		interactionStore[id] = {
+			...current,
+			favourites_count: update.likes_count,
+			reblogs_count: update.boosts_count,
+			replies_count: update.replies_count,
+		};
+	}
 }
 
 export function ensureInteractions(ids: Array<string | null | undefined>): void {

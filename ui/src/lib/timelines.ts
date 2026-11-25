@@ -4,7 +4,7 @@
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { ApiError, getApi, hydrateTimelineBoosts } from './api';
-import { onPostCreated, onPostDeleted, onPostUpdated } from './events';
+import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import type { FeedInterest, TimelineItem } from './types';
 
 export type FeedKind = 'home' | 'for-you' | 'trending' | 'public' | 'tag' | 'followed';
@@ -260,6 +260,26 @@ export function useTimeline(source: () => TimelineSource) {
 		posts.value = posts.value.filter((post) => post.id !== postId && post.object_id !== postId);
 	});
 
+	// A live counter refresh names the activity id; the same post is also
+	// addressable by its object id (and as the original of a boost).
+	const stopEngagement = onEngagement((update) => {
+		posts.value = posts.value.map((item) => {
+			const matches = item.id === update.id
+				|| item.id === update.object_id
+				|| item.object_id === update.object_id;
+			if (!matches) {
+				return item;
+			}
+
+			return {
+				...item,
+				likes_count: update.likes_count,
+				boosts_count: update.boosts_count,
+				replies_count: update.replies_count,
+			};
+		});
+	});
+
 	watch(key, () => {
 		posts.value = [];
 		cursor = null;
@@ -273,6 +293,7 @@ export function useTimeline(source: () => TimelineSource) {
 		stopCreated();
 		stopUpdated();
 		stopDeleted();
+		stopEngagement();
 	});
 
 	return {

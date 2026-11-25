@@ -4,7 +4,8 @@
  */
 import { onUnmounted, type Ref, watch } from 'vue';
 import { getApi } from './api';
-import { announcePostCreated, announcePostDeleted } from './events';
+import { announceEngagement, announcePostCreated, announcePostDeleted } from './events';
+import { applyEngagementUpdate } from './interactions';
 
 const POLL_INTERVAL_MS = 15_000;
 
@@ -46,6 +47,13 @@ export function useLiveUpdates(enabled: Ref<boolean>): void {
 						announcePostCreated(post, true);
 					}
 				}
+			}
+
+			// Origin counters change without a post row changing. Apply the
+			// snapshot to the open cards so an idle tab catches up on its own.
+			for (const update of data.engagement) {
+				applyEngagementUpdate(update);
+				announceEngagement(update);
 			}
 		} catch {
 			// Best effort: keep the cursor and retry on the next tick.

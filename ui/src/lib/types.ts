@@ -200,6 +200,15 @@ export interface RemoteEngagementData {
 	cursor: string | null;
 }
 
+/** A refreshed origin counter snapshot delivered by the live cursor. */
+export interface RemoteEngagementUpdate {
+	id: string;
+	object_id: string;
+	likes_count: number;
+	boosts_count: number;
+	replies_count: number;
+}
+
 export type RemoteSearchType = 'all' | 'accounts' | 'posts';
 export type RemoteSearchNetwork = 'all' | 'activitypub' | 'bluesky';
 

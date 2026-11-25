@@ -12,7 +12,7 @@ import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { displayNameFor, hasDistinctDisplayName, resolveAccount } from '../lib/account';
 import { getApi } from '../lib/api';
-import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
+import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { handleLabel, isRemoteId, postRouteId, truncate } from '../lib/format';
 import { navigate, route } from '../lib/router';
 import { appState, openComposer } from '../lib/state';
@@ -133,6 +133,26 @@ async function loadEngagement(tab: 'likes' | 'reposts', reset: boolean): Promise
 watch(id, () => {
 	void load();
 }, { immediate: true });
+
+// The detail header reads counts from the post itself, so a live refresh has
+// to patch this copy too; the card below uses the interaction store.
+const stopEngagement = onEngagement((update) => {
+	const item = post.value;
+	if (item === null) {
+		return;
+	}
+
+	if (item.id === update.id || item.id === update.object_id || item.object_id === update.object_id) {
+		post.value = {
+			...item,
+			likes_count: update.likes_count,
+			boosts_count: update.boosts_count,
+			replies_count: update.replies_count,
+		};
+	}
+});
+
+onUnmounted(stopEngagement);
 
 async function load(): Promise<void> {
 	const current = ++generation;

@@ -14,6 +14,9 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 
+use function array_filter;
+use function array_map;
+use function array_merge;
 use function array_values;
 use function implode;
 use function max;
@@ -46,7 +49,13 @@ final class LiveUpdates
     }
 
     /**
-     * @return array{since: string, cursor: string, created: list<string>, deleted: list<string>}
+     * @return array{
+     *     since: string,
+     *     cursor: string,
+     *     created: list<string>,
+     *     deleted: list<string>,
+     *     engagement: list<array{id: string, object_id: string, likes_count: int, boosts_count: int, replies_count: int}>
+     * }
      */
     public function changes(string $accountId, ?string $since): array
     {
@@ -108,6 +117,28 @@ final class LiveUpdates
             ['since' => $start],
         );
 
+        // A counter refresh changes no post row, so the page would otherwise
+        // keep showing the numbers from its first load until a reload. The
+        // cache timestamp is the change marker; only followed actors are
+        // included, exactly like the created list above.
+        $engagement = $this->db->fetchAll(
+            'SELECT remote.activity_id, cache.object_id, cache.likes, cache.boosts, cache.replies'
+            . ' FROM social_remote_engagement cache'
+            . ' INNER JOIN social_remote_post remote ON remote.object_id = cache.object_id'
+            . ' WHERE cache.fetched_at > :engagement_since AND remote.deleted_at IS NULL'
+            . ' AND remote.actor_id IN ('
+            . ' SELECT actor_id FROM social_following'
+            . " WHERE local_user_id = :engagement_follower_main AND state = 'accepted'"
+            . ' UNION SELECT subject_did FROM ' . AtprotoFollowSchema::TABLE
+            . " WHERE local_user_id = :engagement_follower_atproto AND state = 'active')"
+            . ' ORDER BY cache.fetched_at ASC LIMIT ' . self::MAX_ITEMS,
+            [
+                'engagement_since' => $start,
+                'engagement_follower_main' => $accountId,
+                'engagement_follower_atproto' => $accountId,
+            ],
+        );
+
         return [
             'since' => $start,
             'cursor' => $cursor,
@@ -119,6 +150,16 @@ final class LiveUpdates
                 array_map(static fn (array $row): string => (string) ($row['id'] ?? ''), $deletedLocal),
                 array_map(static fn (array $row): string => (string) ($row['activity_id'] ?? ''), $deletedRemote),
             ), static fn (string $id): bool => $id !== '')),
+            'engagement' => array_values(array_filter(array_map(
+                static fn (array $row): array => [
+                    'id' => (string) ($row['activity_id'] ?? ''),
+                    'object_id' => (string) ($row['object_id'] ?? ''),
+                    'likes_count' => max(0, (int) ($row['likes'] ?? 0)),
+                    'boosts_count' => max(0, (int) ($row['boosts'] ?? 0)),
+                    'replies_count' => max(0, (int) ($row['replies'] ?? 0)),
+                ],
+                $engagement,
+            ), static fn (array $entry): bool => $entry['id'] !== '' && $entry['object_id'] !== '')),
         ];
     }
 }

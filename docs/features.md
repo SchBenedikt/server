@@ -38,7 +38,7 @@ the core route contract:
 | `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
 | `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
 | `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. The counters are cached for later cards; `bin/worker.php` refreshes them for followed posts (newest first, 15-minute TTL, bounded per tick) so a card never has to fetch the origin itself. |
-| `GET /api/v1/host/updates?since=…` | Cheap change cursor for an open page: ids of posts the viewer may see that appeared or were deleted since the given timestamp, limited to the last 30 minutes. The UI polls this and hydrates only new ids. |
+| `GET /api/v1/host/updates?since=…` | Cheap change cursor for an open page: ids of posts the viewer may see that appeared or were deleted since the given timestamp, limited to the last 30 minutes. It also carries origin counter refreshes for followed posts, so an open card updates likes, boosts and replies without a reload. |
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
 | `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |

@@ -29,6 +29,7 @@ import type {
 	RemoteFollowingEntry,
 	AtprotoFollowEntry,
 	RemoteEngagementData,
+	RemoteEngagementUpdate,
 	RemotePostData,
 	RemoteProfileData,
 	RemoteSearchData,
@@ -287,7 +288,7 @@ export interface Api {
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
 	forYouImpressions(items: { post_id: string; dwell_ms: number }[]): Promise<void>;
-	updates(since: string): Promise<{ cursor: string; created: string[]; deleted: string[] }>;
+	updates(since: string): Promise<{ cursor: string; created: string[]; deleted: string[]; engagement: RemoteEngagementUpdate[] }>;
 	logout(): Promise<void>;
 }
 
@@ -2853,8 +2854,8 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			});
 		},
 
-		async updates(since: string): Promise<{ cursor: string; created: string[]; deleted: string[] }> {
-			const data = await request<{ cursor?: unknown; created?: unknown; deleted?: unknown }>(
+		async updates(since: string): Promise<{ cursor: string; created: string[]; deleted: string[]; engagement: RemoteEngagementUpdate[] }> {
+			const data = await request<{ cursor?: unknown; created?: unknown; deleted?: unknown; engagement?: unknown }>(
 				'GET',
 				'/api/v1/host/updates',
 				{ since },
@@ -2863,11 +2864,24 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			const ids = (value: unknown): string[] => Array.isArray(value)
 				? value.filter((id): id is string => typeof id === 'string' && id !== '')
 				: [];
+			const engagement: RemoteEngagementUpdate[] = Array.isArray(data?.engagement)
+				? data.engagement
+					.filter(isRecord)
+					.map((entry) => ({
+						id: typeof entry.id === 'string' ? entry.id : '',
+						object_id: typeof entry.object_id === 'string' ? entry.object_id : '',
+						likes_count: typeof entry.likes_count === 'number' ? entry.likes_count : 0,
+						boosts_count: typeof entry.boosts_count === 'number' ? entry.boosts_count : 0,
+						replies_count: typeof entry.replies_count === 'number' ? entry.replies_count : 0,
+					}))
+					.filter((entry) => entry.id !== '' && entry.object_id !== '')
+				: [];
 
 			return {
 				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : new Date().toISOString(),
 				created: ids(data?.created),
 				deleted: ids(data?.deleted),
+				engagement,
 			};
 		},
 
