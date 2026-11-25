@@ -93,6 +93,32 @@ final class MastodonEventBrokerTest extends TestCase
 		self::assertCount(2, $publicEvents);
 	}
 
+	public function testPublishRollsBackTheEventWhenRecipientFanoutFails(): void
+	{
+		$server = new TestServer();
+		$server->createAccount('alice');
+		$broker = $server->runtime->app->eventBroker;
+		self::assertNotNull($broker);
+		$server->runtime->database->execute('DROP TABLE mastodon_stream_event_recipient');
+
+		$failed = false;
+		try {
+			$broker->publish(new StreamEventDraft(
+				name: 'status.created',
+				audience: StreamAudience::Public,
+				actorId: 'alice',
+				recipientIds: ['alice'],
+				payload: ['status_id' => 'post-1'],
+				occurredAt: '2026-11-25T00:00:00Z',
+			));
+		} catch (\Throwable) {
+			$failed = true;
+		}
+
+		self::assertTrue($failed, 'The missing recipient table must abort the event write.');
+		self::assertSame(0, (int) $server->runtime->database->fetchValue('SELECT COUNT(*) FROM mastodon_stream_event'));
+	}
+
 	public function testRejectsUnsupportedStreamChannelsInsteadOfSilentlyReturningEmpty(): void
 	{
 		$server = new TestServer();
