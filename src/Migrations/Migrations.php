@@ -59,6 +59,7 @@ final class Migrations
             new Version202611280002ConversationMarkers(),
             new Version202611280003RecommendationImpressions(),
             new Version202611280004RemoteEngagementCache(),
+            new Version202611280005RemoteActorProfileCache(),
         ];
     }
 }

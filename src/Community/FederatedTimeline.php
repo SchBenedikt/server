@@ -14,6 +14,7 @@ use AlohaSocial\Core\Domain\Timeline\TimelineEntry;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Service\MediaService;
 use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Server\Federation\RemoteActorProfiles;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 
 use function array_filter;
@@ -67,6 +68,7 @@ final class FederatedTimeline
         private readonly Connection $db,
         private readonly RemoteEngagement $engagement,
         private readonly ?MediaService $media = null,
+        private readonly ?RemoteActorProfiles $actorProfiles = null,
     ) {
     }
 
@@ -174,6 +176,21 @@ final class FederatedTimeline
 
         $counts = $this->countsFor($posts);
 
+        // A boosted card is attributed to the original author, so the profile
+        // cache is keyed by object_author_id when that differs from the actor
+        // that performed the Announce.
+        $authorIds = [];
+        foreach ($posts as $post) {
+            $authorId = (string) ($post['object_author_id'] ?? '');
+            if ($authorId === '') {
+                $authorId = (string) ($post['author_id'] ?? '');
+            }
+            if ($authorId !== '') {
+                $authorIds[] = $authorId;
+            }
+        }
+        $profiles = $this->actorProfiles?->profiles($authorIds) ?? [];
+
         foreach ($posts as $index => $post) {
             $postId = (string) ($post['id'] ?? '');
             $postObjectId = (string) ($post['object_id'] ?? '');
@@ -184,9 +201,14 @@ final class FederatedTimeline
             // arrived; the reader sees the same public projection as on the
             // origin instance.
             $post['visibility'] = 'public';
-            $post['author_handle'] = $this->handleFor((string) ($post['author_id'] ?? ''));
-            $post['author_display_name'] = null;
-            $post['author_avatar'] = null;
+            $displayAuthorId = (string) ($post['object_author_id'] ?? '');
+            if ($displayAuthorId === '') {
+                $displayAuthorId = (string) ($post['author_id'] ?? '');
+            }
+            $profile = $profiles[$displayAuthorId] ?? null;
+            $post['author_handle'] = $profile['handle'] ?? $this->handleFor($displayAuthorId);
+            $post['author_display_name'] = $profile['display_name'] ?? null;
+            $post['author_avatar'] = $profile['avatar_url'] ?? null;
             $post['external_url'] = $postObjectId !== '' ? $postObjectId : null;
 
             if (isset($rows[$index])) {

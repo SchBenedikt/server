@@ -47,6 +47,7 @@ use AlohaSocial\Server\Federation\CompositeAtprotoAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
 use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
+use AlohaSocial\Server\Federation\RemoteActorProfiles;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
@@ -181,6 +182,7 @@ final class ApplicationFactory
                 $externalAtprotoPublisher,
             );
         $preferences = new Preferences($database, $clock);
+        $remoteActorProfiles = new RemoteActorProfiles($database, $remoteDirectory, $clock);
 
         // Inbound AT Protocol content arrives through a host-owned Jetstream
         // relay. The core keeps the durable store and the cursor; this object
@@ -316,10 +318,12 @@ final class ApplicationFactory
                 $remoteDirectory,
                 $clock,
             ),
+            remoteActorProfiles: $remoteActorProfiles,
             federatedTimeline: new FederatedTimeline(
                 $database,
                 new RemoteEngagement($database, $clock),
                 $app->media,
+                $remoteActorProfiles,
             ),
             liveUpdates: new LiveUpdates($database, $clock),
             preferences: $preferences,

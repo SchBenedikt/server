@@ -46,6 +46,7 @@ use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\AtprotoOAuthService;
+use AlohaSocial\Server\Federation\RemoteActorProfiles;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
@@ -87,6 +88,7 @@ final readonly class Runtime
         public RemoteEngagement $remoteEngagement,
         public RemoteEngagementRefresher $remoteEngagementRefresher,
         public RemoteReactions $remoteReactions,
+        public RemoteActorProfiles $remoteActorProfiles,
         public FederatedTimeline $federatedTimeline,
         public LiveUpdates $liveUpdates,
         public AdminService $admin,

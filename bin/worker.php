@@ -61,6 +61,21 @@ function refreshRemoteEngagement(Runtime $runtime, int $limit = 10): void
     }
 }
 
+/**
+ * Warm display names and avatars for the actors of cached federated posts.
+ *
+ * One guarded actor request per author; the timeline reads the cache and
+ * never waits for a peer. A failed actor backs off in the cache service.
+ */
+function refreshRemoteActorProfiles(Runtime $runtime, int $limit = 8): void
+{
+    try {
+        $runtime->remoteActorProfiles->refreshStale($limit);
+    } catch (Throwable $exception) {
+        fwrite(STDERR, 'Remote actor profile refresh failed: ' . $exception->getMessage() . "\n");
+    }
+}
+
 /** Complete host cleanup after Core's durable account erasure reaches `erased`. */
 function finalizeAccountErasures(Runtime $runtime): void
 {
@@ -95,6 +110,7 @@ if ($once) {
     finalizeAccountErasures($runtime);
     syncAtproto($runtime);
     refreshRemoteEngagement($runtime, 25);
+    refreshRemoteActorProfiles($runtime, 25);
     $handled = $runtime->app->worker->runOnce(10);
     fwrite(STDOUT, 'handled=' . $handled . "\n");
     exit(0);
@@ -112,6 +128,7 @@ if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
 }
 
 $lastEngagementRefresh = 0;
+$lastActorProfileRefresh = 0;
 while (!$stop) {
     // A non-empty batch is drained immediately; an empty one sleeps, so the
     // worker is not a busy loop.
@@ -124,6 +141,11 @@ while (!$stop) {
     if (time() - $lastEngagementRefresh >= 60) {
         refreshRemoteEngagement($runtime);
         $lastEngagementRefresh = time();
+    }
+
+    if (time() - $lastActorProfileRefresh >= 60) {
+        refreshRemoteActorProfiles($runtime);
+        $lastActorProfileRefresh = time();
     }
 
     $handled = $runtime->app->worker->runOnce(10);

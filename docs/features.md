@@ -69,9 +69,13 @@ Home offers **For you**, **Trending**, **Following**, **Local** and
 **Federated**. Local is the public timeline of this instance; Federated is
 every public post the instance has received from other servers, read from the
 remote-post cache so paging makes no peer request and shows the origin's
-counters. A hashtag page lists the local posts first and then the same tag
-from the federated cache, so `#photography` is not limited to what was written
-here. Opening either view is public; liking and boosting still need an
+counters. Author display names and avatars come from the host's
+`social_remote_actor_profile` cache: the worker reads each author's actor
+document once with the guarded fetcher, keeps a successful profile for a week
+and backs off for six hours after a failure. Until a profile is cached the card
+shows the handle derived from the actor URL, so the feed never waits on a peer.
+A hashtag page lists the local posts first and then the same tag from the
+federated cache, so `#photography` is not limited to what was written here. Opening either view is public; liking and boosting still need an
 account.
 
 Ranked feed snapshots are stored for at most 30 minutes and scoped to the

@@ -13,6 +13,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Added
 
+- **Cached remote author profiles:** the federated timeline and its hashtag
+  view show the origin display name and avatar of each author. A host-side
+  cache (`social_remote_actor_profile`) is filled by the worker from one
+  guarded actor request per author, refreshed weekly with a six-hour failure
+  backoff. A post without a cached profile falls back to its derived
+  `@name@host` handle.
 - **Federated timeline and federated hashtags:** Home now separates **Local**
   from **Federated**, and the federated view pages every public post this
   instance received from other servers out of the remote-post cache, including

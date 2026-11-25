@@ -110,6 +110,41 @@ final class RemoteDirectory
      * document. A normal profile read is far more expensive, so this path
      * resolves WebFinger and the actor directly.
      */
+    /**
+     * Reads one ActivityPub actor document for the display-profile cache.
+     *
+     * A stored remote post already carries the canonical actor URL, so this
+     * path skips WebFinger and the outbox and makes one bounded, guarded
+     * request. Collection counts are deliberately not fetched: a timeline
+     * card needs the handle, display name and avatar, and two extra requests
+     * per author would make the worker's cache pass expensive.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function actorProfile(string $actorUrl): ?array
+    {
+        $actorUrl = trim($actorUrl);
+        if ($actorUrl === '') {
+            return null;
+        }
+
+        $scheme = strtolower((string) parse_url($actorUrl, PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+
+        $actor = $this->fetchJson($actorUrl, self::ACTIVITY_ACCEPT);
+        $id = $this->link($actor['id'] ?? null) ?? $actorUrl;
+        if (!$this->sameOrigin($id, $actorUrl)) {
+            throw new RemoteDirectoryException(
+                'remote_actor_mismatch',
+                'The actor document does not belong to the requested address.',
+            );
+        }
+
+        return $this->activityPubProfile($actor, $actorUrl, false);
+    }
+
     public function mentionTarget(string $handle): ?MentionTarget
     {
         $handle = strtolower(ltrim(trim($handle), '@'));
