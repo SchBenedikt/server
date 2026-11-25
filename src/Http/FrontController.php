@@ -501,9 +501,11 @@ final class FrontController
                     $reactions = $this->runtime->app->reactions;
                     if ($viewerId !== null && mb_strlen($id) <= 2048 && $reactions !== null) {
                         try {
-                            $post = $reactions->remotePostFor($viewerId, $id);
+                            // The card state must exist for every cached post,
+                            // including one whose author is not followed; the
+                            // like action itself is no longer gated.
                             $remote[$id] = $this->remoteInteraction(
-                                $reactions->remoteInteractionsFor($viewerId, $post),
+                                $this->runtime->remoteReactions->snapshotFor($viewerId, $id),
                             );
                         } catch (ReactionException) {
                             // Core applies follow, visibility and block policy; unavailable items are omitted.
@@ -520,6 +522,16 @@ final class FrontController
                     $visible[] = $id;
                 } catch (PostNotFoundException) {
                     continue;
+                }
+            }
+
+            // Every time a card is displayed it asks for its interaction
+            // state. Use that request to refresh counters that are older than
+            // the view TTL, bounded so a large page cannot fan out.
+            if ($remote !== []) {
+                $stale = $this->runtime->remoteEngagement->staleObjects(array_keys($remote), 60);
+                if ($stale !== []) {
+                    $this->runtime->remoteEngagementRefresher->refreshIds($stale, 4);
                 }
             }
 
@@ -778,12 +790,17 @@ final class FrontController
                 }
 
                 try {
+                    // A public post may be boosted from discovery, even when
+                    // its author is not followed. The host service keeps the
+                    // signed Announce and resolves the inbox itself.
                     $objectId = $this->remoteObjectId($postId);
                     $interaction = $request->method === 'POST'
-                        ? $reactions->boostRemote($userId, $objectId)
-                        : $reactions->unboostRemote($userId, $objectId);
+                        ? $this->runtime->remoteReactions->boost($userId, $objectId)
+                        : $this->runtime->remoteReactions->unboost($userId, $objectId);
 
-                    return Response::json(['interaction' => $this->remoteInteraction($interaction)]);
+                    return Response::json([
+                        'interaction' => $this->remoteInteractionWithCounts($interaction, $objectId),
+                    ]);
                 } catch (ReactionException $exception) {
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
@@ -872,10 +889,12 @@ final class FrontController
                 try {
                     $objectId = $this->remoteObjectId($postId);
                     $interaction = $request->method === 'POST'
-                        ? $reactions->likeRemote($userId, $objectId)
-                        : $reactions->unlikeRemote($userId, $objectId);
+                        ? $this->runtime->remoteReactions->like($userId, $objectId)
+                        : $this->runtime->remoteReactions->unlike($userId, $objectId);
 
-                    return Response::json(['interaction' => $this->remoteInteraction($interaction)]);
+                    return Response::json([
+                        'interaction' => $this->remoteInteractionWithCounts($interaction, $objectId),
+                    ]);
                 } catch (ReactionException $exception) {
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
@@ -1040,6 +1059,32 @@ final class FrontController
             'replies_count' => 0,
             'emoji_reactions' => [],
         ];
+    }
+
+    /**
+     * The action response a remote like or boost returns: viewer state plus
+     * the cached origin totals, so the card does not fall back to zero.
+     *
+     * @param array<string, mixed> $interaction
+     *
+     * @return array<string, mixed>
+     */
+    private function remoteInteractionWithCounts(array $interaction, string $objectId): array
+    {
+        $result = $this->remoteInteraction($interaction);
+        $cached = $this->runtime->remoteEngagement->counts([$objectId])[$objectId] ?? null;
+        if ($cached !== null) {
+            $result['favourites_count'] = $cached['likes'];
+            $result['reblogs_count'] = $cached['boosts'];
+            $result['replies_count'] = $cached['replies'];
+
+            return $result;
+        }
+
+        $result['favourites_count'] = (int) ($interaction['favourites_count'] ?? 0);
+        $result['reblogs_count'] = (int) ($interaction['reblogs_count'] ?? 0);
+
+        return $result;
     }
 
     /**

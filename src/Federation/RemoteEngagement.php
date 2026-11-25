@@ -15,6 +15,7 @@ use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Support\Time;
 
 use function array_filter;
+use function array_unique;
 use function array_values;
 use function implode;
 use function is_array;
@@ -177,6 +178,63 @@ final class RemoteEngagement
         } catch (DatabaseException) {
             // A display counter must never turn a readable post into an error.
         }
+    }
+
+    /**
+     * The subset of the given object ids whose snapshot is missing or older
+     * than the view TTL.
+     *
+     * Feed cards ask for a refresh whenever they are displayed, but a busy
+     * timeline must not turn that into one origin request per card. A short
+     * view TTL keeps a repeated visit cheap while still updating the numbers.
+     *
+     * @param list<string> $objectIds
+     *
+     * @return list<string>
+     */
+    public function staleObjects(array $objectIds, int $ttlSeconds = 60): array
+    {
+        $objectIds = array_values(array_unique(array_filter(
+            array_map(static fn (mixed $id): string => is_string($id) ? trim($id) : '', $objectIds),
+            static fn (string $id): bool => $id !== '' && mb_strlen($id) <= 512,
+        )));
+        if ($objectIds === []) {
+            return [];
+        }
+
+        $parameters = [];
+        $placeholders = [];
+        foreach ($objectIds as $index => $objectId) {
+            $key = 'stale_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $objectId;
+        }
+
+        $threshold = Time::format($this->clock->now()->modify('-' . max(0, $ttlSeconds) . ' seconds'));
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT object_id, fetched_at FROM social_remote_engagement'
+                . ' WHERE object_id IN (' . implode(', ', $placeholders) . ')',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            return $objectIds;
+        }
+
+        $fresh = [];
+        foreach ($rows as $row) {
+            $objectId = is_string($row['object_id'] ?? null) ? $row['object_id'] : '';
+            $fetchedAt = is_string($row['fetched_at'] ?? null) ? $row['fetched_at'] : '';
+            if ($objectId !== '' && $fetchedAt >= $threshold) {
+                $fresh[$objectId] = true;
+            }
+        }
+
+        return array_values(array_filter(
+            $objectIds,
+            static fn (string $id): bool => !isset($fresh[$id]),
+        ));
     }
 
     /**

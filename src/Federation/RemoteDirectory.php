@@ -165,6 +165,34 @@ final class RemoteDirectory
     }
 
     /**
+     * The actor's personal inbox, resolved from its public document.
+     *
+     * A like on a discovered post has no stored follow edge to read the inbox
+     * from. The actor document is a public, guarded request and the inbox is
+     * the only address a signed ActivityPub delivery may use.
+     */
+    public function actorInbox(string $actorUrl): ?string
+    {
+        $actorUrl = trim($actorUrl);
+        if ($actorUrl === ''
+            || !preg_match('#^https?://#i', $actorUrl)
+            || filter_var($actorUrl, FILTER_VALIDATE_URL) === false
+        ) {
+            return null;
+        }
+
+        try {
+            $actor = $this->fetchJson($actorUrl, self::ACTIVITY_ACCEPT);
+        } catch (RemoteDirectoryException) {
+            return null;
+        }
+
+        $inbox = $this->link($actor['inbox'] ?? null);
+
+        return $inbox !== null && preg_match('#^https?://#i', $inbox) === 1 ? $inbox : null;
+    }
+
+    /**
      * Reads only the public counters of one federated post.
      *
      * The worker refreshes many cards per minute, and a full thread with its

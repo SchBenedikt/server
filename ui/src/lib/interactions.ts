@@ -16,8 +16,12 @@ import type { PostInteraction, RemoteEngagementUpdate } from './types';
 export const interactionStore = reactive<Record<string, PostInteraction>>({});
 
 const queued = new Set<string>();
+const fetchedAt = new Map<string, number>();
 let timer = 0;
 let inFlight = false;
+
+/** A card that becomes visible again refreshes its counters after this. */
+const VIEW_TTL_MS = 60_000;
 
 export function interactionFor(id: string | null | undefined): PostInteraction | undefined {
 	return id === null || id === undefined || id === '' ? undefined : interactionStore[id];
@@ -25,6 +29,7 @@ export function interactionFor(id: string | null | undefined): PostInteraction |
 
 export function rememberInteraction(id: string, interaction: PostInteraction): void {
 	interactionStore[id] = interaction;
+	fetchedAt.set(id, Date.now());
 }
 
 export function patchInteraction(id: string, patch: Partial<PostInteraction>): void {
@@ -58,9 +63,16 @@ export function applyEngagementUpdate(update: RemoteEngagementUpdate): void {
 
 export function ensureInteractions(ids: Array<string | null | undefined>): void {
 	for (const id of ids) {
-		if (id === null || id === undefined || id === '' || interactionStore[id] !== undefined || queued.has(id)) {
+		if (id === null || id === undefined || id === '' || queued.has(id)) {
 			continue;
 		}
+
+		// A stored value is only trusted for one view window: a post the
+		// viewer sees again asks the host for a fresh origin snapshot.
+		if (interactionStore[id] !== undefined && Date.now() - (fetchedAt.get(id) ?? 0) < VIEW_TTL_MS) {
+			continue;
+		}
+
 		queued.add(id);
 	}
 
@@ -87,6 +99,9 @@ async function flush(): Promise<void> {
 	inFlight = true;
 	try {
 		const result = await getApi().interactions(ids);
+		for (const id of ids) {
+			fetchedAt.set(id, Date.now());
+		}
 		for (const [id, interaction] of Object.entries(result)) {
 			// An optimistic update happened while the request was in flight.
 			if (interactionStore[id] === undefined) {

@@ -51,6 +51,61 @@ final class RemoteEngagementRefresher
     }
 
     /**
+     * Refresh an explicit set of objects, for example the cards on one page.
+     *
+     * @param list<string> $objectIds
+     *
+     * @return int number of posts whose counters were stored
+     */
+    public function refreshIds(array $objectIds, int $limit = 4): int
+    {
+        $limit = max(1, min($limit, self::MAX_LIMIT));
+        $now = time();
+        $this->pruneFailures($now);
+
+        $refreshed = 0;
+        $attempts = 0;
+        $seen = [];
+        foreach ($objectIds as $objectId) {
+            if ($attempts >= $limit) {
+                break;
+            }
+
+            $objectId = is_string($objectId) ? trim($objectId) : '';
+            if ($objectId === '' || isset($seen[$objectId]) || isset($this->failedAt[$objectId])) {
+                continue;
+            }
+            $seen[$objectId] = true;
+            $attempts++;
+
+            try {
+                $counts = $this->directory->remoteCounts($objectId);
+            } catch (Throwable) {
+                $counts = null;
+            }
+
+            if ($counts === null) {
+                $this->failedAt[$objectId] = $now;
+                continue;
+            }
+
+            $this->engagement->rememberCounts($objectId, $counts);
+            $refreshed++;
+        }
+
+        return $refreshed;
+    }
+
+    private function pruneFailures(int $now): void
+    {
+        foreach ($this->failedAt as $id => $at) {
+            if ($now - $at >= self::FAILURE_BACKOFF_SECONDS) {
+                unset($this->failedAt[$id]);
+            }
+        }
+    }
+
+    /**
      * @return int number of posts whose counters were stored
      */
     public function refresh(int $limit = 10): int
@@ -61,11 +116,7 @@ final class RemoteEngagementRefresher
         ));
 
         $now = time();
-        foreach ($this->failedAt as $id => $at) {
-            if ($now - $at >= self::FAILURE_BACKOFF_SECONDS) {
-                unset($this->failedAt[$id]);
-            }
-        }
+        $this->pruneFailures($now);
 
         // More candidates than attempts, so a post that is still in backoff
         // does not starve the rest of the queue.

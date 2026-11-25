@@ -50,6 +50,7 @@ use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
+use AlohaSocial\Server\Federation\RemoteReactions;
 use AlohaSocial\Server\Federation\Mastodon\PdoEventBroker;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
@@ -303,6 +304,14 @@ final class ApplicationFactory
             remoteEngagementRefresher: new RemoteEngagementRefresher(
                 $database,
                 new RemoteEngagement($database, $clock),
+                $remoteDirectory,
+                $clock,
+            ),
+            remoteReactions: new RemoteReactions(
+                $database,
+                $app->reactions,
+                new ActivityFactory($this->config->coreConfig()),
+                $app->queue,
                 $remoteDirectory,
                 $clock,
             ),

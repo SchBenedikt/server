@@ -181,7 +181,7 @@ final class HostExtensionTest extends TestCase
         /** @var array{interaction: array{favourited: bool, favourites_count: int}} $likedBody */
         $likedBody = json_decode($liked->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertTrue($likedBody['interaction']['favourited']);
-        self::assertSame(0, $likedBody['interaction']['favourites_count'], 'Remote totals are not represented as trusted counts.');
+        self::assertSame(1, $likedBody['interaction']['favourites_count'], 'A remote like is the viewer\'s own reaction count.');
 
         $queuedAfterLike = $server->runtime->app->queue->pendingCount();
         $repeated = $server->json('POST', $path, [], $alice['cookies'], $alice['csrf']);
@@ -209,7 +209,7 @@ final class HostExtensionTest extends TestCase
         /** @var array{interaction: array{reblogged: bool, reblogs_count: int}} $boostedBody */
         $boostedBody = json_decode($boosted->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertTrue($boostedBody['interaction']['reblogged']);
-        self::assertSame(0, $boostedBody['interaction']['reblogs_count'], 'Remote boost totals are not represented as trusted counts.');
+        self::assertSame(1, $boostedBody['interaction']['reblogs_count'], 'A remote boost is the viewer\'s own reaction count.');
         $queuedAfterBoost = $server->runtime->app->queue->pendingCount();
         $repeatedBoost = $server->json('POST', $boostPath, [], $alice['cookies'], $alice['csrf']);
         self::assertSame(200, $repeatedBoost->status, $repeatedBoost->body);
@@ -230,7 +230,7 @@ final class HostExtensionTest extends TestCase
         self::assertFalse($unboostedBody['interaction']['reblogged']);
     }
 
-    public function testCachedRemotePostLikeRequiresAcceptedFollow(): void
+    public function testCachedRemotePostLikeAndBoostWorkWithoutAFollow(): void
     {
         $server = new TestServer();
         $server->createAccount('alice');
@@ -250,8 +250,9 @@ final class HostExtensionTest extends TestCase
             $alice['cookies'],
             $alice['csrf'],
         );
-        self::assertSame(404, $response->status);
-        self::assertSame('not_found', json_decode($response->body, true, 512, JSON_THROW_ON_ERROR)['error']['code']);
+        self::assertSame(200, $response->status, $response->body);
+        $liked = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($liked['interaction']['favourited']);
 
         $boost = $server->json(
             'POST',
@@ -260,8 +261,7 @@ final class HostExtensionTest extends TestCase
             $alice['cookies'],
             $alice['csrf'],
         );
-        self::assertSame(404, $boost->status);
-        self::assertSame('not_found', json_decode($boost->body, true, 512, JSON_THROW_ON_ERROR)['error']['code']);
+        self::assertSame(200, $boost->status, $boost->body);
 
         $state = $server->send('GET', '/api/v1/host/interactions', [
             'cookies' => $alice['cookies'],
@@ -269,7 +269,8 @@ final class HostExtensionTest extends TestCase
         ]);
         self::assertSame(200, $state->status);
         $stateBody = json_decode($state->body, true, 512, JSON_THROW_ON_ERROR);
-        self::assertArrayNotHasKey($objectId, $stateBody['interactions']);
+        self::assertTrue($stateBody['interactions'][$objectId]['favourited']);
+        self::assertTrue($stateBody['interactions'][$objectId]['reblogged']);
     }
 
     public function testBatchPostHydrationReturnsFullPostsAndIgnoresMissingIds(): void

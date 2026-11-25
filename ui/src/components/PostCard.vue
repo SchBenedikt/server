@@ -562,7 +562,14 @@ async function toggleLike(): Promise<void> {
 		const saved = next.favourited
 			? await getApi().likePost(id)
 			: await getApi().unlikePost(id);
-		rememberInteraction(id, saved);
+		// Keep the optimistic number when a stale origin snapshot has not
+		// caught up with this click yet; it must not jump back after a like.
+		rememberInteraction(id, {
+			...saved,
+			favourites_count: saved.favourited
+				? Math.max(saved.favourites_count, next.favourites_count)
+				: Math.min(saved.favourites_count, next.favourites_count),
+		});
 		atprotoMirrorStatus.value = saved.atproto_mirror ?? null;
 		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
 		showToast(
