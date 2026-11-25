@@ -262,15 +262,22 @@ const replyContext = computed(() => postDetailHref(props.post.in_reply_to_id));
 
 const interaction = computed(() => interactionFor(interactionId.value));
 const liked = computed(() => interaction.value?.favourited === true);
-const likeCount = computed(() => isRemotePost.value
-	? (props.post.likes_count ?? 0)
-	: (interaction.value?.favourites_count ?? props.post.likes_count ?? 0));
-const boostCount = computed(() => isRemotePost.value
-	? Math.max(props.post.boosts_count ?? 0, interaction.value?.reblogged === true ? 1 : 0)
-	: (interaction.value?.reblogs_count ?? props.post.boosts_count ?? 0));
-const replyCount = computed(() => isRemotePost.value
-	? (props.post.replies_count ?? 0)
-	: (interaction.value?.replies_count ?? props.post.replies_count ?? 0));
+// A remote card gets its totals from the host's engagement cache, either on
+// the post payload or through the batched interaction request. The larger
+// value wins so a viewer's own like is never hidden by a stale snapshot.
+const likeCount = computed(() => Math.max(
+	interaction.value?.favourites_count ?? 0,
+	props.post.likes_count ?? 0,
+));
+const boostCount = computed(() => Math.max(
+	interaction.value?.reblogs_count ?? 0,
+	interaction.value?.reblogged === true ? 1 : 0,
+	props.post.boosts_count ?? 0,
+));
+const replyCount = computed(() => Math.max(
+	interaction.value?.replies_count ?? 0,
+	props.post.replies_count ?? 0,
+));
 const emojiReactions = computed(() => interaction.value?.emoji_reactions ?? []);
 
 const boosted = ref(false);

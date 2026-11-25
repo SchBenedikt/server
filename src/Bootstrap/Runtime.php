@@ -47,6 +47,7 @@ use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\AtprotoOAuthService;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
+use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
@@ -82,6 +83,7 @@ final readonly class Runtime
         public PostInteractions $interactions,
         public RemoteDirectory $remoteDirectory,
         public RemoteEngagement $remoteEngagement,
+        public RemoteEngagementRefresher $remoteEngagementRefresher,
         public LiveUpdates $liveUpdates,
         public AdminService $admin,
         public Announcements $announcements,

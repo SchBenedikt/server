@@ -46,6 +46,21 @@ function syncAtproto(Runtime $runtime): void
     }
 }
 
+/**
+ * Fill the public counters of followed federated posts.
+ *
+ * Feed cards read these numbers without a network call, so the worker has to
+ * warm the cache. Failures are per post and never stop the queue.
+ */
+function refreshRemoteEngagement(Runtime $runtime, int $limit = 10): void
+{
+    try {
+        $runtime->remoteEngagementRefresher->refresh($limit);
+    } catch (Throwable $exception) {
+        fwrite(STDERR, 'Remote engagement refresh failed: ' . $exception->getMessage() . "\n");
+    }
+}
+
 /** Complete host cleanup after Core's durable account erasure reaches `erased`. */
 function finalizeAccountErasures(Runtime $runtime): void
 {
@@ -79,6 +94,7 @@ if ($once) {
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
     syncAtproto($runtime);
+    refreshRemoteEngagement($runtime, 25);
     $handled = $runtime->app->worker->runOnce(10);
     fwrite(STDOUT, 'handled=' . $handled . "\n");
     exit(0);
@@ -95,12 +111,21 @@ if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
     });
 }
 
+$lastEngagementRefresh = 0;
 while (!$stop) {
     // A non-empty batch is drained immediately; an empty one sleeps, so the
     // worker is not a busy loop.
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
     syncAtproto($runtime);
+
+    // Origin requests are rate-limited per peer, so a small batch once a
+    // minute is enough to keep visible cards current.
+    if (time() - $lastEngagementRefresh >= 60) {
+        refreshRemoteEngagement($runtime);
+        $lastEngagementRefresh = time();
+    }
+
     $handled = $runtime->app->worker->runOnce(10);
     if ($handled === 0) {
         usleep(500_000);

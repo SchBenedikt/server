@@ -32,6 +32,10 @@ use AlohaSocial\Server\Mail\MailException;
 use AlohaSocial\Server\Setup\SetupException;
 use Throwable;
 
+use function array_keys;
+use function array_unique;
+use function array_values;
+
 /**
  * The server's only HTTP entry point.
  *
@@ -517,7 +521,7 @@ final class FrontController
             return Response::json([
                 'interactions' => array_replace(
                     $this->runtime->interactions->forPosts($visible, $viewerId),
-                    $remote,
+                    $this->withRemoteEngagement($remote),
                 ),
             ]);
         }
@@ -960,6 +964,17 @@ final class FrontController
         $presented['id'] = $id;
         $presented['is_remote'] = true;
 
+        // A federated post carries its origin's public totals. Without them a
+        // feed card can only show zero likes and zero replies, because the
+        // local tables know nothing about reactions on another server.
+        $engagement = $this->runtime->remoteEngagement->counts([$id, $post->objectId]);
+        $counts = $engagement[$id] ?? $engagement[$post->objectId] ?? null;
+        if ($counts !== null) {
+            $presented['likes_count'] = $counts['likes'];
+            $presented['boosts_count'] = $counts['boosts'];
+            $presented['replies_count'] = $counts['replies'];
+        }
+
         return $presented;
     }
 
@@ -1020,6 +1035,46 @@ final class FrontController
             'replies_count' => 0,
             'emoji_reactions' => [],
         ];
+    }
+
+    /**
+     * Add the origin's public totals to the viewer's remote interaction
+     * snapshot. The core only knows whether the viewer liked or boosted the
+     * post, so without the cache a card shows "1" for a post with 400 likes.
+     *
+     * @param array<string, array<string, mixed>> $remote
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function withRemoteEngagement(array $remote): array
+    {
+        if ($remote === []) {
+            return $remote;
+        }
+
+        // Cards address a post by its activity id, the cache stores the
+        // object id, and AT records use the same uri for both.
+        $aliases = [];
+        $lookup = [];
+        foreach (array_keys($remote) as $id) {
+            $aliases[$id] = $this->remoteObjectId($id);
+            $lookup[] = $id;
+            $lookup[] = $aliases[$id];
+        }
+
+        $counts = $this->runtime->remoteEngagement->counts(array_values(array_unique($lookup)));
+        foreach ($remote as $id => $interaction) {
+            $cached = $counts[$id] ?? $counts[$aliases[$id]] ?? null;
+            if ($cached === null) {
+                continue;
+            }
+
+            $remote[$id]['favourites_count'] = $cached['likes'];
+            $remote[$id]['reblogs_count'] = $cached['boosts'];
+            $remote[$id]['replies_count'] = $cached['replies'];
+        }
+
+        return $remote;
     }
 
     private function enforceRateLimit(Request $request, ?string $userId): ?Response

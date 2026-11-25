@@ -127,6 +127,66 @@ final class RemoteLikeCountTest extends TestCase
         self::assertSame(0, $body['interactions'][$parent]['replies_count']);
     }
 
+    public function testCachedOriginCountersDecorateRemoteCardsAndInteractions(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $session = $server->signIn('alice');
+
+        $activityId = 'https://remote.example/activities/42';
+        $objectId = 'https://remote.example/objects/42';
+        $actorId = 'https://remote.example/@bob';
+        $server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, :kind, :content, :published)',
+            [
+                'activity_id' => $activityId,
+                'object_id' => $objectId,
+                'author' => $actorId,
+                'actor' => $actorId,
+                'kind' => 'post',
+                'content' => 'Federated post',
+                'published' => '2026-11-20T10:00:00Z',
+            ],
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
+            . " VALUES ('f-counters', 'alice', :actor, 'https://remote.example/inbox', '2026-11-20T10:00:00Z', 'accepted')",
+            ['actor' => $actorId],
+        );
+        $server->runtime->remoteEngagement->remember($objectId, [
+            'post' => [
+                'id' => $objectId,
+                'favourites_count' => 12,
+                'reblogs_count' => 3,
+                'replies_count' => 4,
+            ],
+        ]);
+
+        $cards = $server->send('GET', '/api/v1/host/posts', [
+            'query' => ['ids' => $activityId],
+        ]);
+        self::assertSame(200, $cards->status);
+        $card = json_decode($cards->body, true, 512, JSON_THROW_ON_ERROR)['posts'][$activityId];
+        self::assertSame(12, $card['likes_count']);
+        self::assertSame(3, $card['boosts_count']);
+        self::assertSame(4, $card['replies_count']);
+
+        // Cards address an ActivityPub post by its object id, so the batched
+        // interaction request must use the same key.
+        $state = $server->send('GET', '/api/v1/host/interactions', [
+            'query' => ['ids' => $objectId],
+            'cookies' => $session['cookies'],
+        ]);
+        self::assertSame(200, $state->status);
+        $interaction = json_decode($state->body, true, 512, JSON_THROW_ON_ERROR)['interactions'][$objectId];
+        self::assertSame(12, $interaction['favourites_count']);
+        self::assertSame(3, $interaction['reblogs_count']);
+        self::assertSame(4, $interaction['replies_count']);
+        self::assertFalse($interaction['favourited']);
+    }
+
     public function testPrivatePostsDoNotLeakInteractionCounts(): void
     {
         $server = new TestServer();

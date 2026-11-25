@@ -49,6 +49,7 @@ use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
+use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
 use AlohaSocial\Server\Federation\Mastodon\PdoEventBroker;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
@@ -299,6 +300,12 @@ final class ApplicationFactory
             archives: new Archives($database, $clock, $app->posts),
             forYou: new ForYouFeed($database, $clock),
             remoteEngagement: new RemoteEngagement($database, $clock),
+            remoteEngagementRefresher: new RemoteEngagementRefresher(
+                $database,
+                new RemoteEngagement($database, $clock),
+                $remoteDirectory,
+                $clock,
+            ),
             liveUpdates: new LiveUpdates($database, $clock),
             preferences: $preferences,
             exports: new Exports($database, $clock, $preferences, $this->config),
