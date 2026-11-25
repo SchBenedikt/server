@@ -13,6 +13,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Added
 
+- **Federated timeline and federated hashtags:** Home now separates **Local**
+  from **Federated**, and the federated view pages every public post this
+  instance received from other servers out of the remote-post cache, including
+  boosts, cached origin counters and media. Hashtag pages add the same tag from
+  that cache below the local timeline. A federated page costs one bounded
+  database query and makes no peer request.
 - **Mastodon-compatible OAuth:** clients can register, authorize with PKCE,
   rotate refresh tokens and revoke access. OAuth scopes are enforced on API
   routes and account security changes invalidate outstanding credentials.

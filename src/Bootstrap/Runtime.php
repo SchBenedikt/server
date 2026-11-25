@@ -31,6 +31,7 @@ use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Community\FeaturedTags;
+use AlohaSocial\Server\Community\FederatedTimeline;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\KokuaBoard;
@@ -86,6 +87,7 @@ final readonly class Runtime
         public RemoteEngagement $remoteEngagement,
         public RemoteEngagementRefresher $remoteEngagementRefresher,
         public RemoteReactions $remoteReactions,
+        public FederatedTimeline $federatedTimeline,
         public LiveUpdates $liveUpdates,
         public AdminService $admin,
         public Announcements $announcements,

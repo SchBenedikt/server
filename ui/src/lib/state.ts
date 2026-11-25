@@ -20,7 +20,7 @@ const THEME_KEY = 'aloha.theme';
 // populated For You tab once after this update.
 const HOME_TAB_KEY = 'aloha.home-tab.v2';
 
-type HomeTab = 'home' | 'for-you' | 'trending' | 'public' | 'tags';
+type HomeTab = 'home' | 'for-you' | 'trending' | 'public' | 'federated' | 'tags';
 
 function initialTheme(): ThemeName {
 	try {
@@ -40,7 +40,8 @@ function initialTheme(): ThemeName {
 function initialHomeTab(): HomeTab {
 	try {
 		const stored = localStorage.getItem(HOME_TAB_KEY);
-		if (stored === 'home' || stored === 'for-you' || stored === 'trending' || stored === 'public' || stored === 'tags') {
+		if (stored === 'home' || stored === 'for-you' || stored === 'trending' || stored === 'public'
+			|| stored === 'federated' || stored === 'tags') {
 			return stored;
 		}
 	} catch {

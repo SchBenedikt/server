@@ -566,6 +566,24 @@ final class FrontController
             return Response::json(['posts' => $posts]);
         }
 
+        // The federated timeline is the third public view a Nextcloud Social
+        // reader expects next to the local and following feeds. It reads the
+        // cached remote-post store, so paging it costs one bounded query and
+        // never waits on a peer. An optional `tag` narrows it to posts that
+        // mention a hashtag, which is what a federated hashtag page shows.
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/federated') {
+            $before = $request->queryParam('before');
+            $beforeId = $request->queryParam('before_id');
+            $tag = $request->queryParam('tag');
+
+            return Response::json($this->runtime->federatedTimeline->page(
+                $request->queryInt('limit', 20, 1, 40),
+                is_string($before) && $before !== '' ? $before : null,
+                is_string($beforeId) && $beforeId !== '' ? $beforeId : null,
+                is_string($tag) && $tag !== '' ? $tag : null,
+            ));
+        }
+
         // A quote stores the quoted object id, which is the ActivityPub note
         // URL for a local post (see ActivityFactory::noteIdFor). The UI needs
         // the summary back to draw the embedded card; resolve local notes from

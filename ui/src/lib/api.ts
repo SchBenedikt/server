@@ -148,6 +148,7 @@ export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	publicTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
+	federatedTimelinePage(limit?: number, before?: string | null, beforeId?: string | null, tag?: string): Promise<TimelinePageData>;
 	homeTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	homeTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	directTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
@@ -1088,8 +1089,12 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		limit: number,
 		before?: string | null,
 		beforeId?: string | null,
+		extra?: Record<string, string>,
 	): Promise<TimelinePageData> {
 		const query: Record<string, string> = { limit: String(limit) };
+		if (extra !== undefined) {
+			Object.assign(query, extra);
+		}
 		if (before !== undefined && before !== null && before !== '') {
 			query.before = before;
 		}
@@ -1146,6 +1151,18 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		publicTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
 			return pagedTimeline('/api/v1/timelines/public', limit, before, beforeId);
+		},
+
+		// Public posts this instance has received from other servers. The
+		// server-side store is the source, so the page needs no peer request.
+		federatedTimelinePage(limit = 20, before = null, beforeId = null, tag = ''): Promise<TimelinePageData> {
+			return pagedTimeline(
+				'/api/v1/host/federated',
+				limit,
+				before,
+				beforeId,
+				tag !== '' ? { tag } : undefined,
+			);
 		},
 
 		async accountStatuses(id: string, limit = 20, before: string | null = null): Promise<AccountStatusesData> {

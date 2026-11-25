@@ -42,6 +42,7 @@ the core route contract:
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
 | `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |
+| `GET /api/v1/host/federated?limit=…&before=…&before_id=…&tag=…` | Page the federated timeline: every public post this instance received from another server, newest first, including boosts and the origin's cached counters. `tag` narrows it to one hashtag for a federated hashtag page. |
 | `GET /api/v1/host/for-you?limit=…&cursor=…` | Page the signed-in account's ranked public feed. The score mixes follows, followed tags, reactions, reading time and recency, and already-seen posts sink so scrolling keeps producing new material. The response also carries the top interests learned so far. The opaque cursor continues the same ranking snapshot for 30 minutes; refresh the feed after it expires. |
 | `POST /api/v1/host/for-you/impressions` | Batched "I saw this" report with the milliseconds a post stayed on screen (max 60 per request). The ranker learns per-author interest from it and keeps seen posts out of later pages. |
 | `GET /api/v1/host/trending?limit=…&cursor=…` | Page the instance-wide ranked public feed using the same snapshot cursor behavior. |
@@ -63,6 +64,15 @@ All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
 posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
 `FrontController`.
+
+Home offers **For you**, **Trending**, **Following**, **Local** and
+**Federated**. Local is the public timeline of this instance; Federated is
+every public post the instance has received from other servers, read from the
+remote-post cache so paging makes no peer request and shows the origin's
+counters. A hashtag page lists the local posts first and then the same tag
+from the federated cache, so `#photography` is not limited to what was written
+here. Opening either view is public; liking and boosting still need an
+account.
 
 Ranked feed snapshots are stored for at most 30 minutes and scoped to the
 account for **For You** or shared for **Trending**. They contain only post

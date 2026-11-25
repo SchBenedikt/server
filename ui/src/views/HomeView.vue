@@ -40,7 +40,8 @@ const tabs = computed(() => {
 		{ id: 'for-you' as const, label: 'For you' },
 		{ id: 'trending' as const, label: 'Trending' },
 		{ id: 'home' as const, label: 'Following' },
-		{ id: 'public' as const, label: 'Public' },
+		{ id: 'public' as const, label: 'Local' },
+		{ id: 'federated' as const, label: 'Federated' },
 		{ id: 'tags' as const, label: 'My Tags' },
 	];
 });
@@ -57,6 +58,8 @@ const subtitle = computed(() => {
 			return 'Local posts are ranked by known engagement and freshness; federated posts are ranked by recency.';
 		case 'home':
 			return 'Posts from people you follow.';
+		case 'federated':
+			return 'The newest public posts this instance has received from the fediverse.';
 		case 'followed':
 			return 'Everything under the hashtags you follow.';
 		default:
@@ -77,8 +80,11 @@ const emptyTitle = computed(() => {
 	if (currentTab.value === 'home') {
 		return 'Your timeline is still quiet';
 	}
+	if (currentTab.value === 'federated') {
+		return 'No federated posts yet';
+	}
 
-	return 'No public posts yet';
+	return 'No local posts yet';
 });
 
 const emptyText = computed(() => {
@@ -94,11 +100,14 @@ const emptyText = computed(() => {
 	if (currentTab.value === 'home') {
 		return 'Follow people who share interesting things — or write the first post yourself.';
 	}
+	if (currentTab.value === 'federated') {
+		return 'Posts from other servers appear here as soon as this instance follows someone or receives a public post.';
+	}
 
 	return 'This instance is new. Be the first voice heard here.';
 });
 
-function switchTab(tab: 'home' | 'for-you' | 'trending' | 'public' | 'tags'): void {
+function switchTab(tab: 'home' | 'for-you' | 'trending' | 'public' | 'federated' | 'tags'): void {
 	setHomeTab(tab);
 }
 

@@ -7,7 +7,7 @@ import { ApiError, getApi, hydrateTimelineBoosts } from './api';
 import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import type { FeedInterest, TimelineItem } from './types';
 
-export type FeedKind = 'home' | 'for-you' | 'trending' | 'public' | 'tag' | 'followed';
+export type FeedKind = 'home' | 'for-you' | 'trending' | 'public' | 'federated' | 'tag' | 'followed';
 
 export interface TimelineSource {
 	kind: FeedKind;
@@ -63,7 +63,10 @@ export function useTimeline(source: () => TimelineSource) {
 	const include = (post: TimelineItem): boolean => {
 		const current = source();
 		if (current.kind === 'public') {
-			return post.visibility === 'public';
+			return post.visibility === 'public' && post.is_remote !== true;
+		}
+		if (current.kind === 'federated') {
+			return post.is_remote === true;
 		}
 		if (current.kind === 'tag') {
 			const tag = (current.tag ?? '').toLowerCase();
@@ -134,6 +137,13 @@ export function useTimeline(source: () => TimelineSource) {
 				});
 			case 'tag':
 				return api.tagTimelinePage(current.tag ?? '', PAGE_SIZE, beforeTime, beforeId).then((page) => ({
+					posts: page.posts,
+					consumed: page.posts.length,
+					nextCursor: page.nextCursor,
+					hasMore: page.hasMore,
+				}));
+			case 'federated':
+				return api.federatedTimelinePage(PAGE_SIZE, beforeTime, beforeId).then((page) => ({
 					posts: page.posts,
 					consumed: page.posts.length,
 					nextCursor: page.nextCursor,
@@ -217,7 +227,7 @@ export function useTimeline(source: () => TimelineSource) {
 			// A polled post is already filtered by the server for this viewer.
 			// Put it on top of a chronological feed instead of reloading the
 			// first page, which would throw away the pages already scrolled.
-			if ((current.kind === 'home' || current.kind === 'public') && include(post)) {
+			if ((current.kind === 'home' || current.kind === 'public' || current.kind === 'federated') && include(post)) {
 				posts.value = [post, ...posts.value];
 			}
 
