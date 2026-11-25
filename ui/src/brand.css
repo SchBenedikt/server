@@ -3,18 +3,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
  * Brand layer for the shared UI. It follows the official Aloha Social website:
- * sand and deep-sea surfaces, coral accents, Fredoka headlines, Public Sans
+ * sand and deep-sea surfaces, coral accents, Public Sans
  * reading text and IBM Plex Mono labels. Loaded after the functional styles so
  * the whole app keeps one visual language.
  */
-
-@font-face {
-	font-family: 'Fredoka';
-	font-style: normal;
-	font-weight: 300 700;
-	font-display: swap;
-	src: url('/ui/brand/fonts/Fredoka-Variable.woff2') format('woff2');
-}
 
 @font-face {
 	font-family: 'Public Sans';
@@ -96,8 +88,8 @@
 	--a-success: #1d6b55;
 	--a-shadow: none;
 	--a-shadow-soft: none;
-	--a-glow-one: rgb(232 96 76 / 0.08);
-	--a-glow-two: rgb(15 76 92 / 0.06);
+	--a-glow-one: transparent;
+	--a-glow-two: transparent;
 	--a-cover-overlay: rgb(15 76 92 / 0.2);
 	--a-dialog-backdrop: rgb(15 32 38 / 0.55);
 	--a-font-sans: 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -142,8 +134,8 @@
 	--a-success: #8ad5bd;
 	--a-shadow: none;
 	--a-shadow-soft: none;
-	--a-glow-one: rgb(239 122 102 / 0.08);
-	--a-glow-two: rgb(158 212 230 / 0.06);
+	--a-glow-one: transparent;
+	--a-glow-two: transparent;
 	--a-cover-overlay: rgb(13 32 41 / 0.3);
 	--a-dialog-backdrop: rgb(4 12 16 / 0.72);
 }
@@ -213,7 +205,7 @@ body.app-shell {
 .a-main {
 	background: var(--a-main);
 	border: 1px solid var(--a-border);
-	border-radius: 20px;
+	border-radius: 16px;
 	box-shadow: none;
 }
 
@@ -223,6 +215,7 @@ body.app-shell {
 
 .a-shell__glow {
 	display: none;
+	filter: none;
 }
 
 /* ------------------------------------------------------------------- brand */
@@ -1446,8 +1439,8 @@ body.app-shell {
 
 .a-post {
 	--a-post-gutter: 56px;
-	border-radius: 14px;
-	border-color: color-mix(in srgb, var(--a-border) 78%, var(--a-primary) 22%);
+	border-radius: 12px;
+	border-color: var(--a-border);
 	background: var(--a-surface);
 	box-shadow: none;
 	transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
@@ -1470,17 +1463,29 @@ body.app-shell {
 }
 
 .a-post--boost {
-	border-left: 3px solid var(--a-mint);
+	border-left: 3px solid var(--a-sea);
 	background: var(--a-surface);
 }
 
 .a-post--detail {
 	--a-post-gutter: 64px;
-	border-radius: 24px;
-	background:
-		linear-gradient(150deg, color-mix(in srgb, var(--a-primary) 5%, transparent), transparent 52%),
-		var(--a-surface);
+	border-radius: 16px;
+	background: var(--a-surface);
 	box-shadow: none;
+}
+
+.a-profile {
+	border-radius: 16px;
+}
+
+.a-profile__cover {
+	background: var(--a-sea);
+	opacity: 1;
+}
+
+.a-profile__cover::after,
+.a-profile__cover-grid {
+	display: none;
 }
 
 .a-post__boosted-by {
