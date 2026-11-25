@@ -1465,10 +1465,10 @@
 }
 
 /* Keep the standalone host and shared Vue components free of decorative shadows. */
-.aloha-root,
-.aloha-root *,
-.aloha-root *::before,
-.aloha-root *::after {
+body.app-shell,
+body.app-shell *,
+body.app-shell *::before,
+body.app-shell *::after {
 	box-shadow: none !important;
 	text-shadow: none !important;
 }
