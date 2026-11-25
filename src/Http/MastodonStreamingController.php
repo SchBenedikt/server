@@ -284,13 +284,7 @@ final class MastodonStreamingController
     /** @return array<string, mixed>|null */
     private function notificationFor(string $userId, string $notificationId): ?array
     {
-        foreach ($this->runtime->app->mastodon?->notifications($userId, 40, null, null, null) ?? [] as $notification) {
-            if (($notification['id'] ?? null) === $notificationId) {
-                return $notification;
-            }
-        }
-
-        return null;
+        return $this->runtime->app->mastodon?->notificationById($userId, $notificationId);
     }
 
     private function matches(string $path): bool
