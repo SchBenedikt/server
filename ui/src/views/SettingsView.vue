@@ -36,6 +36,20 @@ const blueskyBusy = ref(false);
 const atproto = ref<AtprotoIdentityData | null>(null);
 const atprotoHandle = ref('');
 const atprotoBusy = ref(false);
+
+async function copyHandleVerification(field: 'dns_name' | 'dns_value'): Promise<void> {
+	const verification = atproto.value?.identity?.verification ?? null;
+	if (verification === null) {
+		return;
+	}
+
+	try {
+		await navigator.clipboard.writeText(verification[field]);
+		showToast('Copied to clipboard.', 'success');
+	} catch {
+		showToast(verification[field], 'info');
+	}
+}
 const interactionAccounts = computed(() => {
 	const options: { did: string; label: string }[] = [];
 	if (atproto.value?.publish && atproto.value.identity !== null && atproto.value.identity.did !== '') {
@@ -612,6 +626,28 @@ watch(signedIn, (value) => {
 					<p class="a-settings__hint">
 						Repository: <a :href="atproto.identity.pds_url" target="_blank" rel="noopener noreferrer">{{ atproto.identity.pds_url }}</a>
 					</p>
+
+					<div v-if="atproto.identity.verification" class="a-settings__verify">
+						<strong>Verify your handle</strong>
+						<p class="a-settings__hint">
+							Bluesky resolves @{{ atproto.identity.handle }} through this DNS TXT record or through
+							an HTTPS well-known file. A handle more than one level below the domain
+							(for example name.social.example.com) is often not covered by a wildcard
+							certificate, so the TXT record is the reliable option.
+						</p>
+						<p class="a-settings__verify-record">
+							<span>{{ atproto.identity.verification.dns_name }}</span>
+							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="copyHandleVerification('dns_name')">Copy name</button>
+						</p>
+						<p class="a-settings__verify-record">
+							<span>{{ atproto.identity.verification.dns_value }}</span>
+							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="copyHandleVerification('dns_value')">Copy value</button>
+						</p>
+						<p class="a-settings__hint">
+							Alternative: <a :href="atproto.identity.verification.well_known_url" target="_blank" rel="noopener noreferrer">{{ atproto.identity.verification.well_known_url }}</a>
+						</p>
+					</div>
+
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="atprotoBusy" @click="rotateIdentityKeys">
 						<AppIcon name="refresh" :size="15" :class="{ 'a-spin': atprotoBusy }" />
 						Rotate signing keys

@@ -85,6 +85,16 @@ final class AtprotoIdentityController
                 'handle' => $identity->handle,
                 'pds_url' => $this->runtime->config->atprotoPdsUrl,
                 'created_at' => $identity->createdAt,
+                // The AppView verifies a handle either through this TXT record
+                // or through https://<handle>/.well-known/atproto-did. A
+                // wildcard certificate frequently does not cover a handle two
+                // levels below the zone (alice.a.example.com), so the record is
+                // the part an operator can always rely on.
+                'verification' => [
+                    'dns_name' => '_atproto.' . $identity->handle,
+                    'dns_value' => $identity->did,
+                    'well_known_url' => 'https://' . $identity->handle . '/.well-known/atproto-did',
+                ],
             ],
             'external' => $external,
         ];

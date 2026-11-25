@@ -282,6 +282,15 @@ host, and `ALOHASOCIAL_ATPROTO_PDS_HANDLE_DOMAIN` is the suffix members get
 operations with the key sealed by `ALOHASOCIAL_SECRET_KEY`; back that secret up
 before the first identity is created. Without a wildcard record, members can
 still create a DID, but handle verification and external discovery will fail.
+
+The wildcard also needs a certificate covering the same names. Cloudflare's
+free Universal SSL only covers the apex and one level (`*.social.example`), so
+a handle two levels deep such as `alice.a.social.example` fails the TLS
+handshake before the well-known endpoint is reached. Either serve those names
+unproxied and issue the certificate at the origin, use Cloudflare Total TLS or
+Advanced Certificate Manager, or publish the DID as a `_atproto.<handle>` TXT
+record: the AppView resolves that record without any HTTPS request. The
+identity in **Settings → AT Protocol** shows the exact record name and value.
 When the native PDS is disabled, its `subscribeRepos` WebSocket endpoint also
 returns `503 Service Unavailable`; enabling the PDS makes that endpoint
 available through the firehose service.

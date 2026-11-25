@@ -100,6 +100,11 @@ export interface AtprotoIdentityData {
 		handle: string;
 		pds_url: string;
 		created_at: string;
+		verification: {
+			dns_name: string;
+			dns_value: string;
+			well_known_url: string;
+		} | null;
 	} | null;
 	external: BlueskyAccountStatus;
 }
@@ -2869,6 +2874,11 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					handle: typeof identity.handle === 'string' ? identity.handle : '',
 					pds_url: typeof identity.pds_url === 'string' ? identity.pds_url : '',
 					created_at: typeof identity.created_at === 'string' ? identity.created_at : '',
+					verification: isRecord(identity.verification) ? {
+						dns_name: typeof identity.verification.dns_name === 'string' ? identity.verification.dns_name : '',
+						dns_value: typeof identity.verification.dns_value === 'string' ? identity.verification.dns_value : '',
+						well_known_url: typeof identity.verification.well_known_url === 'string' ? identity.verification.well_known_url : '',
+					} : null,
 				},
 				external: normalizeBlueskyAccount(data?.external),
 			};
