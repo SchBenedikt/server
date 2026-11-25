@@ -187,6 +187,13 @@ final class NonClosingStream implements StreamInterface
 {
     use StreamDecoratorTrait;
 
+    public function __destruct()
+    {
+        // StreamDecoratorTrait wraps a Guzzle Stream whose destructor closes
+        // its resource. Detach it here so the caller remains the sole owner.
+        $this->stream->detach();
+    }
+
     public function close(): void
     {
         // Core owns and closes the original resource after the store returns.

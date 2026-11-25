@@ -11,6 +11,18 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      s3mock:
+        image: adobe/s3mock:5.1.0
+        env:
+          COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: aloha-media-ci
+        ports:
+          - 9090:9090
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:9090/favicon.ico"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
@@ -45,6 +57,10 @@ jobs:
           # guard correctly refuses loopback delivery. A self-hosted runner or
           # ALOHASOCIAL_SMOKE_HOST runs the full round trip instead.
           ALOHASOCIAL_SMOKE_ALLOW_SKIP: '1'
+          ALOHASOCIAL_S3_TEST_ENDPOINT: http://127.0.0.1:9090
+          ALOHASOCIAL_S3_TEST_BUCKET: aloha-media-ci
+          ALOHASOCIAL_S3_TEST_ACCESS_KEY: test-access-key
+          ALOHASOCIAL_S3_TEST_SECRET_KEY: test-secret-key
 
       - name: Install previous release and upgrade its database
         run: bash tools/upgrade-smoke.sh 0.12.0
