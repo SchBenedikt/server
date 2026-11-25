@@ -89,6 +89,16 @@ final class ForYouFeed
 
         $followedAuthors = $this->followedAuthors($accountId);
         $followedTags = $this->followedTags($accountId);
+        $tagsByPost = [];
+        if ($followedTags !== []) {
+            $localPostIds = [];
+            foreach ($candidates as $candidate) {
+                if ((int) ($candidate['remote'] ?? 0) !== 1) {
+                    $localPostIds[] = (string) $candidate['id'];
+                }
+            }
+            $tagsByPost = $this->postTagsForPosts($localPostIds);
+        }
         $feedback = $this->feedback($accountId);
         $now = $this->clock->now()->getTimestamp();
 
@@ -120,7 +130,7 @@ final class ForYouFeed
             }
             $tags = $remote
                 ? $this->tagsFromText((string) ($candidate['content'] ?? ''))
-                : $this->postTags($postId);
+                : ($tagsByPost[$postId] ?? []);
             $matching = array_values(array_intersect($tags, $followedTags));
             if ($matching !== []) {
                 $score += min(3.0, count($matching) * 1.5);
@@ -542,17 +552,37 @@ final class ForYouFeed
     /**
      * @return list<string>
      */
-    private function postTags(string $postId): array
+    /** @param list<string> $postIds @return array<string, list<string>> */
+    private function postTagsForPosts(array $postIds): array
     {
+        $postIds = array_values(array_unique(array_filter($postIds, static fn (string $id): bool => $id !== '')));
+        if ($postIds === []) {
+            return [];
+        }
+
+        $parameters = [];
+        $placeholders = [];
+        foreach ($postIds as $index => $postId) {
+            $placeholder = 'post_id_' . $index;
+            $placeholders[] = ':' . $placeholder;
+            $parameters[$placeholder] = $postId;
+        }
         $rows = $this->db->fetchAll(
-            'SELECT hashtag FROM social_post_hashtag WHERE post_id = :post_id',
-            ['post_id' => $postId],
+            'SELECT post_id, hashtag FROM social_post_hashtag WHERE post_id IN ('
+            . implode(', ', $placeholders) . ') ORDER BY post_id, hashtag',
+            $parameters,
         );
 
-        return array_values(array_filter(
-            array_map(static fn (array $row): string => strtolower((string) ($row['hashtag'] ?? '')), $rows),
-            static fn (string $tag): bool => $tag !== '',
-        ));
+        $tagsByPost = [];
+        foreach ($rows as $row) {
+            $postId = (string) ($row['post_id'] ?? '');
+            $tag = strtolower((string) ($row['hashtag'] ?? ''));
+            if ($postId !== '' && $tag !== '') {
+                $tagsByPost[$postId][] = $tag;
+            }
+        }
+
+        return $tagsByPost;
     }
 
     /**
