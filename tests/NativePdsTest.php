@@ -337,6 +337,13 @@ final class NativePdsTest extends TestCase
         self::assertSame(200, $download->status, $download->body);
         self::assertSame('image/png', $download->header('Content-Type'));
         self::assertSame($blobBytes, $download->body);
+
+        $missingBlobs = $server->send('GET', '/xrpc/com.atproto.repo.listMissingBlobs', [
+            'headers' => ['Authorization' => 'Bearer ' . $session['accessJwt']],
+            'query' => ['repo' => $identity['did']],
+        ]);
+        self::assertSame(200, $missingBlobs->status, $missingBlobs->body);
+        self::assertSame([], json_decode($missingBlobs->body, true, 512, JSON_THROW_ON_ERROR)['blobs']);
     }
 
     public function testLocalPostIsQueuedIntoTheNativeRepository(): void
