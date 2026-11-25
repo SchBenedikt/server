@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed } from 'vue';
+import { hasMarkup, sanitizeMarkup } from '../lib/rich-text';
 
 const props = defineProps<{ text: string }>();
 
@@ -13,7 +14,21 @@ interface Token {
 	href?: string;
 }
 
+/**
+ * Federated bodies are HTML and keep their formatting, local bodies are plain
+ * text and keep the link, hashtag and mention highlighter. Both paths render
+ * inside the same `.a-rich-text` box, so a post looks the same wherever it was
+ * written.
+ */
+const html = computed(() => (
+	hasMarkup(props.text) && typeof document !== 'undefined' ? sanitizeMarkup(props.text) : ''
+));
+
 const tokens = computed<Token[]>(() => {
+	if (html.value !== '') {
+		return [];
+	}
+
 	const pattern = /(https?:\/\/[^\s<>"']+)|(#[\p{L}\p{N}_]+)|(@[a-zA-Z0-9](?:[a-zA-Z0-9_.-]*[a-zA-Z0-9])?(?:@[a-zA-Z0-9.-]+)?)/gu;
 	const result: Token[] = [];
 	let lastIndex = 0;
@@ -59,7 +74,8 @@ const tokens = computed<Token[]>(() => {
 </script>
 
 <template>
-	<p class="a-rich-text">
+	<div v-if="html !== ''" class="a-rich-text a-rich-text--html" v-html="html" />
+	<p v-else class="a-rich-text">
 		<template v-for="(token, index) in tokens" :key="index">
 			<a
 				v-if="token.type === 'url'"

@@ -1675,10 +1675,90 @@ button.a-nav__item {
 	text-underline-offset: 2px;
 }
 
-.a-post__actions {
+/* Federated bodies are HTML, so their own block spacing applies instead of
+   the pre-wrap layout that keeps line breaks of plain-text posts. */
+.a-rich-text--html {
+	white-space: normal;
+}
+
+.a-rich-text--html p {
+	margin: 0 0 0.55em;
+}
+
+.a-rich-text--html p:last-child {
+	margin-bottom: 0;
+}
+
+.a-rich-text--html ul,
+.a-rich-text--html ol {
+	margin: 0 0 0.55em;
+	padding-left: 1.2em;
+}
+
+.a-rich-text--html li + li {
+	margin-top: 0.15em;
+}
+
+.a-rich-text--html blockquote {
+	margin: 0 0 0.55em;
+	padding-left: 0.8em;
+	border-left: 2px solid var(--a-border-strong);
+	color: var(--a-muted);
+}
+
+.a-rich-text--html code,
+.a-rich-text--html pre {
+	font-family: var(--a-font-mono);
+	font-size: 0.92em;
+	background: var(--a-bg-soft);
+	border-radius: 6px;
+}
+
+.a-rich-text--html code {
+	padding: 0.1em 0.32em;
+}
+
+.a-rich-text--html pre {
+	margin: 0 0 0.55em;
+	padding: 8px 10px;
+	overflow-x: auto;
+	white-space: pre;
+}
+
+.a-rich-text--html strong,
+.a-rich-text--html b {
+	font-weight: 700;
+}
+
+/* Copyable AT Protocol handle verification values. */
+.a-settings__verify {
+	display: grid;
+	gap: 7px;
+	margin-top: 4px;
+}
+
+.a-settings__verify-record {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 2px;
+	gap: 6px 10px;
+	margin: 0;
+	padding: 7px 10px;
+	border: 1px solid var(--a-border);
+	border-radius: 9px;
+	background: var(--a-bg-soft);
+	font-family: var(--a-font-mono);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+/* Every action gets the same share of the row, so icon and count sit on one
+   line at every width instead of drifting apart. */
+.a-post__actions {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr);
+	align-items: center;
 	margin-top: 13px;
 	padding-top: 9px;
 	border-top: 1px solid var(--a-border);
@@ -1687,15 +1767,32 @@ button.a-nav__item {
 .a-post__action {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: 5px;
-	padding: 6px 9px;
+	min-width: 34px;
+	height: 32px;
+	padding: 0 8px;
 	border: 0;
 	border-radius: 9px;
 	background: transparent;
 	color: var(--a-faint);
 	font-size: 11px;
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	white-space: nowrap;
 	transition: color 0.15s ease, background 0.15s ease;
+}
+
+.a-post__action .a-icon {
+	display: block;
+	flex: none;
+}
+
+.a-post__action-count {
+	font-size: 10.5px;
+	font-weight: 650;
+	line-height: 1;
 }
 
 .a-post__action:hover {
@@ -1717,7 +1814,7 @@ button.a-nav__item {
 }
 
 .a-post__action--link {
-	margin-left: auto;
+	justify-self: end;
 	text-decoration: none;
 }
 
@@ -3705,19 +3802,14 @@ dialog.a-modal::backdrop {
 	}
 
 	.a-post__actions {
-		justify-content: space-between;
 		gap: 0;
 	}
 
 	.a-post__action {
+		height: auto;
 		min-width: 34px;
 		min-height: 40px;
-		justify-content: center;
 		padding: 8px 6px;
-	}
-
-	.a-post__action--link {
-		margin-left: 0;
 	}
 
 	.a-media__item--audio {
