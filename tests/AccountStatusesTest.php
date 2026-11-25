@@ -96,6 +96,84 @@ final class AccountStatusesTest extends TestCase
 		self::assertSame($expected, $ids);
     }
 
+    public function testFollowingFeedIncludesLocalFollowedPublicAndFollowersOnlyPosts(): void
+    {
+        $public = $this->post('bob', 'Bob public post');
+        $followers = $this->post('bob', 'Bob followers post', Visibility::Followers);
+        $this->server->createAccount('carol', 'carol@example.test');
+
+        $alice = $this->server->signIn('alice');
+        $follow = $this->server->json(
+            'POST',
+            '/api/v1/accounts/bob/follow',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(200, $follow->status, $follow->body);
+
+        $home = $this->server->send('GET', '/api/v1/timelines/home', [
+            'cookies' => $alice['cookies'],
+        ]);
+        self::assertSame(200, $home->status, $home->body);
+        $aliceIds = array_column($this->decoded($home)['posts'], 'id');
+        self::assertContains($public, $aliceIds);
+        self::assertContains($followers, $aliceIds);
+
+        $carol = $this->server->signIn('carol');
+        $unrelatedHome = $this->server->send('GET', '/api/v1/timelines/home', [
+            'cookies' => $carol['cookies'],
+        ]);
+        self::assertSame(200, $unrelatedHome->status, $unrelatedHome->body);
+        $carolIds = array_column($this->decoded($unrelatedHome)['posts'], 'id');
+        self::assertNotContains($public, $carolIds);
+        self::assertNotContains($followers, $carolIds);
+    }
+
+    public function testFollowingFeedPagesLocalPostsWithoutRepeatingOrSkippingThem(): void
+    {
+        for ($index = 0; $index < 9; $index++) {
+            $this->post('bob', 'Bob page ' . $index);
+        }
+
+        $alice = $this->server->signIn('alice');
+        $follow = $this->server->json(
+            'POST',
+            '/api/v1/accounts/bob/follow',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(200, $follow->status, $follow->body);
+
+        $actual = [];
+        $query = ['limit' => '3'];
+        do {
+            $page = $this->server->send('GET', '/api/v1/timelines/home', [
+                'cookies' => $alice['cookies'],
+                'query' => $query,
+            ]);
+            self::assertSame(200, $page->status, $page->body);
+            $body = $this->decoded($page);
+            array_push($actual, ...array_column($body['posts'], 'id'));
+
+            if ($body['has_more']) {
+                self::assertIsString($body['next_before']);
+                self::assertIsString($body['next_before_id']);
+                $query['before'] = $body['next_before'];
+                $query['before_id'] = $body['next_before_id'];
+            }
+        } while ($body['has_more']);
+
+        $expected = array_column($this->server->runtime->database->fetchAll(
+            'SELECT id FROM social_post WHERE author_id = :author ORDER BY published_at DESC, id DESC',
+            ['author' => 'bob'],
+        ), 'id');
+        self::assertCount(9, $actual);
+        self::assertCount(count(array_unique($actual)), $actual);
+        self::assertSame($expected, $actual);
+    }
+
     public function testProfileCursorCanBePassedBackUnmodified(): void
     {
         foreach (range(1, 5) as $index) {
