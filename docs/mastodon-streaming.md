@@ -23,11 +23,17 @@ Accept: text/event-stream
 | `user` | `read` or `read:statuses` | The account's own status events; notification events are included only when the token also has `read` or `read:notifications`. |
 | `user:notification` | `read` or `read:notifications` | Notifications visible to the account. |
 | `direct` | `read` or `read:statuses` | Local direct-status events addressed to the account. Remote direct messages are not supported. |
+| `list` | `read` or `read:lists` | Visible public and followers-only status events from members of the caller's private list. |
+
+Open a list stream with `?stream=list&list=<list-id>`. The list must belong to
+the authenticated account. Membership and followers-only access are checked
+when reading and again before a status frame is written; direct statuses are
+never included.
 
 The host emits `update`, `delete` and `notification` SSE events. Events that do
 not remain visible to the subscriber, have an unsupported projection, or fail
-serialization advance the cursor without exposing their payload. Only the six
-channels above are accepted; hashtag and list streams are not implemented.
+serialization advance the cursor without exposing their payload. Hashtag
+streams are not implemented.
 
 ## Reconnect and lifecycle
 
@@ -49,6 +55,6 @@ stream checks token revocation, account disable and account deletion while it
 runs. Reverse proxies must disable response buffering for this path; the
 response includes `X-Accel-Buffering: no`.
 
-This is SSE only. WebSocket transport, remote direct messages, hashtag/list
-channels and integration against third-party Mastodon clients remain outside
-the current compatibility claim. See the Core [streaming ADR](https://github.com/SchBenedikt/core/blob/main/docs/adr/0012-mastodon-streaming.md).
+This is SSE only. WebSocket transport, remote direct messages, hashtag streams
+and integration against third-party Mastodon clients remain outside the current
+compatibility claim. See the Core [streaming ADR](https://github.com/SchBenedikt/core/blob/main/docs/adr/0012-mastodon-streaming.md).

@@ -32,10 +32,12 @@ scopes granted at consent.
 OAuth clients can open a Server-Sent Events connection at
 `/api/mastodon/v1/streaming?stream=<channel>` or the standard alias
 `/api/v1/streaming?stream=<channel>`. Supported channels are `public`,
-`public:local`, `home`, `user`, `user:notification`, and `direct`. The endpoint
-requires a bearer token with `read:statuses`; `user:notification` instead
-requires `read:notifications`. Notifications are also sent on `user` when the
-token has `read:notifications`.
+`public:local`, `home`, `user`, `user:notification`, `direct`, and `list`. A
+list stream uses `stream=list&list=<list-id>` and is limited to the caller's
+own list. The endpoint requires a bearer token with `read:statuses`;
+`user:notification` instead requires `read:notifications`, and `list` requires
+`read:lists`. Notifications are also sent on `user` when the token has
+`read:notifications`.
 
 Frames use Mastodon's `update` and `notification` event names with JSON data.
 `Last-Event-ID` resumes after a retained event; `last_event_id` is accepted as
@@ -43,8 +45,8 @@ a query fallback. The server retains replay events for up to seven days, reads
 at most 100 events per poll, checks token/account status once per poll, and
 closes each connection after 25 seconds. Clients should reconnect with the
 last event ID and use the REST timeline or notification endpoint to resync if
-the cursor has expired. Keepalive comments are sent every ten seconds. Hashtag,
-list and WebSocket streams are not currently supported.
+the cursor has expired. Keepalive comments are sent every ten seconds. Hashtag
+and WebSocket streams are not currently supported.
 
 The supported scopes are the scopes declared by the current Core Mastodon
 route manifest (`read`, `write`, `follow`, and its implemented granular
