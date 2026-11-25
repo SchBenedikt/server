@@ -28,7 +28,7 @@ use Throwable;
 /** Authenticated, bounded SSE transport for the supported Mastodon channels. */
 final class MastodonStreamingController
 {
-    private const STREAMS = ['home', 'public', 'public:local', 'user', 'user:notification', 'direct'];
+    private const STREAMS = ['home', 'public', 'public:local', 'user', 'user:notification', 'direct', 'list'];
 
     private readonly MastodonOAuthRepository $oauth;
 
@@ -69,10 +69,28 @@ final class MastodonStreamingController
         if (!in_array($stream, self::STREAMS, true)) {
             return $this->error(422, 'unsupported_stream', 'This Mastodon streaming channel is not supported.');
         }
-        $notificationStream = $stream === 'user:notification';
-        $requiredScope = $notificationStream ? 'read:notifications' : 'read:statuses';
+        $requiredScope = match ($stream) {
+            'user:notification' => 'read:notifications',
+            'list' => 'read:lists',
+            default => 'read:statuses',
+        };
         if (!in_array('read', $request->scopes, true) && !in_array($requiredScope, $request->scopes, true)) {
             return $this->error(403, 'insufficient_scope', 'The access token needs ' . $requiredScope . '.');
+        }
+
+        $listId = null;
+        if ($stream === 'list') {
+            $listId = trim((string) $request->queryParam('list', ''));
+            if ($listId === '') {
+                return $this->error(400, 'missing_list_id', 'The list stream requires a list id.');
+            }
+            $ownedList = $this->runtime->database->fetchValue(
+                'SELECT id FROM social_account_list WHERE id = :list_id AND user_id = :user_id',
+                ['list_id' => $listId, 'user_id' => $userId],
+            );
+            if (!is_string($ownedList)) {
+                return $this->error(404, 'list_not_found', 'The list is not available.');
+            }
         }
 
         $broker = $this->runtime->app->eventBroker;
@@ -90,7 +108,7 @@ final class MastodonStreamingController
                 && (in_array('read', $request->scopes, true) || in_array('read:notifications', $request->scopes, true))) {
                 $channels[] = 'user:notification';
             }
-            $subscription = new StreamSubscription($userId, $channels);
+            $subscription = new StreamSubscription($userId, $channels, listId: $listId);
             $initial = $broker->read($subscription, $cursor === '' ? null : $cursor, 100);
         } catch (\InvalidArgumentException) {
             return $this->error(410, 'cursor_expired', 'The stream cursor is no longer available; resync over REST.');
@@ -104,7 +122,7 @@ final class MastodonStreamingController
         }
 
         return Response::stream(
-            fn (): iterable => $this->frames($broker, $subscription, $initial, $cursor, $token, $userId, $stream),
+            fn (): iterable => $this->frames($broker, $subscription, $initial, $cursor, $token, $userId, $stream, $listId),
             [
                 'Content-Type' => 'text/event-stream; charset=utf-8',
                 'Cache-Control' => 'no-cache, no-transform',
@@ -123,6 +141,7 @@ final class MastodonStreamingController
         string $token,
         string $userId,
         string $stream,
+        ?string $listId,
     ): iterable {
         $deadline = hrtime(true) + max(1, $this->maxDurationSeconds) * 1_000_000_000;
         $lastHeartbeat = hrtime(true);
@@ -165,7 +184,7 @@ final class MastodonStreamingController
                     continue;
                 }
                 $statusId = $event->payload['status_id'] ?? null;
-                if (!is_string($statusId) || !$this->eligibleForStream($event, $userId, $stream)) {
+                if (!is_string($statusId) || !$this->eligibleForStream($event, $userId, $stream, $listId)) {
                     yield 'id: ' . $this->sseField($event->id) . "\n\n";
                     continue;
                 }
@@ -210,7 +229,7 @@ final class MastodonStreamingController
         }
     }
 
-    private function eligibleForStream(StreamEvent $event, string $userId, string $stream): bool
+    private function eligibleForStream(StreamEvent $event, string $userId, string $stream, ?string $listId): bool
     {
         if ($stream === 'home' && $event->actorId !== $userId) {
             if (!in_array($userId, $event->recipientIds, true)) {
@@ -245,6 +264,21 @@ final class MastodonStreamingController
         if ($stream === 'direct') {
             return $event->audience->value === 'direct' && in_array($userId, $event->recipientIds, true);
         }
+        if ($stream === 'list') {
+            if ($listId === null || !in_array($event->audience->value, ['public', 'followers'], true)) {
+                return false;
+            }
+            $isMember = $this->runtime->database->fetchValue(
+                'SELECT 1 FROM social_account_list owned_list'
+                . ' JOIN social_account_list_member list_member ON list_member.list_id = owned_list.id'
+                . ' WHERE owned_list.id = :list_id AND owned_list.user_id = :user_id'
+                . ' AND list_member.account_id = :actor_id',
+                ['list_id' => $listId, 'user_id' => $userId, 'actor_id' => $event->actorId],
+            );
+
+            return $isMember !== null
+                && ($event->audience->value === 'public' || in_array($userId, $event->recipientIds, true));
+        }
 
         return $stream === 'public' || $stream === 'public:local'
             ? $event->audience->value === 'public'
@@ -266,8 +300,11 @@ final class MastodonStreamingController
             && !$account->isDisabled()
             && $this->runtime->app->accountData?->deletionStatus($userId)->blockedStatus() === null
             && (in_array('read', $grant['scopes'], true)
-                || in_array('read:statuses', $grant['scopes'], true)
-                || ($stream === 'user:notification' && in_array('read:notifications', $grant['scopes'], true)));
+                || in_array(match ($stream) {
+                    'user:notification' => 'read:notifications',
+                    'list' => 'read:lists',
+                    default => 'read:statuses',
+                }, $grant['scopes'], true));
     }
 
     private function tokenHasScope(string $token, string $scope): bool

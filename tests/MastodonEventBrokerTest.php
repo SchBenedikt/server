@@ -543,6 +543,147 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertSame(45, substr_count(implode('', $frames), 'event: notification'));
     }
 
+    public function testListStreamIsOwnerScopedAndShowsOnlyVisibleMemberStatuses(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $server->createAccount('bob');
+        $server->createAccount('carol');
+        $this->createList($server, 'alice', 'list-alice', ['bob']);
+
+        $listed = $server->runtime->app->posts->create(new CreatePost('bob', 'Listed public status'));
+        $server->runtime->app->posts->create(new CreatePost('carol', 'Unlisted author status'));
+        $server->runtime->app->posts->create(new CreatePost(
+            'bob',
+            'Followers-only status',
+            Visibility::Followers,
+        ));
+        $server->runtime->app->posts->create(new CreatePost(
+            'bob',
+            'Direct status',
+            Visibility::Direct,
+            recipientIds: ['alice'],
+        ));
+
+        $token = $this->issueToken($server, 'alice', ['read:lists']);
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'list', 'list' => 'list-alice'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:lists'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        self::assertSame(200, $response->status);
+        $body = implode('', iterator_to_array($response->chunks(), false));
+        self::assertStringContainsString($listed->id, $body);
+        self::assertStringContainsString('Listed public status', $body);
+        self::assertStringNotContainsString('Unlisted author status', $body);
+        self::assertStringNotContainsString('Followers-only status', $body);
+        self::assertStringNotContainsString('Direct status', $body);
+
+        $otherToken = $this->issueToken($server, 'carol', ['read:lists']);
+        $notOwned = (new MastodonStreamingController($server->runtime))->handle(new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'list', 'list' => 'list-alice'],
+            headers: ['Authorization' => 'Bearer ' . $otherToken],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'carol',
+            scopes: ['read:lists'],
+        ));
+        self::assertNotNull($notOwned);
+        self::assertSame(404, $notOwned->status);
+    }
+
+    public function testListStreamRechecksMembershipBeforeWritingFrames(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $server->createAccount('bob');
+        $this->createList($server, 'alice', 'list-alice', ['bob']);
+        $server->runtime->app->posts->create(new CreatePost('bob', 'No longer visible after removal'));
+        $token = $this->issueToken($server, 'alice', ['read:lists']);
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'list', 'list' => 'list-alice'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:lists'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        $server->runtime->database->execute(
+            'DELETE FROM social_account_list_member WHERE list_id = :list_id AND account_id = :account_id',
+            ['list_id' => 'list-alice', 'account_id' => 'bob'],
+        );
+
+        $body = implode('', iterator_to_array($response->chunks(), false));
+        self::assertStringNotContainsString('event: update', $body);
+        self::assertStringNotContainsString('No longer visible after removal', $body);
+    }
+
+    public function testListStreamRequiresItsSpecificScopeAndAnOwnedList(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $this->createList($server, 'alice', 'list-alice', []);
+
+        $listToken = $this->issueToken($server, 'alice', ['read:lists']);
+        $missingList = (new MastodonStreamingController($server->runtime))->handle(new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'list'],
+            headers: ['Authorization' => 'Bearer ' . $listToken],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:lists'],
+        ));
+        self::assertNotNull($missingList);
+        self::assertSame(400, $missingList->status);
+
+        $token = $this->issueToken($server, 'alice', ['read:statuses']);
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'list', 'list' => 'list-alice'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime))->handle($request);
+        self::assertNotNull($response);
+        self::assertSame(403, $response->status);
+    }
+
+    /** @param list<string> $members */
+    private function createList(TestServer $server, string $ownerId, string $listId, array $members): void
+    {
+        $now = Time::format($server->runtime->clock->now());
+        $server->runtime->database->execute(
+            'INSERT INTO social_account_list'
+            . ' (id, user_id, title, replies_policy, exclusive, created_at, updated_at)'
+            . " VALUES (:id, :user, 'Test list', 'none', 0, :created, :updated)",
+            ['id' => $listId, 'user' => $ownerId, 'created' => $now, 'updated' => $now],
+        );
+        foreach ($members as $member) {
+            $server->runtime->database->execute(
+                'INSERT INTO social_account_list_member (list_id, account_id, created_at)'
+                . ' VALUES (:list, :account, :created)',
+                ['list' => $listId, 'account' => $member, 'created' => $now],
+            );
+        }
+    }
+
     private function issueToken(TestServer $server, string $accountId, array $scopes = ['read:statuses']): string
     {
         $token = bin2hex(random_bytes(32));
