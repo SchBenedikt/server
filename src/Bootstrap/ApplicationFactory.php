@@ -48,6 +48,7 @@ use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
 use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteDirectory;
+use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\Mastodon\PdoEventBroker;
 use AlohaSocial\Server\Federation\RemoteMentionResolver;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
@@ -66,6 +67,7 @@ use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\KokuaBoard;
+use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
@@ -296,6 +298,8 @@ final class ApplicationFactory
             drafts: new Drafts($database, $clock),
             archives: new Archives($database, $clock, $app->posts),
             forYou: new ForYouFeed($database, $clock),
+            remoteEngagement: new RemoteEngagement($database, $clock),
+            liveUpdates: new LiveUpdates($database, $clock),
             preferences: $preferences,
             exports: new Exports($database, $clock, $preferences, $this->config),
             followRequests: new FollowRequests(

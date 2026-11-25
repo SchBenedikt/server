@@ -4,8 +4,8 @@
  */
 import type { TimelineItem } from './types';
 
-type PostListener = (post: TimelineItem) => void;
-type DeleteListener = (postId: string) => void;
+type PostListener = (post: TimelineItem, live: boolean) => void;
+type DeleteListener = (postId: string, live: boolean) => void;
 
 const createdListeners = new Set<PostListener>();
 const updatedListeners = new Set<PostListener>();
@@ -26,9 +26,9 @@ export function onPostDeleted(listener: DeleteListener): () => void {
 	return () => deletedListeners.delete(listener);
 }
 
-export function announcePostCreated(post: TimelineItem): void {
+export function announcePostCreated(post: TimelineItem, live = false): void {
 	for (const listener of createdListeners) {
-		listener(post);
+		listener(post, live);
 	}
 }
 
@@ -38,8 +38,8 @@ export function announcePostUpdated(post: TimelineItem): void {
 	}
 }
 
-export function announcePostDeleted(postId: string): void {
+export function announcePostDeleted(postId: string, live = false): void {
 	for (const listener of deletedListeners) {
-		listener(postId);
+		listener(postId, live);
 	}
 }

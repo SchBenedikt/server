@@ -32,12 +32,13 @@ the core route contract:
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and viewer state for local posts and cached remote posts. |
+| `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and viewer state for local posts and cached remote posts. For a federated post the origin's public counters are added from the engagement cache, so a card shows the real totals instead of this instance's few rows. |
 | `POST` / `DELETE /api/v1/posts/{id}/boost` | Add or remove a local boost, or queue an ActivityPub Announce/Undo for a cached remote post from an accepted follow. |
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Add or remove a local favourite, or queue an ActivityPub Like/Undo for a cached remote post from an accepted follow. |
 | `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
 | `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
-| `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. |
+| `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. The counters are cached for later cards.
+| `GET /api/v1/host/updates?since=…` | Cheap change cursor for an open page: ids of posts the viewer may see that appeared or were deleted since the given timestamp, limited to the last 30 minutes. The UI polls this and hydrates only new ids. |
 | `GET /api/v1/host/remote-connections?handle=…&type=followers\|following&cursor=…` | Page a remote profile's public followers or following list. |
 | `GET /api/v1/host/remote-engagement?id=…&type=likes\|reposts&cursor=…` | Page the public likes or boosts of one remote post. |
 | `GET /api/v1/host/search?q=…&type=all\|accounts\|posts&network=all\|activitypub\|bluesky&cursor=…` | Cross-network search across the Fediverse and Bluesky. |

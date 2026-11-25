@@ -18,6 +18,11 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   routes and account security changes invalidate outstanding credentials.
   See [the OAuth guide](docs/mastodon-oauth.md) for supported flows and
   current client limitations.
+- **Federated engagement counters:** opening a remote post keeps the
+  origin's public like, boost and reply totals, and every card for that post
+  shows them next to the local viewer state instead of zero.
+- **Live page updates:** an open page polls a cheap change cursor and adds new
+  posts or drops deleted ones in place, without reloading the timeline.
 - **Learning For You feed:** the ranked timeline now learns from likes,
   boosts, bookmarks, replies and the time posts stay on screen, decays old
   interests, keeps already-seen posts out of later pages and reports which

@@ -306,6 +306,33 @@ final class FrontController
             }
         }
 
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/updates') {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'Sign in to follow live updates.');
+            }
+
+            $retryAfter = $this->runtime->rateLimiter->attempt('host.updates', $userId, 240, 60);
+            if ($retryAfter !== null) {
+                return Response::json(
+                    [
+                        'error' => [
+                            'code' => 'rate_limited',
+                            'message' => 'Too many update checks. Please wait a moment.',
+                        ],
+                    ],
+                    429,
+                    ['Retry-After' => (string) $retryAfter],
+                );
+            }
+
+            $since = $request->queryParam('since');
+
+            return Response::json($this->runtime->liveUpdates->changes(
+                $userId,
+                is_string($since) ? $since : null,
+            ));
+        }
+
         if ($request->method === 'GET' && $request->path === '/api/v1/host/remote-post') {
             $identity = $session?->userId() ?? $ip ?? 'anonymous';
             $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_post', $identity, 60, 60);
@@ -328,7 +355,16 @@ final class FrontController
             }
 
             try {
-                return Response::json($this->runtime->remoteDirectory->remotePost($id));
+                $thread = $this->runtime->remoteDirectory->remotePost($id);
+
+                // Keep the origin's public counters so feed cards can show the
+                // real totals without fetching the thread again.
+                $objectId = is_array($thread['post'] ?? null) && is_string($thread['post']['id'] ?? null)
+                    ? (string) $thread['post']['id']
+                    : $id;
+                $this->runtime->remoteEngagement->remember($objectId, $thread);
+
+                return Response::json($thread);
             } catch (RemoteDirectoryException $exception) {
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {

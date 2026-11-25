@@ -34,6 +34,7 @@ use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\KokuaBoard;
+use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
@@ -45,6 +46,7 @@ use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\AtprotoOAuthService;
 use AlohaSocial\Server\Federation\RemoteDirectory;
+use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
@@ -79,6 +81,8 @@ final readonly class Runtime
         public Clock $clock,
         public PostInteractions $interactions,
         public RemoteDirectory $remoteDirectory,
+        public RemoteEngagement $remoteEngagement,
+        public LiveUpdates $liveUpdates,
         public AdminService $admin,
         public Announcements $announcements,
         public FeaturedTags $featuredTags,

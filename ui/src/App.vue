@@ -44,6 +44,7 @@ import TagView from './views/TagView.vue';
 import { loadHostDisplayNames, setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
 import { configureAdminApi, createAdminApi } from './lib/admin';
+import { useLiveUpdates } from './lib/live';
 import { initRouter, route, routeTitle } from './lib/router';
 import { appState, initTheme, setInstance, setSession, setUnread, toggleTheme } from './lib/state';
 import type { Account } from './lib/types';
@@ -56,6 +57,10 @@ initTheme();
 let stopRouter: (() => void) | null = null;
 let unreadTimer = 0;
 const loggingOut = ref(false);
+
+// Live updates run for the whole shell so every route sees new posts and
+// deletions, not only the home timeline.
+useLiveUpdates(computed(() => appState.session.user !== null));
 
 const currentView = computed(() => {
 	switch (route.value.name) {

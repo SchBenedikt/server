@@ -80,19 +80,83 @@ final class PostInteractions
         $replyCounts = $this->replyCounts($postIds, $viewerId);
         $emoji = $this->emojiReactions($postIds);
 
+        // A cached federated post brings its own public counters. Local rows
+        // only know what this instance did, so a card would otherwise show
+        // zero likes and zero replies for a busy Mastodon post.
+        $remoteCounts = $this->remoteEngagementCounts($postIds);
+
         $result = [];
         foreach ($postIds as $postId) {
             $result[$postId] = [
-                'favourites_count' => $favouriteCounts[$postId] ?? 0,
+                'favourites_count' => ($favouriteCounts[$postId] ?? 0) + ($remoteCounts[$postId]['likes'] ?? 0),
                 'favourited' => $favourited[$postId] ?? false,
-                'reblogs_count' => $boostCounts[$postId] ?? 0,
+                'reblogs_count' => ($boostCounts[$postId] ?? 0) + ($remoteCounts[$postId]['boosts'] ?? 0),
                 'reblogged' => $reblogged[$postId] ?? false,
-                'replies_count' => $replyCounts[$postId] ?? 0,
+                'replies_count' => ($replyCounts[$postId] ?? 0) + ($remoteCounts[$postId]['replies'] ?? 0),
                 'emoji_reactions' => $emoji[$postId] ?? [],
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * Public counters the origin reported for a federated post.
+     *
+     * The cache is filled when a remote thread is opened and expires on its
+     * own; a missing row simply means "not fetched yet", never zero.
+     *
+     * @param list<string> $postIds
+     *
+     * @return array<string, array{likes: int, boosts: int, replies: int}>
+     */
+    private function remoteEngagementCounts(array $postIds): array
+    {
+        $federated = [];
+        foreach ($postIds as $postId) {
+            if (str_starts_with($postId, 'http://')
+                || str_starts_with($postId, 'https://')
+                || str_starts_with($postId, 'at://')
+            ) {
+                $federated[] = $postId;
+            }
+        }
+        if ($federated === []) {
+            return [];
+        }
+
+        $placeholders = [];
+        $parameters = [];
+        foreach ($federated as $index => $postId) {
+            $key = 'engagement_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT object_id, likes, boosts, replies FROM social_remote_engagement'
+                . ' WHERE object_id IN (' . implode(', ', $placeholders) . ')',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            return [];
+        }
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $objectId = is_string($row['object_id'] ?? null) ? $row['object_id'] : '';
+            if ($objectId === '') {
+                continue;
+            }
+            $counts[$objectId] = [
+                'likes' => max(0, (int) ($row['likes'] ?? 0)),
+                'boosts' => max(0, (int) ($row['boosts'] ?? 0)),
+                'replies' => max(0, (int) ($row['replies'] ?? 0)),
+            ];
+        }
+
+        return $counts;
     }
 
     /**

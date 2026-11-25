@@ -207,8 +207,20 @@ export function useTimeline(source: () => TimelineSource) {
 		}
 	}
 
-	const stopCreated = onPostCreated((post) => {
+	const stopCreated = onPostCreated((post, live) => {
 		if (posts.value.some((item) => item.id === post.id)) {
+			return;
+		}
+
+		const current = source();
+		if (live) {
+			// A polled post is already filtered by the server for this viewer.
+			// Put it on top of a chronological feed instead of reloading the
+			// first page, which would throw away the pages already scrolled.
+			if ((current.kind === 'home' || current.kind === 'public') && include(post)) {
+				posts.value = [post, ...posts.value];
+			}
+
 			return;
 		}
 
@@ -244,7 +256,7 @@ export function useTimeline(source: () => TimelineSource) {
 		});
 	});
 
-	const stopDeleted = onPostDeleted((postId) => {
+	const stopDeleted = onPostDeleted((postId, _live) => {
 		posts.value = posts.value.filter((post) => post.id !== postId && post.object_id !== postId);
 	});
 

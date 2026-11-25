@@ -287,6 +287,7 @@ export interface Api {
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
 	forYouImpressions(items: { post_id: string; dwell_ms: number }[]): Promise<void>;
+	updates(since: string): Promise<{ cursor: string; created: string[]; deleted: string[] }>;
 	logout(): Promise<void>;
 }
 
@@ -2850,6 +2851,24 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			await request<unknown>('POST', '/api/v1/host/for-you/impressions', undefined, {
 				impressions: items.slice(0, 60),
 			});
+		},
+
+		async updates(since: string): Promise<{ cursor: string; created: string[]; deleted: string[] }> {
+			const data = await request<{ cursor?: unknown; created?: unknown; deleted?: unknown }>(
+				'GET',
+				'/api/v1/host/updates',
+				{ since },
+			);
+
+			const ids = (value: unknown): string[] => Array.isArray(value)
+				? value.filter((id): id is string => typeof id === 'string' && id !== '')
+				: [];
+
+			return {
+				cursor: typeof data?.cursor === 'string' && data.cursor !== '' ? data.cursor : new Date().toISOString(),
+				created: ids(data?.created),
+				deleted: ids(data?.deleted),
+			};
 		},
 
 		async exportAccount(): Promise<Blob> {
