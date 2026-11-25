@@ -111,6 +111,12 @@ The core's Mastodon-compatible API at `/api/mastodon/v1` is enabled by default
 in `HostConfig` (`mastodon_api`), and the standalone UI uses it for the features
 Mastodon clients expect instead of duplicating federation logic in the host:
 
+Mastodon OAuth clients can also subscribe to the standalone SSE endpoint at
+`/api/mastodon/v1/streaming`. Its supported channels, scopes, reconnect cursor
+and lifecycle are documented in [Mastodon streaming](mastodon-streaming.md).
+The standalone supports SSE; WebSocket and third-party-client compatibility
+are not implied.
+
 | Screen | Route | What it uses |
 | --- | --- | --- |
 | Lesezeichen | `#/bookmarks` | `GET /bookmarks`, `POST /statuses/{id}/bookmark` and `/unbookmark`. Bookmark state is also rendered on every post. |
