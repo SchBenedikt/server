@@ -75,6 +75,9 @@ export interface TimelineItem {
 	deleted_at?: string | null;
 	in_reply_to_id?: string | null;
 	recipient_ids?: string[];
+	conversation_id?: string;
+	unread?: boolean;
+	dismissed?: boolean;
 	quoted_object_id?: string | null;
 	quote_state?: 'pending' | 'accepted' | 'rejected' | 'revoked' | null;
 	attachments?: Attachment[];

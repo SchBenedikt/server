@@ -4935,6 +4935,28 @@ dialog.a-modal::backdrop {
 	list-style: none;
 }
 
+.a-dm-list__item {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.a-dm-list__item .a-dm-row {
+	min-width: 0;
+	flex: 1;
+}
+
+.a-dm-dismiss {
+	flex: 0 0 auto;
+}
+
+.a-dm-unread {
+	margin-inline-start: 6px;
+	color: var(--a-primary);
+	font-size: 11px;
+	font-weight: 600;
+}
+
 .a-dm-row {
 	display: flex;
 	align-items: center;

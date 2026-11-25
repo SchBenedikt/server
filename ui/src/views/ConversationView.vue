@@ -24,7 +24,16 @@ const PAGES = 5;
 const signedIn = computed(() => appState.session.user !== null);
 const myId = computed(() => appState.session.user?.handle ?? '');
 const target = computed(() => route.value.name === 'conversation' ? route.value.id : '');
-const counterpart = computed(() => target.value.split(',')[0] ?? '');
+const threadRoot = computed(() => target.value.startsWith('thread:') ? target.value.slice('thread:'.length) : '');
+const counterpart = computed(() => {
+	if (threadRoot.value !== '') {
+		const latest = items.value.at(-1);
+		return latest === undefined
+			? ''
+			: participantsOf(latest).find((id) => id !== myId.value) ?? '';
+	}
+	return target.value.split(',')[0] ?? '';
+});
 
 const loading = ref(false);
 const loadingMore = ref(false);
@@ -65,9 +74,11 @@ async function load(): Promise<void> {
 
 	loading.value = true;
 	try {
-		const account = await resolveAccount(counterpart.value);
-		if (current === generation) {
-			person.value = account;
+		if (threadRoot.value === '') {
+			const account = await resolveAccount(counterpart.value);
+			if (current === generation) {
+				person.value = account;
+			}
 		}
 
 		const collected: TimelineItem[] = [];
@@ -87,7 +98,15 @@ async function load(): Promise<void> {
 
 		items.value = collected
 			.filter((message) => belongsToConversation(message))
-			.sort((left, right) => timeOf(left) - timeOf(right));
+			.sort(compareOldToNew);
+		if (counterpart.value !== '') {
+			person.value = await resolveAccount(counterpart.value);
+		}
+		const latest = items.value.at(-1);
+		if (latest !== undefined) {
+			await getApi().markConversationRead(latest.id);
+			items.value = items.value.map((message) => ({ ...message, unread: false }));
+		}
 	} catch (caught) {
 		if (current === generation) {
 			error.value = caught instanceof Error ? caught.message : 'The conversation could not be loaded.';
@@ -116,7 +135,7 @@ async function loadMore(): Promise<void> {
 		const seen = new Set(items.value.map((item) => item.id));
 		items.value = [...items.value, ...result.posts.filter((message) => (
 			belongsToConversation(message) && !seen.has(message.id)
-		))].sort((left, right) => timeOf(left) - timeOf(right));
+		))].sort(compareOldToNew);
 	} catch (caught) {
 		if (current === generation) {
 			error.value = caught instanceof Error ? caught.message : 'Older messages could not be loaded.';
@@ -133,6 +152,10 @@ function timeOf(item: TimelineItem): number {
 	return Number.isNaN(value) ? 0 : value;
 }
 
+function compareOldToNew(left: TimelineItem, right: TimelineItem): number {
+	return timeOf(left) - timeOf(right) || left.id.localeCompare(right.id);
+}
+
 function participantsOf(message: TimelineItem): string[] {
 	return [...new Set([message.author_id, ...(message.recipient_ids ?? [])])]
 		.filter((id) => id !== '')
@@ -140,6 +163,13 @@ function participantsOf(message: TimelineItem): string[] {
 }
 
 function belongsToConversation(message: TimelineItem): boolean {
+	if (threadRoot.value !== '') {
+		if (message.conversation_id === threadRoot.value || message.id === threadRoot.value) {
+			return true;
+		}
+		const parent = items.value.find((item) => item.id === message.in_reply_to_id);
+		return parent?.conversation_id === threadRoot.value;
+	}
 	const expected = target.value.split(',').filter((id) => id !== '').sort();
 	const actual = participantsOf(message).filter((id) => id !== myId.value);
 	return expected.length > 0 && expected.every((id) => actual.includes(id)) && actual.length === expected.length;
@@ -168,6 +198,7 @@ function compose(): void {
 const stopCreated = onPostCreated((created) => {
 	if (created.visibility === 'direct' && belongsToConversation(created)) {
 		items.value = [...items.value, created];
+		void getApi().markConversationRead(created.id);
 	}
 });
 
