@@ -130,6 +130,52 @@ final class AccountStatusesTest extends TestCase
         self::assertNotContains($followers, $carolIds);
     }
 
+    public function testBlockingOriginalAuthorHidesTheirPostBoostedByAFollowedLocalAccount(): void
+    {
+        $this->server->createAccount('carol', 'carol@example.test');
+        $postId = $this->post('bob', 'blocked original');
+        $carol = $this->server->signIn('carol');
+        $boost = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($postId) . '/boost',
+            [],
+            $carol['cookies'],
+            $carol['csrf'],
+        );
+        self::assertSame(200, $boost->status, $boost->body);
+
+        $alice = $this->server->signIn('alice');
+        $follow = $this->server->json(
+            'POST',
+            '/api/v1/accounts/carol/follow',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(200, $follow->status, $follow->body);
+        $visible = $this->server->send('GET', '/api/v1/timelines/home', [
+            'cookies' => $alice['cookies'],
+        ]);
+        $visiblePosts = $this->decoded($visible)['posts'];
+        self::assertSame($postId, $visiblePosts[0]['object_id']);
+        self::assertSame('boost', $visiblePosts[0]['kind']);
+
+        $block = $this->server->json(
+            'POST',
+            '/api/v1/blocks',
+            ['actor' => 'http://localhost:3000/@bob'],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(201, $block->status, $block->body);
+
+        $hidden = $this->server->send('GET', '/api/v1/timelines/home', [
+            'cookies' => $alice['cookies'],
+        ]);
+        self::assertSame(200, $hidden->status, $hidden->body);
+        self::assertNotContains($postId, array_column($this->decoded($hidden)['posts'], 'object_id'));
+    }
+
     public function testFollowingFeedPagesLocalPostsWithoutRepeatingOrSkippingThem(): void
     {
         for ($index = 0; $index < 9; $index++) {
