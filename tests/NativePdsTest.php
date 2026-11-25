@@ -26,6 +26,71 @@ use PHPUnit\Framework\TestCase;
  */
 final class NativePdsTest extends TestCase
 {
+    public function testHandleDomainResolvesNativeIdentityFromTheStandardWellKnownPath(): void
+    {
+        $server = new TestServer([
+            'atproto_pds' => true,
+            'atproto_pds_url' => 'https://social.example',
+            'atproto_pds_handle_domain' => 'social.example',
+            'atproto_plc_url' => 'https://plc.directory',
+        ]);
+        $server->createAccount('alice', 'alice@example.test');
+
+        $secret = $server->config->secretKey
+            ?? trim((string) file_get_contents($server->config->secretKeyFile));
+        $pds = new NativePdsService(
+            $server->config->coreConfig(),
+            $server->runtime->pdsRepository,
+            OpenSslSecretBox::fromBase64Key($secret),
+            $server->runtime->clock,
+            new LocalBlobStore($server->config->blobDirectory),
+            null,
+        );
+        $identity = $pds->createIdentity('alice');
+
+        $response = $server->send('GET', '/.well-known/atproto-did', [
+            'headers' => ['Host' => 'ALICE.SOCIAL.EXAMPLE:443'],
+        ]);
+
+        self::assertSame(200, $response->status, $response->body);
+        self::assertSame($identity['did'] . "\n", $response->body);
+        self::assertSame('text/plain; charset=utf-8', $response->header('Content-Type'));
+    }
+
+    public function testHandleDomainDoesNotResolveUnknownOrDisabledPdsIdentities(): void
+    {
+        $server = new TestServer([
+            'atproto_pds' => true,
+            'atproto_pds_url' => 'https://social.example',
+            'atproto_pds_handle_domain' => 'social.example',
+            'atproto_plc_url' => 'https://plc.directory',
+        ]);
+        $server->createAccount('alice', 'alice@example.test');
+
+        $unknown = $server->send('GET', '/.well-known/atproto-did', [
+            'headers' => ['Host' => 'unknown.social.example'],
+        ]);
+        self::assertSame(404, $unknown->status);
+
+        $secret = $server->config->secretKey
+            ?? trim((string) file_get_contents($server->config->secretKeyFile));
+        $pds = new NativePdsService(
+            $server->config->coreConfig(),
+            $server->runtime->pdsRepository,
+            OpenSslSecretBox::fromBase64Key($secret),
+            $server->runtime->clock,
+            new LocalBlobStore($server->config->blobDirectory),
+            null,
+        );
+        $pds->createIdentity('alice');
+        $server->runtime->accounts->disable('alice');
+
+        $disabled = $server->send('GET', '/.well-known/atproto-did', [
+            'headers' => ['Host' => 'alice.social.example'],
+        ]);
+        self::assertSame(404, $disabled->status);
+    }
+
     public function testRotatedPlcOperationCanBeRetriedAfterDirectoryFailure(): void
     {
         $http = new NativePdsPlcHttpClient([200, 503, 200]);
