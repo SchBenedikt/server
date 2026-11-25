@@ -145,6 +145,8 @@ export interface Api {
 	homeTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	homeTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	directTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
+	markConversationRead(postId: string): Promise<void>;
+	dismissConversation(postId: string): Promise<void>;
 	tagTimeline(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
 	tagTimelinePage(tag: string, limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	followedTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
@@ -384,6 +386,9 @@ export function normalizeTimelineItem(value: unknown): TimelineItem | null {
 		recipient_ids: Array.isArray(value.recipient_ids)
 			? value.recipient_ids.filter((id): id is string => typeof id === 'string')
 			: [],
+		conversation_id: typeof value.conversation_id === 'string' ? value.conversation_id : undefined,
+		unread: value.unread === true,
+		dismissed: value.dismissed === true,
 		quoted_object_id: typeof value.quoted_object_id === 'string' ? value.quoted_object_id : null,
 		quote_state: value.quote_state === 'pending' || value.quote_state === 'accepted'
 			|| value.quote_state === 'rejected' || value.quote_state === 'revoked'
@@ -1112,6 +1117,11 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		return pagedTimeline('/api/v1/timelines/direct', limit, before, beforeId);
 	}
 
+	function updateConversation(postId: string, action: 'read' | 'dismiss'): Promise<void> {
+		return request<unknown>('POST', `/api/v1/conversations/${encodeURIComponent(postId)}/${action}`)
+			.then(() => undefined);
+	}
+
 	return {
 		async instance(): Promise<InstanceInfo> {
 			const data = await request<{ instance?: unknown }>('GET', '/api/v1/instance');
@@ -1158,6 +1168,14 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		directTimelinePage(limit = 20, before = null, beforeId = null): Promise<TimelinePageData> {
 			return directTimelinePage(limit, before, beforeId);
+		},
+
+		markConversationRead(postId: string): Promise<void> {
+			return updateConversation(postId, 'read');
+		},
+
+		dismissConversation(postId: string): Promise<void> {
+			return updateConversation(postId, 'dismiss');
 		},
 
 		tagTimeline(tag: string, limit = 20, before = null, beforeId = null): Promise<TimelineItem[]> {

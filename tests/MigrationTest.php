@@ -43,6 +43,7 @@ final class MigrationTest extends TestCase
             'social_moderation_action',
             'social_held_post',
             'social_story',
+            'social_conversation_marker',
             'social_search_index',
             'social_recommendation_preference',
             'social_account_deletion',

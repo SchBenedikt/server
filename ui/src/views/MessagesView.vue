@@ -17,9 +17,11 @@ import { appState, openDirectMessage, showToast } from '../lib/state';
 import type { Account, TimelineItem } from '../lib/types';
 
 interface ConversationSummary {
+	id: string;
 	counterpart: string;
 	last: TimelineItem;
 	count: number;
+	unread: boolean;
 }
 
 const PAGE_SIZE = 40;
@@ -52,19 +54,23 @@ const conversations = computed<ConversationSummary[]>(() => {
 			continue;
 		}
 
-		const existing = groups.get(counterpart);
+		const id = message.conversation_id ?? `participants:${counterpart}`;
+		const existing = groups.get(id);
 		if (existing === undefined) {
-			groups.set(counterpart, { counterpart, last: message, count: 1 });
+			groups.set(id, { id, counterpart, last: message, count: 1, unread: message.unread === true });
 			continue;
 		}
 
 		existing.count += 1;
-		if (timeOf(message) > timeOf(existing.last)) {
+		existing.unread ||= message.unread === true;
+		if (compareOldToNew(message, existing.last) > 0) {
 			existing.last = message;
 		}
 	}
 
-	return [...groups.values()].sort((left, right) => timeOf(right.last) - timeOf(left.last));
+	return [...groups.values()]
+		.filter((conversation) => conversation.last.dismissed !== true)
+		.sort((left, right) => compareOldToNew(right.last, left.last));
 });
 
 onMounted(() => {
@@ -82,6 +88,10 @@ watch(signedIn, (value) => {
 function timeOf(item: TimelineItem): number {
 	const value = new Date(item.published_at).getTime();
 	return Number.isNaN(value) ? 0 : value;
+}
+
+function compareOldToNew(left: TimelineItem, right: TimelineItem): number {
+	return timeOf(left) - timeOf(right) || left.id.localeCompare(right.id);
 }
 
 function counterpartOf(message: TimelineItem): string {
@@ -151,8 +161,22 @@ async function loadMore(): Promise<void> {
 	}
 }
 
-function openConversation(counterpart: string): void {
-	navigate(`/messages/${encodeURIComponent(counterpart)}`);
+function openConversation(conversation: ConversationSummary): void {
+	void getApi().markConversationRead(conversation.last.id).catch((caught: unknown) => {
+		showToast(caught instanceof Error ? caught.message : 'The conversation could not be marked as read.', 'error');
+	});
+	navigate(`/messages/${encodeURIComponent(`thread:${conversation.id}`)}`);
+}
+
+async function dismissConversation(conversation: ConversationSummary): Promise<void> {
+	try {
+		await getApi().dismissConversation(conversation.last.id);
+		messages.value = messages.value.map((message) => message.conversation_id === conversation.id
+			? { ...message, dismissed: true }
+			: message);
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The conversation could not be dismissed.', 'error');
+	}
 }
 
 function preview(message: TimelineItem): string {
@@ -255,21 +279,24 @@ function startWith(account: Account): void {
 			<TimelineSkeleton v-if="loading && conversations.length === 0" :count="3" />
 
 			<ul v-else-if="conversations.length > 0" class="a-dm-list">
-				<li v-for="conversation in conversations" :key="conversation.counterpart">
-					<button type="button" class="a-dm-row" @click="openConversation(conversation.counterpart)">
+				<li v-for="conversation in conversations" :key="conversation.id" class="a-dm-list__item">
+					<button type="button" class="a-dm-row" @click="openConversation(conversation)">
 						<Avatar
 							:id="conversation.counterpart.split(',')[0] ?? ''"
 							:name="counterpartLabel(conversation.counterpart)"
 							:size="44"
 						/>
 						<span class="a-dm-row__copy">
-							<strong>{{ counterpartLabel(conversation.counterpart) }}</strong>
+							<strong>{{ counterpartLabel(conversation.counterpart) }} <span v-if="conversation.unread" class="a-dm-unread">Unread</span></strong>
 							<small>{{ preview(conversation.last) }}</small>
 						</span>
 						<span class="a-dm-row__meta">
 							<time :datetime="conversation.last.published_at">{{ relativeTime(conversation.last.published_at) }}</time>
 							<small v-if="conversation.count > 1">{{ conversation.count }}</small>
 						</span>
+					</button>
+					<button type="button" class="a-icon-btn a-dm-dismiss" :aria-label="`Dismiss conversation with ${counterpartLabel(conversation.counterpart)}`" @click="dismissConversation(conversation)">
+						<AppIcon name="x" :size="15" />
 					</button>
 				</li>
 			</ul>
