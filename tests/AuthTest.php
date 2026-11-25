@@ -80,7 +80,7 @@ final class AuthTest extends TestCase
         ], $this->server->cookiesFrom($form));
 
         self::assertSame(303, $response->status);
-        self::assertSame('/', $response->header('Location'));
+        self::assertSame('/app', $response->header('Location'));
 
         $after = $this->server->cookiesFrom($response)[TestServer::COOKIE];
         self::assertNotSame($before, $after);
