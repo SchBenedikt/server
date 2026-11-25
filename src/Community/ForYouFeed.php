@@ -59,6 +59,10 @@ final class ForYouFeed
 
     private const MAX_SNAPSHOTS_PER_SCOPE = 10;
 
+    private const AUTHOR_DIVERSITY_WINDOW = 20;
+
+    private const AUTHOR_DIVERSITY_LIMIT = 2;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
@@ -175,6 +179,8 @@ final class ForYouFeed
             return $b['score'] <=> $a['score'];
         });
 
+        $scored = $this->spreadAuthors($scored);
+
         return $this->rankedPage('for-you', $accountId, $scored, $limit, $offset);
     }
 
@@ -264,7 +270,37 @@ final class ForYouFeed
         }
         usort($scored, $compare);
 
+        $scored = $this->spreadAuthors($scored);
+
         return $this->rankedPage('trending', null, $scored, $limit, $offset);
+    }
+
+    /**
+     * @param list<array{id:string,author_id:string,score:float,reason:string}> $scored
+     * @return list<array{id:string,author_id:string,score:float,reason:string}>
+     */
+    private function spreadAuthors(array $scored): array
+    {
+        $spread = [];
+        while ($scored !== []) {
+            $recent = array_slice($spread, -(self::AUTHOR_DIVERSITY_WINDOW - 1));
+            $authorCounts = array_count_values(array_column($recent, 'author_id'));
+            $pick = null;
+            foreach ($scored as $index => $entry) {
+                if (($authorCounts[$entry['author_id']] ?? 0) < self::AUTHOR_DIVERSITY_LIMIT) {
+                    $pick = $index;
+                    break;
+                }
+            }
+
+            // Keep all eligible posts when the remaining feed has no other
+            // author to choose from; the cap applies while alternatives exist.
+            $pick ??= 0;
+            $spread[] = $scored[$pick];
+            array_splice($scored, $pick, 1);
+        }
+
+        return $spread;
     }
 
     /** @param list<array{id:string, author_id?:string, score?:float, reason:string}> $scored
