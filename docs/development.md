@@ -41,12 +41,12 @@ Browser → public/index.php → HostConfig → ApplicationFactory::boot()
         → FrontController (session cookie → Request::$userId, CSRF)
         → /, /login, /logout, /forgot-password, /reset-password, /app  (host pages)
         → /api/v1/host/*                                      (host UI extensions)
-        → $app->kernel->handle(Request)   (the core's 84 routes)
+        → $app->kernel->handle(Request)   (the core route manifest)
 ```
 
 The core is a Composer VCS dependency (`alohasocial/core: dev-main` from the
 VCS repository) pinned by `composer.lock`. The installed core reports its
-release line in `vendor/alohasocial/core/src/Version.php` (currently `0.7.0`).
+release line in `vendor/alohasocial/core/src/Version.php` (currently `0.8.0`).
 Nothing from the core is copied here.
 
 ### Working on the core and host together

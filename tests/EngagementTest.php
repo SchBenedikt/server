@@ -235,9 +235,13 @@ final class EngagementTest extends TestCase
         $this->server->runtime->interactions->like('bob', $engaged);
         $this->server->runtime->interactions->like('carol', $engaged);
 
+        // A local follow is a follower edge, not a social_following row. The
+        // actor id is the follower's local actor URL; local_user_id is the
+        // followed account. This is exactly what the follow API writes.
         $this->server->runtime->database->execute(
-            'INSERT INTO social_following (id, local_user_id, actor_id, inbox_url, followed_at, state)'
-            . " VALUES ('f-1', 'alice', 'carol', 'https://remote.test/inbox', '2026-11-16T00:00:00Z', 'accepted')",
+            'INSERT INTO social_follower'
+            . ' (id, local_user_id, actor_id, inbox_url, followed_at, is_local, state)'
+            . " VALUES ('f-1', 'carol', 'http://localhost:3000/@alice', 'http://localhost:3000/inbox', '2026-11-16T00:00:00Z', 1, 'accepted')",
         );
         $this->server->runtime->database->execute(
             'INSERT INTO social_followed_hashtag (user_id, hashtag, created_at)'

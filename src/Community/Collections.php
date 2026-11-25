@@ -22,11 +22,15 @@ use function min;
 use function trim;
 
 /**
- * Curated post collections.
+ * Host-local reading lists.
  *
  * A collection is a named, ordered list of posts. The items reference core
  * post ids; the posts themselves are never copied. Public collections are
- * readable by anyone, private ones only by their owner.
+ * readable by anyone, private ones only by their owner. This is deliberately
+ * not the core's `social_media_collection`: that model is a media album with
+ * an ActivityPub audience, while a reading list may contain any readable post
+ * and is only rendered by this host. Both concepts therefore keep separate
+ * ids and routes.
  */
 final class Collections
 {

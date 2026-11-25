@@ -132,14 +132,25 @@ final class Exports
                 . ' FROM draft WHERE account_id = :account_id ORDER BY updated_at ASC',
                 ['account_id' => $accountId],
             ),
+            'pinned_posts' => $this->rows(
+                'SELECT post_id, position, pinned_at FROM social_post_pin'
+                . ' WHERE owner_id = :account_id ORDER BY position ASC',
+                ['account_id' => $accountId],
+            ),
             'archived_posts' => $this->rows(
-                'SELECT post_id, archived_at FROM archived_post'
-                . ' WHERE account_id = :account_id ORDER BY archived_at ASC, post_id ASC',
+                'SELECT id AS post_id, archived_at FROM social_post'
+                . ' WHERE author_id = :account_id AND archived_at IS NOT NULL AND deleted_at IS NULL'
+                . ' ORDER BY archived_at ASC, id ASC',
                 ['account_id' => $accountId],
             ),
             'recommendation_feedback' => $this->rows(
                 'SELECT post_id, kind, created_at FROM recommendation_feedback'
                 . ' WHERE account_id = :account_id ORDER BY created_at ASC, post_id ASC',
+                ['account_id' => $accountId],
+            ),
+            'recommendation_impressions' => $this->rows(
+                'SELECT post_id, author_id, seen_at, dwell_ms, times FROM recommendation_impression'
+                . ' WHERE account_id = :account_id ORDER BY seen_at ASC, post_id ASC',
                 ['account_id' => $accountId],
             ),
             'kokua_posts' => $this->rows(
@@ -168,7 +179,7 @@ final class Exports
     {
         $rows = $this->db->fetchAll(
             'SELECT id, content, content_warning, visibility, in_reply_to_id, published_at, edited_at,'
-            . ' quoted_object_id, quote_state, revision'
+            . ' quoted_object_id, quote_state, revision, archived_at'
             . ' FROM social_post WHERE author_id = :account_id AND deleted_at IS NULL'
             . ' ORDER BY published_at ASC, id ASC',
             ['account_id' => $accountId],
@@ -199,6 +210,7 @@ final class Exports
                 'quoted_object_id' => is_string($row['quoted_object_id'] ?? null) ? $row['quoted_object_id'] : null,
                 'quote_state' => is_string($row['quote_state'] ?? null) ? $row['quote_state'] : null,
                 'revision' => (int) ($row['revision'] ?? 1),
+                'archived_at' => is_string($row['archived_at'] ?? null) ? $row['archived_at'] : null,
                 'url' => $this->config->instanceUrl . '/api/v1/posts/' . rawurlencode($postId),
                 'attachments' => $attachments,
                 'hashtags' => array_map(static fn (array $tag): string => (string) $tag['hashtag'], $hashtags),

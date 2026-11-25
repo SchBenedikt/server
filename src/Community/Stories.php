@@ -13,6 +13,7 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 
+use function array_merge;
 use function in_array;
 use function max;
 use function mb_strlen;
@@ -20,20 +21,25 @@ use function min;
 use function trim;
 
 /**
- * 24-hour stories.
+ * 24-hour local text stories.
  *
  * A story is deliberately separate from a post: it never enters a timeline,
  * is not federated and disappears without a cleanup job because every read
- * filters by `expires_at`. A background deletion is unnecessary.
+ * filters by `expires_at`. This is the host's text/background format, not the
+ * core's Pixelfed-compatible `social_story` media model; see docs/features.md.
  */
 final class Stories
 {
     public const BACKGROUNDS = ['ocean', 'sunset', 'forest', 'berry', 'night', 'sand'];
 
+    private readonly SocialGraph $graph;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
+        ?SocialGraph $graph = null,
     ) {
+        $this->graph = $graph ?? new SocialGraph($db);
     }
 
     /**
@@ -53,13 +59,14 @@ final class Stories
         if ($viewerId !== null && $viewerId !== '') {
             // A story is for the author and the people who follow them. A
             // public carousel that includes every local account leaks who is
-            // posting and fills the bar with strangers.
-            $sql .= ' AND (account_id = :viewer OR account_id IN ('
-                . ' SELECT actor_id FROM social_following'
-                . " WHERE local_user_id = :follow_viewer AND state = 'accepted'"
-                . '))';
+            // posting and fills the bar with strangers. Local follows are
+            // follower edges (`social_follower`), not remote `social_following`
+            // rows, and their target is a local handle rather than an actor URL.
+            // Remote stories are not part of this local text format.
+            $following = $this->graph->localFollowingSubquery($viewerId, 'actor_id', 'story_follow');
+            $sql .= ' AND (account_id = :viewer OR account_id IN (' . $following['sql'] . '))';
             $parameters['viewer'] = $viewerId;
-            $parameters['follow_viewer'] = $viewerId;
+            $parameters = array_merge($parameters, $following['params']);
         }
 
         $sql .= ' ORDER BY created_at DESC LIMIT ' . $limit;
@@ -266,13 +273,11 @@ final class Stories
             $parameters[$key] = $id;
         }
 
+        $following = $this->graph->localFollowingSubquery($accountId, 'actor_id', 'story_seen_follow');
         $visible = $this->db->fetchAll(
             'SELECT id FROM story WHERE expires_at > :now AND id IN (' . implode(', ', $placeholders) . ')'
-            . ' AND (account_id = :account OR account_id IN ('
-            . ' SELECT actor_id FROM social_following'
-            . " WHERE local_user_id = :follow_account AND state = 'accepted'"
-            . '))',
-            $parameters + ['follow_account' => $accountId],
+            . ' AND (account_id = :account OR account_id IN (' . $following['sql'] . '))',
+            array_merge($parameters, $following['params']),
         );
 
         $marked = 0;

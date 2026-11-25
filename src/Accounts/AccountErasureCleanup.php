@@ -108,7 +108,12 @@ final readonly class AccountErasureCleanup
             );
             $delete('kokua_posts', 'DELETE FROM kokua WHERE account_id = :account_id', $user);
             $delete('drafts', 'DELETE FROM draft WHERE account_id = :account_id', $user);
-            $delete('archived_posts', 'DELETE FROM archived_post WHERE account_id = :account_id', $user);
+            $delete('pinned_posts', 'DELETE FROM social_post_pin WHERE owner_id = :account_id', $user);
+            $delete(
+                'archived_posts',
+                'UPDATE social_post SET archived_at = NULL WHERE author_id = :account_id',
+                $user,
+            );
             $delete(
                 'recommendation_feedback',
                 'DELETE FROM recommendation_feedback WHERE account_id = :account_id',

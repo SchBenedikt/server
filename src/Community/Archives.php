@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Post\PostAccessDeniedException;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
@@ -16,16 +17,16 @@ use AlohaSocial\Core\Service\PostService;
 use AlohaSocial\Core\Support\Time;
 
 use function array_map;
-use function is_string;
 use function trim;
 
 /**
  * Posts an account has taken out of its public profile without deleting them.
  *
- * Archiving is private and reversible: the row only marks (account, post).
- * The core still owns the post, its media and its federation; removing the
- * row puts it back on the profile. Only the author can archive a post, and an
- * archived post is still readable by anyone it was already visible to.
+ * Archiving is a core post state (`social_post.archived_at`), not a second
+ * marker table. That keeps the host profile, the core account statuses, the
+ * search index and the core `/api/v1/posts/archived` route in agreement.
+ * Only the author can archive a post, and an archived post is still readable
+ * by anyone it was already visible to.
  */
 final class Archives
 {
@@ -42,8 +43,9 @@ final class Archives
     public function forAccount(string $accountId): array
     {
         $rows = $this->db->fetchAll(
-            'SELECT post_id, archived_at FROM archived_post WHERE account_id = :account_id'
-            . ' ORDER BY archived_at DESC, post_id ASC LIMIT 500',
+            'SELECT id AS post_id, archived_at FROM social_post'
+            . ' WHERE author_id = :account_id AND archived_at IS NOT NULL AND deleted_at IS NULL'
+            . ' ORDER BY archived_at DESC, id ASC LIMIT 500',
             ['account_id' => $accountId],
         );
 
@@ -75,33 +77,19 @@ final class Archives
         }
 
         try {
-            $post = $this->posts->get($postId);
+            $post = $this->posts->archive($accountId, $postId);
         } catch (PostNotFoundException) {
             throw CommunityException::notFound('This post no longer exists.');
-        }
-
-        if ($post->authorId !== $accountId) {
+        } catch (PostAccessDeniedException) {
             throw CommunityException::forbidden('Only your own posts can be archived.');
         }
 
-        $existing = $this->db->fetchOne(
-            'SELECT post_id, archived_at FROM archived_post WHERE account_id = :account_id AND post_id = :post_id',
-            ['account_id' => $accountId, 'post_id' => $postId],
-        );
-        if ($existing !== null) {
-            return [
-                'post_id' => (string) $existing['post_id'],
-                'archived_at' => (string) $existing['archived_at'],
-            ];
-        }
-
-        $archivedAt = Time::format($this->clock->now());
-        $this->db->execute(
-            'INSERT INTO archived_post (account_id, post_id, archived_at) VALUES (:account_id, :post_id, :archived_at)',
-            ['account_id' => $accountId, 'post_id' => $postId, 'archived_at' => $archivedAt],
-        );
-
-        return ['post_id' => $postId, 'archived_at' => $archivedAt];
+        return [
+            'post_id' => $post->id,
+            'archived_at' => $post->archivedAt === null
+                ? Time::format($this->clock->now())
+                : Time::format($post->archivedAt),
+        ];
     }
 
     /**
@@ -114,11 +102,28 @@ final class Archives
             throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
 
-        $removed = $this->db->execute(
-            'DELETE FROM archived_post WHERE account_id = :account_id AND post_id = :post_id',
-            ['account_id' => $accountId, 'post_id' => $postId],
+        $row = $this->db->fetchOne(
+            'SELECT author_id, archived_at FROM social_post WHERE id = :id AND deleted_at IS NULL',
+            ['id' => $postId],
         );
+        if ($row === null) {
+            return ['post_id' => $postId, 'restored' => false];
+        }
+        if ((string) $row['author_id'] !== $accountId) {
+            throw CommunityException::forbidden('Only your own posts can be restored.');
+        }
+        if ($row['archived_at'] === null) {
+            return ['post_id' => $postId, 'restored' => false];
+        }
 
-        return ['post_id' => $postId, 'restored' => $removed > 0];
+        try {
+            $this->posts->unarchive($accountId, $postId);
+        } catch (PostNotFoundException) {
+            return ['post_id' => $postId, 'restored' => false];
+        } catch (PostAccessDeniedException) {
+            throw CommunityException::forbidden('Only your own posts can be restored.');
+        }
+
+        return ['post_id' => $postId, 'restored' => true];
     }
 }

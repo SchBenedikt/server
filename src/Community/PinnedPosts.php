@@ -9,33 +9,32 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Post\PostAccessDeniedException;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
-use AlohaSocial\Core\Domain\Post\Visibility;
-use AlohaSocial\Core\Platform\Clock\Clock;
+use AlohaSocial\Core\Domain\Post\PostPin;
 use AlohaSocial\Core\Platform\Db\Connection;
-use AlohaSocial\Core\Service\PostService;
-use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Core\Service\PinService;
+use AlohaSocial\Core\Service\ValidationException;
 
 use function array_map;
-use function is_string;
 use function trim;
 
 /**
  * Own posts an account keeps at the top of its profile.
  *
- * Only the author can pin, only a visible (non-direct) post can be pinned,
- * and the list is bounded so a profile cannot grow an endless header. The
- * service never changes the post itself: a pin is a private host marker that
- * disappears when the post or the pin is removed.
+ * Pins live in the core's `social_post_pin` table, which is also what the
+ * ActivityPub `featured` collection reads. The host route stays a thin adapter
+ * around PinService, so pinning in the UI immediately changes what remote
+ * servers and core API clients see. A deleted or archived post is filtered by
+ * the core when it builds featured; a stale row is harmless.
  */
 final class PinnedPosts
 {
-    public const MAX_PINS = 10;
+    public const MAX_PINS = PostPin::MAX_PINS;
 
     public function __construct(
         private readonly Connection $db,
-        private readonly Clock $clock,
-        private readonly PostService $posts,
+        private readonly PinService $pins,
     ) {
     }
 
@@ -45,16 +44,16 @@ final class PinnedPosts
     public function forAccount(string $accountId): array
     {
         $rows = $this->db->fetchAll(
-            'SELECT post_id, position, created_at FROM pinned_post WHERE account_id = :account_id'
-            . ' ORDER BY position ASC, created_at ASC',
-            ['account_id' => $accountId],
+            'SELECT post_id, position, pinned_at FROM social_post_pin WHERE owner_id = :owner_id'
+            . ' ORDER BY position ASC',
+            ['owner_id' => $accountId],
         );
 
         return array_map(
             static fn (array $row): array => [
                 'post_id' => (string) $row['post_id'],
                 'position' => (int) $row['position'],
-                'pinned_at' => (string) $row['created_at'],
+                'pinned_at' => (string) $row['pinned_at'],
             ],
             $rows,
         );
@@ -71,8 +70,8 @@ final class PinnedPosts
     public function isPinned(string $accountId, string $postId): bool
     {
         return $this->db->fetchOne(
-            'SELECT post_id FROM pinned_post WHERE account_id = :account_id AND post_id = :post_id',
-            ['account_id' => $accountId, 'post_id' => $postId],
+            'SELECT post_id FROM social_post_pin WHERE owner_id = :owner_id AND post_id = :post_id',
+            ['owner_id' => $accountId, 'post_id' => $postId],
         ) !== null;
     }
 
@@ -87,47 +86,14 @@ final class PinnedPosts
         }
 
         try {
-            $post = $this->posts->get($postId);
+            $this->pins->pin($accountId, $postId);
         } catch (PostNotFoundException) {
             throw CommunityException::notFound('This post no longer exists.');
-        }
-
-        if ($post->authorId !== $accountId) {
+        } catch (PostAccessDeniedException) {
             throw CommunityException::forbidden('Only your own posts can be pinned.');
+        } catch (ValidationException $exception) {
+            throw CommunityException::invalid($exception->getMessage(), $exception->fields());
         }
-
-        if ($post->visibility === Visibility::Direct) {
-            throw CommunityException::invalid(
-                'Direct messages cannot be pinned.',
-                ['post_id' => 'Choose a public post.'],
-            );
-        }
-
-        if ($this->isPinned($accountId, $postId)) {
-            return ['post_id' => $postId, 'pinned' => true, 'pins' => $this->idsFor($accountId)];
-        }
-
-        $count = (int) $this->db->fetchValue(
-            'SELECT COUNT(*) FROM pinned_post WHERE account_id = :account_id',
-            ['account_id' => $accountId],
-        );
-        if ($count >= self::MAX_PINS) {
-            throw CommunityException::invalid(
-                'You can pin at most ' . self::MAX_PINS . '  posts.',
-                ['post_id' => 'Unpin another post first.'],
-            );
-        }
-
-        $this->db->execute(
-            'INSERT INTO pinned_post (account_id, post_id, position, created_at)'
-            . ' VALUES (:account_id, :post_id, :position, :created_at)',
-            [
-                'account_id' => $accountId,
-                'post_id' => $postId,
-                'position' => $count,
-                'created_at' => Time::format($this->clock->now()),
-            ],
-        );
 
         return ['post_id' => $postId, 'pinned' => true, 'pins' => $this->idsFor($accountId)];
     }
@@ -142,10 +108,7 @@ final class PinnedPosts
             throw CommunityException::invalid('The post is missing.', ['post_id' => 'Please choose a post.']);
         }
 
-        $this->db->execute(
-            'DELETE FROM pinned_post WHERE account_id = :account_id AND post_id = :post_id',
-            ['account_id' => $accountId, 'post_id' => $postId],
-        );
+        $this->pins->unpin($accountId, $postId);
 
         return ['post_id' => $postId, 'pinned' => false, 'pins' => $this->idsFor($accountId)];
     }

@@ -309,7 +309,9 @@ foreach ($required as $extension) {
         $missing[] = $extension;
     }
 }
-if (!extension_loaded("pdo_sqlite") && !extension_loaded("pdo_pgsql")) {
+$drivers = PDO::getAvailableDrivers();
+if (!extension_loaded("pdo_sqlite") && !in_array("sqlite", $drivers, true)
+    && !extension_loaded("pdo_pgsql") && !in_array("pgsql", $drivers, true)) {
     $missing[] = "pdo_sqlite or pdo_pgsql";
 }
 echo implode(" ", $missing);
@@ -586,11 +588,11 @@ if [ -n "$DB_DSN" ]; then
             if [ -z "$sqlite_dsn_path" ] || [ "$sqlite_dsn_path" = ":memory:" ]; then
                 fail "the installer needs a file-backed SQLite DSN, not '${DB_DSN}'"
             fi
-            php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);' \
+            php -r 'exit(in_array("sqlite", PDO::getAvailableDrivers(), true) ? 0 : 1);' \
                 || fail "the configured DSN is SQLite but pdo_sqlite is not installed"
             ;;
         pgsql:*)
-            php -r 'exit(extension_loaded("pdo_pgsql") ? 0 : 1);' \
+            php -r 'exit(in_array("pgsql", PDO::getAvailableDrivers(), true) ? 0 : 1);' \
                 || fail "the configured DSN is PostgreSQL but pdo_pgsql is not installed"
             ;;
         *)
@@ -606,11 +608,11 @@ case "$effective_database_dsn" in
         if [ -z "$effective_sqlite_path" ] || [ "$effective_sqlite_path" = ':memory:' ]; then
             fail "the installer needs a file-backed SQLite DSN, not '${effective_database_dsn}'"
         fi
-        php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);' \
+        php -r 'exit(in_array("sqlite", PDO::getAvailableDrivers(), true) ? 0 : 1);' \
             || fail "the configured DSN is SQLite but pdo_sqlite is not installed"
         ;;
     pgsql:*)
-        php -r 'exit(extension_loaded("pdo_pgsql") ? 0 : 1);' \
+        php -r 'exit(in_array("pgsql", PDO::getAvailableDrivers(), true) ? 0 : 1);' \
             || fail "the configured DSN is PostgreSQL but pdo_pgsql is not installed"
         ;;
     *)
@@ -962,7 +964,7 @@ case "$dsn" in
         fi
         ;;
     pgsql:*)
-        php -r 'exit(extension_loaded("pdo_pgsql") ? 0 : 1);' \
+        php -r 'exit(in_array("pgsql", PDO::getAvailableDrivers(), true) ? 0 : 1);' \
             || fail "the configured DSN is PostgreSQL but pdo_pgsql is not installed"
         ;;
     *)

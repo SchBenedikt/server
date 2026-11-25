@@ -42,10 +42,14 @@ final class LiveUpdates
 
     public const MAX_LOOKBACK_SECONDS = 1800;
 
+    private readonly SocialGraph $graph;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
+        ?SocialGraph $graph = null,
     ) {
+        $this->graph = $graph ?? new SocialGraph($db);
     }
 
     /**
@@ -68,19 +72,14 @@ final class LiveUpdates
             $start = $floor;
         }
 
-        $followed = 'SELECT actor_id FROM social_following'
-            . " WHERE local_user_id = :follower_main AND state = 'accepted'"
-            . ' UNION SELECT subject_did FROM ' . AtprotoFollowSchema::TABLE
-            . " WHERE local_user_id = :follower_atproto AND state = 'active'";
+        $localFollowed = $this->graph->localFollowingSubquery($accountId, 'actor_id', 'live_local');
 
         // Each statement gets exactly its own parameters: PDO rejects a
         // parameter set that names placeholders the statement does not use.
-        $localParameters = [
+        $localParameters = array_merge([
             'since' => $start,
             'viewer' => $accountId,
-            'follower_main' => $accountId,
-            'follower_atproto' => $accountId,
-        ];
+        ], $localFollowed['params']);
         $remoteParameters = [
             'remote_since' => $start,
             'remote_follower_main' => $accountId,
@@ -91,7 +90,7 @@ final class LiveUpdates
             'SELECT id FROM social_post'
             . ' WHERE published_at > :since AND deleted_at IS NULL'
             . " AND visibility IN ('public', 'unlisted')"
-            . ' AND (author_id = :viewer OR author_id IN (' . $followed . '))'
+            . ' AND (author_id = :viewer OR author_id IN (' . $localFollowed['sql'] . '))'
             . ' ORDER BY published_at ASC LIMIT ' . self::MAX_ITEMS,
             $localParameters,
         );
@@ -109,8 +108,10 @@ final class LiveUpdates
         );
 
         $deletedLocal = $this->db->fetchAll(
-            'SELECT id FROM social_post WHERE deleted_at > :since LIMIT ' . self::MAX_ITEMS,
-            ['since' => $start],
+            'SELECT id FROM social_post WHERE deleted_at > :since'
+            . ' AND (author_id = :viewer OR author_id IN (' . $localFollowed['sql'] . '))'
+            . ' LIMIT ' . self::MAX_ITEMS,
+            array_merge(['since' => $start, 'viewer' => $accountId], $localFollowed['params']),
         );
         $deletedRemote = $this->db->fetchAll(
             'SELECT activity_id FROM social_remote_post WHERE deleted_at > :since LIMIT ' . self::MAX_ITEMS,

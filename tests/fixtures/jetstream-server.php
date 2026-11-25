@@ -26,6 +26,10 @@ if ($server === false) {
     exit(1);
 }
 
+// The test waits for this line instead of sleeping for an arbitrary time.
+fwrite(STDOUT, "ready\n");
+fflush(STDOUT);
+
 $messages = [
     // A followed account creates a post.
     json_encode([

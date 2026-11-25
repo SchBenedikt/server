@@ -102,6 +102,14 @@ final class PinnedPostTest extends TestCase
         self::assertSame(201, $pinned->status);
         self::assertTrue($this->decoded($pinned)['pin']['pinned']);
         self::assertSame([$first], $this->decoded($pinned)['pin']['pins']);
+        self::assertSame(
+            [$first],
+            array_map(
+                static fn (\AlohaSocial\Core\Domain\Post\Post $post): string => $post->id,
+                $this->server->runtime->app->pins?->featuredPosts('alice') ?? [],
+            ),
+            'The ActivityPub featured collection must see the same pin.',
+        );
 
         $this->server->json(
             'POST',
@@ -204,7 +212,7 @@ final class PinnedPostTest extends TestCase
         self::assertSame(404, $missing->status);
     }
 
-    public function testDeletingAPostLeavesAStalePinHarmless(): void
+    public function testDeletingAPostRemovesItsPin(): void
     {
         $post = $this->post('alice', 'Wird gelöscht');
         $this->server->runtime->pinnedPosts->pin('alice', $post);
@@ -215,6 +223,7 @@ final class PinnedPostTest extends TestCase
         ]);
 
         self::assertSame(200, $list->status);
-        self::assertSame([$post], $this->decoded($list)['pins']);
+        self::assertSame([], $this->decoded($list)['pins']);
+        self::assertSame([], $this->server->runtime->app->pins?->featuredPosts('alice'));
     }
 }

@@ -9,7 +9,9 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
+use AlohaSocial\Core\Service\CreatePost;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationException;
 use AlohaSocial\Server\Migrations\MigrationRunner;
@@ -272,6 +274,60 @@ final class MigrationTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Add a host migration');
         \AlohaSocial\Server\Migrations\CoreSchemaFingerprint::assertCurrent($server->runtime->database);
+    }
+
+    public function testConsolidationCopiesLegacyPinsAndArchives(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $post = $server->runtime->app->posts->create(
+            new CreatePost('alice', 'Legacy post', Visibility::Public),
+        )->id;
+        $database = $server->runtime->database;
+
+        $database->execute(
+            'CREATE TABLE pinned_post ('
+            . ' account_id VARCHAR(64) NOT NULL,'
+            . ' post_id VARCHAR(64) NOT NULL,'
+            . ' position INTEGER NOT NULL DEFAULT 0,'
+            . ' created_at VARCHAR(20) NOT NULL,'
+            . ' PRIMARY KEY (account_id, post_id)'
+            . ')',
+        );
+        $database->execute(
+            'CREATE TABLE archived_post ('
+            . ' account_id VARCHAR(64) NOT NULL,'
+            . ' post_id VARCHAR(64) NOT NULL,'
+            . ' archived_at VARCHAR(20) NOT NULL,'
+            . ' PRIMARY KEY (account_id, post_id)'
+            . ')',
+        );
+        $database->execute(
+            "INSERT INTO pinned_post (account_id, post_id, position, created_at)
+             VALUES ('alice', :post, 0, '2026-11-24T12:00:00Z')",
+            ['post' => $post],
+        );
+        $database->execute(
+            "INSERT INTO archived_post (account_id, post_id, archived_at)
+             VALUES ('alice', :post, '2026-11-24T12:00:00Z')",
+            ['post' => $post],
+        );
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611280007'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611280007'], $runner->migrate());
+
+        self::assertSame(1, (int) $database->fetchValue(
+            'SELECT COUNT(*) FROM social_post_pin WHERE owner_id = :owner AND post_id = :post',
+            ['owner' => 'alice', 'post' => $post],
+        ));
+        self::assertSame('2026-11-24T12:00:00Z', (string) $database->fetchValue(
+            'SELECT archived_at FROM social_post WHERE id = :post',
+            ['post' => $post],
+        ));
+        self::assertSame(0, (int) $database->fetchValue(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('pinned_post', 'archived_post')",
+        ));
     }
 
     public function testChangedChecksumIsRejected(): void

@@ -292,9 +292,11 @@ their existing public ActivityPub/Bluesky lookup.
 Account export and deletion are available in Settings. Export combines
 host-owned account data with the Core archive, including available media
 blobs. The host export includes profile email, pending follow requests,
-featured tags, stories and views, announcements, collections, drafts, archived
-posts, Kokua posts and replies, and recommendation feedback. Password hashes,
-session tokens, OAuth secrets, and private signing keys are never exported.
+featured tags, stories and views, announcements, reading lists, drafts, pinned
+and archived posts, Kokua posts and replies, recommendation feedback and the
+implicit For You impression log (seen time, dwell time and count). Password
+hashes, session tokens, OAuth secrets, and private signing keys are never
+exported.
 
 Deletion asks for a second confirmation, revokes local and AT Protocol
 credentials, removes host-owned account content and linked credentials, and
@@ -311,3 +313,18 @@ request can resume cleanup after an interrupted attempt. Operator-managed web
 server and proxy logs follow their own retention policy. Remote copies and
 remote AT Protocol data are outside this instance's control and may remain on
 peer servers.
+
+## Host-only reading lists and text stories
+
+Two community surfaces are deliberately local to this host and are not the
+core's ActivityPub media collections or Pixelfed stories. **Reading lists**
+(`collection` / `collection_item`) are private or owner-published lists of any
+post the owner can read; they power `#/collections` and `#/c/:id` only. The
+core's `social_media_collection` tables and `/api/v1/collections` expose media
+albums and `/@handle/collections`; the two models are not advertised as the
+same object. **Text stories** (`story` / `story_seen`) are 24-hour local
+stories with a colour background, visible to the author and local followers.
+They are not federated. The core's media stories (`social_story`) remain a
+separate Pixelfed-compatible surface. This boundary is intentional: a future
+move to media stories or federated reading lists needs a data migration, not
+a second hidden write path.

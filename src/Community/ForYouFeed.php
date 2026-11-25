@@ -88,12 +88,16 @@ final class ForYouFeed
 
     private readonly FeedInterests $interests;
 
+    private readonly SocialGraph $graph;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
         ?FeedInterests $interests = null,
+        ?SocialGraph $graph = null,
     ) {
         $this->interests = $interests ?? new FeedInterests($this->db, $this->clock);
+        $this->graph = $graph ?? new SocialGraph($this->db);
     }
 
     /**
@@ -833,23 +837,10 @@ final class ForYouFeed
      */
     private function followedAuthors(string $accountId): array
     {
-        $rows = $this->db->fetchAll(
-            'SELECT actor_id AS id FROM social_following'
-            . " WHERE local_user_id = :account_id AND state = 'accepted'"
-            . ' UNION SELECT subject_did AS id FROM ' . AtprotoFollowSchema::TABLE
-            . " WHERE local_user_id = :atproto_account_id AND state = 'active'",
-            ['account_id' => $accountId, 'atproto_account_id' => $accountId],
-        );
-
-        $result = [];
-        foreach ($rows as $row) {
-            $actor = (string) ($row['id'] ?? '');
-            if ($actor !== '') {
-                $result[$actor] = true;
-            }
-        }
-
-        return $result;
+        // Local posts carry the local handle as `author_id`; remote posts use
+        // the actor URL or AT Protocol DID. The graph merges both id spaces so
+        // a local follow gets the same ranking bonus as a remote follow.
+        return $this->graph->followedAuthorIds($accountId);
     }
 
     /**

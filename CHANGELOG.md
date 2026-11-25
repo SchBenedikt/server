@@ -46,6 +46,39 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   tags it learned. The feed loads further pages while scrolling instead of
   waiting for a button.
 
+### Fixed
+
+- **Local follows in stories, live updates and For You:** a local follow is a
+  follower edge in `social_follower` with the follower's actor URL, not a
+  `social_following` row. Host queries that only read the remote table, or
+  compared actor URLs with local handles, made followed local accounts vanish
+  from the story bar and the live cursor and removed their For You bonus. A
+  shared `SocialGraph` now resolves both id spaces correctly.
+- **Pins and archives have one source of truth:** host pins moved from
+  `pinned_post` to the core's `social_post_pin`, so the UI and the ActivityPub
+  `featured` collection agree. Archives moved from `archived_post` to
+  `social_post.archived_at`, so core statuses, search and
+  `/api/v1/posts/archived` see the same state. Migration `202611280007` copies
+  existing valid rows and drops the duplicate tables.
+- **Complete account export:** export now includes core pins, archived posts
+  and the For You impressions (seen time, dwell time and count) that erasure
+  already deleted.
+- **Installer on statically built PHP:** the preflight and DSN checks accept
+  PDO drivers reported by `PDO::getAvailableDrivers()`, not only a separately
+  loadable `pdo_sqlite`/`pdo_pgsql` extension.
+- **Runnable test command:** `phpunit.xml` raises the test process limit to
+  512 MB, so the documented `composer test` no longer dies at PHP's 128 MB CLI
+  default while building many throwaway runtimes.
+
+### Changed
+
+- Reading lists (`collection`) and text stories (`story`) are documented as
+  host-local surfaces. They are not the core's ActivityPub media collections
+  or Pixelfed stories and do not pretend to be; a future migration would need
+  a real media/audience model.
+- The development and frontend guides now name the actual core line (`0.8.0`)
+  and the current server release instead of the stale `0.7.0`/`0.11.0` pair.
+
 ## [0.12.0] - 2026-11-18
 
 ### Added

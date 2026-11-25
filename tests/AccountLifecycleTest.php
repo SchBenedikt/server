@@ -257,9 +257,12 @@ final class AccountLifecycleTest extends TestCase
             . ' VALUES (:id, :account, :content, :created, :updated)',
             ['id' => 'draft-bob', 'account' => 'bob', 'content' => 'Bob draft', 'created' => $stamp, 'updated' => $stamp],
         );
+        $archivedPost = $server->runtime->app->posts->create(
+            new CreatePost('alice', 'Archived post', Visibility::Public),
+        )->id;
         $db->execute(
-            'INSERT INTO archived_post (account_id, post_id, archived_at) VALUES (:account, :post, :at)',
-            ['account' => 'alice', 'post' => 'post-archived', 'at' => $stamp],
+            'UPDATE social_post SET archived_at = :at WHERE id = :post',
+            ['post' => $archivedPost, 'at' => $stamp],
         );
         $db->execute(
             'INSERT INTO account_preference (account_id, updated_at) VALUES (:account, :updated)',
@@ -391,8 +394,15 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame(1, $payload['host_data_deleted']['mastodon_oauth_codes']);
         self::assertSame(1, $payload['host_data_deleted']['mastodon_oauth_tokens']);
         self::assertSame(1, $payload['host_data_deleted']['recommendation_snapshots']);
+        // Core erasure removes the post rows; the host cleanup must not leave
+        // an archived marker behind either way.
+        self::assertSame(0, $payload['host_data_deleted']['archived_posts']);
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM social_post WHERE id = :id AND archived_at IS NOT NULL',
+            ['id' => $archivedPost],
+        ));
         foreach ([
-            'draft', 'archived_post', 'account_preference', 'recommendation_feedback',
+            'draft', 'account_preference', 'recommendation_feedback',
             'featured_tag', 'collection', 'story', 'kokua',
         ] as $table) {
             self::assertSame(0, (int) $db->fetchValue(

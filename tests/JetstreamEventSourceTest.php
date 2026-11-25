@@ -22,12 +22,13 @@ use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
 use function fclose;
+use function fgets;
 use function proc_close;
 use function proc_open;
 use function proc_terminate;
+use function stream_set_timeout;
 use function strrpos;
 use function substr;
-use function usleep;
 
 /**
  * The Jetstream transport against a local relay fixture.
@@ -83,8 +84,7 @@ final class JetstreamEventSourceTest extends TestCase
         self::assertIsResource($process);
 
         try {
-            // Give the fixture a moment to bind its port.
-            usleep(350_000);
+            $this->waitForFixture($pipes);
 
             $source = new JetstreamEventSource(
                 'ws://127.0.0.1:' . $port . '/subscribe',
@@ -183,7 +183,7 @@ final class JetstreamEventSourceTest extends TestCase
         self::assertIsResource($process);
 
         try {
-            usleep(350_000);
+            $this->waitForFixture($pipes);
             $source = new JetstreamEventSource(
                 'ws://127.0.0.1:' . $port . '/subscribe',
                 $database,
@@ -231,7 +231,7 @@ final class JetstreamEventSourceTest extends TestCase
         self::assertIsResource($process);
 
         try {
-            usleep(350_000);
+            $this->waitForFixture($pipes);
             $source = new JetstreamEventSource(
                 'ws://127.0.0.1:' . $port . '/subscribe',
                 $database,
@@ -247,6 +247,19 @@ final class JetstreamEventSourceTest extends TestCase
             proc_terminate($process);
             @proc_close($process);
         }
+    }
+
+    /**
+     * The fixture prints `ready` after binding, so the test never races the
+     * process startup on a busy full-suite run.
+     *
+     * @param array<int, resource> $pipes
+     */
+    private function waitForFixture(array $pipes): void
+    {
+        self::assertArrayHasKey(1, $pipes);
+        stream_set_timeout($pipes[1], 5);
+        self::assertSame("ready\n", fgets($pipes[1]), 'The Jetstream fixture did not become ready.');
     }
 
     private function freePort(): int

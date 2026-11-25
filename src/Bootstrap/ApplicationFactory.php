@@ -76,6 +76,7 @@ use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
+use AlohaSocial\Server\Community\SocialGraph;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Auth\PasswordHasher;
@@ -183,6 +184,7 @@ final class ApplicationFactory
                 $externalAtprotoPublisher,
             );
         $preferences = new Preferences($database, $clock);
+        $socialGraph = new SocialGraph($database, $this->config->instanceUrl);
         $remoteActorProfiles = new RemoteActorProfiles($database, $remoteDirectory, $clock);
 
         // Inbound AT Protocol content arrives through a host-owned Jetstream
@@ -299,11 +301,11 @@ final class ApplicationFactory
             featuredTags: new FeaturedTags($database, $clock),
             trends: new Trends($database, $clock),
             memories: new Memories($database, $clock),
-            stories: new Stories($database, $clock),
+            stories: new Stories($database, $clock, $socialGraph),
             collections: new Collections($database, $clock, $app->posts),
             drafts: new Drafts($database, $clock),
             archives: new Archives($database, $clock, $app->posts),
-            forYou: new ForYouFeed($database, $clock),
+            forYou: new ForYouFeed($database, $clock, null, $socialGraph),
             remoteEngagement: new RemoteEngagement($database, $clock),
             remoteEngagementRefresher: new RemoteEngagementRefresher(
                 $database,
@@ -334,7 +336,7 @@ final class ApplicationFactory
                 $app->media,
                 $remoteActorProfiles,
             ),
-            liveUpdates: new LiveUpdates($database, $clock),
+            liveUpdates: new LiveUpdates($database, $clock, $socialGraph),
             preferences: $preferences,
             exports: new Exports($database, $clock, $preferences, $this->config),
             followRequests: new FollowRequests(
@@ -346,7 +348,10 @@ final class ApplicationFactory
                 $app->followRequests,
             ),
             postRevisions: new PdoPostRevisionRepository($database),
-            pinnedPosts: new PinnedPosts($database, $clock, $app->posts),
+            pinnedPosts: new PinnedPosts(
+                $database,
+                $app->pins ?? throw new RuntimeException('The core pin service is not available.'),
+            ),
             kokua: new KokuaBoard($database, $clock),
             setup: new SetupService(
                 $this->config,
