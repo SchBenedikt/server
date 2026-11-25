@@ -310,7 +310,9 @@ DID document points to this PDS, checks `com.atproto.server.describeServer`,
 and asks the public Bluesky AppView to resolve the handle and load the post.
 The final check demonstrates external relay/AppView indexing; local XRPC success
 alone does not. Pass a third argument with another AppView's XRPC base URL if
-you operate a separate integration target.
+you operate a separate integration target. Every destination must resolve only
+to public IP addresses; the check pins those addresses for each HTTPS request so
+DNS changes cannot redirect the connection to a private or local service.
 
 ## Inbound AT Protocol ingestion
 
