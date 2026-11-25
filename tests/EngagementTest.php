@@ -299,6 +299,46 @@ final class EngagementTest extends TestCase
         self::assertStringContainsString('post_id IN (', $tagQueries[0]);
     }
 
+    public function testForYouLimitsRepeatedAuthorsWhileOtherAuthorsAreAvailable(): void
+    {
+        $this->server->createAccount('carol', 'carol@example.test');
+        for ($postIndex = 0; $postIndex < 6; $postIndex++) {
+            $postId = $this->post('bob', 'Popular post ' . $postIndex);
+            for ($reply = 0; $reply < 8; $reply++) {
+                $this->server->runtime->app->posts->create(new CreatePost(
+                    authorId: 'carol',
+                    content: 'Reply ' . $reply,
+                    inReplyToId: $postId,
+                ));
+            }
+        }
+
+        for ($authorIndex = 0; $authorIndex < 9; $authorIndex++) {
+            $authorId = 'alt' . $authorIndex;
+            $this->server->createAccount($authorId, $authorId . '@example.test');
+            for ($postIndex = 0; $postIndex < 3; $postIndex++) {
+                $this->post($authorId, 'Alternative post ' . $postIndex);
+            }
+        }
+
+        $feed = $this->server->runtime->forYou->page('alice', 20);
+        $parameters = [];
+        $placeholders = [];
+        foreach (array_values($feed['posts']) as $index => $postId) {
+            $key = 'post_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+        $rows = $this->server->runtime->database->fetchAll(
+            'SELECT author_id FROM social_post WHERE id IN (' . implode(', ', $placeholders) . ')',
+            $parameters,
+        );
+        $authorCounts = array_count_values(array_column($rows, 'author_id'));
+
+        self::assertCount(20, $feed['posts']);
+        self::assertLessThanOrEqual(2, $authorCounts['bob'] ?? 0);
+    }
+
     public function testForYouCursorKeepsTheRankedOrderWhenTheFeedChanges(): void
     {
         for ($index = 0; $index < 6; $index++) {
