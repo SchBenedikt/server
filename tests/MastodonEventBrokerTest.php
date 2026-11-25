@@ -166,6 +166,52 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertStringContainsString("event: update\ndata: {\"id\":", $chunks[0]);
     }
 
+    public function testPublicLocalStreamingExcludesRemotePublicStatuses(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $localPost = $server->runtime->app->posts->create(new CreatePost('alice', 'local status'));
+        $broker = $server->runtime->app->eventBroker;
+        self::assertNotNull($broker);
+        (new PdoRemotePostRepository($server->runtime->database))->insert(new RemotePost(
+            activityId: 'https://remote.example/activities/1',
+            objectId: 'https://remote.example/posts/1',
+            actorId: 'https://remote.example/users/remy',
+            kind: RemotePostKind::Post,
+            content: 'remote status must not be in the local stream',
+            contentWarning: null,
+            publishedAt: new \DateTimeImmutable('2026-11-25T00:00:00Z'),
+            objectAuthorId: 'https://remote.example/users/remy',
+        ));
+        $broker->publish(new StreamEventDraft(
+            name: 'status.created',
+            audience: StreamAudience::Public,
+            actorId: 'https://remote.example/users/remy',
+            recipientIds: ['alice'],
+            payload: ['status_id' => 'https://remote.example/posts/1'],
+            occurredAt: '2026-11-25T00:00:00Z',
+        ));
+
+        $token = $this->issueToken($server, 'alice');
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'public:local'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        $frames = iterator_to_array($response->chunks(), false);
+        $body = implode('', $frames);
+
+        self::assertCount(1, $frames);
+        self::assertStringContainsString((string) $localPost->id, $body);
+        self::assertStringNotContainsString('https://remote.example/posts/1', $body);
+    }
+
     public function testStreamingEmitsDeleteFrameForRemovedPublicStatus(): void
     {
         $server = new TestServer(['mastodon_api' => true]);
