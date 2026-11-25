@@ -339,6 +339,39 @@ final class EngagementTest extends TestCase
         self::assertLessThanOrEqual(2, $authorCounts['bob'] ?? 0);
     }
 
+    public function testForYouLimitsHashtagDominanceWhileOtherTagsAreAvailable(): void
+    {
+        for ($index = 0; $index < 12; $index++) {
+            $sameTagAuthor = 'same' . $index;
+            $otherTagAuthor = 'other' . $index;
+            $this->server->createAccount($sameTagAuthor, $sameTagAuthor . '@example.test');
+            $this->server->createAccount($otherTagAuthor, $otherTagAuthor . '@example.test');
+            $this->post($sameTagAuthor, 'Shared conversation #sametopic');
+            $this->post($otherTagAuthor, 'Different topic #topic' . $index);
+        }
+
+        $feed = $this->server->runtime->forYou->page('alice', 20);
+        $parameters = [];
+        $placeholders = [];
+        foreach (array_values($feed['posts']) as $index => $postId) {
+            $key = 'post_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+        $rows = $this->server->runtime->database->fetchAll(
+            'SELECT hashtag, COUNT(*) AS post_count FROM social_post_hashtag WHERE post_id IN ('
+            . implode(', ', $placeholders) . ') GROUP BY hashtag',
+            $parameters,
+        );
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[(string) $row['hashtag']] = (int) $row['post_count'];
+        }
+
+        self::assertCount(20, $feed['posts']);
+        self::assertLessThanOrEqual(8, $counts['sametopic'] ?? 0);
+    }
+
     public function testForYouCursorKeepsTheRankedOrderWhenTheFeedChanges(): void
     {
         for ($index = 0; $index < 6; $index++) {

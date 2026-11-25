@@ -40,10 +40,10 @@ use function usort;
  * The core owns the social graph, the engagement rows and the cache of remote
  * posts. This host service only reads them: it scores recent public posts by
  * engagement, freshness, followed authors and followed hashtags, then removes
- * muted and blocked authors and damps repeated authors so one account cannot
- * fill the page. Remote candidates come from accepted ActivityPub and active
- * AT Protocol follows, so the feed reaches connected networks without turning
- * into a public firehose.
+ * muted and blocked authors, then spreads authors and primary hashtags so a
+ * single account or topic cannot fill the page. Remote candidates come from
+ * accepted ActivityPub and active AT Protocol follows, so the feed reaches
+ * connected networks without turning into a public firehose.
  *
  * The rank is deterministic for a given database state, which keeps cursor
  * paging stable within one session. No remote call is made, so the feed still
@@ -62,6 +62,12 @@ final class ForYouFeed
     private const AUTHOR_DIVERSITY_WINDOW = 20;
 
     private const AUTHOR_DIVERSITY_LIMIT = 2;
+
+    private const TAG_DIVERSITY_WINDOW = 20;
+
+    private const TAG_DIVERSITY_LIMIT = 8;
+
+    private const TAG_SNAPSHOT_LIMIT = 10;
 
     public function __construct(
         private readonly Connection $db,
@@ -93,16 +99,13 @@ final class ForYouFeed
 
         $followedAuthors = $this->followedAuthors($accountId);
         $followedTags = $this->followedTags($accountId);
-        $tagsByPost = [];
-        if ($followedTags !== []) {
-            $localPostIds = [];
-            foreach ($candidates as $candidate) {
-                if ((int) ($candidate['remote'] ?? 0) !== 1) {
-                    $localPostIds[] = (string) $candidate['id'];
-                }
+        $localPostIds = [];
+        foreach ($candidates as $candidate) {
+            if ((int) ($candidate['remote'] ?? 0) !== 1) {
+                $localPostIds[] = (string) $candidate['id'];
             }
-            $tagsByPost = $this->postTagsForPosts($localPostIds);
         }
+        $tagsByPost = $this->postTagsForPosts($localPostIds);
         $feedback = $this->feedback($accountId);
         $now = $this->clock->now()->getTimestamp();
 
@@ -151,6 +154,7 @@ final class ForYouFeed
             $scored[] = [
                 'id' => $postId,
                 'author_id' => $authorId,
+                'tags' => $tags,
                 'score' => $score,
                 'reason' => $reason,
             ];
@@ -179,7 +183,7 @@ final class ForYouFeed
             return $b['score'] <=> $a['score'];
         });
 
-        $scored = $this->spreadAuthors($scored);
+        $scored = $this->spreadAuthorsAndTags($scored);
 
         return $this->rankedPage('for-you', $accountId, $scored, $limit, $offset);
     }
@@ -231,6 +235,11 @@ final class ForYouFeed
             ['since' => $since],
         );
 
+        $tagsByPost = $this->postTagsForPosts(array_map(
+            static fn (array $candidate): string => (string) $candidate['id'],
+            $local,
+        ));
+
         $scored = [];
         foreach (array_merge($local, $remote) as $candidate) {
             $postId = (string) $candidate['id'];
@@ -240,10 +249,14 @@ final class ForYouFeed
             $engagement = $remotePost ? 0 : (int) $candidate['favourites'] * 2
                 + (int) $candidate['boosts'] * 3
                 + (int) $candidate['replies'] * 1.5;
+            $tags = $remotePost
+                ? $this->tagsFromText((string) ($candidate['content'] ?? ''))
+                : ($tagsByPost[$postId] ?? []);
 
             $scored[] = [
                 'id' => $postId,
                 'author_id' => (string) $candidate['author_id'],
+                'tags' => $tags,
                 'score' => log(1 + $engagement) * 4.0 + max(0, 4.0 * (1 - $ageHours / 168)),
                 'reason' => $remotePost
                     ? 'Recent from federated networks'
@@ -270,26 +283,77 @@ final class ForYouFeed
         }
         usort($scored, $compare);
 
-        $scored = $this->spreadAuthors($scored);
+        $scored = $this->spreadAuthorsAndTags($scored);
 
         return $this->rankedPage('trending', null, $scored, $limit, $offset);
     }
 
     /**
-     * @param list<array{id:string,author_id:string,score:float,reason:string}> $scored
-     * @return list<array{id:string,author_id:string,score:float,reason:string}>
+     * @param list<array{id:string,author_id:string,tags?:list<string>,score:float,reason:string}> $scored
+     * @return list<array{id:string,author_id:string,tags?:list<string>,score:float,reason:string}>
      */
-    private function spreadAuthors(array $scored): array
+    private function spreadAuthorsAndTags(array $scored): array
     {
         $spread = [];
         while ($scored !== []) {
             $recent = array_slice($spread, -(self::AUTHOR_DIVERSITY_WINDOW - 1));
             $authorCounts = array_count_values(array_column($recent, 'author_id'));
+            $recentTags = array_filter(array_map(
+                static fn (array $entry): string => (string) (($entry['tags'][0] ?? '')),
+                array_slice($spread, -(self::TAG_DIVERSITY_WINDOW - 1)),
+            ));
+            $tagCounts = array_count_values($recentTags);
+            $snapshotTagCounts = array_count_values(array_filter(array_map(
+                static fn (array $entry): string => (string) (($entry['tags'][0] ?? '')),
+                $spread,
+            )));
+            $hasAuthorAlternative = false;
+            $hasTagAlternative = false;
+            foreach ($scored as $entry) {
+                if (($authorCounts[$entry['author_id']] ?? 0) < self::AUTHOR_DIVERSITY_LIMIT) {
+                    $hasAuthorAlternative = true;
+                }
+                $tag = (string) ($entry['tags'][0] ?? '');
+                if ($tag === ''
+                    || (($tagCounts[$tag] ?? 0) < self::TAG_DIVERSITY_LIMIT
+                        && ($snapshotTagCounts[$tag] ?? 0) < self::TAG_SNAPSHOT_LIMIT)
+                ) {
+                    $hasTagAlternative = true;
+                }
+            }
+
             $pick = null;
             foreach ($scored as $index => $entry) {
-                if (($authorCounts[$entry['author_id']] ?? 0) < self::AUTHOR_DIVERSITY_LIMIT) {
+                $authorAvailable = !$hasAuthorAlternative
+                    || ($authorCounts[$entry['author_id']] ?? 0) < self::AUTHOR_DIVERSITY_LIMIT;
+                $tag = (string) ($entry['tags'][0] ?? '');
+                $tagAvailable = !$hasTagAlternative || $tag === ''
+                    || (($tagCounts[$tag] ?? 0) < self::TAG_DIVERSITY_LIMIT
+                        && ($snapshotTagCounts[$tag] ?? 0) < self::TAG_SNAPSHOT_LIMIT);
+                if ($authorAvailable && $tagAvailable) {
                     $pick = $index;
                     break;
+                }
+            }
+
+            // Preserve author diversity when the two limits cannot both be
+            // satisfied; every candidate remains in the ranked result.
+            if ($pick === null && $hasAuthorAlternative) {
+                foreach ($scored as $index => $entry) {
+                    if (($authorCounts[$entry['author_id']] ?? 0) < self::AUTHOR_DIVERSITY_LIMIT) {
+                        $pick = $index;
+                        break;
+                    }
+                }
+            }
+            if ($pick === null && $hasTagAlternative) {
+                foreach ($scored as $index => $entry) {
+                    $tag = (string) ($entry['tags'][0] ?? '');
+                    if ($tag === '' || (($tagCounts[$tag] ?? 0) < self::TAG_DIVERSITY_LIMIT
+                        && ($snapshotTagCounts[$tag] ?? 0) < self::TAG_SNAPSHOT_LIMIT)) {
+                        $pick = $index;
+                        break;
+                    }
                 }
             }
 
