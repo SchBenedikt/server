@@ -433,6 +433,44 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertStringContainsString("event: notification\ndata: {\"id\":", implode('', $chunks));
     }
 
+    public function testNotificationStreamReplaysItemsOlderThanTheLatestFortyNotifications(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $server->createAccount('bob');
+        for ($index = 0; $index < 45; $index++) {
+            $post = $server->runtime->app->posts->create(new CreatePost('bob', 'Mention target ' . $index));
+            $server->runtime->app->notifications?->recordMention('alice', 'bob', $post->id);
+        }
+
+        $oldest = $server->runtime->database->fetchAll(
+            'SELECT id FROM social_notification WHERE recipient_id = :recipient ORDER BY created_at, id LIMIT 5',
+            ['recipient' => 'alice'],
+        );
+        foreach ($oldest as $row) {
+            $server->runtime->database->execute(
+                'UPDATE social_notification SET created_at = :created_at WHERE id = :id',
+                ['created_at' => '2026-11-01T00:00:00Z', 'id' => $row['id']],
+            );
+        }
+
+        $token = $this->issueToken($server, 'alice', ['read:notifications']);
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'user:notification'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:notifications'],
+        );
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        $frames = iterator_to_array($response->chunks(), false);
+
+        self::assertSame(45, substr_count(implode('', $frames), 'event: notification'));
+    }
+
     private function issueToken(TestServer $server, string $accountId, array $scopes = ['read:statuses']): string
     {
         $token = bin2hex(random_bytes(32));
