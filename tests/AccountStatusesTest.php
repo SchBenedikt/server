@@ -176,6 +176,58 @@ final class AccountStatusesTest extends TestCase
         self::assertNotContains($postId, array_column($this->decoded($hidden)['posts'], 'object_id'));
     }
 
+    public function testHomeTimelineFillsPastAFullBatchOfBlockedLocalBoosts(): void
+    {
+        $this->server->createAccount('carol', 'carol@example.test');
+        $this->server->createAccount('dave', 'dave@example.test');
+        $visiblePostId = $this->post('dave', 'older visible boost');
+        $visibleBoost = $this->server->runtime->app->boosts?->boost('carol', $visiblePostId);
+        self::assertNotNull($visibleBoost);
+        $this->server->runtime->database->execute(
+            'UPDATE social_boost SET created_at = :created_at WHERE id = :id',
+			['created_at' => '2026-01-01T00:00:00Z', 'id' => $visibleBoost->boost->id],
+        );
+
+        for ($index = 0; $index < 20; ++$index) {
+            $postId = $this->post('bob', 'blocked boost ' . $index);
+            $boost = $this->server->runtime->app->boosts?->boost('carol', $postId);
+            self::assertNotNull($boost);
+            $this->server->runtime->database->execute(
+                'UPDATE social_boost SET created_at = :created_at WHERE id = :id',
+                [
+					'created_at' => sprintf('2026-01-01T00:00:%02dZ', $index + 1),
+                    'id' => $boost->boost->id,
+                ],
+            );
+        }
+
+        $alice = $this->server->signIn('alice');
+        $follow = $this->server->json(
+            'POST',
+            '/api/v1/accounts/carol/follow',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(200, $follow->status, $follow->body);
+
+        $block = $this->server->json(
+            'POST',
+            '/api/v1/blocks',
+            ['actor' => 'http://localhost:3000/@bob'],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(201, $block->status, $block->body);
+
+        $home = $this->server->send('GET', '/api/v1/timelines/home', [
+            'cookies' => $alice['cookies'],
+            'query' => ['limit' => '1'],
+        ]);
+        self::assertSame(200, $home->status, $home->body);
+        self::assertSame($visiblePostId, $this->decoded($home)['posts'][0]['object_id'] ?? null);
+    }
+
     public function testFollowingFeedPagesLocalPostsWithoutRepeatingOrSkippingThem(): void
     {
         for ($index = 0; $index < 9; $index++) {
