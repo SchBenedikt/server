@@ -174,7 +174,10 @@ final class FederationController
         }
 
         $identity = $this->runtime->pdsRepository->identityByHandle($handle);
-        if ($identity === null) {
+        if ($identity === null || $this->runtime->database->fetchValue(
+            'SELECT 1 FROM account WHERE id = :account AND disabled_at IS NULL',
+            ['account' => $identity->localUserId],
+        ) === null) {
             return $this->notFound();
         }
 
