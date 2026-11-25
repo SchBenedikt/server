@@ -165,6 +165,16 @@ final class MastodonStreamingController
                     continue;
                 }
 
+                if ($event->name === 'status.deleted') {
+                    try {
+                        $json = json_encode($statusId, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+                        yield 'id: ' . $this->sseField($event->id) . "\nevent: delete\ndata: " . $json . "\n\n";
+                    } catch (Throwable) {
+                        yield 'id: ' . $this->sseField($event->id) . "\n\n";
+                    }
+                    continue;
+                }
+
                 try {
                     $status = $this->runtime->app->mastodon?->status($statusId, $userId);
                 } catch (PostNotFoundException|MastodonRequestException) {

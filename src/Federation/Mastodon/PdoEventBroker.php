@@ -93,11 +93,11 @@ final class PdoEventBroker implements EventBroker
         $channels = [];
         foreach ($subscription->channels as $channel) {
             $channels[$channel] = match ($channel) {
-                'public', 'public:local' => "e.event_name = 'status.created' AND e.audience = 'public'",
-                'home' => "e.event_name = 'status.created' AND e.audience IN ('public', 'followers') AND recipient.account_id IS NOT NULL",
+                'public', 'public:local' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'public'",
+                'home' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience IN ('public', 'followers') AND recipient.account_id IS NOT NULL",
                 'user' => 'e.actor_id = :actor_user_id',
                 'user:notification' => "e.event_name = 'notification.created' AND recipient.account_id IS NOT NULL",
-                'direct' => "e.event_name = 'status.created' AND e.audience = 'direct' AND recipient.account_id IS NOT NULL",
+                'direct' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'direct' AND recipient.account_id IS NOT NULL",
                 default => throw new InvalidArgumentException('This Mastodon stream channel is not available yet.'),
             };
         }

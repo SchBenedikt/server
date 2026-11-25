@@ -142,6 +142,61 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertStringContainsString("event: update\ndata: {\"id\":", $chunks[0]);
     }
 
+    public function testStreamingEmitsDeleteFrameForRemovedPublicStatus(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $post = $server->runtime->app->posts->create(new CreatePost('alice', 'remove me'));
+        $broker = $server->runtime->app->eventBroker;
+        self::assertNotNull($broker);
+        $created = $broker->read(new StreamSubscription('alice', ['public']), null, 10)[0];
+        $server->runtime->app->posts->delete('alice', $post->id);
+        $token = $this->issueToken($server, 'alice');
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'public'],
+            headers: ['Authorization' => 'Bearer ' . $token, 'Last-Event-ID' => $created->id],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        $frames = iterator_to_array($response->chunks(), false);
+        self::assertCount(1, $frames);
+        self::assertStringContainsString("event: delete\ndata: \"{$post->id}\"", $frames[0]);
+    }
+
+    public function testStreamingRendersTheCurrentStatusAfterAnEdit(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $post = $server->runtime->app->posts->create(new CreatePost('alice', 'before'));
+        $broker = $server->runtime->app->eventBroker;
+        self::assertNotNull($broker);
+        $created = $broker->read(new StreamSubscription('alice', ['public']), null, 10)[0];
+        $server->runtime->app->posts->edit('alice', $post->id, new \AlohaSocial\Core\Service\UpdatePost(content: 'after'));
+        $token = $this->issueToken($server, 'alice');
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'public'],
+            headers: ['Authorization' => 'Bearer ' . $token, 'Last-Event-ID' => $created->id],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        $frames = iterator_to_array($response->chunks(), false);
+        self::assertCount(1, $frames);
+        self::assertStringContainsString('event: update', $frames[0]);
+        self::assertStringContainsString('after', $frames[0]);
+    }
+
     public function testStreamingStopsWhenOAuthTokenIsRevoked(): void
     {
         $server = new TestServer(['mastodon_api' => true]);
