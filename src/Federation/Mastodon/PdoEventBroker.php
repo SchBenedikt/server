@@ -9,8 +9,9 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Federation\Mastodon;
 
-use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Clock\Clock;
+use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Platform\Db\TransactionRunner;
 use AlohaSocial\Core\Platform\Events\EventBroker;
 use AlohaSocial\Core\Platform\Events\StreamAudience;
 use AlohaSocial\Core\Platform\Events\StreamEvent;
@@ -40,35 +41,44 @@ final class PdoEventBroker implements EventBroker
     public function publish(StreamEventDraft $event): void
     {
         $this->pruneExpired();
-        $id = $this->ids->generate();
-        $this->db->execute(
-            'INSERT INTO mastodon_stream_event'
-            . ' (event_id, event_name, audience, actor_id, payload_json, occurred_at)'
-            . ' VALUES (:event_id, :event_name, :audience, :actor_id, :payload_json, :occurred_at)',
-            [
-                'event_id' => $id,
-                'event_name' => $event->name,
-                'audience' => $event->audience->value,
-                'actor_id' => $event->actorId,
-                'payload_json' => json_encode($event->payload, JSON_THROW_ON_ERROR),
-                'occurred_at' => $event->occurredAt,
-            ],
-        );
-        $sequence = $this->db->fetchValue(
-            'SELECT sequence FROM mastodon_stream_event WHERE event_id = :event_id',
-            ['event_id' => $id],
-        );
-        if (!is_numeric($sequence)) {
-            throw new \RuntimeException('The stream event was stored without a replay sequence.');
+        $write = function () use ($event): void {
+            $id = $this->ids->generate();
+            $this->db->execute(
+                'INSERT INTO mastodon_stream_event'
+                . ' (event_id, event_name, audience, actor_id, payload_json, occurred_at)'
+                . ' VALUES (:event_id, :event_name, :audience, :actor_id, :payload_json, :occurred_at)',
+                [
+                    'event_id' => $id,
+                    'event_name' => $event->name,
+                    'audience' => $event->audience->value,
+                    'actor_id' => $event->actorId,
+                    'payload_json' => json_encode($event->payload, JSON_THROW_ON_ERROR),
+                    'occurred_at' => $event->occurredAt,
+                ],
+            );
+            $sequence = $this->db->fetchValue(
+                'SELECT sequence FROM mastodon_stream_event WHERE event_id = :event_id',
+                ['event_id' => $id],
+            );
+            if (!is_numeric($sequence)) {
+                throw new \RuntimeException('The stream event was stored without a replay sequence.');
+            }
+
+            foreach ($event->recipientIds as $recipientId) {
+                $this->db->execute(
+                    'INSERT INTO mastodon_stream_event_recipient (event_sequence, account_id)'
+                    . ' VALUES (:event_sequence, :account_id)',
+                    ['event_sequence' => (int) $sequence, 'account_id' => $recipientId],
+                );
+            }
+        };
+
+        if ($this->db instanceof TransactionRunner) {
+            $this->db->transaction($write);
+            return;
         }
 
-        foreach ($event->recipientIds as $recipientId) {
-            $this->db->execute(
-                'INSERT INTO mastodon_stream_event_recipient (event_sequence, account_id)'
-                . ' VALUES (:event_sequence, :account_id)',
-                ['event_sequence' => (int) $sequence, 'account_id' => $recipientId],
-            );
-        }
+        $write();
     }
 
     public function read(StreamSubscription $subscription, ?string $cursor, int $limit): array
