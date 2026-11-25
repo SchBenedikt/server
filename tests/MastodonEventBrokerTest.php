@@ -317,6 +317,42 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertStringContainsString('event: update', implode('', $frames));
         self::assertStringContainsString($objectId, implode('', $frames));
 
+        $createdEvent = $broker->read(new StreamSubscription('alice', ['home']), null, 10)[0];
+        $updatedAt = $now->modify('+1 minute');
+        (new PdoRemotePostRepository($server->runtime->database))->updatePostContent(
+            $objectId,
+            $actorId,
+            'An edited remote status',
+            null,
+            $updatedAt,
+        );
+        $broker->publish(new StreamEventDraft(
+            name: 'status.updated',
+            audience: StreamAudience::Followers,
+            actorId: $actorId,
+            recipientIds: ['alice'],
+            payload: ['status_id' => $objectId],
+            occurredAt: Time::format($updatedAt),
+        ));
+        $updateRequest = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'home'],
+            headers: [
+                'Authorization' => 'Bearer ' . $token,
+                'Last-Event-ID' => $createdEvent->id,
+            ],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+        $updateResponse = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($updateRequest);
+        self::assertNotNull($updateResponse);
+        $updateFrames = iterator_to_array($updateResponse->chunks(), false);
+        self::assertCount(1, $updateFrames);
+        self::assertStringContainsString('event: update', $updateFrames[0]);
+        self::assertStringContainsString('An edited remote status', $updateFrames[0]);
+
         $server->runtime->database->execute('DELETE FROM social_following WHERE local_user_id = :user_id', ['user_id' => 'alice']);
         $responseAfterUnfollow = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
         self::assertNotNull($responseAfterUnfollow);
