@@ -18,6 +18,8 @@ final class HostConfigTest extends TestCase
     private const KEYS = [
         'ALOHASOCIAL_INSTANCE_URL',
         'ALOHASOCIAL_INSTANCE_NAME',
+        'ALOHASOCIAL_CORE_CHANNEL',
+        'ALOHASOCIAL_CORE_VERSION',
         'ALOHASOCIAL_ENV_FILE',
         'ALOHASOCIAL_DB_DSN',
         'ALOHASOCIAL_VAR_DIRECTORY',
@@ -68,6 +70,14 @@ final class HostConfigTest extends TestCase
         }
 
         self::removeDirectory($this->root);
+    }
+
+    public function testCoreDefaultsToTheSupportedTaggedRelease(): void
+    {
+        $config = HostConfig::load($this->root);
+
+        self::assertSame('release', $config->coreChannel);
+        self::assertSame('0.8.0', $config->coreVersion);
     }
 
     public function testSetupEnvFileOverridesTheCheckoutDotEnv(): void

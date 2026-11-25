@@ -17,7 +17,7 @@
         "ext-mbstring": "*",
         "ext-openssl": "*",
         "ext-pdo": "*",
-        "alohasocial/core": "dev-main",
+        "alohasocial/core": "^0.8.0",
         "aws/aws-sdk-php": "^3.400",
         "guzzlehttp/psr7": "^2.8"
     },

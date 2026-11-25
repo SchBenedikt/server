@@ -4,11 +4,11 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2626421a6b029abb052f585ceff67918",
+    "content-hash": "d4209ecb0840d58aa81053372c51f49f",
     "packages": [
         {
             "name": "alohasocial/core",
-            "version": "dev-main",
+            "version": "0.8.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/SchBenedikt/core",
@@ -33,7 +33,6 @@
                 "ext-pdo_sqlite": "*",
                 "phpunit/phpunit": "^11.5"
             },
-            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {

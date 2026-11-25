@@ -30,6 +30,7 @@ final class CoreVersionTest extends TestCase
         self::assertTrue(InstalledVersions::isInstalled('alohasocial/core'));
         $details = CoreVersion::details();
 
+        self::assertSame(Version::CURRENT, InstalledVersions::getPrettyVersion('alohasocial/core'));
         self::assertSame(InstalledVersions::getPrettyVersion('alohasocial/core'), $details['version']);
         self::assertSame(InstalledVersions::getReference('alohasocial/core'), $details['reference']);
         self::assertIsString($details['reference']);

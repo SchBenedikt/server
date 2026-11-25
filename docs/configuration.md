@@ -245,8 +245,8 @@ can also be changed in the admin console at `/admin`.
 The console stores the Core dependency policy in the env file:
 
 ```dotenv
-ALOHASOCIAL_CORE_CHANNEL=main
-ALOHASOCIAL_CORE_VERSION=
+ALOHASOCIAL_CORE_CHANNEL=release
+ALOHASOCIAL_CORE_VERSION=0.8.0
 ```
 
 `main` follows the development branch. `release` installs the tag in
@@ -260,8 +260,12 @@ php bin/core-version.php
 ```
 
 The helper runs `composer require alohasocial/core:...` and the database
-migrations. Docker images are immutable; rebuild the image with the chosen
-Core version instead of changing the vendor tree inside a running container.
+migrations. Keep the previous code version and database backup until health
+checks and representative account, feed, media and federation requests pass.
+To roll back, restore the previous code and its matching database backup; do
+not assume forward database migrations can be reversed. Docker images are
+immutable, so rebuild from the selected tagged release rather than changing the
+vendor tree inside a running container.
 
 ## Native AT Protocol PDS
 
