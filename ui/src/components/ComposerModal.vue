@@ -766,7 +766,7 @@ async function submit(): Promise<void> {
 			<div v-if="directTo" class="a-composer__direct">
 				<Avatar :id="directTo.id" :name="directName" :src="directTo.avatar" :size="30" />
 				<div>
-					<strong>message an {{ directName }}</strong>
+					<strong>message to {{ directName }}</strong>
 					<span>{{ directHandle }} · visible only to this account</span>
 				</div>
 			</div>

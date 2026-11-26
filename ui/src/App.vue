@@ -8,6 +8,7 @@ import { useHostBridge } from '@alohasocial/ui';
 import type { AlohaHostBridge } from './bridge';
 import { adminSession } from './bridge';
 import AppIcon from './components/AppIcon.vue';
+import Avatar from './components/Avatar.vue';
 import ComposerModal from './components/ComposerModal.vue';
 import Lightbox from './components/Lightbox.vue';
 import MobileNav from './components/MobileNav.vue';
@@ -46,8 +47,8 @@ import { loadHostDisplayNames, setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
 import { configureAdminApi, createAdminApi } from './lib/admin';
 import { useLiveUpdates } from './lib/live';
-import { initRouter, route, routeTitle } from './lib/router';
-import { appState, initTheme, setInstance, setSession, setUnread, toggleTheme } from './lib/state';
+import { initRouter, navigate, route, routeTitle } from './lib/router';
+import { appState, initTheme, openComposer, setInstance, setSearchSeed, setSession, setUnread, toggleTheme } from './lib/state';
 import type { Account } from './lib/types';
 
 const bridge = useHostBridge() as AlohaHostBridge;
@@ -58,6 +59,33 @@ initTheme();
 let stopRouter: (() => void) | null = null;
 let unreadTimer = 0;
 const loggingOut = ref(false);
+const searchQuery = ref('');
+const topbarHandle = computed(() => appState.session.user?.handle ?? '');
+const topbarName = computed(() => (
+	appState.session.user?.displayName
+	|| appState.session.profile?.display_name
+	|| topbarHandle.value
+));
+
+function submitSearch(): void {
+	const query = searchQuery.value.trim();
+	if (query === '') {
+		navigate('/search');
+		return;
+	}
+
+	setSearchSeed(query);
+	navigate('/search');
+}
+
+function compose(): void {
+	if (appState.session.user === null) {
+		window.location.assign('/login');
+		return;
+	}
+
+	openComposer();
+}
 
 // Live updates run for the whole shell so every route sees new posts and
 // deletions, not only the home timeline.
@@ -249,8 +277,50 @@ watch(() => appState.instance?.name, (name) => {
 		<span class="a-boot__spinner" />
 	</div>
 
-	<div v-else class="a-shell">
-		<div class="a-shell__ambient" aria-hidden="true">
+	<div v-else class="a-app">
+		<header class="a-topbar">
+			<a class="a-topbar__brand" href="#/" :title="appState.instance?.name ?? 'Aloha Social'">
+				<span class="a-topbar__mark" aria-hidden="true"><img :src="'/ui/brand/aloha-mark.svg'" alt="" /></span>
+				<strong>{{ appState.instance?.name ?? 'Aloha Social' }}</strong>
+			</a>
+
+			<form class="a-topbar__search" role="search" @submit.prevent="submitSearch">
+				<AppIcon name="search" :size="18" />
+				<input
+					v-model="searchQuery"
+					type="search"
+					placeholder="Search Aloha"
+					aria-label="Search Aloha"
+					autocomplete="off"
+				/>
+			</form>
+
+			<nav class="a-topbar__nav" aria-label="Primary navigation">
+				<a href="#/" :class="{ 'is-active': route.name === 'home' }">Home</a>
+				<a href="#/explore" :class="{ 'is-active': route.name === 'explore' }">Explore</a>
+				<a href="#/notifications" :class="{ 'is-active': route.name === 'notifications' }">Notifications</a>
+			</nav>
+
+			<div class="a-topbar__actions">
+				<button type="button" class="a-btn a-btn--primary a-btn--small a-topbar__create" @click="compose">
+					<AppIcon name="plus" :size="16" /> Create
+				</button>
+				<a href="#/notifications" class="a-topbar__icon" aria-label="Notifications" title="Notifications">
+					<AppIcon name="bell" :size="20" />
+					<span v-if="appState.unread > 0" class="a-topbar__badge">{{ appState.unread > 9 ? '9+' : appState.unread }}</span>
+				</a>
+				<a href="#/messages" class="a-topbar__icon" aria-label="Messages" title="Messages">
+					<AppIcon name="message" :size="20" />
+				</a>
+				<a v-if="appState.session.user !== null" :href="`#/u/${encodeURIComponent(topbarHandle)}`" class="a-topbar__me" :title="topbarName">
+					<Avatar :id="topbarHandle" :name="topbarName" :size="30" />
+				</a>
+				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+			</div>
+		</header>
+
+		<div class="a-shell">
+			<div class="a-shell__ambient" aria-hidden="true">
 			<span class="a-shell__glow a-shell__glow--one" />
 			<span class="a-shell__glow a-shell__glow--two" />
 		</div>
@@ -264,6 +334,9 @@ watch(() => appState.instance?.name, (name) => {
 				</span>
 			</a>
 			<div class="a-mobile-head__actions">
+				<a class="a-icon-btn" href="#/search" aria-label="Search" title="Search">
+					<AppIcon name="search" :size="19" />
+				</a>
 				<button
 					v-if="appState.session.user !== null"
 					type="button"
@@ -292,7 +365,8 @@ watch(() => appState.instance?.name, (name) => {
 			</div>
 		</main>
 
-		<RightRail />
+			<RightRail />
+		</div>
 	</div>
 
 	<MobileNav v-if="appState.session.ready" />

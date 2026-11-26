@@ -16,7 +16,7 @@ const primaryItems = [
 	{ name: 'home', label: 'Start', icon: 'home', href: '#/' },
 	{ name: 'explore', label: 'Explore', icon: 'compass', href: '#/explore' },
 	{ name: 'notifications', label: 'Notifications', icon: 'bell', href: '#/notifications' },
-	{ name: 'messages', label: 'messages', icon: 'message', href: '#/messages' },
+	{ name: 'messages', label: 'Messages', icon: 'message', href: '#/messages' },
 ];
 
 const sheetGroups = computed(() => {
@@ -29,7 +29,7 @@ const sheetGroups = computed(() => {
 		groups.push({
 			title: 'Your account',
 			items: [
-				{ name: 'profile', label: 'profiles', icon: 'user', href: `#/u/${encodeURIComponent(handle.value)}` },
+				{ name: 'profile', label: 'Profile', icon: 'user', href: `#/u/${encodeURIComponent(handle.value)}` },
 				{ name: 'settings', label: 'Settings', icon: 'settings', href: '#/settings' },
 				{ name: 'follow-requests', label: 'Follow requests', icon: 'lock', href: '#/follow-requests' },
 			],
@@ -41,7 +41,7 @@ const sheetGroups = computed(() => {
 		items: [
 			{ name: 'search', label: 'Search', icon: 'search', href: '#/search' },
 			{ name: 'kokua', label: 'Kokua', icon: 'handHeart', href: '#/kokua' },
-			{ name: 'memories', label: 'memories', icon: 'clock', href: '#/memories' },
+			{ name: 'memories', label: 'Memories', icon: 'clock', href: '#/memories' },
 		],
 	});
 
@@ -50,10 +50,10 @@ const sheetGroups = computed(() => {
 			{
 				title: 'Library',
 				items: [
-					{ name: 'bookmarks', label: 'bookmarks', icon: 'bookmark', href: '#/bookmarks' },
-					{ name: 'collections', label: 'collections', icon: 'list', href: '#/collections' },
+					{ name: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', href: '#/bookmarks' },
+					{ name: 'collections', label: 'Collections', icon: 'list', href: '#/collections' },
 					{ name: 'starter-packs', label: 'Starter packs', icon: 'users', href: '#/starter-packs' },
-					{ name: 'lists', label: 'lists', icon: 'list', href: '#/lists' },
+					{ name: 'lists', label: 'Lists', icon: 'list', href: '#/lists' },
 					{ name: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts' },
 					{ name: 'archived', label: 'Archive', icon: 'archive', href: '#/archived' },
 					{ name: 'scheduled', label: 'Scheduled', icon: 'calendar', href: '#/scheduled' },
@@ -62,7 +62,7 @@ const sheetGroups = computed(() => {
 			{
 				title: 'Moderation',
 				items: [
-					{ name: 'filters', label: 'filter', icon: 'filter', href: '#/filters' },
+					{ name: 'filters', label: 'Filters', icon: 'filter', href: '#/filters' },
 					{ name: 'muted', label: 'Muted', icon: 'bellOff', href: '#/muted' },
 					{ name: 'blocked', label: 'Blocked', icon: 'ban', href: '#/blocked' },
 				],
@@ -74,9 +74,9 @@ const sheetGroups = computed(() => {
 		{ name: 'about', label: 'About this instance', icon: 'info', href: '#/about' },
 	];
 	if (appState.session.admin) {
-		instanceItems.unshift({ name: 'admin', label: 'administration', icon: 'shield', href: '#/admin' });
+		instanceItems.unshift({ name: 'admin', label: 'Administration', icon: 'shield', href: '#/admin' });
 	}
-	instanceItems.push({ name: 'dashboard', label: 'Server-Dashboard', icon: 'server', href: '/' });
+			instanceItems.push({ name: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/' });
 	groups.push({ title: 'instance', items: instanceItems });
 
 	if (!signedIn.value) {

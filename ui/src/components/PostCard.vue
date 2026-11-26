@@ -582,7 +582,7 @@ async function toggleLike(): Promise<void> {
 				: (
 					id === remoteTarget.value
 						? (saved.favourited ? 'Remote like queued.' : 'Remote unlike queued.')
-						: (saved.favourited ? 'Post liked.' : 'Like removed.')),
+						: (saved.favourited ? 'Post upvoted.' : 'Upvote removed.')),
 			mirrorProblem !== null ? 'error' : 'success',
 		);
 	} catch (error) {
@@ -1332,21 +1332,21 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action a-post__action--like"
 				:class="{ 'a-post__action--liked': liked }"
-				:aria-label="liked ? 'Remove like' : 'Like post'"
+				:aria-label="liked ? 'Remove upvote' : 'Upvote post'"
 				:aria-pressed="liked"
-				:title="liked ? 'Remove like' : 'Like post'"
+				:title="liked ? 'Remove upvote' : 'Upvote post'"
 				:disabled="liking"
 				@click="toggleLike"
 			>
-				<AppIcon name="heart" :size="18" />
+				<AppIcon name="arrowUp" :size="18" />
 				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 			</button>
 			<span
 				v-else
 				class="a-post__action a-post__action--static"
-				:title="`${likeCount} likes on ${handle}`"
+				:title="`${likeCount} upvotes on ${handle}`"
 			>
-				<AppIcon name="heart" :size="18" />
+				<AppIcon name="arrowUp" :size="18" />
 				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 			</span>
 

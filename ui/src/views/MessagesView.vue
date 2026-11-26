@@ -230,7 +230,7 @@ function startWith(account: Account): void {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="messages" subtitle="Private conversations between accounts on this instance.">
+		<PageHeader title="Messages" subtitle="Private conversations between accounts on this instance.">
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="openPicker">
 					<AppIcon name="pen" :size="15" />
@@ -244,7 +244,7 @@ function startWith(account: Account): void {
 		<template v-else>
 			<div v-if="pickerOpen" class="a-dm-picker">
 				<header class="a-section-head">
-					<h2>An wen?</h2>
+					<h2>Send to?</h2>
 					<button type="button" class="a-icon-btn" aria-label="Close selection" @click="closePicker">
 						<AppIcon name="x" :size="16" />
 					</button>

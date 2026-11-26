@@ -51,7 +51,7 @@ const sectionView = computed(() => {
 <template>
 	<div class="a-page a-admin">
 		<PageHeader
-			:title="section === 'overview' ? 'administration' : current.label"
+			:title="section === 'overview' ? 'Administration' : current.label"
 			:subtitle="current.hint"
 			back-href="#/"
 			back-label="Back to home"

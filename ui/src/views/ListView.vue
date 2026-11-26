@@ -191,7 +191,7 @@ async function removeMember(account: Account): Promise<void> {
 <template>
 	<div class="a-page">
 		<PageHeader
-			:title="list?.title ?? 'list'"
+			:title="list?.title ?? 'List'"
 			:subtitle="list ? 'Private timeline for this list.' : 'Loading list…'"
 			back-href="#/lists"
 			back-label="Back to lists"

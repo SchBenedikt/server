@@ -57,7 +57,7 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="memories"
+			title="Memories"
 			:subtitle="`What you shared on this day in earlier years — ${dateLabel()}.`"
 			back-href="#/"
 			back-label="Back to home"

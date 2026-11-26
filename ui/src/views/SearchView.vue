@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import AccountRow from '../components/AccountRow.vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
@@ -16,7 +16,7 @@ import { appState, showToast } from '../lib/state';
 import type { Account, HashtagResult, SearchResults, TimelineItem } from '../lib/types';
 
 const signedIn = computed(() => appState.session.user !== null);
-const query = ref('');
+const query = ref(appState.searchSeed);
 const searching = ref(false);
 const searched = ref(false);
 const error = ref('');
@@ -93,6 +93,23 @@ async function search(): Promise<void> {
 		searching.value = false;
 	}
 }
+
+// The shell's search box seeds this view before navigating here. Running the
+// search on mount makes that box a real shortcut instead of a dead field.
+onMounted(() => {
+	if (query.value.trim() !== '') {
+		void search();
+	}
+});
+
+watch(() => appState.searchSeed, (value) => {
+	if (value.trim() === '' || value === query.value) {
+		return;
+	}
+
+	query.value = value;
+	void search();
+});
 
 function hashtagHref(tag: HashtagResult): string {
 	return `#/tag/${encodeURIComponent(tag.name)}`;

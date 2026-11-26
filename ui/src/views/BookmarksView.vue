@@ -64,7 +64,7 @@ function onBookmark(id: string, bookmarked: boolean): void {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="bookmarks"
+			title="Bookmarks"
 			subtitle="Private saved posts, visible only to you."
 		>
 			<template #actions>

@@ -226,33 +226,37 @@ export function routeTitle(current: Route): string {
 		case 'tag':
 			return `#${current.tag}`;
 		case 'bookmarks':
-			return 'bookmarks';
+			return 'Bookmarks';
 		case 'search':
 			return 'Search';
 		case 'kokua':
 			return 'Kokua';
 		case 'lists':
-			return 'lists';
+			return 'Lists';
 		case 'list':
-			return 'list';
+			return 'List';
 		case 'muted':
 			return 'Muted';
 		case 'blocked':
 			return 'Blocked';
 		case 'filters':
-			return 'filter';
+			return 'Filters';
 		case 'scheduled':
 			return 'Scheduled posts';
+		case 'messages':
+			return 'Messages';
+		case 'conversation':
+			return 'Conversation';
 		case 'memories':
-			return 'memories';
+			return 'Memories';
 		case 'collections':
-			return 'collections';
+			return 'Collections';
 		case 'collection':
-			return 'collection';
+			return 'Collection';
 		case 'starter-packs':
-			return 'starter packs';
+			return 'Starter packs';
 		case 'starter-pack':
-			return 'starter pack';
+			return 'Starter pack';
 		case 'drafts':
 			return 'Drafts';
 		case 'archived':
@@ -263,8 +267,8 @@ export function routeTitle(current: Route): string {
 			return 'Follow requests';
 		case 'admin':
 			return current.section === 'overview'
-				? 'administration'
-				: `administration · ${adminSectionDefinition(current.section).label}`;
+				? 'Administration'
+				: `Administration · ${adminSectionDefinition(current.section).label}`;
 		default:
 			return 'Not found';
 	}

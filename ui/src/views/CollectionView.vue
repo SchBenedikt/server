@@ -109,7 +109,7 @@ watch(id, load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			:title="collection?.title ?? 'collection'"
+			:title="collection?.title ?? 'Collection'"
 			:subtitle="collection?.description || 'A curated list of posts.'"
 			back-href="#/collections"
 			back-label="All collections"

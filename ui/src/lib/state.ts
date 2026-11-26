@@ -18,7 +18,7 @@ import type {
 const THEME_KEY = 'aloha.theme';
 // A versioned key so browsers that stored the old default ("home") open the
 // populated For You tab once after this update.
-const HOME_TAB_KEY = 'aloha.home-tab.v2';
+const HOME_TAB_KEY = 'aloha.home-tab.v3';
 
 type HomeTab = 'home' | 'for-you' | 'trending' | 'public' | 'federated' | 'tags';
 
@@ -78,6 +78,7 @@ export const appState = reactive({
 	},
 	toasts: [] as ToastMessage[],
 	homeTab: initialHomeTab(),
+	searchSeed: '',
 	theme: initialTheme() as ThemeName,
 	mobileMenuOpen: false,
 });
@@ -103,6 +104,10 @@ export function dismissToast(id: number): void {
 	if (index !== -1) {
 		appState.toasts.splice(index, 1);
 	}
+}
+
+export function setSearchSeed(query: string): void {
+	appState.searchSeed = query;
 }
 
 export function setHomeTab(tab: HomeTab): void {

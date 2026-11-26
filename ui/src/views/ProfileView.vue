@@ -871,7 +871,7 @@ onUnmounted(() => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="profiles"
+			title="Profile"
 			:subtitle="handleText"
 			back-href="#/"
 			back-label="Back to home"
@@ -1084,7 +1084,7 @@ onUnmounted(() => {
 					:aria-selected="tab === 'media'"
 					@click="tab = 'media'"
 				>
-					media
+					Media
 				</button>
 			</div>
 

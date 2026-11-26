@@ -26,6 +26,7 @@ const paths: Record<string, string> = {
 	trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/>',
 	search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
 	arrowLeft: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+	arrowUp: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
 	refresh: '<path d="M20 11a8 8 0 0 0-14.9-4L3 10"/><path d="M3 4v6h6"/><path d="M4 13a8 8 0 0 0 14.9 4L21 14"/><path d="M21 20v-6h-6"/>',
 	x: '<path d="M18 6 6 18M6 6l12 12"/>',
 	image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 16-5-5L5 20"/>',

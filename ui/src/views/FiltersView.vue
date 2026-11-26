@@ -215,7 +215,7 @@ function contextLabel(value: FilterContext): string {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="filter" subtitle="Hide or warn about posts containing certain words.">
+		<PageHeader title="Filters" subtitle="Hide or warn about posts containing certain words.">
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">
 					<AppIcon name="plus" :size="15" /> New filter

@@ -85,7 +85,7 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="collections"
+			title="Collections"
 			subtitle="Organize posts into named, ordered lists — public or just for you."
 			back-href="#/"
 			back-label="Back to home"

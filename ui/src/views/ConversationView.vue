@@ -240,7 +240,7 @@ void stopDeleted;
 					<span>{{ person.handle }}</span>
 				</div>
 				<a :href="`#/u/${encodeURIComponent(person.handle || person.id)}`" class="a-btn a-btn--ghost a-btn--small">
-					profiles
+					Profile
 				</a>
 			</div>
 
