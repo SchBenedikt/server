@@ -1141,9 +1141,9 @@ onUnmounted(() => {
 				<AppIcon name="info" :size="14" />
 				Content warning: <strong>{{ post.content_warning }}</strong>
 			</summary>
-			<RichText :text="post.content" />
+			<RichText :text="post.content" :allow-markup="post.is_remote === true" />
 		</details>
-		<RichText v-else :text="post.content" class="a-post__content" />
+		<RichText v-else :text="post.content" :allow-markup="post.is_remote === true" class="a-post__content" />
 
 		<article v-if="quoteObjectId !== ''" class="a-quote-embed">
 			<p v-if="quoteStateLabel !== ''" class="a-quote-embed__state">
@@ -1174,7 +1174,7 @@ onUnmounted(() => {
 				<p v-if="quotedPost.content_warning" class="a-quote-embed__cw">
 					<AppIcon name="info" :size="13" /> {{ quotedPost.content_warning }}
 				</p>
-				<RichText v-else :text="quotedPost.content" class="a-quote-embed__text" />
+				<RichText v-else :text="quotedPost.content" :allow-markup="quotedPost.is_remote === true" class="a-quote-embed__text" />
 				<template v-if="quoteMedia(quotedPost) !== null">
 					<video
 						v-if="attachmentIsVideo(quoteMedia(quotedPost)!)"

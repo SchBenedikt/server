@@ -60,7 +60,14 @@ const atprotoFollow = ref<AtprotoFollowEntry | null>(null);
 const atprotoFollowAvailable = ref(false);
 const loading = ref(false);
 const error = ref('');
-const tab = ref<'posts' | 'media'>('posts');
+const tab = ref<'posts' | 'media'>(
+	route.value.name === 'profile' && route.value.tab === 'media' ? 'media' : 'posts',
+);
+watch(() => route.value.name === 'profile' ? route.value.tab : null, (value) => {
+	if (value !== null) {
+		tab.value = value;
+	}
+});
 
 const posts = ref<TimelineItem[]>([]);
 const postsLoading = ref(false);

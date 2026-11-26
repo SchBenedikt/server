@@ -11,7 +11,7 @@ export type Route =
 	| { name: 'explore' }
 	| { name: 'notifications' }
 	| { name: 'about' }
-	| { name: 'profile'; handle: string }
+	| { name: 'profile'; handle: string; tab?: 'posts' | 'media' }
 	| { name: 'post'; id: string }
 	| { name: 'tag'; tag: string }
 	| { name: 'bookmarks' }
@@ -151,7 +151,11 @@ export function parseHash(hash: string): Route {
 	}
 
 	if (parts[0] === 'u' && parts[1] !== undefined) {
-		return { name: 'profile', handle: decode(parts[1]) };
+		return {
+			name: 'profile',
+			handle: decode(parts[1]),
+			tab: parts[2] === 'media' ? 'media' : 'posts',
+		};
 	}
 
 	if (parts[0] === 'p' && parts[1] !== undefined) {

@@ -6,7 +6,9 @@
 import { computed } from 'vue';
 import { hasMarkup, sanitizeMarkup } from '../lib/rich-text';
 
-const props = defineProps<{ text: string }>();
+const props = withDefaults(defineProps<{ text: string; allowMarkup?: boolean }>(), {
+	allowMarkup: false,
+});
 
 interface Token {
 	type: 'text' | 'url' | 'tag' | 'mention';
@@ -20,8 +22,13 @@ interface Token {
  * inside the same `.a-rich-text` box, so a post looks the same wherever it was
  * written.
  */
+// Local posts are plain text even when they contain angle brackets. Only a
+// federated body is HTML, so a local post can never inject markup into the
+// page through the feed.
 const html = computed(() => (
-	hasMarkup(props.text) && typeof document !== 'undefined' ? sanitizeMarkup(props.text) : ''
+	props.allowMarkup && hasMarkup(props.text) && typeof document !== 'undefined'
+		? sanitizeMarkup(props.text)
+		: ''
 ));
 
 const tokens = computed<Token[]>(() => {
