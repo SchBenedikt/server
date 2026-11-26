@@ -162,6 +162,7 @@ export interface Api {
 	followedTimelinePage(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelinePageData>;
 	listTimeline(id: string, limit?: number, maxId?: string | null): Promise<TimelineItem[]>;
 	post(id: string): Promise<TimelineItem>;
+	postContext(id: string): Promise<{ ancestors: TimelineItem[]; descendants: TimelineItem[] }>;
 	posts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	quotedPosts(ids: string[]): Promise<Record<string, TimelineItem>>;
 	account(id: string): Promise<Account>;
@@ -1305,6 +1306,18 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return post;
+		},
+
+		async postContext(id: string): Promise<{ ancestors: TimelineItem[]; descendants: TimelineItem[] }> {
+			const data = await request<{ ancestors?: unknown; descendants?: unknown }>(
+				'GET',
+				`/api/v1/statuses/${encodeURIComponent(id)}/context`,
+			);
+
+			return {
+				ancestors: normalizeMastodonStatuses(data?.ancestors),
+				descendants: normalizeMastodonStatuses(data?.descendants),
+			};
 		},
 
 		async posts(ids: string[]): Promise<Record<string, TimelineItem>> {

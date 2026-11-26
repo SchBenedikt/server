@@ -306,7 +306,7 @@ function startWith(account: Account): void {
 			</button>
 
 			<EmptyState
-				v-else-if="!loading"
+				v-if="conversations.length === 0 && !loading"
 				icon="message"
 				title="No messages yet"
 				text="Private messages stay between the accounts on this instance. Start a new conversation."

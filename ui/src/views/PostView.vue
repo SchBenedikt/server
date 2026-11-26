@@ -247,6 +247,26 @@ async function loadReplies(current: number, merge = false): Promise<void> {
 	let cursor: { before: string; beforeId: string } | null = null;
 
 	try {
+		// The status context is the authoritative reply collection. Public
+		// timelines only contain top-level posts, so scanning them made the
+		// detail view claim "0 replies" while the counter showed one.
+		try {
+			const context = await getApi().postContext(id.value);
+			if (current !== generation) {
+				return;
+			}
+
+			for (const entry of context.descendants) {
+				if (!seen.has(entry.id)) {
+					seen.add(entry.id);
+					found.push(entry);
+				}
+			}
+		} catch {
+			// Remote status IDs are not addressable through the local context
+			// endpoint; the remote loader already supplied their replies.
+		}
+
 		for (let page = 0; page < 3; page += 1) {
 			const result = await getApi().publicTimelinePage(PAGE_SIZE, cursor?.before, cursor?.beforeId);
 			if (current !== generation) {
@@ -336,8 +356,20 @@ function reply(): void {
 }
 
 const stopCreated = onPostCreated((created) => {
-	if (created.in_reply_to_id === id.value && !replies.value.some((entry) => entry.id === created.id)) {
-		replies.value = [...replies.value, created];
+	const parentId = created.in_reply_to_id;
+	const belongsToThread = parentId === id.value
+		|| replies.value.some((entry) => entry.id === parentId);
+	if (!belongsToThread || replies.value.some((entry) => entry.id === created.id)) {
+		return;
+	}
+
+	// A reply to a reply is still part of this thread. Appending it here keeps
+	// the new message visible without a reload and keeps the counter honest.
+	replies.value = [...replies.value, created].sort((left, right) => (
+		new Date(left.published_at).getTime() - new Date(right.published_at).getTime()
+	));
+	if (post.value !== null && typeof post.value.replies_count === 'number') {
+		post.value = { ...post.value, replies_count: post.value.replies_count + 1 };
 	}
 });
 
@@ -361,7 +393,11 @@ const stopDeleted = onPostDeleted((deletedId) => {
 		return;
 	}
 
+	const removed = replies.value.some((entry) => entry.id === deletedId);
 	replies.value = replies.value.filter((entry) => entry.id !== deletedId);
+	if (removed && post.value !== null && typeof post.value.replies_count === 'number' && post.value.replies_count > 0) {
+		post.value = { ...post.value, replies_count: post.value.replies_count - 1 };
+	}
 	if (parent.value?.id === deletedId) {
 		parent.value = null;
 	}

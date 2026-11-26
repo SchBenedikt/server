@@ -154,8 +154,8 @@ export function openQuote(quoteTo: TimelineItem): void {
 /**
  * Opens the composer as a private direct message to one local account.
  */
-export function openDirectMessage(account: Account): void {
-	openComposer(null, null, account);
+export function openDirectMessage(account: Account, replyTo: TimelineItem | null = null): void {
+	openComposer(replyTo, null, account);
 }
 
 /**

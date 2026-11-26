@@ -982,6 +982,17 @@ final class FrontController
             $this->runtime->app->handle($authenticated),
         );
 
+        // The core home timeline also returns the reader's own direct posts.
+        // The first-party feed is public timeline content; private messages
+        // belong to the direct timeline and its inbox. Strip them at the API
+        // boundary so following/local cards can never show a DM.
+        if ($request->method === 'GET'
+            && $request->path === '/api/v1/timelines/home'
+            && $sessionUserId !== null
+        ) {
+            $response = $this->withoutDirectMessages($response);
+        }
+
         // The core accepted an inbox POST, but a remote Create has no local
         // reply row and its RemotePost record does not keep `inReplyTo`. Index
         // the reply only after signature, audience and replay checks passed.
@@ -1288,6 +1299,40 @@ final class FrontController
         }
 
         return $remote;
+    }
+
+    /**
+     * Removes direct posts from a timeline response without touching the
+     * private direct timeline. Pagination is retargeted to the last visible
+     * post so a filtered page cannot make the reader skip older entries.
+     */
+    private function withoutDirectMessages(Response $response): Response
+    {
+        if ($response->status !== 200 || $response->body === '') {
+            return $response;
+        }
+
+        $data = json_decode($response->body, true);
+        if (!is_array($data) || !is_array($data['posts'] ?? null)) {
+            return $response;
+        }
+
+        $posts = array_values(array_filter(
+            $data['posts'],
+            static fn (mixed $post): bool => !is_array($post) || ($post['visibility'] ?? null) !== 'direct',
+        ));
+        if (count($posts) === count($data['posts'])) {
+            return $response;
+        }
+
+        $data['posts'] = $posts;
+        $last = $posts === [] ? null : $posts[array_key_last($posts)];
+        if (is_array($last)) {
+            $data['next_before'] = $last['published_at'] ?? ($data['next_before'] ?? null);
+            $data['next_before_id'] = $last['id'] ?? ($data['next_before_id'] ?? null);
+        }
+
+        return Response::json($data, 200, $response->headers);
     }
 
     private function enforceRateLimit(Request $request, ?string $userId): ?Response
@@ -1613,7 +1658,7 @@ final class FrontController
 
         [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
 
-        return $this->runtime->view->page('signup', [
+        return $this->page('signup', [
             'session' => $session,
             'csrf' => $session?->session->csrfToken ?? '',
             'errors' => $errors,

@@ -68,7 +68,10 @@ async function load(): Promise<void> {
 	hasMore.value = false;
 	cursor.value = null;
 
-	if (!signedIn.value || counterpart.value === '') {
+	// A thread link only carries the root id. The counterpart is derived from
+	// the messages after loading, so requiring it here left every conversation
+	// linked from the inbox permanently empty.
+	if (!signedIn.value || (threadRoot.value === '' && counterpart.value === '')) {
 		return;
 	}
 
@@ -176,9 +179,12 @@ function belongsToConversation(message: TimelineItem): boolean {
 }
 
 function compose(): void {
+	// A message inside a conversation must reply to the newest message. Without
+	// that link the core treats it as a new conversation, so the thread splits.
+	const replyTo = items.value.at(-1) ?? null;
 	const account = person.value;
 	if (account !== null) {
-		openDirectMessage(account);
+		openDirectMessage(account, replyTo);
 		return;
 	}
 
@@ -191,15 +197,20 @@ function compose(): void {
 			followers_count: null,
 			following_count: null,
 			relationship: null,
-		});
+		}, replyTo);
 	}
 }
 
 const stopCreated = onPostCreated((created) => {
-	if (created.visibility === 'direct' && belongsToConversation(created)) {
-		items.value = [...items.value, created];
-		void getApi().markConversationRead(created.id);
+	if (created.visibility !== 'direct') {
+		return;
 	}
+
+	// The create response does not always carry the conversation root, so it
+	// cannot be matched against the thread reliably. Reloading the direct
+	// timeline is the authoritative update and keeps the sent message visible.
+	void load();
+	void getApi().markConversationRead(created.id);
 });
 
 const stopDeleted = onPostDeleted((deletedId) => {
