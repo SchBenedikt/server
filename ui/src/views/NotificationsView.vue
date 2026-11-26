@@ -9,7 +9,7 @@ import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { accountName, handleLabel, postHref, relativeTime, truncate } from '../lib/format';
+import { accountName, handleLabel, notificationPostHref, relativeTime, truncate } from '../lib/format';
 import { getApi } from '../lib/api';
 import { appState, setUnread, showToast } from '../lib/state';
 import type { NotificationItem, NotificationSenderRequest } from '../lib/types';
@@ -213,7 +213,7 @@ function actorIsExternal(item: NotificationItem): boolean {
 }
 
 function statusHref(item: NotificationItem): string | null {
-	return item.status ? postHref(item.status) : (item.post_id ? `#/p/${encodeURIComponent(item.post_id)}` : null);
+	return notificationPostHref(item.status, item.post_id);
 }
 
 function statusPreview(item: NotificationItem): string {

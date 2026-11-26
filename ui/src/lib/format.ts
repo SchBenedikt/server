@@ -182,6 +182,20 @@ export function postHref(post: TimelineItem): string | null {
 	return id === null ? null : `#/p/${encodeURIComponent(id)}`;
 }
 
+export function notificationPostHref(
+	post: TimelineItem | null | undefined,
+	postId: string | null | undefined,
+): string | null {
+	const statusHref = post === null || post === undefined ? null : postHref(post);
+	if (statusHref !== null) {
+		return statusHref;
+	}
+
+	return postId !== null && postId !== undefined && postId !== ''
+		? `#/p/${encodeURIComponent(postId)}`
+		: null;
+}
+
 export function postExternalUrl(post: TimelineItem): string | null {
 	const candidate = post.object_id ?? post.id;
 	return isRemoteId(candidate) ? candidate : null;

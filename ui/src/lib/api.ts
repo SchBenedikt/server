@@ -601,13 +601,24 @@ function htmlToText(value: unknown): string {
 		return '';
 	}
 
-	const text = value
-		.replace(/<br\s*\/?>/gi, '\n')
-		.replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
-		.replace(/<\/p>/gi, '\n\n')
-		.replace(/<[^>]+>/g, '');
+	// A remote status is already HTML; its content may additionally be escaped
+	// by a peer or by the Mastodon projection. Strip and decode in a bounded
+	// loop so nested entities such as `&lt;p&gt;` become text instead of
+	// literal markup, without ever inserting the result as HTML.
+	let text = value;
+	for (let pass = 0; pass < 3; pass++) {
+		const next = decodeEntities(text)
+			.replace(/<br\s*\/?>/gi, '\n')
+			.replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+			.replace(/<\/p>/gi, '\n\n')
+			.replace(/<[^>]+>/g, '');
+		if (next === text) {
+			break;
+		}
+		text = next;
+	}
 
-	return decodeEntities(text).replace(/\n{3,}/g, '\n\n').trim();
+	return text.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function isRemoteAccountId(id: string): boolean {
