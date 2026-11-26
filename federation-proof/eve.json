@@ -1,0 +1,19 @@
+{
+    "@context": [
+        "https://www.w3.org/ns/activitystreams",
+        "https://w3id.org/security/v1"
+    ],
+    "id": "https://raw.githubusercontent.com/SchBenedikt/server/federation-proof-31482fbf11db/federation-proof/eve.json",
+    "type": "Person",
+    "preferredUsername": "eve",
+    "name": "Eve Hostile",
+    "summary": "Federation proof actor",
+    "inbox": "https://httpbin.org/post",
+    "outbox": "https://httpbin.org/post",
+    "followers": "https://httpbin.org/post",
+    "publicKey": {
+        "id": "https://raw.githubusercontent.com/SchBenedikt/server/federation-proof-31482fbf11db/federation-proof/eve.json#main-key",
+        "owner": "https://raw.githubusercontent.com/SchBenedikt/server/federation-proof-31482fbf11db/federation-proof/eve.json",
+        "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA216lJQB6avNWZEAkCiMD\nBtJIXV5ms1d6CQnJKcNR3dSNNOlB6inn+J5LPS8UU7GPTq3nXE4p+sM/bMRI/nJ0\nB7BVE7EGHZ1QsOLEIcWEsUVSiBYgY6EdiX3PvGeh5KPrLze3me+Qoxvrl4dZnxnf\nQv/EPw/FARHQI8OLIRE5MYBZI63CN4WoubgLdF+cSp/nIysP1EBViq0lSsFdZfYx\niCzVDQdVB0LyT4FpvQ3dg/gIApqt82AoPlCyZDWY12UCt0grKQKItpEfByGTvd76\no3zecc+YwicB9k1yeBj74EtWbDzgXEAkp4TeM7KVc8SDb+rpwFg2GWQYPF339jrt\nQQIDAQAB\n-----END PUBLIC KEY-----\n"
+    }
+}
