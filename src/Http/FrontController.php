@@ -382,6 +382,24 @@ final class FrontController
 
                 return Response::json($thread);
             } catch (RemoteDirectoryException $exception) {
+                // The store already has the post, but its origin is unreachable
+                // (DNS failures are reported as 403 by the remote fetcher). A
+                // cached card must still open instead of becoming a dead end in
+                // the feed or in a notification. An authoritative 404 stays a
+                // 404 so a deleted post is not resurrected from the cache.
+                if ($exception->status !== 404) {
+                    $cached = $this->presentRemotePost($id);
+                    if ($cached !== null) {
+                        return Response::json([
+                            'network' => 'activitypub',
+                            'post' => $cached,
+                            'parent' => null,
+                            'replies' => [],
+                            'profile' => null,
+                        ]);
+                    }
+                }
+
                 return $this->apiError($exception->status, $exception->errorCode, $exception->getMessage());
             } catch (Throwable) {
                 return $this->apiError(502, 'remote_post_failed', 'The remote post could not be loaded.');
@@ -981,6 +999,7 @@ final class FrontController
             $request,
             $this->runtime->app->handle($authenticated),
         );
+        $response = $this->withMastodonNotificationTargets($request, $response, $userId);
 
         // The core home timeline also returns the reader's own direct posts.
         // The first-party feed is public timeline content; private messages
@@ -1112,9 +1131,12 @@ final class FrontController
     private function presentRemotePost(string $id): ?array
     {
         $repository = new PdoRemotePostRepository($this->runtime->database);
+        // Feed cards link to the object id, while the store is keyed by the
+        // activity id. Resolve both so a cached post keeps opening through the
+        // same URL the card and a notification use.
         $post = str_starts_with($id, 'at://')
             ? $repository->findPostByObjectId($id)
-            : $repository->findByActivityId($id);
+            : ($repository->findByActivityId($id) ?? $repository->findPostByObjectId($id));
         if (!$post instanceof RemotePost || $post->deletedAt !== null) {
             return null;
         }
@@ -1299,6 +1321,85 @@ final class FrontController
         }
 
         return $remote;
+    }
+
+    /**
+     * Keeps the target id on a Mastodon notification when the status itself
+     * cannot be projected.
+     *
+     * The compatibility presenter omits `status` for a remote notification
+     * whose origin is unreachable, which left the first-party UI without any
+     * link to the post. `post_id` is the durable target the core notification
+     * already stores; adding it here keeps the notification actionable without
+     * inventing a status shape.
+     */
+    private function withMastodonNotificationTargets(Request $request, Response $response, ?string $userId): Response
+    {
+        if ($userId === null
+            || $request->method !== 'GET'
+            || $request->path !== rtrim($this->runtime->config->mastodonPrefix, '/') . '/notifications'
+            || $response->status !== 200
+            || $response->body === ''
+        ) {
+            return $response;
+        }
+
+        $rows = json_decode($response->body, true);
+        if (!is_array($rows) || $rows === []) {
+            return $response;
+        }
+
+        $ids = [];
+        foreach ($rows as $row) {
+            if (is_array($row) && is_string($row['id'] ?? null) && $row['id'] !== '') {
+                $ids[] = $row['id'];
+            }
+        }
+        if ($ids === []) {
+            return $response;
+        }
+
+        $parameters = ['recipient' => $userId];
+        $placeholders = [];
+        foreach (array_values(array_unique($ids)) as $index => $id) {
+            $name = 'id_' . $index;
+            $placeholders[] = ':' . $name;
+            $parameters[$name] = $id;
+        }
+        $stored = $this->runtime->database->fetchAll(
+            'SELECT id, post_id FROM social_notification'
+            . ' WHERE recipient_id = :recipient AND id IN (' . implode(', ', $placeholders) . ')',
+            $parameters,
+        );
+        $targets = [];
+        foreach ($stored as $row) {
+            $id = (string) ($row['id'] ?? '');
+            $postId = $row['post_id'] ?? null;
+            if ($id !== '' && is_string($postId) && $postId !== '') {
+                $targets[$id] = $postId;
+            }
+        }
+
+        $changed = false;
+        foreach ($rows as $index => $row) {
+            if (!is_array($row) || !is_string($row['id'] ?? null)) {
+                continue;
+            }
+            $postId = $targets[$row['id']] ?? null;
+            if ($postId === null) {
+                continue;
+            }
+            $rows[$index]['post_id'] = $postId;
+            $changed = true;
+        }
+
+        return $changed
+            ? new Response(
+                $response->status,
+                $response->headers,
+                json_encode($rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            )
+            : $response;
     }
 
     /**

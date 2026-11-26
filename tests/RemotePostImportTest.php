@@ -106,6 +106,103 @@ final class RemotePostImportTest extends TestCase
         self::assertCount(1, $jobs);
     }
 
+    public function testCachedRemotePostOpensByObjectIdWhenOriginIsUnavailable(): void
+    {
+        $this->http->html(self::OBJECT, 'origin unavailable', 503);
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at)',
+            [
+                'activity_id' => 'https://peer.example/activities/live-1',
+                'object_id' => self::OBJECT,
+                'author' => self::ACTOR,
+                'actor' => self::ACTOR,
+                'content' => '<p>Cached remote ✅</p>',
+                'published_at' => '2026-11-20T10:00:00Z',
+            ],
+        );
+        $alice = $this->server->signIn('alice');
+
+        $batch = $this->server->send('GET', '/api/v1/host/posts', [
+            'cookies' => $alice['cookies'],
+            'query' => ['ids' => self::OBJECT],
+        ]);
+        self::assertSame(200, $batch->status, $batch->body);
+        $batchBody = json_decode($batch->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(self::OBJECT, $batchBody['posts'][self::OBJECT]['object_id'] ?? null);
+        self::assertTrue($batchBody['posts'][self::OBJECT]['is_remote'] ?? false);
+
+        $detail = $this->server->send('GET', '/api/v1/host/remote-post', [
+            'cookies' => $alice['cookies'],
+            'query' => ['id' => self::OBJECT],
+        ]);
+        self::assertSame(200, $detail->status, $detail->body);
+        $detailBody = json_decode($detail->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(self::OBJECT, $detailBody['post']['object_id'] ?? null);
+        self::assertTrue($detailBody['post']['is_remote'] ?? false);
+        self::assertStringContainsString('Cached remote', $detailBody['post']['content'] ?? '');
+    }
+
+    public function testMastodonNotificationKeepsItsRemoteTargetWhenStatusIsUnavailable(): void
+    {
+        $http = new FakeBoundedHttpClient();
+        $http->html(
+            'https://peer.example/users/bob',
+            'origin unavailable',
+            503,
+        );
+        $server = new TestServer(['mastodon_api' => true], $http, new class implements HostResolver {
+            public function resolve(string $host): array
+            {
+                return $host === 'peer.example' ? ['8.8.8.8'] : [];
+            }
+        });
+        $server->createAccount('alice');
+        $server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at)',
+            [
+                'activity_id' => 'https://peer.example/activities/notification-1',
+                'object_id' => 'https://peer.example/notes/notification-1',
+                'author' => 'https://peer.example/users/bob',
+                'actor' => 'https://peer.example/users/bob',
+                'content' => '<p>Remote notification</p>',
+                'published_at' => '2026-11-20T10:00:00Z',
+            ],
+        );
+        $server->runtime->database->execute(
+            'INSERT INTO social_notification'
+            . ' (id, recipient_id, actor_id, type, post_id, created_at, status)'
+            . ' VALUES (:id, :recipient, :actor, \'mention\', :post, :created_at, \'visible\')',
+            [
+                'id' => 'notification-remote-1',
+                'recipient' => 'alice',
+                'actor' => 'https://peer.example/users/bob',
+                'post' => 'https://peer.example/notes/notification-1',
+                'created_at' => '2026-11-20T10:00:00Z',
+            ],
+        );
+        $alice = $server->signIn('alice');
+
+        $response = $server->send('GET', '/api/mastodon/v1/notifications', [
+            'cookies' => $alice['cookies'],
+            'query' => ['limit' => '20'],
+        ]);
+        self::assertSame(200, $response->status, $response->body);
+        $rows = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        $remote = null;
+        foreach ($rows as $row) {
+            if (($row['id'] ?? null) === 'notification-remote-1') {
+                $remote = $row;
+            }
+        }
+        self::assertIsArray($remote, $response->body);
+        self::assertArrayNotHasKey('status', $remote);
+        self::assertSame('https://peer.example/notes/notification-1', $remote['post_id'] ?? null);
+    }
+
     public function testAPrivateLiveObjectIsNotImported(): void
     {
         $this->http->json(self::OBJECT, [

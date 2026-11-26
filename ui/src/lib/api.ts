@@ -1100,7 +1100,12 @@ function normalizeMastodonNotification(value: unknown): NotificationItem | null 
 		id: value.id,
 		type: typeof value.type === 'string' ? value.type : 'unknown',
 		actor_id: account?.id ?? '',
-		post_id: status?.id ?? null,
+		// A remote notification can lack its projected status when the origin is
+		// offline. The host still returns the durable target id, so the link to
+		// the post survives instead of disappearing with the preview.
+		post_id: typeof value.post_id === 'string' && value.post_id !== ''
+			? value.post_id
+			: (status?.id ?? null),
 		created_at: typeof value.created_at === 'string' ? value.created_at : '',
 		read: value.unread !== true,
 		account,

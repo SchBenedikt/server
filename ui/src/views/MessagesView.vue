@@ -223,7 +223,11 @@ function searchPeople(): void {
 
 function startWith(account: Account): void {
 	closePicker();
-	openDirectMessage(account);
+	// Reuse the latest message when a conversation with this account already
+	// exists. Opening the composer without a reply target made the core create
+	// a new root, so the same conversation appeared twice in the inbox.
+	const existing = conversations.value.find((conversation) => conversation.counterpart === account.id);
+	openDirectMessage(account, existing?.last ?? null);
 	navigate(`/messages/${encodeURIComponent(account.id)}`);
 }
 </script>
