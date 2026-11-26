@@ -70,6 +70,9 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   owner-only reading lists, and text/background stories, without the core's
   media-only restrictions. Migration `202611280008` copies every row, item
   position and view marker and drops the duplicate tables.
+- **S3 upload streams:** the adapter now declares the wrapped stream property
+  explicitly, removing the PHP dynamic-property deprecation emitted by the
+  Guzzle stream decorator during uploads.
 - **Installer on statically built PHP:** the preflight and DSN checks accept
   PDO drivers reported by `PDO::getAvailableDrivers()`, not only a separately
   loadable `pdo_sqlite`/`pdo_pgsql` extension.

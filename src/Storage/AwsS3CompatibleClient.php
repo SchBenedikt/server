@@ -187,6 +187,8 @@ final class NonClosingStream implements StreamInterface
 {
     use StreamDecoratorTrait;
 
+    private StreamInterface $stream;
+
     public function __destruct()
     {
         // StreamDecoratorTrait wraps a Guzzle Stream whose destructor closes

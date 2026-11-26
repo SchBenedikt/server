@@ -453,7 +453,7 @@ final class CommunityApiController
                 }
 
                 return Response::json([
-                    'collection' => $this->runtime->collections->addItem($userId === null ? '' : rawurldecode($matches[1]), $userId, $postId),
+                    'collection' => $this->runtime->collections->addItem(rawurldecode($matches[1]), $userId, $postId),
                 ]);
             }
 
