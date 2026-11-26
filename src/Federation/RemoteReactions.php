@@ -51,6 +51,7 @@ final class RemoteReactions
         private readonly JobQueue $queue,
         private readonly RemoteDirectory $directory,
         private readonly Clock $clock,
+        private readonly ?RemotePostImporter $importer = null,
     ) {
         $this->reactions = new PdoReactionRepository($db);
     }
@@ -211,7 +212,14 @@ final class RemoteReactions
             throw new ReactionException('remote_post_not_found', 'Remote post not found.');
         }
 
-        $post = (new PdoRemotePostRepository($this->db))->findPostByObjectId($objectId);
+        $posts = new PdoRemotePostRepository($this->db);
+        $post = $posts->findPostByObjectId($objectId);
+        if (($post === null || $post->deletedAt !== null) && $this->importer !== null) {
+            // A post discovered through search or a profile is not in the
+            // inbound cache yet. Import it once so a like or boost has the
+            // same target an inbound Create would have stored.
+            $post = $this->importer->ensure($objectId);
+        }
         if ($post === null || $post->deletedAt !== null) {
             throw new ReactionException('remote_post_not_found', 'Remote post not found.');
         }

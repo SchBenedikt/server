@@ -58,6 +58,7 @@ final class RemoteReplies
         private readonly JobQueue $queue,
         private readonly RemoteDirectory $directory,
         private readonly Clock $clock,
+        private readonly ?RemotePostImporter $importer = null,
     ) {
     }
 
@@ -94,7 +95,14 @@ final class RemoteReplies
             );
         }
 
-        $remote = (new PdoRemotePostRepository($this->db))->findPostByObjectId($target);
+        $posts = new PdoRemotePostRepository($this->db);
+        $remote = $posts->findPostByObjectId($target);
+        if (($remote === null || $remote->deletedAt !== null) && $this->importer !== null) {
+            // A live search result has no cache row yet. Import the public
+            // object so the parent, its author and later counts share the
+            // same record an inbound Create would have produced.
+            $remote = $this->importer->ensure($target) ?? $posts->findPostByObjectId($target);
+        }
         if ($remote !== null && $remote->deletedAt !== null) {
             throw new RemoteReplyException(404, 'remote_post_not_found', 'This post is no longer available.');
         }

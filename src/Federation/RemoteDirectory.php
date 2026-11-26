@@ -200,6 +200,60 @@ final class RemoteDirectory
     }
 
     /**
+     * Reads one public post object for the interaction cache.
+     *
+     * Search results and remote profiles are read live, while a like or a
+     * reply needs a cached row. This path deliberately skips counters,
+     * replies and the actor profile: the interaction service only needs the
+     * author, content and reply parent. Mastodon-compatible instances that
+     * reject an unsigned actor request still expose the status through their
+     * public API, so that shape is tried first when the URL is a status URL.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws RemoteDirectoryException when the origin cannot be read
+     */
+    public function remoteObject(string $url): ?array
+    {
+        $url = trim($url);
+        if ($url === ''
+            || preg_match('#^https?://#i', $url) !== 1
+            || filter_var($url, FILTER_VALIDATE_URL) === false
+        ) {
+            return null;
+        }
+
+        $host = parse_url($url, PHP_URL_HOST);
+        $statusId = $this->mastodonStatusId($url);
+        if ($statusId !== null && is_string($host) && $host !== '') {
+            try {
+                $status = $this->fetchJson(
+                    'https://' . $host . '/api/v1/statuses/' . rawurlencode($statusId),
+                    self::JSON_ACCEPT,
+                );
+                if (isset($status['reblog']) && is_array($status['reblog'])) {
+                    $status = $status['reblog'];
+                }
+
+                $post = $this->mastodonPost($status, $host);
+                if ($post !== null) {
+                    return $post;
+                }
+            } catch (RemoteDirectoryException) {
+                // Not every server exposes the Mastodon API; the object
+                // endpoint may still answer.
+            }
+        }
+
+        $note = $this->fetchJson($url, self::ACTIVITY_ACCEPT);
+        if (isset($note['object']) && is_array($note['object'])) {
+            $note = $note['object'];
+        }
+
+        return $this->activityPubPost($note, []);
+    }
+
+    /**
      * The actor's personal inbox, resolved from its public document.
      *
      * A like on a discovered post has no stored follow edge to read the inbox

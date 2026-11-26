@@ -51,6 +51,7 @@ use AlohaSocial\Server\Federation\RemoteActorProfiles;
 use AlohaSocial\Server\Federation\RemoteDirectory;
 use AlohaSocial\Server\Federation\RemoteEngagement;
 use AlohaSocial\Server\Federation\RemoteEngagementRefresher;
+use AlohaSocial\Server\Federation\RemotePostImporter;
 use AlohaSocial\Server\Federation\RemoteReactions;
 use AlohaSocial\Server\Federation\RemoteReplies;
 use AlohaSocial\Server\Federation\Mastodon\PdoEventBroker;
@@ -321,6 +322,7 @@ final class ApplicationFactory
                 $app->queue,
                 $remoteDirectory,
                 $clock,
+                new RemotePostImporter($database, $remoteDirectory, $clock),
             ),
             remoteReplies: new RemoteReplies(
                 $database,
@@ -329,6 +331,7 @@ final class ApplicationFactory
                 $app->queue,
                 $remoteDirectory,
                 $clock,
+                new RemotePostImporter($database, $remoteDirectory, $clock),
             ),
             remoteActorProfiles: $remoteActorProfiles,
             federatedTimeline: new FederatedTimeline(
