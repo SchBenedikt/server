@@ -64,6 +64,7 @@ final class Migrations
             new Version202611280007ConsolidatePinsAndArchive(),
             new Version202611280008ConsolidateCollectionsAndStories(),
             new Version202611280009RepairStoryViews(),
+            new Version202611280010StarterPacks(),
         ];
     }
 }

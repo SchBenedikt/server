@@ -860,6 +860,117 @@ final class BlueskyAccountTest extends TestCase
         self::assertCount(1, $deletes);
     }
 
+    public function testRemotePostCanBeLikedWithoutFollowingItsAuthor(): void
+    {
+        $this->bluesky->connect('alice', 'alice.bsky.social', 'abcd-efgh-ijkl-mnop');
+        $now = $this->server->runtime->clock->now();
+        $source = 'jetstream';
+        $remoteDid = 'did:plc:unfollowedauthor';
+        $uri = 'at://' . $remoteDid . '/app.bsky.feed.post/unfollowed-post';
+        $inbound = new PdoAtprotoInboundRepository($this->server->runtime->database);
+        $inbound->saveAccount(new AtprotoRemoteAccount(
+            $source,
+            $remoteDid,
+            'unfollowed.example',
+            AtprotoAccountStatus::Active,
+            true,
+            $now,
+        ));
+        $inbound->saveRecord(new AtprotoRemoteRecord(
+            $source,
+            $remoteDid,
+            'app.bsky.feed.post',
+            'unfollowed-post',
+            $uri,
+            'bafy-unfollowed-post',
+            null,
+            1,
+            ['text' => 'Unfollowed target', 'createdAt' => '2026-11-24T10:00:00Z'],
+            false,
+            $now,
+            $now,
+            $now,
+        ));
+
+        $session = $this->server->signIn('alice');
+        $path = '/api/v1/posts/' . rawurlencode($uri) . '/like';
+        $this->http->requests = [];
+        $liked = $this->server->json(
+            'POST',
+            $path,
+            ['account_did' => 'did:plc:alice123'],
+            $session['cookies'],
+            $session['csrf'],
+        );
+
+        self::assertSame(200, $liked->status, $liked->body);
+        $likedBody = json_decode($liked->body, true, 64, JSON_THROW_ON_ERROR);
+        self::assertTrue($likedBody['interaction']['favourited']);
+        self::assertCount(1, array_filter(
+            $this->http->requests,
+            static fn (array $request): bool => str_contains($request['url'], 'com.atproto.repo.putRecord')
+                && str_contains($request['body'], 'app.bsky.feed.like'),
+        ));
+
+        // The card state must be available for the same record that was just
+        // liked, even though no follow edge to its author exists.
+        $state = $this->server->send('GET', '/api/v1/host/interactions', [
+            'cookies' => $session['cookies'],
+            'query' => ['ids' => $uri],
+        ]);
+        self::assertSame(200, $state->status);
+        self::assertTrue(
+            json_decode($state->body, true, 64, JSON_THROW_ON_ERROR)['interactions'][$uri]['favourited'],
+        );
+    }
+
+    public function testRemoteLikeWithoutABlueskyIdentityExplainsWhatIsMissing(): void
+    {
+        $now = $this->server->runtime->clock->now();
+        $source = 'jetstream';
+        $remoteDid = 'did:plc:unconnectedauthor';
+        $uri = 'at://' . $remoteDid . '/app.bsky.feed.post/unconnected-post';
+        $inbound = new PdoAtprotoInboundRepository($this->server->runtime->database);
+        $inbound->saveAccount(new AtprotoRemoteAccount(
+            $source,
+            $remoteDid,
+            'unconnected.example',
+            AtprotoAccountStatus::Active,
+            true,
+            $now,
+        ));
+        $inbound->saveRecord(new AtprotoRemoteRecord(
+            $source,
+            $remoteDid,
+            'app.bsky.feed.post',
+            'unconnected-post',
+            $uri,
+            'bafy-unconnected-post',
+            null,
+            1,
+            ['text' => 'Unconnected target', 'createdAt' => '2026-11-24T10:00:00Z'],
+            false,
+            $now,
+            $now,
+            $now,
+        ));
+
+        $session = $this->server->signIn('alice');
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($uri) . '/like',
+            [],
+            $session['cookies'],
+            $session['csrf'],
+        );
+
+        self::assertSame(409, $response->status, $response->body);
+        self::assertSame(
+            'atproto_account_not_connected',
+            json_decode($response->body, true, 64, JSON_THROW_ON_ERROR)['error']['code'],
+        );
+    }
+
     public function testPublishedRecordsCanBeDeletedWhenOutboundPublishingIsDisabled(): void
     {
         $disabled = new TestServer(['atproto_publish' => false], $this->http, new class implements HostResolver {

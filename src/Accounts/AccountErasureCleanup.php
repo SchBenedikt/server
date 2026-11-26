@@ -125,6 +125,14 @@ final readonly class AccountErasureCleanup
                 ['account_id' => $accountId, 'private_owner' => Collections::PRIVATE_OWNER_PREFIX . $accountId],
             );
             $delete(
+                'starter_pack_members',
+                'DELETE FROM social_starter_pack_member WHERE pack_id IN'
+                    . ' (SELECT id FROM social_starter_pack WHERE owner_id = :account_id)'
+                    . " OR (network = 'local' AND member_id = :member_id)",
+                ['account_id' => $accountId, 'member_id' => $accountId],
+            );
+            $delete('starter_packs', 'DELETE FROM social_starter_pack WHERE owner_id = :account_id', $user);
+            $delete(
                 'kokua_replies',
                 'DELETE FROM kokua_help WHERE account_id = :helper_id OR kokua_id IN'
                     . ' (SELECT id FROM kokua WHERE account_id = :owner_id)',

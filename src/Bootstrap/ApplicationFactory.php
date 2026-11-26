@@ -77,6 +77,7 @@ use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
 use AlohaSocial\Server\Community\SocialGraph;
+use AlohaSocial\Server\Community\StarterPacks;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Auth\PasswordHasher;
@@ -200,7 +201,6 @@ final class ApplicationFactory
         $atprotoInboundRepository = new PdoAtprotoInboundRepository($database);
         $atprotoTargetPolicy = new RemoteInteractionTargetPolicy(
             $atprotoInboundRepository,
-            $atprotoFollowRepository,
             new PdoBlockRepository($database),
             $atprotoJetstream?->name() ?? JetstreamEventSource::NAME,
         );
@@ -303,6 +303,7 @@ final class ApplicationFactory
             memories: new Memories($database, $clock),
             stories: new Stories($database, $clock, $socialGraph),
             collections: new Collections($database, $clock, $app->posts),
+            starterPacks: new StarterPacks($database, $clock, $accounts, $remoteDirectory),
             drafts: new Drafts($database, $clock),
             archives: new Archives($database, $clock, $app->posts),
             forYou: new ForYouFeed($database, $clock, null, $socialGraph),

@@ -126,6 +126,7 @@ final class Exports
             ),
             'lists' => $this->lists($accountId),
             'collections' => $this->collections($accountId),
+            'starter_packs' => $this->starterPacks($accountId),
             'drafts' => $this->rows(
                 'SELECT context, content, content_warning, visibility, attachment_ids, in_reply_to_id,'
                 . ' quoted_post_id, poll_options, poll_multiple, poll_hide_totals, poll_expires_in, updated_at'
@@ -326,6 +327,28 @@ final class Exports
         }
 
         return $collections;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function starterPacks(string $accountId): array
+    {
+        $packs = $this->rows(
+            'SELECT id, title, description, created_at, updated_at FROM social_starter_pack'
+            . ' WHERE owner_id = :account_id ORDER BY created_at ASC',
+            ['account_id' => $accountId],
+        );
+
+        foreach ($packs as $index => $pack) {
+            $packs[$index]['members'] = $this->rows(
+                'SELECT member_id, network, handle, display_name, avatar_url, inbox_url, position, created_at'
+                . ' FROM social_starter_pack_member WHERE pack_id = :pack_id ORDER BY position ASC, created_at ASC',
+                ['pack_id' => (string) $pack['id']],
+            );
+        }
+
+        return $packs;
     }
 
     /**

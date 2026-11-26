@@ -21,7 +21,10 @@ use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Service\ReactionException;
 use AlohaSocial\Core\Service\ValidationException;
 use AlohaSocial\Core\Domain\Atproto\AtprotoInteractionRecord;
+use AlohaSocial\Core\Service\Atproto\AtprotoAccountNotConnectedException;
 use AlohaSocial\Core\Service\Atproto\AtprotoInteractionRejectedException;
+use AlohaSocial\Core\Service\Atproto\AtprotoNotConfiguredException;
+use AlohaSocial\Core\Service\Atproto\AtprotoPublishDisabledException;
 use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Accounts\RegistrationException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
@@ -812,6 +815,10 @@ final class FrontController
                     return Response::json(['ok' => true]);
                 } catch (AtprotoInteractionRejectedException $exception) {
                     return $this->atprotoInteractionError($exception);
+                } catch (AtprotoAccountNotConnectedException) {
+                    return $this->atprotoInteractionAccountError();
+                } catch (AtprotoPublishDisabledException | AtprotoNotConfiguredException) {
+                    return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
                 } catch (Throwable) {
                     return $this->apiError(502, 'atproto_interaction_failed', 'The AT Protocol interaction could not be published.');
                 }
@@ -909,6 +916,10 @@ final class FrontController
                     return Response::json($result);
                 } catch (AtprotoInteractionRejectedException $exception) {
                     return $this->atprotoInteractionError($exception);
+                } catch (AtprotoAccountNotConnectedException) {
+                    return $this->atprotoInteractionAccountError();
+                } catch (AtprotoPublishDisabledException | AtprotoNotConfiguredException) {
+                    return $this->apiError(503, 'atproto_interactions_not_configured', 'AT Protocol interactions are not available.');
                 } catch (Throwable) {
                     return $this->apiError(502, 'atproto_interaction_failed', 'The AT Protocol interaction could not be published.');
                 }
@@ -1066,6 +1077,20 @@ final class FrontController
         return is_array($parts)
             && in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
             && isset($parts['host']);
+    }
+
+    /**
+     * A Bluesky like is a record in the member's own PDS repository. Without
+     * a connected identity there is nowhere to publish it, so the card needs
+     * an actionable answer instead of a generic 502.
+     */
+    private function atprotoInteractionAccountError(): Response
+    {
+        return $this->apiError(
+            409,
+            'atproto_account_not_connected',
+            'Connect a Bluesky account in Settings to like or boost Bluesky posts.',
+        );
     }
 
     private function atprotoInteractionError(AtprotoInteractionRejectedException $exception): Response

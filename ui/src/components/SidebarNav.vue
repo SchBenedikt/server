@@ -71,6 +71,7 @@ const moreGroups = computed(() => {
 					{ id: 'memories', label: 'Memories', icon: 'clock', href: '#/memories', group: 'library', requiresAuth: true },
 					{ id: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', href: '#/bookmarks', group: 'library', requiresAuth: true },
 					{ id: 'collections', label: 'Collections', icon: 'list', href: '#/collections', group: 'library', requiresAuth: true },
+					{ id: 'starter-packs', label: 'Starter packs', icon: 'users', href: '#/starter-packs', group: 'library', requiresAuth: true },
 					{ id: 'lists', label: 'Lists', icon: 'list', href: '#/lists', group: 'library', requiresAuth: true },
 					{ id: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts', group: 'library', requiresAuth: true },
 					{ id: 'archived', label: 'Archive', icon: 'archive', href: '#/archived', group: 'library', requiresAuth: true },
@@ -119,6 +120,9 @@ function isActive(name: string): boolean {
 	}
 	if (name === 'collections') {
 		return route.value.name === 'collections' || route.value.name === 'collection';
+	}
+	if (name === 'starter-packs') {
+		return route.value.name === 'starter-packs' || route.value.name === 'starter-pack';
 	}
 	if (name === 'search') {
 		return route.value.name === 'search' || route.value.name === 'tag';

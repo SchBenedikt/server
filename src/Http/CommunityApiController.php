@@ -370,6 +370,103 @@ final class CommunityApiController
                 ]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/starter-packs') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to see starter packs.');
+                }
+
+                return Response::json([
+                    'mine' => $this->runtime->starterPacks->forAccount($userId),
+                    'discover' => $this->runtime->starterPacks->discover($userId),
+                ]);
+            }
+
+            if (preg_match('#^/api/v1/host/starter-packs/([^/]+)/members/([^/]+)$#', $path, $matches) === 1
+                && $method === 'DELETE'
+            ) {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                return Response::json([
+                    'starter_pack' => $this->runtime->starterPacks->removeMember(
+                        rawurldecode($matches[1]),
+                        $userId,
+                        rawurldecode($matches[2]),
+                    ),
+                ]);
+            }
+
+            if (preg_match('#^/api/v1/host/starter-packs/([^/]+)/members$#', $path, $matches) === 1
+                && $method === 'POST'
+            ) {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                $this->limit($request, $ip, $session);
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'starter_pack' => $this->runtime->starterPacks->addMember(
+                        rawurldecode($matches[1]),
+                        $userId,
+                        $body['member'] ?? null,
+                    ),
+                ], 201);
+            }
+
+            if (preg_match('#^/api/v1/host/starter-packs/([^/]+)$#', $path, $matches) === 1) {
+                $packId = rawurldecode($matches[1]);
+                if ($method === 'GET') {
+                    $pack = $this->runtime->starterPacks->find($packId);
+                    if ($pack === null) {
+                        return $this->error(404, 'not_found', 'This starter pack does not exist.');
+                    }
+
+                    return Response::json(['starter_pack' => $pack]);
+                }
+
+                if (in_array($method, ['PATCH', 'DELETE'], true)) {
+                    if ($userId === null) {
+                        return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                    }
+                    if ($method === 'DELETE') {
+                        $this->runtime->starterPacks->delete($packId, $userId);
+
+                        return Response::json(['deleted' => true]);
+                    }
+
+                    $body = $this->jsonBody($request);
+
+                    return Response::json([
+                        'starter_pack' => $this->runtime->starterPacks->update(
+                            $packId,
+                            $userId,
+                            $body['title'] ?? null,
+                            $body['description'] ?? null,
+                        ),
+                    ]);
+                }
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/starter-packs') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
+                }
+
+                $this->limit($request, $ip, $session);
+                $body = $this->jsonBody($request);
+
+                return Response::json([
+                    'starter_pack' => $this->runtime->starterPacks->create(
+                        $userId,
+                        $body['title'] ?? null,
+                        $body['description'] ?? '',
+                    ),
+                ], 201);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/collections') {
                 $account = $this->account($request, $session, 'account');
                 if ($account === null) {

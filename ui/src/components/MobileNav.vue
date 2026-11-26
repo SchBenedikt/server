@@ -52,6 +52,7 @@ const sheetGroups = computed(() => {
 				items: [
 					{ name: 'bookmarks', label: 'bookmarks', icon: 'bookmark', href: '#/bookmarks' },
 					{ name: 'collections', label: 'collections', icon: 'list', href: '#/collections' },
+					{ name: 'starter-packs', label: 'Starter packs', icon: 'users', href: '#/starter-packs' },
 					{ name: 'lists', label: 'lists', icon: 'list', href: '#/lists' },
 					{ name: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts' },
 					{ name: 'archived', label: 'Archive', icon: 'archive', href: '#/archived' },
@@ -97,6 +98,9 @@ function isActive(name: string): boolean {
 	}
 	if (name === 'collections') {
 		return route.value.name === 'collections' || route.value.name === 'collection';
+	}
+	if (name === 'starter-packs') {
+		return route.value.name === 'starter-packs' || route.value.name === 'starter-pack';
 	}
 	if (name === 'lists') {
 		return route.value.name === 'lists' || route.value.name === 'list';

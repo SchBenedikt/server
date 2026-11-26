@@ -13,6 +13,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Added
 
+- **Starter packs:** members can bundle local accounts, fediverse actors and
+  Bluesky identities into a named pack and share it. A pack shows each
+  member's network and display profile, and **Follow all** follows the members
+  through the normal local, ActivityPub and AT Protocol follow services. Packs
+  live in `social_starter_pack` and `social_starter_pack_member`; every signed-in
+  member can read a pack, only the owner can edit or delete it.
 - **Replies to remote posts:** federated posts can now be answered from the
   composer. The reply is stored locally with the remote object URL as its
   parent and delivered as a signed `Create` with `inReplyTo` to the parent
@@ -48,6 +54,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Liking and boosting external posts:** an AT Protocol card rendered its like
+  action as a static count because the card only accepted HTTP targets, and the
+  AT interaction policy refused every post whose author was not followed. Both
+  are fixed: a cached Bluesky post can now be liked or boosted from the
+  federated timeline, and a missing Bluesky identity answers with a clear
+  "connect an account" message instead of a generic failure.
 - **Local follows in stories, live updates and For You:** a local follow is a
   follower edge in `social_follower` with the follower's actor URL, not a
   `social_following` row. Host queries that only read the remote table, or

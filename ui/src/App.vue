@@ -32,6 +32,7 @@ import MessagesView from './views/MessagesView.vue';
 import ArchivedView from './views/ArchivedView.vue';
 import CollectionView from './views/CollectionView.vue';
 import CollectionsView from './views/CollectionsView.vue';
+import StarterPacksView from './views/StarterPacksView.vue';
 import DraftsView from './views/DraftsView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import NotificationsView from './views/NotificationsView.vue';
@@ -104,6 +105,9 @@ const currentView = computed(() => {
 			return CollectionsView;
 		case 'collection':
 			return CollectionView;
+		case 'starter-packs':
+		case 'starter-pack':
+			return StarterPacksView;
 		case 'drafts':
 			return DraftsView;
 		case 'archived':
@@ -136,6 +140,8 @@ const viewKey = computed(() => {
 			return `conversation:${current.id}`;
 		case 'collection':
 			return `collection:${current.id}`;
+		case 'starter-pack':
+			return `starter-pack:${current.id}`;
 		case 'admin':
 			return `admin:${current.section}`;
 		default:

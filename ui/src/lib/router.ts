@@ -28,6 +28,8 @@ export type Route =
 	| { name: 'memories' }
 	| { name: 'collections' }
 	| { name: 'collection'; id: string }
+	| { name: 'starter-packs' }
+	| { name: 'starter-pack'; id: string }
 	| { name: 'drafts' }
 	| { name: 'archived' }
 	| { name: 'settings' }
@@ -135,6 +137,14 @@ export function parseHash(hash: string): Route {
 		return { name: 'collection', id: decode(parts[1]) };
 	}
 
+	if (parts[0] === 'starter-packs' && parts.length === 1) {
+		return { name: 'starter-packs' };
+	}
+
+	if (parts[0] === 'starter-packs' && parts[1] !== undefined) {
+		return { name: 'starter-pack', id: decode(parts[1]) };
+	}
+
 	if (parts[0] === 'admin') {
 		const section = parts[1] !== undefined && isAdminSection(parts[1]) ? parts[1] : 'overview';
 		return { name: 'admin', section };
@@ -239,6 +249,10 @@ export function routeTitle(current: Route): string {
 			return 'collections';
 		case 'collection':
 			return 'collection';
+		case 'starter-packs':
+			return 'starter packs';
+		case 'starter-pack':
+			return 'starter pack';
 		case 'drafts':
 			return 'Drafts';
 		case 'archived':

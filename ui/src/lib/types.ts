@@ -543,6 +543,30 @@ export interface Collection {
 	post_ids?: string[];
 }
 
+export interface StarterPackMember {
+	id: string;
+	member_id: string;
+	network: 'local' | 'activitypub' | 'bluesky';
+	handle: string;
+	display_name: string | null;
+	avatar_url: string | null;
+	inbox_url: string | null;
+	position: number;
+}
+
+export interface StarterPack {
+	id: string;
+	owner_id: string;
+	owner_handle: string;
+	owner_name: string;
+	title: string;
+	description: string;
+	member_count: number;
+	created_at: string;
+	updated_at: string;
+	members: StarterPackMember[];
+}
+
 export interface PostRevision {
 	post_id: string;
 	revision: number;

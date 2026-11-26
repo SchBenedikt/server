@@ -39,6 +39,7 @@ use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
+use AlohaSocial\Server\Community\StarterPacks;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
 use AlohaSocial\Server\Config\HostConfig;
@@ -100,6 +101,7 @@ final readonly class Runtime
         public Memories $memories,
         public Stories $stories,
         public Collections $collections,
+        public StarterPacks $starterPacks,
         public Drafts $drafts,
         public Archives $archives,
         public ForYouFeed $forYou,

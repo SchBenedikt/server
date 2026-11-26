@@ -47,6 +47,8 @@ import type {
 	StoriesData,
 	Story,
 	Collection,
+	StarterPack,
+	StarterPackMember,
 	PostRevisionData,
 	Draft,
 	ArchivedPost,
@@ -219,6 +221,13 @@ export interface Api {
 	deleteCollection(id: string): Promise<void>;
 	addCollectionItem(id: string, postId: string): Promise<Collection>;
 	removeCollectionItem(id: string, postId: string): Promise<Collection>;
+	starterPacks(): Promise<{ mine: StarterPack[]; discover: StarterPack[] }>;
+	starterPack(id: string): Promise<StarterPack>;
+	createStarterPack(title: string, description?: string): Promise<StarterPack>;
+	updateStarterPack(id: string, payload: { title?: string; description?: string }): Promise<StarterPack>;
+	deleteStarterPack(id: string): Promise<void>;
+	addStarterPackMember(id: string, member: string): Promise<StarterPack>;
+	removeStarterPackMember(id: string, memberRowId: string): Promise<StarterPack>;
 	kokua(params?: { kind?: string; category?: string; state?: string; limit?: number; offset?: number }): Promise<KokuaPage>;
 	createKokua(payload: KokuaCreatePayload): Promise<KokuaEntry>;
 	setKokuaStatus(id: string, status: KokuaStatus): Promise<KokuaEntry>;
@@ -942,6 +951,46 @@ function normalizeCollection(value: unknown): Collection | null {
 		post_ids: Array.isArray(value.post_ids)
 			? value.post_ids.filter((id): id is string => typeof id === 'string')
 			: undefined,
+	};
+}
+
+function normalizeStarterPackMember(value: unknown): StarterPackMember | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.member_id !== 'string') {
+		return null;
+	}
+
+	const network = value.network === 'activitypub' || value.network === 'bluesky' ? value.network : 'local';
+
+	return {
+		id: value.id,
+		member_id: value.member_id,
+		network,
+		handle: typeof value.handle === 'string' ? value.handle : '',
+		display_name: typeof value.display_name === 'string' ? value.display_name : null,
+		avatar_url: typeof value.avatar_url === 'string' ? value.avatar_url : null,
+		inbox_url: typeof value.inbox_url === 'string' ? value.inbox_url : null,
+		position: typeof value.position === 'number' ? value.position : 0,
+	};
+}
+
+function normalizeStarterPack(value: unknown): StarterPack | null {
+	if (!isRecord(value) || typeof value.id !== 'string' || typeof value.title !== 'string') {
+		return null;
+	}
+
+	return {
+		id: value.id,
+		owner_id: typeof value.owner_id === 'string' ? value.owner_id : '',
+		owner_handle: typeof value.owner_handle === 'string' ? value.owner_handle : '',
+		owner_name: typeof value.owner_name === 'string' ? value.owner_name : '',
+		title: value.title,
+		description: typeof value.description === 'string' ? value.description : '',
+		member_count: typeof value.member_count === 'number' ? value.member_count : 0,
+		created_at: typeof value.created_at === 'string' ? value.created_at : '',
+		updated_at: typeof value.updated_at === 'string' ? value.updated_at : '',
+		members: Array.isArray(value.members)
+			? value.members.map(normalizeStarterPackMember).filter((member): member is StarterPackMember => member !== null)
+			: [],
 	};
 }
 
@@ -2496,6 +2545,94 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return collection;
+		},
+
+		async starterPacks(): Promise<{ mine: StarterPack[]; discover: StarterPack[] }> {
+			const data = await request<{ mine?: unknown; discover?: unknown }>('GET', '/api/v1/host/starter-packs');
+
+			return {
+				mine: Array.isArray(data?.mine)
+					? data.mine.map(normalizeStarterPack).filter((pack): pack is StarterPack => pack !== null)
+					: [],
+				discover: Array.isArray(data?.discover)
+					? data.discover.map(normalizeStarterPack).filter((pack): pack is StarterPack => pack !== null)
+					: [],
+			};
+		},
+
+		async starterPack(id: string): Promise<StarterPack> {
+			const data = await request<{ starter_pack?: unknown }>(
+				'GET',
+				`/api/v1/host/starter-packs/${encodeURIComponent(id)}`,
+			);
+			const pack = normalizeStarterPack(data?.starter_pack);
+			if (pack === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a starter pack.');
+			}
+
+			return pack;
+		},
+
+		async createStarterPack(title: string, description = ''): Promise<StarterPack> {
+			const data = await request<{ starter_pack?: unknown }>(
+				'POST',
+				'/api/v1/host/starter-packs',
+				undefined,
+				{ title, description },
+			);
+			const pack = normalizeStarterPack(data?.starter_pack);
+			if (pack === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a starter pack.');
+			}
+
+			return pack;
+		},
+
+		async updateStarterPack(id: string, payload: { title?: string; description?: string }): Promise<StarterPack> {
+			const data = await request<{ starter_pack?: unknown }>(
+				'PATCH',
+				`/api/v1/host/starter-packs/${encodeURIComponent(id)}`,
+				undefined,
+				payload,
+			);
+			const pack = normalizeStarterPack(data?.starter_pack);
+			if (pack === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a starter pack.');
+			}
+
+			return pack;
+		},
+
+		async deleteStarterPack(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/starter-packs/${encodeURIComponent(id)}`);
+		},
+
+		async addStarterPackMember(id: string, member: string): Promise<StarterPack> {
+			const data = await request<{ starter_pack?: unknown }>(
+				'POST',
+				`/api/v1/host/starter-packs/${encodeURIComponent(id)}/members`,
+				undefined,
+				{ member },
+			);
+			const pack = normalizeStarterPack(data?.starter_pack);
+			if (pack === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a starter pack.');
+			}
+
+			return pack;
+		},
+
+		async removeStarterPackMember(id: string, memberRowId: string): Promise<StarterPack> {
+			const data = await request<{ starter_pack?: unknown }>(
+				'DELETE',
+				`/api/v1/host/starter-packs/${encodeURIComponent(id)}/members/${encodeURIComponent(memberRowId)}`,
+			);
+			const pack = normalizeStarterPack(data?.starter_pack);
+			if (pack === null) {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain a starter pack.');
+			}
+
+			return pack;
 		},
 
 		async updateCollection(

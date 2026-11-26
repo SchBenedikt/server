@@ -33,8 +33,8 @@ the core route contract:
 | Route | Purpose |
 | --- | --- |
 | `GET /api/v1/host/interactions?ids=…` | Batched favourite/boost/reply counts and viewer state for local posts and cached remote posts. For a federated post the origin's public counters are added from the engagement cache, so a card shows the real totals instead of this instance's few rows. |
-| `POST` / `DELETE /api/v1/posts/{id}/boost` | Add or remove a local boost, or queue an ActivityPub Announce/Undo for a cached remote post from an accepted follow. |
-| `POST` / `DELETE /api/v1/posts/{id}/like` | Add or remove a local favourite, or queue an ActivityPub Like/Undo for a cached remote post from an accepted follow. |
+| `POST` / `DELETE /api/v1/posts/{id}/boost` | Add or remove a local boost, or queue an ActivityPub Announce/Undo for a cached remote post. A cached AT Protocol post is reposted in the member's own PDS repository. |
+| `POST` / `DELETE /api/v1/posts/{id}/like` | Add or remove a local favourite, or queue an ActivityPub Like/Undo for a cached remote post. A cached AT Protocol post is liked in the member's own PDS repository; without a connected Bluesky or native PDS identity the route answers `409 atproto_account_not_connected`. |
 | `GET /api/v1/host/posts?ids=…` | Full post records for batch hydration, including attachments and reply parents. |
 | `GET /api/v1/host/lookup?handle=…&cursor=…` | Resolve and page a public Fediverse or Bluesky profile for the profile view. |
 | `GET /api/v1/host/remote-post?id=…` | Read one remote post with its parent, replies and engagement counts. The counters are cached for later cards; `bin/worker.php` refreshes them for followed posts (newest first, 15-minute TTL, bounded per tick) so a card never has to fetch the origin itself. |
@@ -144,6 +144,22 @@ are not implied.
 | Scheduled posts | `#/scheduled` | `/api/v1/scheduled-posts`; a schedule can be re-timed or cancelled, but not edited after queueing. |
 | Notifications | `#/notifications` | `GET /api/mastodon/v1/notifications` with actor and status previews, plus the core dismiss/clear actions. |
 
+### Starter packs
+
+`#/starter-packs` collects local accounts, fediverse actors and Bluesky
+identities into a named, shareable pack. Add a member by local handle,
+`@name@server`, actor URL or Bluesky handle/DID; the host resolves and stores
+the canonical identity, display name, avatar and — for ActivityPub — the
+inbox. **Follow all** then follows each member through the same services as a
+single follow: a locked local account receives an ordinary follow request, and
+a Bluesky member needs a connected identity. Every signed-in member can read a
+pack; only the owner can add or remove members, rename it or delete it.
+
+The pack is a directory, not a second follow graph, so it never widens a
+post's audience or bypasses a block. It is stored in `social_starter_pack` and
+`social_starter_pack_member`; `GET /api/v1/host/starter-packs` returns own and
+discoverable packs, and the `/members` routes manage membership.
+
 The composer can attach a poll (2–4 options, multiple choice, hide totals,
 expiry) or schedule a post. Polls are created through
 `POST /api/mastodon/v1/statuses` because the neutral create route has no poll
@@ -193,9 +209,11 @@ following count loads that list page by page: the Mastodon API when available,
 otherwise the actor's ActivityPub collection, or `app.bsky.graph.getFollowers`
 and `getFollows` for Bluesky. Remote profile and post counts are shown exactly
 as the origin reports them. Remote profiles, follows and replies remain
-read-only; cached posts from followed ActivityPub accounts support local likes,
-boosts and replies using the local account's ActivityPub identity. These
-operations queue signed Like/Undo(Like), Announce/Undo(Announce) and
+read-only; any cached public post supports local likes and boosts. A cached
+ActivityPub post uses the local account's ActivityPub identity and queues
+signed Like/Undo(Like) and Announce/Undo(Announce) deliveries; a cached AT
+Protocol post is liked or reposted as a record in the member's connected
+Bluesky or native PDS repository. Replies to an ActivityPub post use
 `Create`/`Note` deliveries. A reply stores the remote object as its parent and
 is threaded locally; remote engagement totals remain as reported by the
 origin.

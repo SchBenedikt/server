@@ -88,8 +88,9 @@ Accounts, sessions and CSRF are host-owned per
   cross-network search over Bluesky's AppView and a configurable public
   Mastodon-compatible instance (`ALOHASOCIAL_DISCOVERY_INSTANCE`). Results are
   grouped into profiles and posts, paged by cursor, and never stored locally.
-  A remote post's detail view lists who publicly liked or reposted it. Cached
-  posts from followed ActivityPub accounts also support local likes and boosts.
+  A remote post's detail view lists who publicly liked or reposted it. Any cached
+  public post supports local likes and boosts, including AT Protocol posts
+  through the member's connected Bluesky or native PDS identity.
   Both use the same SSRF guard and byte limits as the profile lookup.
 - **Editing.** The post menu on the signed-in account's own posts opens the
   composer in edit mode. It calls the core's `PATCH /api/v1/posts/{id}` with the

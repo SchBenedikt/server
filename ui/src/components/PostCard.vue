@@ -102,11 +102,10 @@ const remoteTarget = computed(() => {
 	const candidate = props.post.object_id ?? props.post.id;
 	return isRemoteId(candidate) || candidate.startsWith('at://') ? candidate : null;
 });
-const interactionId = computed(() => (
-	localId.value ?? (remoteTarget.value?.startsWith('http://') || remoteTarget.value?.startsWith('https://')
-		? remoteTarget.value
-		: null)
-));
+// Every cached external post is likeable: an ActivityPub post by its object
+// URL and an AT Protocol post by its at:// record URI. `remoteTarget` only
+// yields those two shapes.
+const interactionId = computed(() => localId.value ?? remoteTarget.value);
 const detailTarget = computed(() => localId.value ?? remoteTarget.value);
 const detailHref = computed(() => detailTarget.value === null ? null : `#/p/${encodeURIComponent(detailTarget.value)}`);
 const isRemotePost = computed(() => localId.value === null);
