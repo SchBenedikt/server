@@ -18,6 +18,7 @@ use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Migrations\Version202611280008ConsolidateCollectionsAndStories;
+use AlohaSocial\Server\Migrations\Version202611280009RepairStoryViews;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -286,6 +287,15 @@ final class CollectionStoryConsolidationTest extends TestCase
                 ['id' => $createdStoryBody['story']['id']],
             ),
         );
+        $newStorySeen = $server->json(
+            'POST',
+            '/api/v1/host/stories/seen',
+            ['ids' => [$createdStoryBody['story']['id']]],
+            $login['cookies'],
+            $login['csrf'],
+        );
+        self::assertSame(200, $newStorySeen->status, $newStorySeen->body);
+        self::assertSame(1, json_decode($newStorySeen->body, true, 512, JSON_THROW_ON_ERROR)['seen']);
 
         $deleted = $server->json(
             'DELETE',
@@ -299,6 +309,10 @@ final class CollectionStoryConsolidationTest extends TestCase
             'SELECT deleted_at FROM social_story WHERE id = :id',
             ['id' => $createdStoryBody['story']['id']],
         ));
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM social_story_view WHERE story_id = :id',
+            ['id' => $createdStoryBody['story']['id']],
+        ));
 
         $export = $server->send('GET', '/api/v1/host/export', ['cookies' => $login['cookies']]);
         self::assertSame(200, $export->status, $export->body);
@@ -309,9 +323,22 @@ final class CollectionStoryConsolidationTest extends TestCase
         self::assertSame(['legacy-story'], array_column($exportBody['stories'], 'id'));
         self::assertSame('legacy-story', (string) $exportBody['story_views'][0]['story_id']);
 
+        // Simulate a view marker that outlived its soft-deleted story. The
+        // repair migration must clean it before the frozen 008 rollback turns
+        // it into an orphaned legacy row.
+        $deletedStoryId = (string) $createdStoryBody['story']['id'];
+        $db->execute(
+            'INSERT INTO social_story_view (story_id, viewer_id, viewed_at)'
+            . ' VALUES (:story_id, :viewer_id, :viewed_at)',
+            ['story_id' => $deletedStoryId, 'viewer_id' => 'bob', 'viewed_at' => $stamp],
+        );
+
         // The rollback path is part of the migration contract too: it restores
-        // the old tables and reconstructs the host shape from core rows.
+        // the old tables and reconstructs the host shape from core rows. The
+        // runner unwinds 009 before 008, and the test follows that order.
         $migration = new Version202611280008ConsolidateCollectionsAndStories();
+        $repair = new Version202611280009RepairStoryViews();
+        $repair->down($db);
         $migration->down($db);
         self::assertSame(
             'Legacy private',
@@ -342,11 +369,112 @@ final class CollectionStoryConsolidationTest extends TestCase
                 'account_id',
             ),
         );
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM story WHERE id = :id',
+            ['id' => $deletedStoryId],
+        ));
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM story_seen WHERE story_id = :id',
+            ['id' => $deletedStoryId],
+        ));
 
         $migration->up($db);
+        $repair->up($db);
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM social_story_view WHERE story_id = :id',
+            ['id' => $deletedStoryId],
+        ));
+        self::assertSame(2, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM social_story_view WHERE story_id = :id',
+            ['id' => 'legacy-story'],
+        ));
         self::assertSame([], $db->fetchAll(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
             . " AND name IN ('collection', 'collection_item', 'story', 'story_seen')",
+        ));
+    }
+
+    public function testCollidingCoreStoryIdDoesNotReceiveLegacyStoryViews(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+        $db = $server->runtime->database;
+        $stamp = Time::format($server->runtime->clock->now());
+        $expires = Time::format($server->runtime->clock->now()->modify('+24 hours'));
+
+        $db->execute(
+            'CREATE TABLE story ('
+            . ' id VARCHAR(64) NOT NULL PRIMARY KEY,'
+            . ' account_id VARCHAR(64) NOT NULL,'
+            . ' content VARCHAR(500) NOT NULL,'
+            . ' background VARCHAR(32) NOT NULL,'
+            . ' created_at VARCHAR(20) NOT NULL,'
+            . ' expires_at VARCHAR(20) NOT NULL'
+            . ')',
+        );
+        $db->execute(
+            'CREATE TABLE story_seen ('
+            . ' story_id VARCHAR(64) NOT NULL,'
+            . ' account_id VARCHAR(64) NOT NULL,'
+            . ' seen_at VARCHAR(20) NOT NULL,'
+            . ' PRIMARY KEY (story_id, account_id)'
+            . ')',
+        );
+
+        // A core story already owns the id that the legacy row would use.
+        // The legacy story is therefore not copied; its view must not be
+        // attached to this unrelated core row.
+        $db->execute(
+            'INSERT INTO social_story'
+            . ' (id, owner_id, is_local, object_id, caption, attachment_id, remote_media_url,'
+            . ' created_at, expires_at, deleted_at)'
+            . ' VALUES (:id, :owner, 1, :object_id, :caption, NULL, :media, :created, :expires, NULL)',
+            [
+                'id' => 'collision-story',
+                'owner' => 'alice',
+                'object_id' => 'https://remote.example/stories/collision',
+                'caption' => 'Core story',
+                'media' => 'https://remote.example/media/collision.png',
+                'created' => $stamp,
+                'expires' => $expires,
+            ],
+        );
+        $db->execute(
+            'INSERT INTO story (id, account_id, content, background, created_at, expires_at)'
+            . ' VALUES (:id, :account, :content, :background, :created, :expires)',
+            [
+                'id' => 'collision-story',
+                'account' => 'alice',
+                'content' => 'Legacy story',
+                'background' => 'forest',
+                'created' => $stamp,
+                'expires' => $expires,
+            ],
+        );
+        $db->execute(
+            'INSERT INTO story_seen (story_id, account_id, seen_at)'
+            . ' VALUES (:story, :account, :seen)',
+            ['story' => 'collision-story', 'account' => 'alice', 'seen' => $stamp],
+        );
+        $db->execute("DELETE FROM schema_migration WHERE version = '202611280008'");
+
+        $runner = new MigrationRunner($db, new SystemClock(), Migrations::all());
+        self::assertSame(['202611280008'], $runner->migrate());
+
+        self::assertSame(
+            'Core story',
+            (string) $db->fetchValue(
+                'SELECT caption FROM social_story WHERE id = :id',
+                ['id' => 'collision-story'],
+            ),
+        );
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT COUNT(*) FROM social_story_view WHERE story_id = :id',
+            ['id' => 'collision-story'],
+        ));
+        self::assertSame([], $db->fetchAll(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+            . " AND name IN ('story', 'story_seen')",
         ));
     }
 }

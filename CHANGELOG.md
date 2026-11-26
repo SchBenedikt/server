@@ -69,7 +69,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
   `social_story`/`social_story_view`. The adapter preserves arbitrary-post and
   owner-only reading lists, and text/background stories, without the core's
   media-only restrictions. Migration `202611280008` copies every row, item
-  position and view marker and drops the duplicate tables.
+  position and view marker and drops the duplicate tables. Additive migration
+  `202611280009` removes view markers for deleted host stories before a
+  legacy rollback and repairs existing markers on upgrade; migration
+  `202611280008` remains byte-identical and keeps its recorded checksum. The
+  migration runner also drops legacy views that collide with an unrelated core
+  story id, and a deleted host story removes its view markers.
 - **S3 upload streams:** the adapter now declares the wrapped stream property
   explicitly, removing the PHP dynamic-property deprecation emitted by the
   Guzzle stream decorator during uploads.

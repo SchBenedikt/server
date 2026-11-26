@@ -333,6 +333,41 @@ final class MigrationTest extends TestCase
         ));
     }
 
+    public function testRepairMigrationCleansExistingDeletedStoryViews(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $database->execute(
+            'INSERT INTO social_story'
+            . ' (id, owner_id, is_local, object_id, caption, attachment_id, remote_media_url,'
+            . ' created_at, expires_at, deleted_at)'
+            . ' VALUES (:id, :owner, 1, :object_id, :caption, NULL, :media, :created, :expires, :deleted)',
+            [
+                'id' => 'deleted-host-story',
+                'owner' => 'alice',
+                'object_id' => 'host-story:deleted-host-story',
+                'caption' => 'Already deleted',
+                'media' => '/api/v1/host/stories/deleted-host-story/background',
+                'created' => '2026-11-26T00:00:00Z',
+                'expires' => '2026-11-27T00:00:00Z',
+                'deleted' => '2026-11-26T01:00:00Z',
+            ],
+        );
+        $database->execute(
+            'INSERT INTO social_story_view (story_id, viewer_id, viewed_at)'
+            . ' VALUES (:story, :viewer, :viewed)',
+            ['story' => 'deleted-host-story', 'viewer' => 'bob', 'viewed' => '2026-11-26T00:30:00Z'],
+        );
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611280009'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611280009'], $runner->migrate());
+        self::assertSame(0, (int) $database->fetchValue(
+            'SELECT COUNT(*) FROM social_story_view WHERE story_id = :story',
+            ['story' => 'deleted-host-story'],
+        ));
+    }
+
     public function testChangedChecksumIsRejected(): void
     {
         $server = new TestServer();

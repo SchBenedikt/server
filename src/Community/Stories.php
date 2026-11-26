@@ -45,7 +45,7 @@ final class Stories
 {
     public const BACKGROUNDS = ['ocean', 'sunset', 'forest', 'berry', 'night', 'sand'];
 
-    private const OBJECT_PREFIX = 'host-story:';
+    public const OBJECT_PREFIX = 'host-story:';
 
     private const BACKGROUND_COLOURS = [
         'ocean' => '#0b3b5c',
@@ -285,12 +285,20 @@ final class Stories
         }
 
         $now = Time::toSecondPrecision($this->clock->now());
-        $this->db->execute(
-            'UPDATE ' . StorySchema::TABLE . ' SET deleted_at = :deleted_at'
-            . ' WHERE id = :id AND deleted_at IS NULL',
-            ['deleted_at' => Time::format($now), 'id' => $id],
-        );
-        $this->repository->markTombstone((string) $row['object_id'], $accountId, $now);
+        $this->db->transaction(function () use ($id, $row, $accountId, $now): void {
+            $this->db->execute(
+                'UPDATE ' . StorySchema::TABLE . ' SET deleted_at = :deleted_at'
+                . ' WHERE id = :id AND deleted_at IS NULL',
+                ['deleted_at' => Time::format($now), 'id' => $id],
+            );
+            $this->repository->markTombstone((string) $row['object_id'], $accountId, $now);
+            // A deleted story cannot be restored or rendered, so keeping its
+            // view markers would only leave orphans for the legacy rollback.
+            $this->db->execute(
+                'DELETE FROM ' . StorySchema::VIEW_TABLE . ' WHERE story_id = :id',
+                ['id' => $id],
+            );
+        });
     }
 
     /**

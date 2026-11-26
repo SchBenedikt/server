@@ -67,6 +67,7 @@ final class MigrationRunner
             }
 
             $run = function () use ($migration, $version, $checksum): void {
+                $this->prepare($migration);
                 $migration->up($this->connection);
                 $this->connection->execute(
                     'INSERT INTO ' . self::TABLE . ' (version, applied_at, checksum) VALUES (:version, :applied_at, :checksum)',
@@ -114,6 +115,20 @@ final class MigrationRunner
         } catch (Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Version 008 is checksum-frozen and already applied on installations.
+     * Its legacy view copy cannot be changed, so prepare its input in
+     * application code instead of editing the migration.
+     */
+    private function prepare(Migration $migration): void
+    {
+        if ($migration->version() !== LegacyStoryViewCollisionGuard::MIGRATION_VERSION) {
+            return;
+        }
+
+        (new LegacyStoryViewCollisionGuard($this->connection))->prepare();
     }
 
     public static function checksum(Migration $migration): string
