@@ -72,6 +72,14 @@ final class RemoteReactions
     public function like(string $userId, string $objectId): array
     {
         $post = $this->post($userId, $objectId);
+        $existing = $this->reactions->find(
+            ReactionDirection::Out,
+            $userId,
+            $post->objectId,
+            ReactionKind::Like,
+            null,
+        );
+        $inbox = $existing === null ? $this->inboxFor($userId, $post->actorId) : null;
         $reaction = new Reaction(
             direction: ReactionDirection::Out,
             subjectId: $userId,
@@ -84,8 +92,8 @@ final class RemoteReactions
             createdAt: Time::toSecondPrecision($this->clock->now()),
         );
 
-        if ($this->insert($reaction)) {
-            $this->deliver($userId, $post->actorId, $this->activities->like($userId, $post->objectId));
+        if ($this->insert($reaction) && $inbox !== null) {
+            $this->enqueue($userId, $inbox, $this->activities->like($userId, $post->objectId));
         }
 
         return $this->snapshot($userId, $post);
@@ -102,6 +110,9 @@ final class RemoteReactions
             ReactionKind::Like,
             null,
         );
+        // Resolve the inbox before removing the row: a failed Undo must leave
+        // the local like in place so a retry can still reach the peer.
+        $inbox = $stored !== null ? $this->inboxFor($userId, $post->actorId) : null;
         $removed = $this->reactions->remove(
             ReactionDirection::Out,
             $userId,
@@ -110,8 +121,8 @@ final class RemoteReactions
             null,
         );
 
-        if ($removed) {
-            $this->deliver($userId, $post->actorId, $this->activities->undoLike($userId, $post->objectId));
+        if ($removed && $inbox !== null) {
+            $this->enqueue($userId, $inbox, $this->activities->undoLike($userId, $post->objectId));
         }
 
         return $this->snapshot($userId, $post, $stored?->activityId);
@@ -121,6 +132,14 @@ final class RemoteReactions
     public function boost(string $userId, string $objectId): array
     {
         $post = $this->post($userId, $objectId);
+        $existing = $this->reactions->find(
+            ReactionDirection::Out,
+            $userId,
+            $post->objectId,
+            ReactionKind::Boost,
+            null,
+        );
+        $inbox = $existing === null ? $this->inboxFor($userId, $post->actorId) : null;
         $createdAt = Time::toSecondPrecision($this->clock->now());
         $activityId = $this->activities->remoteBoostId($userId, $post->objectId, $createdAt);
         $reaction = new Reaction(
@@ -135,10 +154,10 @@ final class RemoteReactions
             createdAt: $createdAt,
         );
 
-        if ($this->insert($reaction)) {
-            $this->deliver(
+        if ($this->insert($reaction) && $inbox !== null) {
+            $this->enqueue(
                 $userId,
-                $post->actorId,
+                $inbox,
                 $this->activities->announceRemote($userId, $post->objectId, $activityId),
             );
         }
@@ -157,6 +176,7 @@ final class RemoteReactions
             ReactionKind::Boost,
             null,
         );
+        $inbox = $stored !== null ? $this->inboxFor($userId, $post->actorId) : null;
         $removed = $this->reactions->remove(
             ReactionDirection::Out,
             $userId,
@@ -165,10 +185,10 @@ final class RemoteReactions
             null,
         );
 
-        if ($removed) {
-            $this->deliver(
+        if ($removed && $inbox !== null) {
+            $this->enqueue(
                 $userId,
-                $post->actorId,
+                $inbox,
                 $this->activities->undoRemoteAnnounce($userId, $post->objectId, $stored?->activityId),
             );
         }
@@ -265,17 +285,31 @@ final class RemoteReactions
     }
 
     /**
-     * @param array<string, mixed> $activity
+     * Resolves the delivery target before the local reaction is written.
+     *
+     * A stored follow edge wins; otherwise the actor document is read with a
+     * signed GET. A refusal is surfaced to the caller instead of returning
+     * success for a reaction the peer will never see.
      */
-    private function deliver(string $userId, string $actorId, array $activity): void
+    private function inboxFor(string $userId, string $actorId): string
     {
-        $inbox = $this->storedInbox($userId, $actorId) ?? $this->directory->actorInbox($actorId);
-        if ($inbox === null || $inbox === '') {
-            // The local reaction is still valid; without an inbox there is no
-            // verifiable delivery target yet.
-            return;
+        $inbox = $this->storedInbox($userId, $actorId);
+        if ($inbox !== null) {
+            return $inbox;
         }
 
+        try {
+            return $this->directory->resolveActorInbox($actorId);
+        } catch (RemoteDirectoryException $exception) {
+            throw new ReactionException('remote_delivery_unreachable', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $activity
+     */
+    private function enqueue(string $userId, string $inbox, array $activity): void
+    {
         $this->queue->push(JobType::FEDERATION_DELIVER, [
             'inbox' => $inbox,
             'activity' => $activity,

@@ -17,9 +17,11 @@ use AlohaSocial\Core\Platform\Http\ResponseLimitExceededException;
 use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
 use AlohaSocial\Core\Service\Federation\RemoteFetchException;
 use JsonException;
+use Throwable;
 
 use function array_filter;
 use function array_is_list;
+use function array_unique;
 use function array_values;
 use function count;
 use function explode;
@@ -78,11 +80,19 @@ final class RemoteDirectory
     /** @var array<string, array<string, mixed>> actor documents already fetched in this request */
     private array $actorCache = [];
 
+    /** @var null|callable(string, string, string): array<string, string> */
+    private $signer;
+
+    /**
+     * @param null|callable(string, string, string): array<string, string> $signer
+     */
     public function __construct(
         private readonly BoundedHttpClient $http,
         private readonly FederationTargetGuard $guard,
         private readonly string $discoveryInstance = 'mastodon.social',
+        ?callable $signer = null,
     ) {
+        $this->signer = $signer;
     }
 
     /**
@@ -262,23 +272,44 @@ final class RemoteDirectory
      */
     public function actorInbox(string $actorUrl): ?string
     {
+        try {
+            return $this->resolveActorInbox($actorUrl);
+        } catch (RemoteDirectoryException) {
+            return null;
+        }
+    }
+
+    /**
+     * The actor's inbox, with the peer's HTTP status and message on failure.
+     *
+     * Interaction services must not turn a refused authorized fetch into a
+     * silent local-only reaction: the like or reply would look delivered while
+     * the origin never saw it. They call this variant so the caller can show
+     * exactly why the inbox could not be read.
+     *
+     * @throws RemoteDirectoryException when the actor or its inbox is unusable
+     */
+    public function resolveActorInbox(string $actorUrl): string
+    {
         $actorUrl = trim($actorUrl);
         if ($actorUrl === ''
             || !preg_match('#^https?://#i', $actorUrl)
             || filter_var($actorUrl, FILTER_VALIDATE_URL) === false
         ) {
-            return null;
+            throw new RemoteDirectoryException('remote_actor_invalid', 'The remote actor address is invalid.', 422);
         }
 
-        try {
-            $actor = $this->fetchJson($actorUrl, self::ACTIVITY_ACCEPT);
-        } catch (RemoteDirectoryException) {
-            return null;
-        }
-
+        $actor = $this->fetchJson($actorUrl, self::ACTIVITY_ACCEPT);
         $inbox = $this->link($actor['inbox'] ?? null);
+        if ($inbox === null || preg_match('#^https?://#i', $inbox) !== 1) {
+            throw new RemoteDirectoryException(
+                'remote_inbox_missing',
+                'The remote actor document has no usable inbox.',
+                502,
+            );
+        }
 
-        return $inbox !== null && preg_match('#^https?://#i', $inbox) === 1 ? $inbox : null;
+        return $inbox;
     }
 
     /**
@@ -2142,11 +2173,31 @@ final class RemoteDirectory
                 throw new RemoteDirectoryException($exception->reason, $this->fetchMessage($exception->reason), 403);
             }
 
+            $headers = ['Accept' => $accept];
+            if ($this->signer !== null) {
+                try {
+                    /** @var array<string, string> $signed */
+                    $signed = ($this->signer)('GET', $current, '');
+                } catch (Throwable $exception) {
+                    throw new RemoteDirectoryException(
+                        'remote_signature_failed',
+                        'The outgoing federation request could not be signed: ' . $exception->getMessage(),
+                        502,
+                    );
+                }
+
+                foreach ($signed as $name => $value) {
+                    if (!isset($headers[$name])) {
+                        $headers[$name] = $value;
+                    }
+                }
+            }
+
             try {
                 $response = $this->http->requestBounded(
                     'GET',
                     $current,
-                    ['Accept' => $accept],
+                    $headers,
                     '',
                     self::TIMEOUT_SECONDS,
                     self::MAX_BYTES,
@@ -2169,9 +2220,11 @@ final class RemoteDirectory
             }
 
             if (!$response->isSuccessful()) {
+                $detail = $this->errorDetail($response);
                 throw new RemoteDirectoryException(
                     'remote_http_error',
-                    'The remote server responded with HTTP ' . $response->status . '.',
+                    'The remote server responded with HTTP ' . $response->status
+                        . ($detail !== '' ? ' (' . $detail . ').' : '.'),
                     in_array($response->status, [401, 403, 404], true) ? $response->status : 502,
                 );
             }
@@ -2180,6 +2233,38 @@ final class RemoteDirectory
         }
 
         throw new RemoteDirectoryException('remote_redirect_loop', 'The remote server redirects too often.');
+    }
+
+    /**
+     * The peer's own explanation, bounded and without an HTML dump.
+     */
+    private function errorDetail(HttpResponse $response): string
+    {
+        $body = trim($response->body);
+        if ($body === '') {
+            return '';
+        }
+
+        $data = json_decode($body, true);
+        if (is_array($data)) {
+            $parts = [];
+            foreach (['error', 'message'] as $key) {
+                $value = $data[$key] ?? null;
+                if (is_string($value) && trim($value) !== '') {
+                    $parts[] = trim($value);
+                }
+            }
+
+            if ($parts !== []) {
+                return mb_substr(implode(': ', array_unique($parts)), 0, 200);
+            }
+        }
+
+        if (str_contains($body, '<')) {
+            return '';
+        }
+
+        return mb_substr($body, 0, 200);
     }
 
     private function resolveUrl(string $base, string $reference): string

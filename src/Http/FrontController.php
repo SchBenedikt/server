@@ -846,6 +846,7 @@ final class FrontController
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
                         'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                        'remote_delivery_unreachable' => [502, 'remote_delivery_unreachable', $exception->getMessage()],
                         default => [422, $exception->reason, $exception->getMessage()],
                     };
 
@@ -944,6 +945,7 @@ final class FrontController
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
                         'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                        'remote_delivery_unreachable' => [502, 'remote_delivery_unreachable', $exception->getMessage()],
                         default => [422, $exception->reason, $exception->getMessage()],
                     };
 
@@ -1109,12 +1111,17 @@ final class FrontController
     private function remoteInteraction(array $status): array
     {
         $viewer = is_array($status['viewer'] ?? null) ? $status['viewer'] : [];
+        $favourited = ($viewer['favourited'] ?? false) === true;
+        $reblogged = ($viewer['reblogged'] ?? false) === true;
 
+        // The viewer's own reaction is a fact even when the origin total is
+        // unknown or stale. Showing 0 likes on a card the viewer just liked
+        // contradicts the pressed button; the export is never below one then.
         return [
-            'favourites_count' => 0,
-            'favourited' => ($viewer['favourited'] ?? false) === true,
-            'reblogs_count' => 0,
-            'reblogged' => ($viewer['reblogged'] ?? false) === true,
+            'favourites_count' => $favourited ? 1 : 0,
+            'favourited' => $favourited,
+            'reblogs_count' => $reblogged ? 1 : 0,
+            'reblogged' => $reblogged,
             'replies_count' => 0,
             'emoji_reactions' => [],
         ];
@@ -1133,8 +1140,8 @@ final class FrontController
         $result = $this->remoteInteraction($interaction);
         $cached = $this->runtime->remoteEngagement->counts([$objectId])[$objectId] ?? null;
         if ($cached !== null) {
-            $result['favourites_count'] = $cached['likes'];
-            $result['reblogs_count'] = $cached['boosts'];
+            $result['favourites_count'] = max((int) $cached['likes'], $result['favourited'] ? 1 : 0);
+            $result['reblogs_count'] = max((int) $cached['boosts'], $result['reblogged'] ? 1 : 0);
             $result['replies_count'] = $cached['replies'];
 
             return $result;
@@ -1178,8 +1185,14 @@ final class FrontController
                 continue;
             }
 
-            $remote[$id]['favourites_count'] = $cached['likes'];
-            $remote[$id]['reblogs_count'] = $cached['boosts'];
+            $remote[$id]['favourites_count'] = max(
+                (int) $cached['likes'],
+                ($remote[$id]['favourited'] ?? false) === true ? 1 : 0,
+            );
+            $remote[$id]['reblogs_count'] = max(
+                (int) $cached['boosts'],
+                ($remote[$id]['reblogged'] ?? false) === true ? 1 : 0,
+            );
             $remote[$id]['replies_count'] = $cached['replies'];
         }
 

@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Platform\Network\HostResolver;
+use AlohaSocial\Server\Tests\Support\FakeBoundedHttpClient;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -232,7 +234,20 @@ final class HostExtensionTest extends TestCase
 
     public function testCachedRemotePostLikeAndBoostWorkWithoutAFollow(): void
     {
-        $server = new TestServer();
+        $http = new FakeBoundedHttpClient();
+        $http->json('https://remote.example/users/carol', [
+            'id' => 'https://remote.example/users/carol',
+            'type' => 'Person',
+            'inbox' => 'https://remote.example/users/carol/inbox',
+            'outbox' => 'https://remote.example/users/carol/outbox',
+        ]);
+        $resolver = new class () implements HostResolver {
+            public function resolve(string $host): array
+            {
+                return ['8.8.8.8'];
+            }
+        };
+        $server = new TestServer([], $http, $resolver);
         $server->createAccount('alice');
         $alice = $server->signIn('alice');
         $objectId = 'https://remote.example/objects/post-unfollowed';
@@ -271,6 +286,7 @@ final class HostExtensionTest extends TestCase
         $stateBody = json_decode($state->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertTrue($stateBody['interactions'][$objectId]['favourited']);
         self::assertTrue($stateBody['interactions'][$objectId]['reblogged']);
+        self::assertContains('https://remote.example/users/carol', $http->requests);
     }
 
     public function testBatchPostHydrationReturnsFullPostsAndIgnoresMissingIds(): void

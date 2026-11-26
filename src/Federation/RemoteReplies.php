@@ -129,13 +129,13 @@ final class RemoteReplies
             throw new RemoteReplyException(403, 'blocked_actor', 'This actor is blocked.');
         }
 
-        $inbox = $this->storedInbox($userId, $actorId) ?? $this->directory->actorInbox($actorId);
-        if ($inbox === null || $inbox === '') {
-            throw new RemoteReplyException(
-                502,
-                'remote_reply_unreachable',
-                'The remote author cannot receive replies right now. Please try again later.',
-            );
+        $inbox = $this->storedInbox($userId, $actorId);
+        if ($inbox === null) {
+            try {
+                $inbox = $this->directory->resolveActorInbox($actorId);
+            } catch (RemoteDirectoryException $exception) {
+                throw new RemoteReplyException(502, 'remote_reply_unreachable', $exception->getMessage());
+            }
         }
 
         return $this->db->transaction(function () use (

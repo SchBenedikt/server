@@ -25,6 +25,7 @@ use AlohaSocial\Core\Domain\Post\PdoPostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Jobs\PdoJobQueue;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
+use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\CurlHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClient;
 use AlohaSocial\Core\Platform\Network\DnsHostResolver;
@@ -40,11 +41,13 @@ use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
 use AlohaSocial\Server\Federation\Atproto\JetstreamEventSource;
+use AlohaSocial\Server\Federation\ActivityPubRequestSigner;
 use AlohaSocial\Server\Federation\Atproto\RemoteInteractionTargetPolicy;
 use AlohaSocial\Server\Federation\BlueskyAccounts;
 use AlohaSocial\Server\Federation\AtprotoOAuthService;
 use AlohaSocial\Server\Federation\CompositeAtprotoAccounts;
 use AlohaSocial\Server\Federation\CompositeAtprotoPublisher;
+use AlohaSocial\Server\Federation\FederationHttpDiagnostics;
 use AlohaSocial\Server\Federation\NativePdsAccountResolver;
 use AlohaSocial\Server\Federation\NativePdsPublisher;
 use AlohaSocial\Server\Federation\RemoteActorProfiles;
@@ -137,15 +140,36 @@ final class ApplicationFactory
         // 5. HTTP client and DNS policy (shared by federation, media, threads)
         $logger = new RuntimeLogger($database, $clock);
         $httpClient = $this->httpClient ?? new CurlHttpClient();
+        if ($httpClient instanceof BoundedHttpClient) {
+            // Delivery failures otherwise reach the queue as a bare status.
+            $httpClient = new FederationHttpDiagnostics($httpClient, $logger);
+        }
         $hostResolver = $this->hostResolver ?? new DnsHostResolver();
         $targetGuard = new FederationTargetGuard(
             $hostResolver,
             new StoredModerationPolicy(new PdoModerationActionRepository($database)),
         );
+        // Authorized-fetch peers refuse unsigned actor and object reads. One
+        // local actor signs those GETs; every local actor shares the instance
+        // key, so any existing account can author the request. The provider is
+        // resolved per request: accounts may be created after this boot.
+        $requestSigner = new ActivityPubRequestSigner(
+            $signingKey,
+            new ActivityFactory($this->config->coreConfig()),
+            $clock,
+            static function () use ($database): ?string {
+                $id = $database->fetchValue(
+                    'SELECT id FROM account WHERE disabled_at IS NULL ORDER BY created_at ASC, id ASC LIMIT 1',
+                );
+
+                return is_string($id) && trim($id) !== '' ? $id : null;
+            },
+        );
         $remoteDirectory = new RemoteDirectory(
             $httpClient,
             $targetGuard,
             $this->config->discoveryInstance,
+            $requestSigner,
         );
 
         // 6.-8. Repositories, queue/log and the core assembly
