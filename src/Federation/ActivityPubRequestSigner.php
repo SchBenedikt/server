@@ -68,8 +68,12 @@ final class ActivityPubRequestSigner
             return [];
         }
 
-        if (isset($parts['port']) && is_int($parts['port'])) {
-            $host .= ':' . $parts['port'];
+        // curl omits the default port from the Host header it sends, so an
+        // explicit :443 or :80 in the fetched URL must not enter the signature.
+        $port = $parts['port'] ?? null;
+        $defaultPort = ($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80);
+        if (is_int($port) && !$defaultPort) {
+            $host .= ':' . $port;
         }
 
         $path = $parts['path'] ?? '/';

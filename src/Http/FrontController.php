@@ -377,6 +377,7 @@ final class FrontController
                 $objectId = is_array($thread['post'] ?? null) && is_string($thread['post']['id'] ?? null)
                     ? (string) $thread['post']['id']
                     : $id;
+                $thread = $this->withLocalReplies($thread, $id, $objectId, $session?->userId());
                 $this->runtime->remoteEngagement->remember($objectId, $thread);
 
                 return Response::json($thread);
@@ -846,7 +847,7 @@ final class FrontController
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
                         'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
-                        'remote_delivery_unreachable' => [502, 'remote_delivery_unreachable', $exception->getMessage()],
+                        'remote_delivery_unreachable', 'remote_post_unreachable' => [502, $exception->reason, $exception->getMessage()],
                         default => [422, $exception->reason, $exception->getMessage()],
                     };
 
@@ -945,7 +946,7 @@ final class FrontController
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
                         'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
-                        'remote_delivery_unreachable' => [502, 'remote_delivery_unreachable', $exception->getMessage()],
+                        'remote_delivery_unreachable', 'remote_post_unreachable' => [502, $exception->reason, $exception->getMessage()],
                         default => [422, $exception->reason, $exception->getMessage()],
                     };
 
@@ -996,10 +997,100 @@ final class FrontController
     }
 
     /**
-     * The core declares a budget per route and leaves enforcement to the
-     * host. The identity is the signed-in account, or the client address for
-     * anonymous requests.
+     * Adds local replies to a remote conversation.
+     *
+     * The remote origin only knows the replies it received. A reply written
+     * here is stored with the remote post URL as its parent, so without this
+     * merge it is visible in the author's profile but disappears from the
+     * thread as soon as the page is reloaded. Only replies the viewer may read
+     * are included, and a failed query leaves the remote thread untouched.
+     *
+     * @param array<string, mixed> $thread
+     *
+     * @return array<string, mixed>
      */
+    private function withLocalReplies(array $thread, string $requestedId, string $objectId, ?string $viewerId): array
+    {
+        if (($thread['network'] ?? '') !== 'activitypub' || !is_array($thread['post'] ?? null)) {
+            return $thread;
+        }
+
+        try {
+            $rows = $this->runtime->database->fetchAll(
+                'SELECT id, visibility FROM social_post'
+                . ' WHERE in_reply_to_id IN (:requested, :object) AND deleted_at IS NULL'
+                . " AND (visibility IN ('public', 'unlisted') OR author_id = :viewer)"
+                . ' ORDER BY published_at ASC, id ASC LIMIT 50',
+                ['requested' => $requestedId, 'object' => $objectId, 'viewer' => $viewerId ?? ''],
+            );
+        } catch (Throwable) {
+            return $thread;
+        }
+
+        $replies = is_array($thread['replies'] ?? null) ? array_values($thread['replies']) : [];
+        $seen = [];
+        foreach ($replies as $reply) {
+            if (is_array($reply) && is_string($reply['id'] ?? null)) {
+                $seen[$reply['id']] = true;
+            }
+        }
+
+        $remoteCount = count($replies);
+        $addedPublic = 0;
+        foreach ($rows as $row) {
+            $postId = is_string($row['id'] ?? null) ? $row['id'] : '';
+            if ($postId === '') {
+                continue;
+            }
+
+            // A peer that processed our Create may already list the note as a
+            // descendant. Prefer the remote representation instead of showing
+            // the same reply twice.
+            try {
+                $noteUrl = $this->runtime->remoteReplies->noteUrlFor($postId);
+            } catch (Throwable) {
+                $noteUrl = '';
+            }
+            if ((isset($seen[$postId]) || ($noteUrl !== '' && isset($seen[$noteUrl])))) {
+                continue;
+            }
+
+            try {
+                $post = $this->runtime->app->posts->getVisible($postId, $viewerId);
+            } catch (Throwable) {
+                continue;
+            }
+
+            $replies[] = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
+            $seen[$postId] = true;
+            if ($noteUrl !== '') {
+                $seen[$noteUrl] = true;
+            }
+            if (($row['visibility'] ?? null) === 'public' || ($row['visibility'] ?? null) === 'unlisted') {
+                // Followers-only replies stay visible to their author, but
+                // must not inflate the public counter cached for everyone.
+                $addedPublic++;
+            }
+        }
+
+        usort($replies, static function (mixed $left, mixed $right): int {
+            $leftAt = is_array($left) && is_string($left['published_at'] ?? null) ? $left['published_at'] : '';
+            $rightAt = is_array($right) && is_string($right['published_at'] ?? null) ? $right['published_at'] : '';
+
+            return strcmp($leftAt, $rightAt);
+        });
+
+        $thread['replies'] = $replies;
+        $reported = is_numeric($thread['post']['replies_count'] ?? null)
+            ? (int) $thread['post']['replies_count']
+            : $remoteCount;
+        // The origin's total already counts its own replies; local public
+        // replies are new to it and are added once.
+        $thread['post']['replies_count'] = max($reported, $remoteCount) + $addedPublic;
+
+        return $thread;
+    }
+
     /**
      * Hydrate a cached federated post for the shared card without a network
      * call. The home timeline uses the same entry shape, so a For You card and
@@ -1379,6 +1470,11 @@ final class FrontController
         ]);
     }
 
+    /**
+     * The core declares a budget per route and leaves enforcement to the
+     * host. The identity is the signed-in account, or the client address for
+     * anonymous requests.
+     */
     private function enforceIdentityRateLimit(string $route, string $identity, int $limit, int $window): ?Response
     {
         $retryAfter = $this->runtime->rateLimiter->attempt($route, $identity, $limit, $window);

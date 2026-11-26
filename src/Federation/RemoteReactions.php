@@ -13,6 +13,7 @@ use AlohaSocial\Core\Domain\Interaction\PdoReactionRepository;
 use AlohaSocial\Core\Domain\Interaction\Reaction;
 use AlohaSocial\Core\Domain\Interaction\ReactionDirection;
 use AlohaSocial\Core\Domain\Interaction\ReactionKind;
+use AlohaSocial\Core\Domain\Interaction\ReactionSchema;
 use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
 use AlohaSocial\Core\Domain\Federation\RemotePost;
 use AlohaSocial\Core\Jobs\JobQueue;
@@ -92,9 +93,11 @@ final class RemoteReactions
             createdAt: Time::toSecondPrecision($this->clock->now()),
         );
 
-        if ($this->insert($reaction) && $inbox !== null) {
-            $this->enqueue($userId, $inbox, $this->activities->like($userId, $post->objectId));
-        }
+        $this->db->transaction(function () use ($reaction, $inbox, $userId, $post): void {
+            if ($this->insert($reaction) && $inbox !== null) {
+                $this->enqueue($userId, $inbox, $this->activities->like($userId, $post->objectId));
+            }
+        });
 
         return $this->snapshot($userId, $post);
     }
@@ -113,17 +116,19 @@ final class RemoteReactions
         // Resolve the inbox before removing the row: a failed Undo must leave
         // the local like in place so a retry can still reach the peer.
         $inbox = $stored !== null ? $this->inboxFor($userId, $post->actorId) : null;
-        $removed = $this->reactions->remove(
-            ReactionDirection::Out,
-            $userId,
-            $post->objectId,
-            ReactionKind::Like,
-            null,
-        );
+        $this->db->transaction(function () use ($userId, $post, $inbox): void {
+            $removed = $this->reactions->remove(
+                ReactionDirection::Out,
+                $userId,
+                $post->objectId,
+                ReactionKind::Like,
+                null,
+            );
 
-        if ($removed && $inbox !== null) {
-            $this->enqueue($userId, $inbox, $this->activities->undoLike($userId, $post->objectId));
-        }
+            if ($removed && $inbox !== null) {
+                $this->enqueue($userId, $inbox, $this->activities->undoLike($userId, $post->objectId));
+            }
+        });
 
         return $this->snapshot($userId, $post, $stored?->activityId);
     }
@@ -154,13 +159,15 @@ final class RemoteReactions
             createdAt: $createdAt,
         );
 
-        if ($this->insert($reaction) && $inbox !== null) {
-            $this->enqueue(
-                $userId,
-                $inbox,
-                $this->activities->announceRemote($userId, $post->objectId, $activityId),
-            );
-        }
+        $this->db->transaction(function () use ($reaction, $inbox, $userId, $post, $activityId): void {
+            if ($this->insert($reaction) && $inbox !== null) {
+                $this->enqueue(
+                    $userId,
+                    $inbox,
+                    $this->activities->announceRemote($userId, $post->objectId, $activityId),
+                );
+            }
+        });
 
         return $this->snapshot($userId, $post);
     }
@@ -177,21 +184,23 @@ final class RemoteReactions
             null,
         );
         $inbox = $stored !== null ? $this->inboxFor($userId, $post->actorId) : null;
-        $removed = $this->reactions->remove(
-            ReactionDirection::Out,
-            $userId,
-            $post->objectId,
-            ReactionKind::Boost,
-            null,
-        );
-
-        if ($removed && $inbox !== null) {
-            $this->enqueue(
+        $this->db->transaction(function () use ($userId, $post, $inbox, $stored): void {
+            $removed = $this->reactions->remove(
+                ReactionDirection::Out,
                 $userId,
-                $inbox,
-                $this->activities->undoRemoteAnnounce($userId, $post->objectId, $stored?->activityId),
+                $post->objectId,
+                ReactionKind::Boost,
+                null,
             );
-        }
+
+            if ($removed && $inbox !== null) {
+                $this->enqueue(
+                    $userId,
+                    $inbox,
+                    $this->activities->undoRemoteAnnounce($userId, $post->objectId, $stored?->activityId),
+                );
+            }
+        });
 
         return $this->snapshot($userId, $post);
     }
@@ -238,7 +247,15 @@ final class RemoteReactions
             // A post discovered through search or a profile is not in the
             // inbound cache yet. Import it once so a like or boost has the
             // same target an inbound Create would have stored.
-            $post = $this->importer->ensure($objectId);
+            try {
+                $post = $this->importer->ensure($objectId);
+            } catch (RemoteDirectoryException $exception) {
+                if ($exception->status === 404) {
+                    throw new ReactionException('remote_post_not_found', 'Remote post not found.');
+                }
+
+                throw new ReactionException('remote_post_unreachable', $exception->getMessage());
+            }
         }
         if ($post === null || $post->deletedAt !== null) {
             throw new ReactionException('remote_post_not_found', 'Remote post not found.');
@@ -262,26 +279,35 @@ final class RemoteReactions
         return $post;
     }
 
+    /**
+     * Inserts idempotently without relying on a failed statement.
+     *
+     * A duplicate reaction is expected when a client retries. Catching the
+     * unique violation would work on SQLite, but PostgreSQL aborts the whole
+     * transaction at that point, so the following SELECT and the queue insert
+     * would fail. `ON CONFLICT DO NOTHING` keeps a retry harmless and lets the
+     * reaction and its delivery stay in one transaction.
+     */
     private function insert(Reaction $reaction): bool
     {
-        try {
-            $this->reactions->insert($reaction);
-
-            return true;
-        } catch (DatabaseException $exception) {
-            $existing = $this->reactions->find(
-                ReactionDirection::Out,
-                $reaction->subjectId,
-                $reaction->objectId,
-                $reaction->kind,
-                $reaction->emoji,
-            );
-            if ($existing === null) {
-                throw $exception;
-            }
-
-            return false;
-        }
+        return $this->db->execute(
+            'INSERT INTO ' . ReactionSchema::TABLE
+            . ' (id, direction, subject_id, object_id, local_post_id, kind, emoji, icon_url, activity_id, created_at)'
+            . ' VALUES (:id, :direction, :subject_id, :object_id, :local_post_id, :kind, :emoji, :icon_url, :activity_id, :created_at)'
+            . ' ON CONFLICT DO NOTHING',
+            [
+                'id' => $reaction->id(),
+                'direction' => $reaction->direction->value,
+                'subject_id' => $reaction->subjectId,
+                'object_id' => $reaction->objectId,
+                'local_post_id' => $reaction->localPostId,
+                'kind' => $reaction->kind->value,
+                'emoji' => $reaction->emoji ?? '',
+                'icon_url' => $reaction->iconUrl,
+                'activity_id' => $reaction->activityId,
+                'created_at' => Time::format($reaction->createdAt),
+            ],
+        ) > 0;
     }
 
     /**

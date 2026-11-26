@@ -99,6 +99,28 @@ final class SignedFederationDeliveryTest extends TestCase
         );
     }
 
+    public function testDefaultPortIsNotPartOfTheSignedHost(): void
+    {
+        $key = RsaKeyPair::generate();
+        $activities = new ActivityFactory(new ArrayConfig([
+            'social' => ['instance.url' => 'https://app.test'],
+        ]));
+        $signer = new ActivityPubRequestSigner($key, $activities, new SystemClock(), 'alice');
+
+        $headers = $signer('GET', 'https://peer.test:443/users/carol');
+        self::assertSame('peer.test', $headers['Host']);
+
+        HttpSignature::verify(
+            $key->publicKeyPem(),
+            'GET',
+            '/users/carol',
+            array_change_key_case($headers, CASE_LOWER),
+            '',
+            300,
+            new DateTimeImmutable('now'),
+        );
+    }
+
     public function testAuthorizedFetchRefusalIsVisibleInsteadOfSilentlySkipped(): void
     {
         $key = RsaKeyPair::generate();
@@ -344,6 +366,19 @@ final class SignedFederationDeliveryTest extends TestCase
         );
         self::assertSame(200, $like->status, $like->body);
 
+        // A retried like is idempotent and must not enqueue a second delivery.
+        $duplicate = $server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($objectId) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+        self::assertSame(200, $duplicate->status, $duplicate->body);
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM social_job WHERE type = 'federation.deliver' AND dead_at IS NULL",
+        ));
+
         $interactions = $server->send('GET', '/api/v1/host/interactions', [
             'cookies' => $alice['cookies'],
             'query' => ['ids' => $objectId],
@@ -360,6 +395,21 @@ final class SignedFederationDeliveryTest extends TestCase
             'in_reply_to_id' => $objectId,
         ], $alice['cookies'], $alice['csrf']);
         self::assertSame(201, $reply->status, $reply->body);
+        /** @var array{post: array{id: string}} $replyBody */
+        $replyBody = json_decode($reply->body, true, 512, JSON_THROW_ON_ERROR);
+        $replyId = $replyBody['post']['id'];
+
+        // The remote origin does not know this reply. It must still be part of
+        // the conversation after a reload, not only in the author's profile.
+        $thread = $server->send('GET', '/api/v1/host/remote-post', [
+            'cookies' => $alice['cookies'],
+            'query' => ['id' => $objectId],
+        ]);
+        self::assertSame(200, $thread->status, $thread->body);
+        /** @var array{post: array{replies_count: int}, replies: list<array{id: string, content: string}>} $threadBody */
+        $threadBody = json_decode($thread->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertContains($replyId, array_column($threadBody['replies'], 'id'));
+        self::assertGreaterThanOrEqual(1, $threadBody['post']['replies_count']);
 
         $handled = $server->runtime->app->worker->runOnce(50);
         self::assertGreaterThanOrEqual(2, $handled);
@@ -398,5 +448,38 @@ final class SignedFederationDeliveryTest extends TestCase
             }
         }
         self::assertGreaterThanOrEqual(2, $signedGets);
+    }
+
+    public function testAnUnreadableRemotePostReportsThePeerRefusal(): void
+    {
+        $http = new FakeBoundedHttpClient();
+        $http->json(StrictActivityPubPeer::NOTE, [
+            'error' => 'authorized_fetch_required',
+            'message' => 'This resource requires an HTTP signature.',
+        ], 401);
+
+        $resolver = new class () implements HostResolver {
+            public function resolve(string $host): array
+            {
+                return ['8.8.8.8'];
+            }
+        };
+        $server = new TestServer([], $http, $resolver);
+        $server->createAccount('alice');
+        $alice = $server->signIn('alice');
+
+        $like = $server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode(StrictActivityPubPeer::NOTE) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(502, $like->status, $like->body);
+        /** @var array{error: array{code: string, message: string}} $body */
+        $body = json_decode($like->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('remote_post_unreachable', $body['error']['code']);
+        self::assertStringContainsString('authorized_fetch_required', $body['error']['message']);
     }
 }

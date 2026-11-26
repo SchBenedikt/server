@@ -63,6 +63,17 @@ final class RemoteReplies
     }
 
     /**
+     * The canonical ActivityPub URL of a local post.
+     *
+     * The thread view needs it to recognize its own reply when the origin
+     * echoes the delivered Create back as a remote descendant.
+     */
+    public function noteUrlFor(string $postId): string
+    {
+        return $this->activities->noteIdFor($postId);
+    }
+
+    /**
      * @param list<string> $attachmentIds
      *
      * @throws ValidationException when the post itself is invalid
@@ -101,7 +112,15 @@ final class RemoteReplies
             // A live search result has no cache row yet. Import the public
             // object so the parent, its author and later counts share the
             // same record an inbound Create would have produced.
-            $remote = $this->importer->ensure($target) ?? $posts->findPostByObjectId($target);
+            try {
+                $remote = $this->importer->ensure($target) ?? $posts->findPostByObjectId($target);
+            } catch (RemoteDirectoryException $exception) {
+                if ($exception->status === 404) {
+                    throw new RemoteReplyException(404, 'remote_post_not_found', 'This post is no longer available.');
+                }
+
+                throw new RemoteReplyException(502, 'remote_reply_unreachable', $exception->getMessage());
+            }
         }
         if ($remote !== null && $remote->deletedAt !== null) {
             throw new RemoteReplyException(404, 'remote_post_not_found', 'This post is no longer available.');

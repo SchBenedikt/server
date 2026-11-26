@@ -76,6 +76,11 @@ final class RemotePostImporter
 
         try {
             $data = $this->directory->remoteObject($objectId);
+        } catch (RemoteDirectoryException $exception) {
+            // An authorized-fetch refusal or a broken origin is not the same
+            // as a post that does not exist. Keep the peer's status and
+            // message so the like or reply can report why it failed.
+            throw $exception;
         } catch (Throwable) {
             return null;
         }
