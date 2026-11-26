@@ -693,6 +693,8 @@ final class FrontController
             }
         }
 
+        $request = $this->linkDirectConversation($request, $userId);
+
         // The core validates a reply target against its local post table. A
         // remote inReplyTo therefore needs the host path, which stores the
         // post first and retargets its already queued Create atomically.
@@ -1321,6 +1323,110 @@ final class FrontController
         }
 
         return $remote;
+    }
+
+    /**
+     * Keeps a new direct message inside the existing conversation.
+     *
+     * The core gives every post without a parent its own conversation root.
+     * The composer now supplies the latest message, but an API client could
+     * still create a second root for the same participants. Linking the new
+     * message before the core stores it makes the one-inbox-row invariant a
+     * server rule rather than a property of one UI path.
+     */
+    private function linkDirectConversation(Request $request, ?string $userId): Request
+    {
+        if ($userId === null
+            || $request->method !== 'POST'
+            || $request->path !== '/api/v1/posts'
+        ) {
+            return $request;
+        }
+
+        $body = json_decode($request->body, true);
+        if (!is_array($body)
+            || ($body['visibility'] ?? null) !== 'direct'
+            || (is_string($body['in_reply_to_id'] ?? null) && trim($body['in_reply_to_id']) !== '')
+        ) {
+            return $request;
+        }
+
+        $rawRecipients = $body['recipient_ids'] ?? null;
+        if (!is_array($rawRecipients) || $rawRecipients === []) {
+            return $request;
+        }
+        $recipients = [];
+        foreach ($rawRecipients as $recipient) {
+            if (is_string($recipient) && trim($recipient) !== '') {
+                $recipients[] = trim($recipient);
+            }
+        }
+        if ($recipients === []) {
+            return $request;
+        }
+
+        $participants = array_values(array_unique(array_merge([$userId], $recipients)));
+        sort($participants, SORT_STRING);
+
+        $rows = $this->runtime->database->fetchAll(
+            'SELECT post.id, post.author_id, recipient.recipient_id'
+            . ' FROM social_post post'
+            . ' LEFT JOIN social_post_recipient recipient ON recipient.post_id = post.id'
+            . ' WHERE post.visibility = :visibility AND post.deleted_at IS NULL'
+            . ' AND (post.author_id = :author_view OR EXISTS ('
+            . ' SELECT 1 FROM social_post_recipient visible'
+            . ' WHERE visible.post_id = post.id AND visible.recipient_id = :recipient_view))'
+            . ' ORDER BY post.published_at DESC, post.id DESC',
+            [
+                'visibility' => 'direct',
+                'author_view' => $userId,
+                'recipient_view' => $userId,
+            ],
+        );
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            $postId = (string) ($row['id'] ?? '');
+            $authorId = (string) ($row['author_id'] ?? '');
+            if ($postId === '' || $authorId === '') {
+                continue;
+            }
+            $grouped[$postId]['author'] = $authorId;
+            $recipientId = $row['recipient_id'] ?? null;
+            if (is_string($recipientId) && $recipientId !== '') {
+                $grouped[$postId]['recipients'][] = $recipientId;
+            }
+        }
+
+        $latest = null;
+        foreach ($grouped as $postId => $conversation) {
+            $members = array_values(array_unique(array_merge(
+                [(string) $conversation['author']],
+                $conversation['recipients'] ?? [],
+            )));
+            sort($members, SORT_STRING);
+            if ($members === $participants) {
+                $latest = $postId;
+                break;
+            }
+        }
+        if ($latest === null) {
+            return $request;
+        }
+
+        $body['in_reply_to_id'] = $latest;
+
+        return new Request(
+            method: $request->method,
+            path: $request->path,
+            query: $request->query,
+            headers: $request->headers,
+            body: json_encode($body, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            attributes: $request->attributes,
+            remoteAddress: $request->remoteAddress,
+            userId: $request->userId,
+            scopes: $request->scopes,
+        );
     }
 
     /**

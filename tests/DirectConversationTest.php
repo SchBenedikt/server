@@ -57,6 +57,42 @@ final class DirectConversationTest extends TestCase
 		self::assertFalse($incoming['unread']);
 	}
 
+	public function testApiDirectMessagesCannotSplitAnExistingConversation(): void
+	{
+		$server = new TestServer();
+		$server->createAccount('alice');
+		$server->createAccount('bob');
+		$alice = $server->signIn('alice');
+		$bob = $server->signIn('bob');
+
+		$firstResponse = $server->json('POST', '/api/v1/posts', [
+			'content' => 'First API message',
+			'visibility' => 'direct',
+			'recipient_ids' => ['bob'],
+		], $alice['cookies'], $alice['csrf']);
+		self::assertSame(201, $firstResponse->status, $firstResponse->body);
+		$first = json_decode($firstResponse->body, true, 512, JSON_THROW_ON_ERROR)['post'];
+
+		$secondResponse = $server->json('POST', '/api/v1/posts', [
+			'content' => 'Second API message without a parent',
+			'visibility' => 'direct',
+			'recipient_ids' => ['alice'],
+		], $bob['cookies'], $bob['csrf']);
+		self::assertSame(201, $secondResponse->status, $secondResponse->body);
+		$second = json_decode($secondResponse->body, true, 512, JSON_THROW_ON_ERROR)['post'];
+		self::assertSame($first['id'], $second['in_reply_to_id']);
+
+		$timeline = $server->send('GET', '/api/v1/timelines/direct', ['cookies' => $alice['cookies']]);
+		self::assertSame(200, $timeline->status, $timeline->body);
+		$posts = json_decode($timeline->body, true, 512, JSON_THROW_ON_ERROR)['posts'];
+		$byId = [];
+		foreach ($posts as $post) {
+			$byId[$post['id']] = $post;
+		}
+		self::assertSame($first['id'], $byId[$first['id']]['conversation_id']);
+		self::assertSame($first['id'], $byId[$second['id']]['conversation_id']);
+	}
+
 	public function testLegacyDirectRootsAreLinkedIntoOneConversation(): void
 	{
 		$server = new TestServer();
