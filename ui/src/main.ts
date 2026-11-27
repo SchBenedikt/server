@@ -9,6 +9,7 @@ import './style.css';
 import './brand.css';
 import './modern.css';
 import './admin.css';
+import './design.css';
 import App from './App.vue';
 import { bridge } from './bridge';
 
