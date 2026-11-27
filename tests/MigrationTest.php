@@ -59,6 +59,7 @@ final class MigrationTest extends TestCase
             'session',
             'login_attempt',
             'instance_key',
+            'installation_identity',
             'kokua',
             'kokua_help',
             'runtime_error',

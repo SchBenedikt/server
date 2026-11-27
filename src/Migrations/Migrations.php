@@ -69,6 +69,7 @@ final class Migrations
             new Version202611280012RemotePostAudience(),
             new Version202611280013RemoteAudienceFingerprint(),
             new Version202611280014CredentialVersioning(),
+            new Version202611280015InstallationIdentity(),
         ];
     }
 }

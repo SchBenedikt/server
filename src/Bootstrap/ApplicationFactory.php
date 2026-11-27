@@ -134,8 +134,16 @@ final class ApplicationFactory
         $database = PdoFactory::connect($this->config);
         $this->assertSchemaCurrent($database);
 
-        // 4. Instance keys, sealed at rest
+        // 4. Instance keys, sealed at rest. The persistent identity binds the
+        // key, origin and database before any request can use stale actor ids.
         $signingKey = (new KeyStore($database, $this->secretBox(), $clock))->loadOrCreate();
+        (new InstallationIdentity(
+            $database,
+            $this->config->varDirectory,
+            $this->config->instanceUrl,
+            $signingKey->publicKeyPem(),
+            $clock,
+        ))->assertCurrent();
 
         // 5. HTTP client and DNS policy (shared by federation, media, threads)
         $logger = new RuntimeLogger($database, $clock);

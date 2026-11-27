@@ -32,8 +32,9 @@ instead, for example after changing PHP code.
 Open <http://localhost:3000/login>.
 
 The defaults use the SQLite file in the `aloha-social_aloha-var` volume and map container
-port 80 to host port 3000. Create the first admin either in `.env` before the
-first start:
+port 80 to host port 3000. The volume names are configurable, but their
+defaults are the historical names, so upgrades keep the existing data. Create
+the first admin either in `.env` before the first start:
 
 ```dotenv
 ALOHASOCIAL_ADMIN_HANDLE=admin
@@ -159,6 +160,48 @@ the proxy-to-container hop is HTTP. The instance URL enables `Secure` session
 cookies from that public origin; keep `ALOHASOCIAL_SECURE_COOKIES` unset or set
 it to `true`. Never disable secure cookies for a public instance.
 
+## Multiple installations on one host
+
+`COMPOSE_PROJECT_NAME` changes the service/container namespace, but it does
+**not** change the two data volume names by itself. That is deliberate: a
+changed project name or a renamed checkout must never make an existing
+installation look empty. A second, independent installation therefore has to
+set a distinct project name, both volume names and a separate port/origin:
+
+```dotenv
+COMPOSE_PROJECT_NAME=aloha-social-two
+ALOHASOCIAL_VAR_VOLUME=aloha-social-two-var
+ALOHASOCIAL_DB_VOLUME=aloha-social-two-db
+ALOHASOCIAL_PORT=3001
+ALOHASOCIAL_INSTANCE_URL=http://localhost:3001
+```
+
+Use a separate `.env`/checkout for each installation and never attach the same
+`aloha-var` volume to two projects. The installation identity stored in the
+database and `var/installation.json` refuses a mismatched data-directory/DB
+pair, a replaced signing key or an origin change after the first account.
+Changing only `COMPOSE_PROJECT_NAME` while reusing the default volumes stops
+the second app with a readable boot error instead of silently sharing accounts.
+
+## Coolify and other Compose panels
+
+- Mount persistent storage at `/var/www/html/var` and keep one volume per
+  application. Do not select the existing `aloha-social_aloha-var` volume for a
+  new app.
+- Set `COMPOSE_PROJECT_NAME`, `ALOHASOCIAL_VAR_VOLUME` and (with PostgreSQL)
+  `ALOHASOCIAL_DB_VOLUME` in the application's environment. The defaults are
+  for the historical `aloha-social` project only.
+- Let app, worker and firehose use the same image digest. Pin
+  `ALOHASOCIAL_IMAGE_TAG=sha-<commit>` instead of mixing `latest` and an older
+  tag; a digest is immutable even when the registry tag moves.
+- After a redeploy, check `docker compose ps`, `/healthz`, `/readyz`,
+  `/.well-known/webfinger?resource=acct:<handle>@<host>` and the existing
+  actor URL. The handle and actor id must stay the same.
+- If the public origin changed, restore the old
+  `ALOHASOCIAL_INSTANCE_URL` first. A populated instance refuses to start with
+  a different origin; add a new instance with an empty volume instead of
+  rewriting actor ids in place.
+
 ## PostgreSQL
 
 The overlay adds a `db` service and points app and worker at it:
@@ -188,7 +231,10 @@ most useful Docker-specific values are:
 | --- | --- | --- |
 | `ALOHASOCIAL_PORT` | `3000` | Host port published by the app service. |
 | `ALOHASOCIAL_ENV_FILE` | `/var/www/html/var/.env` | Persistent file written by web setup; overrides `.env` defaults. |
-| `ALOHASOCIAL_IMAGE_TAG` | `latest` | Tag of the `ghcr.io/schbenedikt/server` image. |
+| `COMPOSE_PROJECT_NAME` | `aloha-social` | Compose project/container namespace; keep the default for an existing installation. |
+| `ALOHASOCIAL_VAR_VOLUME` | `aloha-social_aloha-var` | Physical data volume; set a unique name for each additional installation. |
+| `ALOHASOCIAL_DB_VOLUME` | `aloha-social_aloha-db` | PostgreSQL data volume; set a unique name for each additional installation. |
+| `ALOHASOCIAL_IMAGE_TAG` | `latest` | Tag or digest of the `ghcr.io/schbenedikt/server` image; use one tag for all three services. |
 | `ALOHASOCIAL_ADMIN_HANDLE` | empty | First admin handle; created on boot. |
 | `ALOHASOCIAL_ADMIN_EMAIL` | `<handle>@example.invalid` | First admin email. |
 | `ALOHASOCIAL_ADMIN_PASSWORD` | empty | First admin password (8+ characters). |
@@ -201,11 +247,13 @@ The `.env` file is excluded from the image and must not be committed.
 
 | Path | Content |
 | --- | --- |
-| `aloha-social_aloha-var` volume | `var/secret.key`, SQLite database, uploaded blobs and mail files |
+| `aloha-social_aloha-var` volume | `var/secret.key`, `var/installation.json`, SQLite database, uploaded blobs and mail files |
 | `aloha-social_aloha-db` volume (PostgreSQL overlay) | the database cluster |
 
-`var/secret.key` decrypts the instance signing key. Back it up together with
-the database and blobs; losing it makes existing actor keys unreadable.
+`var/secret.key` decrypts the instance signing key; `var/installation.json`
+binds the data directory to the database and public origin. Back both up
+together with the database and blobs. Restoring only one half is refused at
+boot instead of silently changing actor ids.
 
 SQLite backup (verified, with account count in a metadata sidecar):
 
@@ -246,6 +294,13 @@ use the `db` container for PostgreSQL backups (above). The worker is recreated
 after the app is healthy. If you pinned `ALOHASOCIAL_IMAGE_TAG`, update the tag.
 To follow a source change instead of the published image, use
 `docker compose up -d --build` (and rebuild the UI bundle first, see below).
+
+App, worker and firehose use the same `image:` line from the shared Compose
+anchor. Pin an immutable `sha-<commit>` tag or digest for a production
+deployment; `latest` is convenient but can move between two service starts.
+After an image update, the installation identity checks that the app and
+worker still see the same database, data volume, signing key and public
+origin.
 
 If you configured the public domain in the browser before `0.11.3`, that value
 was written to the container's ephemeral `/var/www/html/.env`. Copy it out
@@ -322,7 +377,10 @@ user.
 | WebFinger or `/@handle` returns 403 | Confirm the image is current; old images denied every dot-path including `/.well-known`. |
 | Login loops back to `/login` | The instance URL must match the browser origin, including scheme and port. |
 | Permission denied on `var/secret.key` | The entrypoint fixes ownership on start; a read-only bind mount prevents this. Use the named volume or chown it for the container's `www-data` user. |
-| Accounts are missing after an update | Check `docker volume ls` for the `aloha-social_aloha-var` volume and run `docker compose exec app php bin/doctor.php`. A different project name or `docker compose down -v` created/removed the volume. Restore the newest backup and the matching `var/secret.key`. |
+| Accounts are missing after an update | Check `docker volume ls` for the configured `var` volume and run `docker compose exec app php bin/doctor.php`. A different project/volume configuration or `docker compose down -v` created/removed a volume. Restore the newest database backup with the matching `var/secret.key` and `var/installation.json`. |
+| Boot says the data directory and database belong to different installations | A new Compose project was attached to an existing `var` volume, or a database was restored under another data directory. | Stop the stack. Restore `var/installation.json` and the database from the same backup, or give the new app its own empty `ALOHASOCIAL_VAR_VOLUME`; never merge two installations. |
+| Boot says the public origin changed | `ALOHASOCIAL_INSTANCE_URL` differs from the origin recorded at setup. | Restore the original origin, especially for a populated instance. Changing it changes actor ids and WebFinger; create a new instance with an empty volume instead. |
+| Boot says the signing key does not match | `var/secret.key` and the database are from different backups, or the instance key was replaced. | Restore the matching key and database pair. Key rotation on a populated instance is not supported because peers cache actor key ids. |
 | App stops with `safety backup could not be created` | The `aloha-social_aloha-var` volume is not writable or the backup directory is full. Check `docker compose logs app`, free disk space, or run `php bin/backup.php` manually. |
 | Worker does nothing | `docker compose logs worker`; the worker needs the app healthy before it starts. |
 

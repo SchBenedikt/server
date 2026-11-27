@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 use AlohaSocial\Core\Platform\Clock\SystemClock;
+use AlohaSocial\Server\Bootstrap\InstallationIdentity;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationRunner;
@@ -39,6 +40,36 @@ try {
     $accounts = $backups->accountCount();
     $keyExists = $config->secretKey !== null || is_file($config->secretKeyFile);
     $keyValid = secretKeyIsValid($config);
+    [$identityFileId, $identityFileInvalid] = installationFileId(
+        $config->varDirectory . '/' . InstallationIdentity::FILE_NAME,
+    );
+    $identityRow = null;
+    $instancePublicKey = null;
+    if ($installed) {
+        try {
+            $identityRow = $database->fetchOne(
+                'SELECT installation_id, instance_url, key_fingerprint FROM installation_identity WHERE id = :id',
+                ['id' => InstallationIdentity::ROW_ID],
+            );
+            $instancePublicKey = $database->fetchValue(
+                'SELECT public_pem FROM instance_key WHERE id = :id',
+                ['id' => 'instance'],
+            );
+        } catch (Throwable) {
+            // A pending migration is reported separately; do not turn the
+            // doctor into a raw SQL error while diagnosing it.
+        }
+    }
+    $identityId = $identityRow === null ? null : (string) $identityRow['installation_id'];
+    $identityOrigin = null;
+    $identityOriginInvalid = false;
+    if ($identityRow !== null) {
+        try {
+            $identityOrigin = InstallationIdentity::normalizeOrigin((string) $identityRow['instance_url']);
+        } catch (Throwable) {
+            $identityOriginInvalid = true;
+        }
+    }
     $backupFiles = array_merge(
         glob($config->varDirectory . '/backups/alohasocial-*.sqlite') ?: [],
         glob($config->varDirectory . '/backups/alohasocial-*.dump') ?: [],
@@ -82,6 +113,13 @@ try {
         'secret_key' => $config->secretKey !== null ? 'environment' : $config->secretKeyFile,
         'secret_key_present' => $keyExists,
         'secret_key_valid' => $keyValid,
+        'installation_id' => $identityId === null ? null : substr($identityId, 0, 12) . '…',
+        'installation_origin' => $identityOrigin,
+        'installation_identity_file' => $identityFileId !== null,
+        'installation_identity_valid' => !$identityFileInvalid
+            && !$identityOriginInvalid
+            && ($identityId === null || $identityFileId !== null),
+        'instance_key_fingerprint' => is_string($instancePublicKey) ? hash('sha256', $instancePublicKey) : null,
         'database_file' => $databaseFile,
         'database_writable' => $databaseWritable,
         'mail_transport' => $config->mailTransport,
@@ -103,6 +141,39 @@ try {
     }
     if ($keyExists && !$keyValid) {
         $problems[] = 'The configured secret key is not 32 bytes, base64 encoded.';
+    }
+    if ($identityFileInvalid) {
+        $problems[] = 'The installation identity file is invalid: ' . $config->varDirectory . '/'
+            . InstallationIdentity::FILE_NAME . '. Restore it from the same backup as the database.';
+    }
+    if ($identityOriginInvalid) {
+        $problems[] = 'The database installation origin is invalid. Restore the matching database backup.';
+    }
+    if ($identityId !== null && $identityFileId !== null && !hash_equals($identityId, $identityFileId)) {
+        $problems[] = 'The data directory and database belong to different installations. Restore the matching '
+            . 'installation identity file and database backup.';
+    }
+    if ($identityId !== null && $identityFileId === null && !$identityFileInvalid && ($accounts ?? 0) > 0) {
+        $problems[] = 'The installation identity file is missing. Restore var/'
+            . InstallationIdentity::FILE_NAME . ' from the same backup as the database.';
+    }
+    if ($identityId === null && $identityFileId !== null && ($accounts ?? 0) > 0) {
+        $problems[] = 'The database is missing the installation identity record for this data directory. '
+            . 'Restore the matching database backup; do not attach this var volume to a new database.';
+    }
+    if ($identityOrigin !== null && ($accounts ?? 0) > 0) {
+        $configOrigin = InstallationIdentity::normalizeOrigin($config->instanceUrl);
+        if ($identityOrigin !== $configOrigin) {
+            $problems[] = 'The public origin changed on a populated instance: recorded ' . $identityOrigin
+                . ', configured ' . $configOrigin . '. Restore the original ALOHASOCIAL_INSTANCE_URL.';
+        }
+    }
+    if ($identityRow !== null && is_string($instancePublicKey) && ($accounts ?? 0) > 0) {
+        $actualFingerprint = hash('sha256', $instancePublicKey);
+        if (!hash_equals((string) $identityRow['key_fingerprint'], $actualFingerprint)) {
+            $problems[] = 'The instance signing key does not match the installation identity. Restore the matching '
+                . 'var/secret.key and database backup.';
+        }
     }
     if (!writableDirectory($config->varDirectory)) {
         $problems[] = 'The var directory is not writable: ' . $config->varDirectory;
@@ -141,6 +212,7 @@ try {
         : $config->blobDirectory;
     fwrite(STDOUT, '  Blobs:          ' . $storageLabel . ($storageAvailable ? ' (available)' : ' (UNAVAILABLE)') . "\n");
     fwrite(STDOUT, "  Secret key:     " . ($config->secretKey !== null ? 'from environment' : $config->secretKeyFile) . ($keyExists ? ($keyValid ? ' (present)' : ' (INVALID)') : ' (MISSING)') . "\n");
+    fwrite(STDOUT, "  Installation:   " . ($identityId === null ? 'not initialized' : substr($identityId, 0, 12) . '…') . ($identityOrigin === null ? '' : ' @ ' . $identityOrigin) . "\n");
     fwrite(STDOUT, "  Database file:  " . ($databaseFile ?? 'server-managed') . ($databaseWritable ? ' (writable)' : ' (NOT writable)') . "\n");
     fwrite(STDOUT, "  Mail:           " . $config->mailTransport . ' -> ' . $config->mailLogDirectory . ($mailWritable ? ' (writable)' : ' (NOT writable)') . "\n");
     fwrite(STDOUT, "  Backups:        " . count($backupFiles) . " in " . $report['backup_directory'] . "\n");
@@ -172,6 +244,32 @@ function writableDirectory(string $path): bool
     $parent = dirname($path);
 
     return is_dir($parent) && is_writable($parent);
+}
+
+/**
+ * Reads only the public installation id. A malformed file is reported as
+ * invalid; the id itself is not secret.
+ *
+ * @return array{0: ?string, 1: bool}
+ */
+function installationFileId(string $path): array
+{
+    if (!is_file($path)) {
+        return [null, false];
+    }
+
+    try {
+        $data = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    } catch (Throwable) {
+        return [null, true];
+    }
+
+    $id = is_array($data) ? ($data['installation_id'] ?? null) : null;
+    if (!is_string($id) || preg_match('/^[a-f0-9]{32}$/', $id) !== 1) {
+        return [null, true];
+    }
+
+    return [$id, false];
 }
 
 /**

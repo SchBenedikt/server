@@ -16,7 +16,7 @@
 # push to main. `docker compose pull` fetches it; `docker compose build` builds
 # the same tag from this checkout instead.
 
-name: aloha-social
+name: ${COMPOSE_PROJECT_NAME:-aloha-social}
 
 # Web setup writes this file. It lives in the persistent `var` volume, so a
 # configured domain survives `docker compose up -d`, image updates and
@@ -75,7 +75,10 @@ services:
 # Keep the physical volume name stable even when Compose is invoked with a
 # different project name or from a renamed checkout. The explicit name is the
 # one this stack has always used because the project is named `aloha-social`.
-# Changing it would make an existing installation look empty.
+# Changing it would make an existing installation look empty. Independent
+# installations on one host must set both COMPOSE_PROJECT_NAME and
+# ALOHASOCIAL_VAR_VOLUME (and ALOHASOCIAL_DB_VOLUME for PostgreSQL); see
+# docs/docker.md.
 volumes:
   aloha-var:
-    name: aloha-social_aloha-var
+    name: ${ALOHASOCIAL_VAR_VOLUME:-aloha-social_aloha-var}
