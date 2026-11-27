@@ -284,7 +284,7 @@ final class SignedFederationDeliveryTest extends TestCase
         }
     }
 
-    public function testAFailedDeliveryLogsThePeersOwnMessage(): void
+    public function testAFailedDeliveryLogsAPeerErrorCodeWithoutTheRawBody(): void
     {
         $inner = new class () implements BoundedHttpClient {
             public function request(
@@ -332,7 +332,10 @@ final class SignedFederationDeliveryTest extends TestCase
         self::assertCount(1, $logger->records);
         self::assertSame('warning', $logger->records[0]['level']);
         self::assertSame(422, $logger->records[0]['context']['status']);
-        self::assertStringContainsString('invalid_object: The Like does not target the note.', $logger->records[0]['context']['peer_message']);
+        self::assertSame('invalid_object', $logger->records[0]['context']['code']);
+        self::assertStringContainsString('{code}', $logger->records[0]['message']);
+        self::assertStringNotContainsString('The Like does not target the note.', json_encode($logger->records[0], JSON_THROW_ON_ERROR));
+        self::assertArrayNotHasKey('peer_message', $logger->records[0]['context']);
     }
 
     public function testLikeAndReplyReachAStrictPeerThroughTheRealWorker(): void

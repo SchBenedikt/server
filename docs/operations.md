@@ -110,8 +110,13 @@ The **Errors** tab lists warnings and failures recorded by the worker and the
 federation layer: outbound delivery errors, remote fetch problems, media
 failures and other background work. It also lists dead jobs that exhausted
 their retries. The runtime logger writes the same messages to the PHP error log,
-so shell access still gives the full context; the admin view keeps the
-operational picture available without it.
+so shell access still gives the operational picture without the admin UI.
+Both sinks pass through the same redaction boundary: URL credentials, query
+strings and fragments, authorization/cookie values, tokens, passwords and
+unknown context fields are removed before a message is written or stored. Only
+allowlisted operational fields such as the job id, status, domain, error code
+and sanitized URL are retained; peer response bodies are reduced to a stable
+error code.
 
 Do not treat every warning as an outage. A remote server returning `404` or a
 blocked media fetch is a peer problem; repeated failures for the same domain,

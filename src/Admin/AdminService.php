@@ -31,6 +31,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Support\EnvFile;
+use AlohaSocial\Server\Support\LogRedactor;
 use DateTimeImmutable;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -1132,9 +1133,9 @@ final class AdminService
             'errors' => array_map(fn (array $row): array => [
                 'id' => (string) $row['id'],
                 'level' => (string) $row['level'],
-                'source' => $row['source'] === null ? null : (string) $row['source'],
-                'message' => (string) $row['message'],
-                'context' => $this->decodeDetails($row['context']),
+                'source' => $row['source'] === null ? null : LogRedactor::text((string) $row['source'], 120),
+                'message' => LogRedactor::text((string) $row['message'], 1000),
+                'context' => LogRedactor::contextArray($this->decodeDetails($row['context'])),
                 'created_at' => (string) $row['created_at'],
             ], $rows),
             'counts' => [
