@@ -54,6 +54,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **SMTP transport semantics:** writes are completed byte-for-byte with a
+  deadline, replies are bounded and parsed as real status lines, and the
+  final `DATA` 250 is treated as acceptance even when `QUIT` closes early.
+  STARTTLS/implicit TLS verify the peer, plaintext AUTH requires an explicit
+  opt-in, Unicode subjects use MIME encoded-words, and peer response text is
+  never copied into an error.
 - **Runtime log redaction:** both the SAPI log and `runtime_error` now pass
   through one allowlist-based boundary. URL credentials/query/fragment,
   bearer tokens, cookies, key/value secrets, unknown context fields and raw
