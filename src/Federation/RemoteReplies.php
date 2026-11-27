@@ -12,10 +12,6 @@ namespace AlohaSocial\Server\Federation;
 use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
 use AlohaSocial\Core\Domain\Post\Post;
 use AlohaSocial\Core\Domain\Post\Visibility;
-use AlohaSocial\Core\Jobs\JobQueue;
-use AlohaSocial\Core\Jobs\JobSubject;
-use AlohaSocial\Core\Jobs\JobType;
-use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
@@ -26,31 +22,20 @@ use AlohaSocial\Core\Service\ReactionService;
 use AlohaSocial\Core\Service\ValidationException;
 use Throwable;
 
-use function array_values;
-use function in_array;
-use function is_array;
 use function is_string;
-use function json_decode;
-use function json_encode;
 use function preg_match;
 use function trim;
-
-use const JSON_THROW_ON_ERROR;
-use const JSON_UNESCAPED_SLASHES;
 
 /**
  * Replies to posts that live on another server.
  *
- * The core resolves every `in_reply_to_id` against its own post table. That
- * is correct for a reply inside the local instance, but a public conversation
- * also has remote parents. This service creates the local post through the
- * core while its parent is still absent, then retargets it and rewrites the
- * already queued Create inside the same database transaction. A worker can
- * therefore never observe a delivery without `inReplyTo` or a post without its
- * remote parent.
- *
- * The parent author's inbox is resolved before the post is written, so a
- * reply that cannot be delivered does not leave a half-published comment.
+ * The core resolves an absolute `in_reply_to_id` against its stored remote
+ * posts, authorizes it with the shared read policy, persists the remote
+ * parent edge and delivers the signed Create to the parent author's inbox.
+ * This service keeps the host-specific steps around that write: importing a
+ * not-yet-cached search result, mapping authorization failures to stable
+ * API errors and refusing to publish a reply whose parent inbox cannot be
+ * resolved at all.
  */
 final class RemoteReplies
 {
@@ -58,9 +43,7 @@ final class RemoteReplies
         private readonly Connection $db,
         private readonly PostService $posts,
         private readonly ActivityFactory $activities,
-        private readonly JobQueue $queue,
         private readonly RemoteDirectory $directory,
-        private readonly Clock $clock,
         private readonly ?ReactionService $authorization = null,
         private readonly ?RemotePostImporter $importer = null,
     ) {
@@ -180,139 +163,20 @@ final class RemoteReplies
             }
         }
 
-        return $this->db->transaction(function () use (
-            $userId,
-            $target,
-            $content,
-            $visibility,
-            $contentWarning,
-            $attachmentIds,
-            $quotedPostId,
-            $language,
-            $actorId,
-            $inbox,
-        ): Post {
-            $post = $this->posts->create(new CreatePost(
-                authorId: $userId,
-                content: $content,
-                visibility: $visibility,
-                contentWarning: $contentWarning,
-                attachmentIds: $attachmentIds,
-                inReplyToId: null,
-                quotedPostId: $quotedPostId,
-                language: $language,
-            ));
-
-            $this->db->execute(
-                'UPDATE social_post SET in_reply_to_id = :target WHERE id = :id',
-                ['target' => $target, 'id' => $post->id],
-            );
-
-            $noteUrl = $this->activities->noteIdFor($post->id);
-            [$activity, $queuedInboxes] = $this->retargetDeliveries($userId, $noteUrl, $target, $actorId);
-            if ($activity === null) {
-                $activity = $this->activities->createNote($post);
-                $activity['object']['inReplyTo'] = $target;
-                $activity = $this->withParentAudience($activity, $actorId);
-            }
-
-            // The core may already have queued the same inbox because the
-            // parent author follows this account. Delivering twice is only a
-            // wasted request, but skipping the duplicate keeps the queue clean.
-            if (!in_array($inbox, $queuedInboxes, true)) {
-                $this->queue->push(JobType::FEDERATION_DELIVER, [
-                    'inbox' => $inbox,
-                    'activity' => $activity,
-                    'key_id' => $this->activities->keyId($userId),
-                ], subject: JobSubject::account($userId));
-            }
-
-            return $this->posts->get($post->id);
-        });
-    }
-
-    /**
-     * Rewrites every pending Create for this post so peers see the remote
-     * parent instead of a top-level note. Returns the rewritten activity and
-     * the inboxes the core already queued.
-     *
-     * @return array{0: ?array<string, mixed>, 1: list<string>}
-     */
-    private function retargetDeliveries(
-        string $userId,
-        string $noteUrl,
-        string $target,
-        string $actorId,
-    ): array {
-        $rows = $this->db->fetchAll(
-            'SELECT id, payload FROM social_job'
-            . ' WHERE type = :type AND dead_at IS NULL'
-            . ' AND subject_type = :subject_type AND subject_id = :subject_id',
-            [
-                'type' => JobType::FEDERATION_DELIVER,
-                'subject_type' => JobSubject::account($userId)->type,
-                'subject_id' => $userId,
-            ],
-        );
-
-        $activity = null;
-        $inboxes = [];
-        foreach ($rows as $row) {
-            $payload = json_decode((string) $row['payload'], true);
-            if (!is_array($payload) || !is_array($payload['activity'] ?? null)) {
-                continue;
-            }
-
-            $queued = $payload['activity'];
-            $object = $queued['object'] ?? null;
-            if (!is_array($object) || ($object['id'] ?? null) !== $noteUrl) {
-                continue;
-            }
-
-            if (is_string($payload['inbox'] ?? null)) {
-                $inboxes[] = $payload['inbox'];
-            }
-
-            $object['inReplyTo'] = $target;
-            $queued['object'] = $object;
-            $queued = $this->withParentAudience($queued, $actorId);
-            $payload['activity'] = $queued;
-
-            $this->db->execute(
-                'UPDATE social_job SET payload = :payload WHERE id = :id',
-                [
-                    'payload' => json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
-                    'id' => (string) $row['id'],
-                ],
-            );
-
-            $activity ??= $queued;
-        }
-
-        return [$activity, array_values(array_unique($inboxes))];
-    }
-
-    /**
-     * Adds the parent author to the audience so a followers-only reply still
-     * reaches the person it answers and every peer can thread it.
-     *
-     * @param array<string, mixed> $activity
-     *
-     * @return array<string, mixed>
-     */
-    private function withParentAudience(array $activity, string $actorId): array
-    {
-        $cc = is_array($activity['cc'] ?? null) ? array_values($activity['cc']) : [];
-        if (!in_array($actorId, $cc, true)) {
-            $cc[] = $actorId;
-        }
-        $activity['cc'] = $cc;
-
-        if (is_array($activity['object'] ?? null)) {
-            $activity['object']['cc'] = $cc;
-        }
-
-        return $activity;
+        // The core write resolves the same stored parent, applies the shared
+        // audience policy, persists the remote parent edge, emits the
+        // canonical inReplyTo with the parent author in cc and queues the
+        // delivery to this inbox even when the author has no followers.
+        return $this->posts->create(new CreatePost(
+            authorId: $userId,
+            content: $content,
+            visibility: $visibility,
+            contentWarning: $contentWarning,
+            attachmentIds: $attachmentIds,
+            inReplyToId: $target,
+            quotedPostId: $quotedPostId,
+            language: $language,
+        ));
     }
 
     private function storedInbox(string $userId, string $actorId): ?string

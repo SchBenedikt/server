@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Federation;
 
+use AlohaSocial\Core\Domain\Federation\ActorInboxResolver;
 use AlohaSocial\Core\Domain\Federation\MentionTarget;
 use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpClientException;
@@ -59,7 +60,7 @@ use const FILTER_VALIDATE_URL;
  * requested profile may be a handle (`@user@host`, `user.bsky.social`) or an
  * absolute profile/actor URL.
  */
-final class RemoteDirectory
+final class RemoteDirectory implements ActorInboxResolver
 {
     private const ACTIVITY_ACCEPT = 'application/activity+json, application/ld+json; profile="https://www.w3.org/ns/activitystreams"';
 
@@ -277,6 +278,16 @@ final class RemoteDirectory
         } catch (RemoteDirectoryException) {
             return null;
         }
+    }
+
+    /**
+     * {@see ActorInboxResolver}: the core's actor-inbox port. The directory's
+     * fetch is signed, so peers that require authorized fetch still resolve;
+     * an unsigned core fetch would be refused before the inbox is read.
+     */
+    public function inboxFor(string $actorId): ?string
+    {
+        return $this->actorInbox($actorId);
     }
 
     /**

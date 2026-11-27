@@ -1052,7 +1052,8 @@ final class FrontController
         try {
             $rows = $this->runtime->database->fetchAll(
                 'SELECT id, visibility FROM social_post'
-                . ' WHERE in_reply_to_id IN (:requested, :object) AND deleted_at IS NULL'
+                . ' WHERE (in_reply_to_id IN (:requested, :object)'
+                . ' OR in_reply_to_remote_object_id IN (:requested, :object)) AND deleted_at IS NULL'
                 . " AND (visibility IN ('public', 'unlisted') OR author_id = :viewer)"
                 . ' ORDER BY published_at ASC, id ASC LIMIT 50',
                 ['requested' => $requestedId, 'object' => $objectId, 'viewer' => $viewerId ?? ''],

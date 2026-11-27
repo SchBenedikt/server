@@ -467,6 +467,8 @@ if ($remoteObjectId !== null) {
         ], JSON_THROW_ON_ERROR),
     ]);
     check('B: reply to the remote post created', $status === 201, 'status ' . $status . ' ' . $body);
+    $replyDecoded = json_decode($body, true);
+    $replyLocalId = is_array($replyDecoded) ? ($replyDecoded['post']['id'] ?? null) : null;
 
     $code = runPhp($root, ['bin/worker.php', '--once'], $envB, $output);
     check('B: worker delivered the reply', $code === 0, (string) $output);
@@ -477,6 +479,7 @@ if ($remoteObjectId !== null) {
     // mention notification against the reply's remote object id.
     [$status, $body] = httpRequest('GET', $baseA . '/api/v1/notifications', ['jar' => $jarA]);
     $mentionFound = false;
+    $replyRemoteId = null;
     if ($status === 200) {
         $notifications = json_decode($body, true);
         foreach ($notifications['notifications'] ?? [] as $notification) {
@@ -485,11 +488,44 @@ if ($remoteObjectId !== null) {
                 && str_starts_with((string) $notification['post_id'], $baseB)
             ) {
                 $mentionFound = true;
+                $replyRemoteId = $notification['post_id'];
                 break;
             }
         }
     }
     check('A: remote reply recorded a mention notification', $mentionFound, 'status ' . $status . ' ' . $body);
+
+    // The stored remote reply is readable before the delete…
+    if ($replyRemoteId !== null) {
+        [$status, $body] = httpRequest(
+            'GET',
+            $baseA . '/api/v1/remote-posts/' . rawurlencode($replyRemoteId),
+            ['jar' => $jarA],
+        );
+        check('A: stored remote reply is readable', $status === 200, 'status ' . $status . ' ' . $body);
+    }
+
+    // …and B's delete reaches A's copy: the same parent-author inbox that got
+    // the Create gets the Delete, and the remote row is tombstoned.
+    if (is_string($replyLocalId) && $replyLocalId !== '') {
+        [$status, $body] = httpRequest('DELETE', $baseB . '/api/v1/posts/' . rawurlencode($replyLocalId), [
+            'jar' => $jarB,
+            'headers' => ['X-CSRF-Token: ' . $csrfB],
+        ]);
+        check('B: reply deleted locally', $status === 204 || $status === 200, 'status ' . $status . ' ' . $body);
+
+        $code = runPhp($root, ['bin/worker.php', '--once'], $envB, $output);
+        check('B: worker delivered the delete', $code === 0, (string) $output);
+
+        if ($replyRemoteId !== null) {
+            [$status, $body] = httpRequest(
+                'GET',
+                $baseA . '/api/v1/remote-posts/' . rawurlencode($replyRemoteId),
+                ['jar' => $jarA],
+            );
+            check('A: deleted remote reply no longer resolves', $status === 404, 'status ' . $status . ' ' . $body);
+        }
+    }
 }
 
 [$status, $body] = httpRequest('GET', $baseB . '/api/v1/timelines/public');
