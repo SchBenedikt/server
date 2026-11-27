@@ -73,12 +73,38 @@ matching systemd unit and Nginx server block. Without `--handle` and without
 the wizard it leaves account creation to you. The script does not start
 PHP-FPM, Nginx or the worker; the sections below cover those services.
 
-## Reset and reconfigure in the browser
+## First-run setup in the browser
+
+On an empty, migrated installation, generate a short-lived setup token without
+touching the database or `.env`:
+
+```shell
+php bin/setup-token.php
+php bin/setup-token.php --ttl=900
+```
+
+The command prints a URL like `https://social.example/setup?token=…`, stores
+the token with mode `0600` in `var/setup.token`, and refuses to run as soon as
+an account or any content exists. The default lifetime is one hour; the maximum
+is 24 hours. Never paste the URL into logs, tickets or chat.
+
+Open the URL and fill in the final public HTTPS origin, the instance identity
+and the first administrator. The setup writes only these values to `.env` and
+closes the token after success. An empty database alone is not enough: the
+token is required. If the token expires or is lost, rerun
+`php bin/setup-token.php` while the instance is still fresh.
+
+Restart PHP-FPM after setup if your deployment does not reload the environment
+per request, then start `bin/worker.php` again. The long-running worker also
+reloads a changed env file at its next batch boundary. Actor IDs and WebFinger
+links of the new accounts use the new domain.
+
+### Reset and reconfigure
 
 A running instance can be returned to an empty installation without losing its
-database connection or instance key. Stop the worker and PHP-FPM first (or put
-the site in maintenance mode) so no request writes to the tables while they are
-dropped:
+database connection or instance key. This is destructive and is not needed to
+obtain a first-run token. Stop the worker and PHP-FPM first (or put the site in
+maintenance mode) so no request writes to the tables while they are dropped:
 
 ```shell
 sudo systemctl stop aloha-worker php8.3-fpm
@@ -109,9 +135,10 @@ sudo systemctl start aloha-worker
 ``` The
 actor IDs and WebFinger links of the new accounts use the new domain.
 
-If the setup token is lost, run `php bin/reset.php` again or read
-`var/setup.token` as the application user. Never publish that file or paste the
-setup URL into a chat.
+The reset prints a fresh setup URL. If only that token is lost, read
+`var/setup.token` as the application user or rerun `php bin/setup-token.php`
+on a still-empty instance. Never publish that file or paste the setup URL into
+a chat.
 
 ## What you are installing
 

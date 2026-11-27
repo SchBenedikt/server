@@ -117,6 +117,17 @@ the host `.env` values Compose forwards as environment. It survives
 one place; if you prefer the host `.env`, set it there before first boot and
 leave the browser setup's origin unchanged.
 
+For browser setup on a fresh stack, print a short-lived token from inside the
+container. The command refuses to run once an account or content exists and
+never deletes data:
+
+```shell
+docker compose exec app php bin/setup-token.php
+```
+
+Open the printed URL. The token is stored in the `aloha-var` volume with mode
+`0600` and expires after one hour by default.
+
 Example Caddy:
 
 ```caddy

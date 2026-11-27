@@ -42,11 +42,6 @@ final class EnvFile
      */
     public static function set(string $path, array $values): void
     {
-        $directory = dirname($path);
-        if (!is_dir($directory) && !mkdir($directory, 0o770, true) && !is_dir($directory)) {
-            throw new RuntimeException('Cannot create the configuration directory: ' . $directory);
-        }
-
         $lines = [];
         if (is_file($path)) {
             $contents = file_get_contents($path);
@@ -77,12 +72,42 @@ final class EnvFile
             }
         }
 
+        self::write($path, implode("\n", $lines) . "\n");
+    }
+
+    /**
+     * Restores a complete snapshot, or removes the file when null.
+     *
+     * Setup takes this snapshot before it writes anything. If the database
+     * transaction rolls back, the exact previous file returns; that is safer
+     * than trying to reverse individual keys whose original values or order
+     * may have been unknown.
+     */
+    public static function replace(string $path, ?string $contents): void
+    {
+        if ($contents === null) {
+            if (is_file($path) && !unlink($path)) {
+                throw new RuntimeException('Cannot remove the configuration file: ' . $path);
+            }
+
+            return;
+        }
+
+        self::write($path, $contents);
+    }
+
+    private static function write(string $path, string $body): void
+    {
+        $directory = dirname($path);
+        if (!is_dir($directory) && !mkdir($directory, 0o770, true) && !is_dir($directory)) {
+            throw new RuntimeException('Cannot create the configuration directory: ' . $directory);
+        }
+
         $temporary = tempnam($directory, '.env-');
         if ($temporary === false) {
             throw new RuntimeException('Cannot create a temporary configuration file in ' . $directory);
         }
 
-        $body = implode("\n", $lines) . "\n";
         if (file_put_contents($temporary, $body) === false) {
             @unlink($temporary);
             throw new RuntimeException('Cannot write the configuration file: ' . $path);

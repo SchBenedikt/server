@@ -129,7 +129,30 @@ if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
 
 $lastEngagementRefresh = 0;
 $lastActorProfileRefresh = 0;
+$envFile = $runtime->config->envFile;
+$envStamp = is_file($envFile) ? (int) filemtime($envFile) : 0;
 while (!$stop) {
+    // Web setup and deployments rewrite the env file atomically. Rebuild the
+    // runtime at a batch boundary so a long-running worker uses the same
+    // origin and mail settings as the next web request instead of waiting for
+    // a manual service restart.
+    clearstatcache(true, $envFile);
+    $newStamp = is_file($envFile) ? (int) filemtime($envFile) : 0;
+    if ($newStamp !== $envStamp) {
+        try {
+            $reloaded = HostConfig::load($root);
+            $runtime = (new ApplicationFactory($reloaded, $root))->boot();
+            $envFile = $runtime->config->envFile;
+            $envStamp = is_file($envFile) ? (int) filemtime($envFile) : $newStamp;
+            fwrite(STDERR, "Configuration reloaded from " . $envFile . ".\n");
+        } catch (Throwable $exception) {
+            // Keep the previous runtime. Retry only after the file changes
+            // again, so a broken configuration does not flood the journal.
+            $envStamp = $newStamp;
+            fwrite(STDERR, 'Configuration reload failed; keeping the previous runtime: ' . $exception->getMessage() . "\n");
+        }
+    }
+
     // A non-empty batch is drained immediately; an empty one sleeps, so the
     // worker is not a busy loop.
     $runtime->admin->heartbeat();
