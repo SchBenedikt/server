@@ -867,6 +867,7 @@ final class FrontController
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
                         'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                        'authorization_unavailable' => [503, 'authorization_unavailable', 'Remote interaction authorization is temporarily unavailable.'],
                         'remote_delivery_unreachable', 'remote_post_unreachable' => [502, $exception->reason, $exception->getMessage()],
                         default => [422, $exception->reason, $exception->getMessage()],
                     };
@@ -966,6 +967,7 @@ final class FrontController
                     [$status, $code, $message] = match ($exception->reason) {
                         'remote_post_not_found', 'remote_post_not_followed' => [404, 'not_found', 'Status not found.'],
                         'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                        'authorization_unavailable' => [503, 'authorization_unavailable', 'Remote interaction authorization is temporarily unavailable.'],
                         'remote_delivery_unreachable', 'remote_post_unreachable' => [502, $exception->reason, $exception->getMessage()],
                         default => [422, $exception->reason, $exception->getMessage()],
                     };

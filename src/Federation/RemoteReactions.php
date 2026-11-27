@@ -26,6 +26,7 @@ use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Service\ReactionException;
 use AlohaSocial\Core\Service\ReactionService;
 use AlohaSocial\Core\Support\Time;
+use Throwable;
 
 use function is_string;
 use function max;
@@ -261,22 +262,29 @@ final class RemoteReactions
             throw new ReactionException('remote_post_not_found', 'Remote post not found.');
         }
 
-        // A block is decided locally and the activity is never sent. The post
-        // stays readable only through an explicit block filter, so refusing the
-        // reaction is the least surprising answer.
+        // Use the core's single remote-interaction policy. It checks both block
+        // directions, the stored audience and the accepted-follow rule. If the
+        // policy store is unavailable, fail closed instead of treating an
+        // unknown block state as permission.
         try {
-            $blocked = (int) $this->db->fetchValue(
-                'SELECT COUNT(*) FROM social_block WHERE local_user_id = :user AND actor_id = :actor',
-                ['user' => $userId, 'actor' => $post->actorId],
+            $authorized = $this->snapshots?->remotePostFor($userId, $post->objectId);
+        } catch (ReactionException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw new ReactionException(
+                'authorization_unavailable',
+                'Remote interaction authorization is temporarily unavailable.',
             );
-        } catch (DatabaseException) {
-            $blocked = 0;
-        }
-        if ($blocked > 0) {
-            throw new ReactionException('blocked_actor', 'This actor is blocked.');
         }
 
-        return $post;
+        if ($authorized === null) {
+            throw new ReactionException(
+                'authorization_unavailable',
+                'Remote interaction authorization is temporarily unavailable.',
+            );
+        }
+
+        return $authorized;
     }
 
     /**

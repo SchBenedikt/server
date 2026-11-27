@@ -120,9 +120,9 @@ final class RemoteReplyTest extends TestCase
         $this->server->runtime->database->execute(
             'INSERT INTO social_remote_post'
             . ' (activity_id, object_id, object_author_id, actor_id, kind, content,'
-            . ' content_warning, published_at, deleted_at)'
+            . ' content_warning, published_at, deleted_at, audience)'
             . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content,'
-            . ' NULL, :published_at, NULL)',
+            . ' NULL, :published_at, NULL, :audience)',
             [
                 'activity_id' => 'https://peer.example/activities/1',
                 'object_id' => 'https://peer.example/notes/1',
@@ -131,6 +131,7 @@ final class RemoteReplyTest extends TestCase
                 'kind' => 'post',
                 'content' => 'A remote post',
                 'published_at' => '2026-11-20T10:00:00Z',
+                'audience' => 'public',
             ],
         );
     }
