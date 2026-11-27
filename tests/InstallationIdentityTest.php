@@ -103,6 +103,20 @@ final class InstallationIdentityTest extends TestCase
         $this->identity($server)->assertCurrent();
     }
 
+    public function testPopulatedDatabaseFromBeforeTheFeatureAdoptsItsIdentity(): void
+    {
+        $server = new TestServer();
+        $server->createAccount();
+        $path = $server->runtime->config->varDirectory . '/installation.json';
+        $server->runtime->database->execute('DELETE FROM installation_identity');
+        unlink($path);
+
+        $this->identity($server)->assertCurrent();
+
+        self::assertFileExists($path);
+        self::assertSame($this->fileId($path), $this->row($server)['installation_id']);
+    }
+
     public function testMissingDatabaseRowIsRecoveredFromTheIdentityFile(): void
     {
         $server = new TestServer();

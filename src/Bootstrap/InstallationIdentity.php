@@ -103,6 +103,7 @@ final class InstallationIdentity
         $path = $this->path();
         $file = $this->readFile($path);
         $row = $this->row();
+        $hadStoredRow = $row !== null;
         $hasData = $this->hasData();
 
         if ($row === null) {
@@ -137,7 +138,10 @@ final class InstallationIdentity
             throw new RuntimeException(self::PAIR_MISMATCH);
         }
         if ($file === null) {
-            if ($hasData) {
+            // A row created in this boot is the one-time adoption of a database
+            // from before this feature. A row that was already stored without
+            // its file is a broken volume pair and must not be silently repaired.
+            if ($hasData && $hadStoredRow) {
                 throw new RuntimeException(self::FILE_MISSING);
             }
 
