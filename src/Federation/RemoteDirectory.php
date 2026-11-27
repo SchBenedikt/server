@@ -248,6 +248,10 @@ final class RemoteDirectory implements ActorInboxResolver
 
                 $post = $this->mastodonPost($status, $host);
                 if ($post !== null) {
+                    // remoteObject feeds only the import cache, so it reports
+                    // the proven audience rather than the display fallback.
+                    $post['visibility'] = $this->string($status['visibility'] ?? null);
+
                     return $post;
                 }
             } catch (RemoteDirectoryException) {
@@ -261,7 +265,12 @@ final class RemoteDirectory implements ActorInboxResolver
             $note = $note['object'];
         }
 
-        return $this->activityPubPost($note, []);
+        $post = $this->activityPubPost($note, []);
+        if ($post !== null) {
+            $post['visibility'] = $this->visibility($note);
+        }
+
+        return $post;
     }
 
     /**
@@ -1793,7 +1802,7 @@ final class RemoteDirectory implements ActorInboxResolver
             'content_warning' => $summary !== null && trim($summary) !== ''
                 ? HtmlText::toPlainText($summary, 500)
                 : null,
-            'visibility' => $this->visibility($note),
+            'visibility' => $this->visibility($note) ?? 'unlisted',
             'published_at' => $published,
             'edited_at' => $this->string($note['updated'] ?? null),
             'deleted_at' => null,
@@ -2323,12 +2332,18 @@ final class RemoteDirectory implements ActorInboxResolver
     }
 
     /**
+     * The audience an ActivityPub object declares, or null when it does not
+     * prove one. Only an explicit Public or followers collection counts:
+     * ActivityPub has no unlisted visibility, so an object addressed to
+     * specific actors — or to nobody — must not be mistaken for link-public
+     * content by the import cache.
+     *
      * @param array<string, mixed> $note
      */
-    private function visibility(array $note): string
+    private function visibility(array $note): ?string
     {
         $audience = [];
-        foreach (['to', 'cc'] as $field) {
+        foreach (['to', 'cc', 'audience'] as $field) {
             $value = $note[$field] ?? [];
             foreach (is_array($value) ? $value : [$value] as $entry) {
                 if (is_string($entry)) {
@@ -2347,7 +2362,7 @@ final class RemoteDirectory implements ActorInboxResolver
             }
         }
 
-        return 'unlisted';
+        return null;
     }
 
     private function isBlueskyQuery(string $query): bool

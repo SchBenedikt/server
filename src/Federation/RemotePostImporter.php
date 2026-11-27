@@ -90,9 +90,10 @@ final class RemotePostImporter
             return null;
         }
 
-        // The interaction cache feeds public timelines. A followers-only
-        // object that an origin happens to serve unsigned must not enter it.
-        $visibility = is_string($data['visibility'] ?? null) ? $data['visibility'] : 'public';
+        // The interaction cache feeds public timelines. Only an explicitly
+        // proven public or unlisted audience may enter it: a missing or
+        // directed audience is unknown, and unknown fails closed.
+        $visibility = $data['visibility'] ?? null;
         if (!in_array($visibility, ['public', 'unlisted'], true)) {
             return null;
         }
