@@ -57,10 +57,14 @@ final class RemoteReplyTest extends TestCase
         self::assertSame('https://peer.example/notes/1', $post['in_reply_to_id']);
 
         $stored = $this->server->runtime->database->fetchOne(
-            'SELECT in_reply_to_id FROM social_post WHERE id = :id',
+            'SELECT in_reply_to_id, in_reply_to_remote_object_id, in_reply_to_remote_author'
+            . ' FROM social_post WHERE id = :id',
             ['id' => (string) $post['id']],
         );
-        self::assertSame('https://peer.example/notes/1', $stored['in_reply_to_id'] ?? null);
+        self::assertIsArray($stored);
+        self::assertNull($stored['in_reply_to_id']);
+        self::assertSame('https://peer.example/notes/1', $stored['in_reply_to_remote_object_id'] ?? null);
+        self::assertSame('https://peer.example/users/bob', $stored['in_reply_to_remote_author'] ?? null);
 
         $jobs = $this->server->runtime->database->fetchAll(
             'SELECT payload FROM social_job WHERE type = :type AND subject_id = :user',
@@ -73,7 +77,7 @@ final class RemoteReplyTest extends TestCase
         self::assertSame('https://peer.example/users/bob/inbox', $payload['inbox']);
         self::assertSame('Great point!', $payload['activity']['object']['content']);
         self::assertSame('https://peer.example/notes/1', $payload['activity']['object']['inReplyTo']);
-        self::assertContains('https://peer.example/users/bob', $payload['activity']['cc']);
+        self::assertContains('https://peer.example/users/bob', $payload['activity']['object']['cc']);
     }
 
     public function testLocalReplyStillUsesALocalParent(): void

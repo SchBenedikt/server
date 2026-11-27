@@ -186,7 +186,7 @@ final class AdminService
             'posts' => [
                 'total' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL'),
                 'public' => $this->intValue("SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND visibility = 'public'"),
-                'replies' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND in_reply_to_id IS NOT NULL'),
+                'replies' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND (in_reply_to_id IS NOT NULL OR in_reply_to_remote_object_id IS NOT NULL)'),
                 'today' => $this->intValue('SELECT COUNT(*) FROM social_post WHERE deleted_at IS NULL AND published_at >= :today', ['today' => $today]),
             ],
             'media' => [
@@ -1596,7 +1596,7 @@ final class AdminService
     private function recentPosts(int $limit): array
     {
         $rows = $this->db->fetchAll(
-            'SELECT id, author_id, content, visibility, in_reply_to_id, published_at FROM social_post'
+            'SELECT id, author_id, content, visibility, in_reply_to_id, in_reply_to_remote_object_id, published_at FROM social_post'
             . ' WHERE deleted_at IS NULL ORDER BY published_at DESC LIMIT ' . max(1, $limit),
         );
 
@@ -1606,7 +1606,7 @@ final class AdminService
             'author_name' => $this->localName((string) $row['author_id']),
             'content' => $this->excerpt((string) $row['content'], 220),
             'visibility' => (string) $row['visibility'],
-            'reply' => $row['in_reply_to_id'] !== null,
+            'reply' => $row['in_reply_to_id'] !== null || $row['in_reply_to_remote_object_id'] !== null,
             'published_at' => (string) $row['published_at'],
         ], $rows);
     }

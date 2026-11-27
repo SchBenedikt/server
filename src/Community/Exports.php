@@ -179,7 +179,8 @@ final class Exports
     private function posts(string $accountId): array
     {
         $rows = $this->db->fetchAll(
-            'SELECT id, content, content_warning, visibility, in_reply_to_id, published_at, edited_at,'
+            'SELECT id, content, content_warning, visibility, in_reply_to_id,'
+            . ' in_reply_to_remote_object_id, in_reply_to_remote_author, published_at, edited_at,'
             . ' quoted_object_id, quote_state, revision, archived_at'
             . ' FROM social_post WHERE author_id = :account_id AND deleted_at IS NULL'
             . ' ORDER BY published_at ASC, id ASC',
@@ -205,7 +206,11 @@ final class Exports
                 'content' => (string) $row['content'],
                 'content_warning' => is_string($row['content_warning'] ?? null) ? $row['content_warning'] : null,
                 'visibility' => (string) $row['visibility'],
-                'in_reply_to_id' => is_string($row['in_reply_to_id'] ?? null) ? $row['in_reply_to_id'] : null,
+                'in_reply_to_id' => is_string($row['in_reply_to_id'] ?? null)
+                    ? $row['in_reply_to_id']
+                    : (is_string($row['in_reply_to_remote_object_id'] ?? null) ? $row['in_reply_to_remote_object_id'] : null),
+                'remote_parent_object_id' => is_string($row['in_reply_to_remote_object_id'] ?? null) ? $row['in_reply_to_remote_object_id'] : null,
+                'remote_parent_author_id' => is_string($row['in_reply_to_remote_author'] ?? null) ? $row['in_reply_to_remote_author'] : null,
                 'published_at' => (string) $row['published_at'],
                 'edited_at' => is_string($row['edited_at'] ?? null) ? $row['edited_at'] : null,
                 'quoted_object_id' => is_string($row['quoted_object_id'] ?? null) ? $row['quoted_object_id'] : null,
