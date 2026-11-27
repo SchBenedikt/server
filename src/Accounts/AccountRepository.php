@@ -73,8 +73,8 @@ final class AccountRepository
         $email = strtolower(trim($email));
 
         $this->db->execute(
-            'INSERT INTO account (id, handle, email, password_hash, role, display_name, created_at, disabled_at)'
-            . ' VALUES (:id, :handle, :email, :password_hash, :role, :display_name, :created_at, :disabled_at)',
+            'INSERT INTO account (id, handle, email, password_hash, role, display_name, created_at, disabled_at, credential_version)'
+            . ' VALUES (:id, :handle, :email, :password_hash, :role, :display_name, :created_at, :disabled_at, 1)',
             [
                 'id' => $handle,
                 'handle' => $handle,
@@ -95,7 +95,27 @@ final class AccountRepository
         return $account;
     }
 
+    /**
+     * Replaces the credential and advances its generation.
+     *
+     * The increment is part of the same statement, so a concurrent reset
+     * cannot observe the new hash with a stale generation.
+     */
     public function updatePasswordHash(string $id, string $passwordHash): void
+    {
+        $this->db->execute(
+            'UPDATE account SET password_hash = :hash, credential_version = credential_version + 1 WHERE id = :id',
+            ['hash' => $passwordHash, 'id' => $id],
+        );
+    }
+
+    /**
+     * Upgrades the stored hash without changing the password.
+     *
+     * A login-time algorithm upgrade must not invalidate an outstanding
+     * password-reset link, so it deliberately leaves the generation alone.
+     */
+    public function rehashPasswordHash(string $id, string $passwordHash): void
     {
         $this->db->execute(
             'UPDATE account SET password_hash = :hash WHERE id = :id',
@@ -237,6 +257,7 @@ final class AccountRepository
             displayName: $row['display_name'] === null ? null : (string) $row['display_name'],
             createdAt: (string) $row['created_at'],
             disabledAt: $row['disabled_at'] === null ? null : (string) $row['disabled_at'],
+            credentialVersion: (int) ($row['credential_version'] ?? 1),
         );
     }
 }

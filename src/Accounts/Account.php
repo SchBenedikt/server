@@ -30,6 +30,7 @@ final readonly class Account
         public ?string $displayName,
         public string $createdAt,
         public ?string $disabledAt,
+        public int $credentialVersion = 1,
     ) {
     }
 

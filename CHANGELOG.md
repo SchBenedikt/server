@@ -54,6 +54,14 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Password reset under concurrency:** two simultaneous submissions of one
+  emailed link could both pass validation and overwrite the password. The
+  reset now locks the account, claims the exact token with a conditional
+  update, rechecks the account state and credential generation, and changes
+  the password, sessions and OAuth codes in the same transaction. Concurrent
+  issuance leaves one live link. Migration `202611280014` adds credential
+  versions and a unique per-account reset index; existing duplicate reset rows
+  are reduced to the newest token.
 - **Liking and boosting external posts:** an AT Protocol card rendered its like
   action as a static count because the card only accepted HTTP targets, and the
   AT interaction policy refused every post whose author was not followed. Both

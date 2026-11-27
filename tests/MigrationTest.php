@@ -69,6 +69,13 @@ final class MigrationTest extends TestCase
             self::assertNotContains($legacy, $tables, 'Legacy table should have been consolidated: ' . $legacy);
         }
 
+        $accountColumns = $server->runtime->database->fetchAll('PRAGMA table_info(account)');
+        self::assertContains('credential_version', array_column($accountColumns, 'name'));
+        $resetColumns = $server->runtime->database->fetchAll('PRAGMA table_info(password_reset)');
+        self::assertContains('credential_version', array_column($resetColumns, 'name'));
+        $resetIndexes = $server->runtime->database->fetchAll("PRAGMA index_list('password_reset')");
+        self::assertContains('password_reset_account_unique', array_column($resetIndexes, 'name'));
+
         $preferenceColumns = $server->runtime->database->fetchAll('PRAGMA table_info(account_preference)');
         $columnNames = array_map(static fn (array $row): string => (string) $row['name'], $preferenceColumns);
         self::assertContains('mirror_likes_to_atproto', $columnNames);
@@ -366,6 +373,42 @@ final class MigrationTest extends TestCase
             'SELECT COUNT(*) FROM social_story_view WHERE story_id = :story',
             ['story' => 'deleted-host-story'],
         ));
+    }
+
+    public function testCredentialVersioningMigrationReducesDuplicateResetRows(): void
+    {
+        $server = new TestServer();
+        $server->createAccount();
+        $database = $server->runtime->database;
+
+        // Recreate the schema as it existed before migration 014.
+        $database->execute('DROP INDEX password_reset_account_unique');
+        $database->execute('ALTER TABLE password_reset DROP COLUMN credential_version');
+        $database->execute('ALTER TABLE account DROP COLUMN credential_version');
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611280014'");
+
+        foreach ([1, 2, 3] as $age) {
+            $database->execute(
+                'INSERT INTO password_reset (token_hash, account_id, created_at, expires_at, used_at)'
+                . ' VALUES (:hash, :account, :created, :expires, NULL)',
+                [
+                    'hash' => hash('sha256', 'old-token-' . $age),
+                    'account' => 'alice',
+                    'created' => '2026-11-0' . $age . 'T00:00:00Z',
+                    'expires' => '2026-11-0' . ($age + 1) . 'T00:00:00Z',
+                ],
+            );
+        }
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611280014'], $runner->migrate());
+
+        self::assertSame(1, (int) $database->fetchValue('SELECT COUNT(*) FROM password_reset'));
+        self::assertSame(
+            hash('sha256', 'old-token-3'),
+            (string) $database->fetchValue('SELECT token_hash FROM password_reset'),
+        );
+        self::assertSame(1, (int) $database->fetchValue('SELECT credential_version FROM account'));
     }
 
     public function testChangedChecksumIsRejected(): void

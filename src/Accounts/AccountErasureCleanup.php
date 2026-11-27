@@ -209,6 +209,7 @@ final readonly class AccountErasureCleanup
 
             $db->execute(
                 'UPDATE account SET handle = :handle, email = :email, display_name = NULL, password_hash = :password_hash,'
+                    . ' credential_version = credential_version + 1,'
                     . ' disabled_at = COALESCE(disabled_at, :disabled_at)'
                     . ' WHERE id = :account_id',
                 [
