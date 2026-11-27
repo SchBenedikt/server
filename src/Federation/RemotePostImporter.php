@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Federation;
 use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
 use AlohaSocial\Core\Domain\Federation\RemotePost;
 use AlohaSocial\Core\Domain\Federation\RemotePostKind;
+use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\DatabaseException;
@@ -120,20 +121,19 @@ final class RemotePostImporter
             } catch (Throwable) {
                 // Keep the local receive time for a malformed origin date.
             }
-        }
-
-        $inReplyTo = is_string($data['in_reply_to_id'] ?? null) ? trim($data['in_reply_to_id']) : '';
-        $post = new RemotePost(
+        }		$inReplyTo = is_string($data['in_reply_to_id'] ?? null) ? trim($data['in_reply_to_id']) : '';
+		$audience = $visibility === 'unlisted' ? Visibility::Unlisted : Visibility::Public;
+		$post = new RemotePost(
             activityId: $objectId,
             objectId: $objectId,
             actorId: $author,
             kind: RemotePostKind::Post,
             content: $content,
             contentWarning: $warning,
-            publishedAt: $publishedAt,
-            objectAuthorId: $author,
-            inReplyToId: $inReplyTo !== '' ? $inReplyTo : null,
-        );
+            publishedAt: $publishedAt,			objectAuthorId: $author,
+			inReplyToId: $inReplyTo !== '' ? $inReplyTo : null,
+			audience: $audience,
+		);
 
         try {
             $this->posts->insert($post);

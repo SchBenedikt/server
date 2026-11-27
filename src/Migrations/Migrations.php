@@ -66,6 +66,7 @@ final class Migrations
             new Version202611280009RepairStoryViews(),
             new Version202611280010StarterPacks(),
             new Version202611280011RepairDirectMessageRoots(),
+            new Version202611280012RemotePostAudience(),
         ];
     }
 }
