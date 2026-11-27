@@ -172,8 +172,8 @@ final class HostExtensionTest extends TestCase
         );
         $server->runtime->database->execute(
             'INSERT INTO social_remote_post'
-            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
-            . " VALUES ('https://remote.example/activities/post-1', :object_id, :actor, :actor, 'post', 'Remote post', '2026-11-22T10:00:00Z')",
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, audience)'
+            . " VALUES ('https://remote.example/activities/post-1', :object_id, :actor, :actor, 'post', 'Remote post', '2026-11-22T10:00:00Z', 'public')",
             ['object_id' => $objectId, 'actor' => $actor],
         );
 
@@ -253,8 +253,8 @@ final class HostExtensionTest extends TestCase
         $objectId = 'https://remote.example/objects/post-unfollowed';
         $server->runtime->database->execute(
             'INSERT INTO social_remote_post'
-            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
-            . " VALUES ('https://remote.example/activities/post-unfollowed', :object_id, 'https://remote.example/users/carol', 'https://remote.example/users/carol', 'post', 'Remote post', '2026-11-22T10:00:00Z')",
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, audience)'
+            . " VALUES ('https://remote.example/activities/post-unfollowed', :object_id, 'https://remote.example/users/carol', 'https://remote.example/users/carol', 'post', 'Remote post', '2026-11-22T10:00:00Z', 'public')",
             ['object_id' => $objectId],
         );
 

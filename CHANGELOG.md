@@ -54,6 +54,13 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Remote interaction authorization:** likes, boosts and replies on cached
+  federated posts now use the core's block, inbound-block, audience and
+  accepted-follow policy instead of a separate host query. A failed
+  authorization-store read returns `503 authorization_unavailable` and writes
+  no reaction, reply or delivery job; previously a database error was treated
+  as "not blocked". Restricted posts and pending follow requests are denied,
+  while public posts remain interactive without following their author.
 - **Password reset under concurrency:** two simultaneous submissions of one
   emailed link could both pass validation and overwrite the password. The
   reset now locks the account, claims the exact token with a conditional

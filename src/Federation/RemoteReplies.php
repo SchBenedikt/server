@@ -21,7 +21,10 @@ use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Protocol\ActivityPub\ActivityFactory;
 use AlohaSocial\Core\Service\CreatePost;
 use AlohaSocial\Core\Service\PostService;
+use AlohaSocial\Core\Service\ReactionException;
+use AlohaSocial\Core\Service\ReactionService;
 use AlohaSocial\Core\Service\ValidationException;
+use Throwable;
 
 use function array_values;
 use function in_array;
@@ -58,6 +61,7 @@ final class RemoteReplies
         private readonly JobQueue $queue,
         private readonly RemoteDirectory $directory,
         private readonly Clock $clock,
+        private readonly ?ReactionService $authorization = null,
         private readonly ?RemotePostImporter $importer = null,
     ) {
     }
@@ -126,26 +130,45 @@ final class RemoteReplies
             throw new RemoteReplyException(404, 'remote_post_not_found', 'This post is no longer available.');
         }
 
-        $actorId = $remote?->objectAuthorId;
-        if ($actorId === null || $actorId === '') {
-            $actorId = $this->liveActorId($target);
-        }
-        if ($actorId === null || $actorId === '') {
-            throw new RemoteReplyException(404, 'remote_post_not_found', 'This post is no longer available.');
+        // The core policy owns both block directions, the audience and the
+        // accepted-follow rule. A policy-store failure is an unavailable
+        // authorization service, never permission to write or deliver.
+        try {
+            $authorized = $this->authorization?->remotePostFor($userId, $target);
+        } catch (ReactionException $exception) {
+            [$status, $code, $message] = match ($exception->reason) {
+                'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+                'remote_post_not_found', 'remote_post_not_followed' => [
+                    404,
+                    'remote_post_not_found',
+                    'This post is no longer available.',
+                ],
+                default => [403, 'remote_interaction_not_allowed', 'You may not reply to this post.'],
+            };
+
+            throw new RemoteReplyException($status, $code, $message);
+        } catch (Throwable) {
+            throw new RemoteReplyException(
+                503,
+                'authorization_unavailable',
+                'Remote interaction authorization is temporarily unavailable.',
+            );
         }
 
-        // A block is local policy: the post stays readable only through an
-        // explicit filter, so a reply must not reach the blocked actor.
-        try {
-            $blocked = (int) $this->db->fetchValue(
-                'SELECT COUNT(*) FROM social_block WHERE local_user_id = :user AND actor_id = :actor',
-                ['user' => $userId, 'actor' => $actorId],
+        if ($authorized === null) {
+            throw new RemoteReplyException(
+                503,
+                'authorization_unavailable',
+                'Remote interaction authorization is temporarily unavailable.',
             );
-        } catch (DatabaseException) {
-            $blocked = 0;
         }
-        if ($blocked > 0) {
-            throw new RemoteReplyException(403, 'blocked_actor', 'This actor is blocked.');
+
+        $actorId = $authorized->objectAuthorId;
+        if ($actorId === null || $actorId === '') {
+            $actorId = $authorized->actorId;
+        }
+        if ($actorId === '') {
+            throw new RemoteReplyException(404, 'remote_post_not_found', 'This post is no longer available.');
         }
 
         $inbox = $this->storedInbox($userId, $actorId);
@@ -290,37 +313,6 @@ final class RemoteReplies
         }
 
         return $activity;
-    }
-
-    /**
-     * Reads the author of a post that has not reached the local cache yet.
-     * The federated timeline stores what it imported, but a reply may start
-     * from a search result or a direct post URL.
-     */
-    private function liveActorId(string $target): ?string
-    {
-        try {
-            $thread = $this->directory->remotePost($target);
-        } catch (\Throwable) {
-            return null;
-        }
-
-        $post = is_array($thread['post'] ?? null) ? $thread['post'] : null;
-        if ($post === null) {
-            return null;
-        }
-
-        foreach (['author_id', 'object_author_id'] as $key) {
-            $value = $post[$key] ?? null;
-            if (is_string($value) && trim($value) !== '') {
-                return trim($value);
-            }
-        }
-
-        $profile = is_array($thread['profile'] ?? null) ? $thread['profile'] : [];
-        $id = $profile['id'] ?? null;
-
-        return is_string($id) && trim($id) !== '' ? trim($id) : null;
     }
 
     private function storedInbox(string $userId, string $actorId): ?string

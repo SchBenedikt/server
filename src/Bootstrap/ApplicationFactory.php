@@ -355,6 +355,7 @@ final class ApplicationFactory
                 $app->queue,
                 $remoteDirectory,
                 $clock,
+                $app->reactions,
                 new RemotePostImporter($database, $remoteDirectory, $clock),
             ),
             remoteActorProfiles: $remoteActorProfiles,
