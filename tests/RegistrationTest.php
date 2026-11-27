@@ -75,6 +75,20 @@ final class RegistrationTest extends TestCase
         self::assertSame(303, $login['response']->status);
     }
 
+    public function testRegistrationPreservesLeadingAndTrailingPasswordSpaces(): void
+    {
+        $server = new TestServer([
+            'registrations' => true,
+            'registration_approval' => false,
+        ]);
+        $password = '  spaced password  ';
+
+        $server->runtime->registration->register('newbie', 'new@example.test', $password);
+
+        self::assertSame(303, $server->login('newbie', $password)['response']->status);
+        self::assertSame(401, $server->login('newbie', trim($password))['response']->status);
+    }
+
     public function testNativePdsStatusIsExposedToItsOwnerOnly(): void
     {
         $server = new TestServer([

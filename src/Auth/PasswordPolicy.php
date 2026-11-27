@@ -27,6 +27,11 @@ final class PasswordPolicy
      */
     public const MAX_LENGTH = 4096;
 
+    public static function maxBytes(): int
+    {
+        return PasswordHasher::maxPasswordBytes();
+    }
+
     /**
      * A user-facing error for an unacceptable password, or null when it is
      * acceptable.
@@ -37,8 +42,9 @@ final class PasswordPolicy
             return 'The password needs at least ' . self::MIN_LENGTH . ' characters.';
         }
 
-        if (strlen($password) > self::MAX_LENGTH) {
-            return 'The password is too long.';
+        if (strlen($password) > self::maxBytes()) {
+            return 'The password is too long for the configured hasher (maximum '
+                . self::maxBytes() . ' bytes).';
         }
 
         return null;

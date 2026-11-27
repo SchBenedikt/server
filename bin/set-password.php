@@ -39,7 +39,7 @@ $handle = strtolower(trim($handle));
 
 if ($password === null) {
     fwrite(STDERR, 'New password for ' . $handle . ': ');
-    $password = trim((string) fgets(STDIN));
+    $password = rtrim((string) fgets(STDIN), "\r\n");
 
     if ($password === '') {
         fwrite(STDERR, "A password is required.\n");

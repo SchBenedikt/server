@@ -54,6 +54,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Password validation parity:** setup no longer trims passwords, the CLI
+  strips only the line ending, and every entry point uses the shared policy.
+  Passwords are counted in Unicode characters, never silently truncated, and
+  the bcrypt-only fallback rejects more than 72 bytes instead of treating two
+  different secrets as the same credential. Argon2id remains preferred and
+  existing hashes still verify and rehash on successful login.
 - **Atomic first-run setup:** web setup can no longer leave a partial
   installation after a crash or concurrent submission. A journal restores the
   previous `.env` when the database transaction rolls back, a committed setup

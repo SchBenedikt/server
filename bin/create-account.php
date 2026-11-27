@@ -67,14 +67,14 @@ if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
 }
 
 if ($passwordStdin) {
-    $password = trim((string) fgets(STDIN));
+    $password = rtrim((string) fgets(STDIN), "\r\n");
     if ($password === '') {
         fwrite(STDERR, "A password is required on standard input.\n");
         exit(2);
     }
 } elseif ($password === null) {
     fwrite(STDERR, 'Password for ' . $handle . ': ');
-    $password = trim((string) fgets(STDIN));
+    $password = rtrim((string) fgets(STDIN), "\r\n");
 
     if ($password === '') {
         fwrite(STDERR, "A password is required.\n");
