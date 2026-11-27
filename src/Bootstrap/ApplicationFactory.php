@@ -352,10 +352,6 @@ final class ApplicationFactory
             remoteReactions: new RemoteReactions(
                 $database,
                 $app->reactions,
-                new ActivityFactory($this->config->coreConfig()),
-                $app->queue,
-                $remoteDirectory,
-                $clock,
                 new RemotePostImporter($database, $remoteDirectory, $clock),
             ),
             remoteReplies: new RemoteReplies(
