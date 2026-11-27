@@ -439,6 +439,59 @@ fwrite(STDOUT, '     worker: ' . str_replace("\n", ' | ', (string) $output) . "\
 [$status, $body] = httpRequest('GET', $baseB . '/api/v1/timelines/home', ['jar' => $jarB]);
 check('B: delivered post appears in bob\'s home timeline', $status === 200 && str_contains($body, $content), 'status ' . $status . ' ' . $body);
 
+// B replies to the delivered remote post. The reply must carry the remote
+// object's canonical id, be delivered to the parent author's inbox even
+// though the reply fan-out has no local followers of its own, and be stored
+// inbound on A as a reply to alice's local post.
+$remoteObjectId = null;
+if ($status === 200) {
+    $timeline = json_decode($body, true);
+    foreach ($timeline['posts'] ?? [] as $entry) {
+        if (($entry['content'] ?? null) === $content && is_string($entry['object_id'] ?? null)) {
+            $remoteObjectId = $entry['object_id'];
+            break;
+        }
+    }
+}
+check('B: remote parent exposes its canonical object id', $remoteObjectId !== null);
+
+if ($remoteObjectId !== null) {
+    $replyContent = 'Federation smoke reply ' . bin2hex(random_bytes(4));
+    [$status, $body] = httpRequest('POST', $baseB . '/api/v1/posts', [
+        'jar' => $jarB,
+        'headers' => ['Content-Type: application/json', 'X-CSRF-Token: ' . $csrfB],
+        'body' => json_encode([
+            'content' => $replyContent,
+            'visibility' => 'public',
+            'in_reply_to_id' => $remoteObjectId,
+        ], JSON_THROW_ON_ERROR),
+    ]);
+    check('B: reply to the remote post created', $status === 201, 'status ' . $status . ' ' . $body);
+
+    $code = runPhp($root, ['bin/worker.php', '--once'], $envB, $output);
+    check('B: worker delivered the reply', $code === 0, (string) $output);
+    fwrite(STDOUT, '     worker: ' . str_replace("\n", ' | ', (string) $output) . "\n");
+
+    // A's inbox accepts the signed reply because its inReplyTo names a local
+    // post alice can see; it is stored as a remote post and recorded as a
+    // mention notification against the reply's remote object id.
+    [$status, $body] = httpRequest('GET', $baseA . '/api/v1/notifications', ['jar' => $jarA]);
+    $mentionFound = false;
+    if ($status === 200) {
+        $notifications = json_decode($body, true);
+        foreach ($notifications['notifications'] ?? [] as $notification) {
+            if (($notification['type'] ?? null) === 'mention'
+                && is_string($notification['post_id'] ?? null)
+                && str_starts_with((string) $notification['post_id'], $baseB)
+            ) {
+                $mentionFound = true;
+                break;
+            }
+        }
+    }
+    check('A: remote reply recorded a mention notification', $mentionFound, 'status ' . $status . ' ' . $body);
+}
+
 [$status, $body] = httpRequest('GET', $baseB . '/api/v1/timelines/public');
 check('B: public timeline still answers', $status === 200, 'status ' . $status);
 
