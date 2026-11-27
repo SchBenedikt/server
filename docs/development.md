@@ -7,6 +7,7 @@ How the host and the host-neutral core fit together, how to work on both reposit
 ```
 public/index.php          one entry point: boot, authenticate, dispatch
 bin/update.php            backup, migrate and verify accounts
+bin/setup-token.php       first-run setup URL; refuses installed instances
 bin/reset.php             backup, empty the instance and print the setup URL
 bin/backup.php            verified database backup with metadata
 bin/doctor.php            data-path, schema, key and backup diagnostics

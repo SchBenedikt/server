@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 use AlohaSocial\Core\Platform\Clock\SystemClock;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationRunner;
@@ -142,11 +143,14 @@ try {
         fwrite(STDOUT, 'Removed ' . $blobs . ' media file(s) and ' . $mail . " mail file(s).\n");
     }
 
-    $token = (new SetupToken($config->varDirectory . '/setup.token'))->generate();
+    $setupToken = new SetupToken($config->varDirectory . '/setup.token');
+    $token = $setupToken->generate();
+    $expiresAt = $setupToken->expiresAt();
     $url = rtrim($config->instanceUrl, '/') . '/setup?token=' . rawurlencode($token);
 
     fwrite(STDOUT, "\nReset complete. The instance is empty and ready for web setup.\n");
-    fwrite(STDOUT, '  ' . $url . "\n\n");
+    fwrite(STDOUT, '  ' . $url . "\n");
+    fwrite(STDOUT, '  Expires: ' . ($expiresAt === null ? 'unknown' : Time::format($expiresAt)) . " UTC\n\n");
     fwrite(STDOUT, "The token is also in " . $config->varDirectory . "/setup.token.\n");
     fwrite(STDOUT, "Open the URL, set the final HTTPS domain and create the first admin.\n");
     if ($backup !== null) {

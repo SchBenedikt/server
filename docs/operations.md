@@ -15,6 +15,7 @@ php bin/routes.php                 # inspect the served route manifest
 php bin/set-password.php alice     # reset a password and revoke sessions
 php bin/backup.php                 # verified database backup
 php bin/update.php                 # backup, migrate and verify accounts
+php bin/setup-token.php            # first-run setup URL; never deletes data
 php bin/reset.php                  # back up, empty the instance, print setup URL
 php bin/doctor.php                 # paths, schema, key, database and mail
 ```
@@ -355,7 +356,7 @@ convenience, not a monitoring signal.
 | `Migration stopped: the safety backup could not be created` | `var/backups` is not writable, or `pg_dump` is missing/incompatible. | Fix permissions or install the matching PostgreSQL client; run `php bin/backup.php`; only then retry. `--allow-unbacked` is a last resort. |
 | `/healthz` is green but pages return 500 | Database, key or schema problem. | Check the PHP error log and run `php bin/doctor.php`; do not enable debug mode on a public instance. |
 | Browser shows **Server is not ready** | Boot failed, usually a pending migration, missing schema or an invalid secret key. | Run `php bin/doctor.php`, then `php bin/update.php`; the public page stays generic while the PHP log and doctor output give the cause. Restart PHP-FPM/worker. |
-| Web setup is locked after a reset | The one-time token is missing or was already used. | Open the URL printed by `php bin/reset.php`; read `var/setup.token` as the application user. Run the reset again if the token was lost. |
+| Web setup is locked | The one-time token is missing, expired or was already used. | On an empty instance run `php bin/setup-token.php`; on an installed instance, use `php bin/reset.php` only if you deliberately want to wipe it. Read `var/setup.token` as the application user. |
 | Federation links still use the old domain after web setup | Long-running FPM workers or the worker still hold the old environment. | Restart PHP-FPM and the worker after setup; verify `/api/v1/instance` reports the new domain. Changing the domain after accounts exist is not supported. |
 | Login succeeds but the next request is signed out | Origin mismatch or secure-cookie policy. | Use the exact `ALOHASOCIAL_INSTANCE_URL` origin; use HTTPS in production; check proxy/forwarding. |
 | `csrf_token_invalid` from the UI | The page has no CSRF token or the session changed. | Reload `/app`; ensure cookies are enabled; check that the app is served from the same origin as the API. |

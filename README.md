@@ -104,6 +104,7 @@ passed. Without SMTP, password-reset mail is written to `var/mail/*.eml`.
 ## Operating the instance
 
 ```shell
+php bin/setup-token.php       # short-lived first-run setup URL, no data changes
 php bin/reset.php             # backup, empty the instance, print the setup URL
 php bin/update.php            # backup, migrate and verify accounts
 php bin/doctor.php            # data path, schema, key and backup diagnostics
@@ -111,9 +112,12 @@ php bin/worker.php            # supervised loop; --once for cron
 php bin/backup.php            # verified database backup
 ```
 
-`reset` keeps `.env`, the database connection and the instance key, and prints
-a one-time `/setup?token=…` URL. `update` refuses to continue when the safety
-backup fails or the account count drops. On a bare-metal host keep runtime
+`setup-token` only works while the instance has no accounts or content; it
+never deletes anything and prints a one-hour `/setup?token=…` URL. `reset` is
+the destructive path: it creates a backup, empties the installation, keeps
+`.env`, the database connection and the instance key, and prints a fresh setup
+URL. `update` refuses to continue when the safety backup fails or the account
+count drops. On a bare-metal host keep runtime
 state outside the release directory with
 `scripts/install.sh --data-dir=/srv/aloha-data`. Full procedures are in
 [Installation](docs/installation.md) and [Operations](docs/operations.md).

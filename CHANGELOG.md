@@ -54,6 +54,16 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Atomic first-run setup:** web setup can no longer leave a partial
+  installation after a crash or concurrent submission. A journal restores the
+  previous `.env` when the database transaction rolls back, a committed setup
+  is reconciled without creating a second admin, and setup refuses to start on
+  existing posts, follows, collections, stories, Kokua entries, drafts or
+  announcements even when no account remains. Setup tokens now expire after
+  one hour by default; `bin/setup-token.php` issues one on an empty instance
+  without resetting or deleting anything. The setup form reports process
+  environment keys that the setup file replaces, and the long-running worker
+  reloads a changed env file at its next batch boundary.
 - **Remote interaction authorization:** likes, boosts and replies on cached
   federated posts now use the core's block, inbound-block, audience and
   accepted-follow policy instead of a separate host query. A failed

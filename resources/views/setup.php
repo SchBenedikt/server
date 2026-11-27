@@ -10,6 +10,10 @@ declare(strict_types=1);
  * @var string $csrf
  * @var string $token
  * @var bool $tokenValid
+ * @var string|null $tokenExpiresAt
+ * @var string $effectiveUrl
+ * @var string $envFile
+ * @var list<string> $environmentWarnings
  * @var string|null $error
  * @var array<string, string> $errors
  * @var array<string, string> $values
@@ -23,6 +27,14 @@ declare(strict_types=1);
         WebFinger handles and federation links are derived from it, so this is
         the moment to use the final domain.
     </p>
+    <p class="muted">
+        Effective origin: <code><?= $escape($effectiveUrl) ?></code> from
+        <code><?= $escape($envFile) ?></code>.
+    </p>
+
+    <?php foreach ($environmentWarnings as $warning): ?>
+        <p class="error" role="status"><?= $escape($warning) ?></p>
+    <?php endforeach; ?>
 
     <?php if ($error !== null): ?>
         <p class="error" role="alert"><?= $escape($error) ?></p>
@@ -31,14 +43,26 @@ declare(strict_types=1);
     <?php if (!$tokenValid): ?>
         <h2>Setup is locked</h2>
         <p>
-            This page needs the one-time token printed by the reset command.
-            Run <code>php bin/reset.php</code> on the server and open the URL it
-            prints. The token is also stored in <code>var/setup.token</code>.
+            This page needs the one-time token printed by the setup command.
+            Run <code>php bin/setup-token.php</code> on the server and open the
+            URL it prints. The token is also stored in
+            <code>var/setup.token</code>.
         </p>
         <p class="muted">
-            No token is accepted after the first administrator exists.
+            No token is accepted after the first administrator exists. The
+            destructive <code>bin/reset.php</code> is only for deliberately
+            wiping an installation.
         </p>
     <?php else: ?>
+        <?php if ($tokenExpiresAt !== null): ?>
+            <p class="muted">
+                This setup link expires at
+                <time datetime="<?= $escape($tokenExpiresAt) ?>"><?= $escape($tokenExpiresAt) ?></time>
+                UTC. Run <code>php bin/setup-token.php</code> again if it has
+                expired.
+            </p>
+        <?php endif; ?>
+
         <form method="post" action="/setup">
             <input type="hidden" name="_csrf" value="<?= $escape($csrf) ?>">
             <input type="hidden" name="token" value="<?= $escape($token) ?>">

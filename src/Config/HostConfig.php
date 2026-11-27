@@ -82,6 +82,14 @@ final readonly class HostConfig
         /** @var list<string> Trusted proxy IPs or CIDRs for X-Forwarded-For. */
         public array $trustedProxies = [],
         public int $runtimeErrorRetentionDays = 90,
+        /**
+         * Setup-owned keys that were already present in the real process
+         * environment before dotenv loading. The setup file still wins, but
+         * the setup form reports the conflict instead of hiding it.
+         *
+         * @var list<string>
+         */
+        public array $externallyManagedSetupKeys = [],
     ) {
     }
 
@@ -115,6 +123,18 @@ final readonly class HostConfig
         // highest precedence and must not be overwritten by any dotenv file.
         $realEnv = getenv();
         $realEnv = is_array($realEnv) ? $realEnv : [];
+        $externallyManagedSetupKeys = [];
+        foreach ([
+            'ALOHASOCIAL_INSTANCE_URL',
+            'ALOHASOCIAL_INSTANCE_NAME',
+            'ALOHASOCIAL_INSTANCE_DESCRIPTION',
+            'ALOHASOCIAL_CONTACT_EMAIL',
+            'ALOHASOCIAL_SECURE_COOKIES',
+        ] as $key) {
+            if (isset($realEnv[$key]) && trim((string) $realEnv[$key]) !== '') {
+                $externallyManagedSetupKeys[] = $key;
+            }
+        }
 
         $rootEnv = $root . '/.env';
         self::loadDotEnv($rootEnv, $realEnv, false);
@@ -387,6 +407,7 @@ final readonly class HostConfig
             atprotoJetstreamUrl: $atprotoJetstream,
             trustedProxies: $trustedProxies,
             runtimeErrorRetentionDays: $runtimeErrorRetentionDays,
+            externallyManagedSetupKeys: $externallyManagedSetupKeys,
         );
     }
 

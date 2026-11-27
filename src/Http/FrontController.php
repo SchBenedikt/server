@@ -1758,7 +1758,8 @@ final class FrontController
     ): Response {
         if (!$this->runtime->setup->enabled()) {
             return $this->page('error', [
-                'message' => 'Web setup is closed. Reset the instance from the terminal to open it again.',
+                'message' => 'Web setup is closed. On an empty instance run bin/setup-token.php; '
+                    . 'only use bin/reset.php when you deliberately want to delete the installation.',
             ], 'Setup closed', 404);
         }
 
@@ -1846,6 +1847,10 @@ final class FrontController
             'csrf' => $session?->session->csrfToken ?? '',
             'token' => $token,
             'tokenValid' => $tokenValid,
+            'tokenExpiresAt' => $this->runtime->setup->tokenExpiresAt(),
+            'effectiveUrl' => $this->runtime->config->instanceUrl,
+            'envFile' => $this->runtime->config->envFile,
+            'environmentWarnings' => $this->runtime->setup->environmentWarnings(),
             'error' => $error,
             'errors' => $errors,
             'values' => $defaults,
