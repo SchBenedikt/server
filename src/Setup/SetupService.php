@@ -16,8 +16,10 @@ use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordPolicy;
+use AlohaSocial\Server\Bootstrap\InstallationIdentity;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Support\EnvFile;
+use AlohaSocial\Server\Support\InstanceData;
 use RuntimeException;
 use Throwable;
 
@@ -59,34 +61,6 @@ use const JSON_UNESCAPED_UNICODE;
  */
 final class SetupService
 {
-    /**
-     * Tables that prove this installation has content even if every account
-     * was deleted or disabled. A missing table counts as data: setup fails
-     * closed rather than exposing a half-migrated instance.
-     */
-    private const DATA_TABLES = [
-        'social_post',
-        'social_remote_post',
-        'social_following',
-        'social_follower',
-        'social_media_collection',
-        'social_story',
-        'kokua',
-        'draft',
-        'announcement',
-        'social_attachment',
-        'social_reaction',
-        'social_bookmark',
-        'social_favourite',
-        'social_boost',
-        'social_notification',
-        'social_account_list',
-        'featured_tag',
-        'follow_request',
-        'moderation_report',
-        'social_report',
-    ];
-
     private readonly SetupToken $token;
 
     private readonly SetupJournal $journal;
@@ -315,6 +289,17 @@ final class SetupService
                     $displayName === '' ? $handle : $displayName,
                 );
 
+                // The boot guard created this row. Keep the chosen origin in
+                // the same transaction as the first account, so a committed
+                // setup can never leave an identity that refuses the next boot.
+                $this->db->execute(
+                    'UPDATE installation_identity SET instance_url = :instance_url WHERE id = :id',
+                    [
+                        'instance_url' => InstallationIdentity::normalizeOrigin($url),
+                        'id' => InstallationIdentity::ROW_ID,
+                    ],
+                );
+
                 // The environment cannot join the transaction. Write it while
                 // the transaction is open and after the journal snapshot, so
                 // a later failure rolls back and reconcile restores it.
@@ -398,23 +383,7 @@ final class SetupService
 
     private function hasInstanceData(): bool
     {
-        if ($this->accounts->count() > 0) {
-            return true;
-        }
-
-        foreach (self::DATA_TABLES as $table) {
-            try {
-                $count = $this->db->fetchValue('SELECT COUNT(*) FROM ' . $table);
-            } catch (Throwable) {
-                return true;
-            }
-
-            if ($count !== null && (int) $count > 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->accounts->count() > 0 || InstanceData::exists($this->db);
     }
 
     private function readEnvironment(): ?string

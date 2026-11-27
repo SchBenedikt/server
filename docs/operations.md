@@ -186,6 +186,7 @@ Back up all state that is not reproducible from Git:
 
 - the database (SQLite file or PostgreSQL dump)
 - `var/secret.key` (or the `ALOHASOCIAL_SECRET_KEY` value)
+- `var/installation.json` (binds the data directory to the database)
 - `var/blobs/` (uploaded originals and thumbnails)
 - `.env` (configuration, including SMTP and database secrets)
 - optionally `var/mail/` if it contains messages you must retain
@@ -217,11 +218,11 @@ sudo -u aloha sqlite3 /srv/aloha/var/server.sqlite \
   ".backup '/srv/backups/server-$(date +%F).sqlite'"
 ```
 
-Then archive the blobs and key:
+Then archive the blobs, key and installation identity:
 
 ```shell
 sudo tar -C /srv/aloha -czf /srv/backups/aloha-files-$(date +%F).tgz \
-  var/blobs var/secret.key .env
+  var/blobs var/secret.key var/installation.json .env
 ```
 
 If `ALOHASOCIAL_SECRET_KEY` is supplied through the environment, store it in
@@ -232,7 +233,7 @@ your secret manager; it is not in the files above.
 ```shell
 sudo -u postgres pg_dump -Fc aloha > /srv/backups/aloha-$(date +%F).dump
 sudo tar -C /srv/aloha -czf /srv/backups/aloha-files-$(date +%F).tgz \
-  var/blobs var/secret.key .env
+  var/blobs var/secret.key var/installation.json .env
 ```
 
 Keep at least one off-host copy, encrypt backups at rest, and test a restore
@@ -242,8 +243,8 @@ on a separate host. A backup that has never been restored is only a hope.
 
 1. Stop the worker and PHP-FPM (or put the site in maintenance mode).
 2. Restore the database.
-3. Restore `var/secret.key`, `var/blobs/` and `.env` with the same ownership
-   and permissions.
+3. Restore `var/secret.key`, `var/installation.json`, `var/blobs/` and `.env`
+   from the same backup with the same ownership and permissions.
 4. Run `php bin/doctor.php`; if a migration is pending, run
    `php bin/update.php`.
 5. Start PHP-FPM and the worker.
@@ -317,6 +318,9 @@ lives in Git, but both can be lost by moving or deleting the wrong directory:
   `docker compose down` and `docker compose up -d` keep them.
 - Do not delete `var/secret.key` while the database still contains accounts;
   the sealed instance key becomes unreadable and federation identity is lost.
+- Keep `var/installation.json` with the database. It records the installation
+  id, public origin and signing-key fingerprint. A mismatched pair, wrong key
+  or changed origin on a populated instance stops boot with a readable error.
 - Run `php bin/doctor.php` after every update. It reports account count,
   pending migrations, key validity, writable database, blob and mail paths
   and the newest backup without printing secrets.
@@ -352,7 +356,11 @@ convenience, not a monitoring signal.
 | Symptom | Likely cause | Action |
 | --- | --- | --- |
 | `The database schema is not installed` or `Pending migrations` | Migrations were skipped or a new version was deployed without migrating. | Run `php bin/update.php`; inspect output; restart PHP-FPM/worker. |
-| Accounts seem to be gone after an update | Wrong data directory, a lost Docker volume, or a release directory that was replaced. | Stop services; check `php bin/doctor.php` for the database path; restore the newest `var/backups/*.sqlite` or the PostgreSQL dump with `var/secret.key`; set `--data-dir` for the next install. Never use `docker compose down -v`. |
+| Accounts seem to be gone after an update | Wrong data directory, a lost Docker volume, or a release directory that was replaced. | Stop services; check `php bin/doctor.php` for the database path; restore the newest `var/backups/*.sqlite` or the PostgreSQL dump with `var/secret.key` and `var/installation.json`; set `--data-dir` for the next install. Never use `docker compose down -v`. |
+| `The data directory and database belong to different installations` | A new deployment attached an existing `var/` volume to another database, or only half of a backup was restored. | Restore `var/installation.json` and the database from the same backup, or start the new instance with an empty data directory. Do not merge the two installations. |
+| `This populated installation is missing var/installation.json` | A worker or new app was started with an empty data volume while using the existing database. | Restore the file from the database's backup and mount the correct volume for every service. Do not recreate the file by hand. |
+| `Changing the public origin on a populated instance` | `ALOHASOCIAL_INSTANCE_URL` no longer matches the origin recorded by setup. | Restore the old origin. Actor ids and WebFinger subjects derive from it; changing it after accounts exist is not supported. Use a new instance with an empty volume for a different domain. |
+| `The instance signing key does not match this installation identity` | `var/secret.key`, `instance_key` and the identity record came from different backups. | Restore the matching database, secret key and installation file as one set. Do not regenerate the key on a populated instance. |
 | `Migration stopped: the safety backup could not be created` | `var/backups` is not writable, or `pg_dump` is missing/incompatible. | Fix permissions or install the matching PostgreSQL client; run `php bin/backup.php`; only then retry. `--allow-unbacked` is a last resort. |
 | `/healthz` is green but pages return 500 | Database, key or schema problem. | Check the PHP error log and run `php bin/doctor.php`; do not enable debug mode on a public instance. |
 | Browser shows **Server is not ready** | Boot failed, usually a pending migration, missing schema or an invalid secret key. | Run `php bin/doctor.php`, then `php bin/update.php`; the public page stays generic while the PHP log and doctor output give the cause. Restart PHP-FPM/worker. |

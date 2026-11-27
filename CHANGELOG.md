@@ -54,6 +54,14 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Installation identity and Docker volumes:** Compose project and volume
+  names are configurable while their historical defaults preserve upgrades.
+  A new installation id is stored in both the database and
+  `var/installation.json`; boot refuses a mismatched pair, a replaced signing
+  key, or an origin change on a populated instance. This prevents a second
+  Compose project or a half-restored backup from silently sharing or rebinding
+  existing accounts. Docker and Coolify guidance covers separate volumes,
+  immutable image tags and the exact recovery steps.
 - **Atomic rate limits:** each request now reserves its slot with one
   conditional upsert instead of a read-then-write transaction. Concurrent PHP
   workers therefore admit exactly the declared budget, the next request gets

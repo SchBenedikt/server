@@ -15,6 +15,7 @@ use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Bootstrap\InstallationIdentity;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
@@ -321,6 +322,39 @@ final class SetupTest extends TestCase
             (int) $server->runtime->database->fetchValue('SELECT COUNT(*) FROM account'),
         );
         self::assertTrue((new SetupToken($path))->verify($token));
+    }
+
+    public function testSetupRecordsTheChosenOriginInTheInstallationIdentity(): void
+    {
+        $server = new TestServer();
+        $token = (new SetupToken($server->config->varDirectory . '/setup.token'))->generate();
+        $before = (string) $server->runtime->database->fetchValue(
+            'SELECT installation_id FROM installation_identity WHERE id = :id',
+            ['id' => InstallationIdentity::ROW_ID],
+        );
+
+        $server->runtime->setup->install($this->setupInput($token));
+
+        self::assertSame('https://social.example', (string) $server->runtime->database->fetchValue(
+            'SELECT instance_url FROM installation_identity WHERE id = :id',
+            ['id' => InstallationIdentity::ROW_ID],
+        ));
+        self::assertSame($before, (string) $server->runtime->database->fetchValue(
+            'SELECT installation_id FROM installation_identity WHERE id = :id',
+            ['id' => InstallationIdentity::ROW_ID],
+        ));
+
+        // The committed setup can boot again with the origin it wrote.
+        new InstallationIdentity(
+            $server->runtime->database,
+            $server->config->varDirectory,
+            'https://social.example',
+            (string) $server->runtime->database->fetchValue(
+                'SELECT public_pem FROM instance_key WHERE id = :id',
+                ['id' => 'instance'],
+            ),
+            $server->runtime->clock,
+        )->assertCurrent();
     }
 
     public function testSetupPreservesLeadingAndTrailingPasswordSpaces(): void
