@@ -253,7 +253,9 @@ Registration is intentionally disabled on this host
 php bin/create-account.php alice alice@example.com --admin
 ```
 
-The command asks for a password (minimum 8 characters). In a provisioning
+The command asks for a password. The shared policy requires at least 8 Unicode
+characters and preserves leading/trailing spaces exactly; the byte limit is
+4096 with Argon2id or 72 when only bcrypt is available. In a provisioning
 script you can pass `--password='…'` and `--display-name='Alice'`, but avoid
 putting secrets in shell history:
 

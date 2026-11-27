@@ -239,8 +239,8 @@ final class SetupService
         $handle = strtolower($this->text($input, 'handle'));
         $email = strtolower($this->text($input, 'email'));
         $displayName = $this->text($input, 'display_name');
-        $password = $this->text($input, 'password');
-        $confirmation = $this->text($input, 'password_confirm');
+        $password = $this->secret($input, 'password');
+        $confirmation = $this->secret($input, 'password_confirm');
 
         $fields = [];
         if (!$this->validOrigin($url)) {
@@ -470,5 +470,18 @@ final class SetupService
         $value = $input[$key] ?? '';
 
         return is_string($value) ? trim($value) : '';
+    }
+
+    /**
+     * Password secrets are never trimmed: leading and trailing spaces are part
+     * of the exact value the user typed at every entry point.
+     *
+     * @param array<string, mixed> $input
+     */
+    private function secret(array $input, string $key): string
+    {
+        $value = $input[$key] ?? '';
+
+        return is_string($value) ? $value : '';
     }
 }

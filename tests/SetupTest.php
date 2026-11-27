@@ -323,6 +323,26 @@ final class SetupTest extends TestCase
         self::assertTrue((new SetupToken($path))->verify($token));
     }
 
+    public function testSetupPreservesLeadingAndTrailingPasswordSpaces(): void
+    {
+        $server = new TestServer();
+        $token = (new SetupToken($server->config->varDirectory . '/setup.token'))->generate();
+        $page = $server->send('GET', '/setup', ['query' => ['token' => $token]]);
+        $cookies = $server->cookiesFrom($page);
+        $csrf = $server->csrfFrom($page->body);
+        $password = '  spaced password  ';
+
+        $response = $server->form('/setup', $this->setupInput($token, [
+            '_csrf' => $csrf,
+            'password' => $password,
+            'password_confirm' => $password,
+        ]), $cookies);
+
+        self::assertSame(303, $response->status);
+        self::assertSame(303, $server->login('admin', $password)['response']->status);
+        self::assertSame(401, $server->login('admin', trim($password))['response']->status);
+    }
+
     public function testSetupReportsProcessEnvironmentConflicts(): void
     {
         putenv('ALOHASOCIAL_INSTANCE_NAME=Compose instance');
