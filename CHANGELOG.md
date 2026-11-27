@@ -54,6 +54,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Runtime log redaction:** both the SAPI log and `runtime_error` now pass
+  through one allowlist-based boundary. URL credentials/query/fragment,
+  bearer tokens, cookies, key/value secrets, unknown context fields and raw
+  peer response bodies are redacted before storage or display. Messages and
+  context are bounded and invalid UTF-8 is scrubbed; a database failure while
+  persisting a log record no longer writes the database exception to the log.
 - **Installation identity and Docker volumes:** Compose project and volume
   names are configurable while their historical defaults preserve upgrades.
   A new installation id is stored in both the database and

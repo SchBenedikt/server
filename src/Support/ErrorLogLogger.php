@@ -27,13 +27,9 @@ final class ErrorLogLogger extends AbstractLogger
      */
     public function log($level, string|Stringable $message, array $context = []): void
     {
-        $text = (string) $message;
-        foreach ($context as $key => $value) {
-            if (is_scalar($value) || $value instanceof Stringable) {
-                $text = str_replace('{' . $key . '}', (string) $value, $text);
-            }
-        }
-
-        error_log('[' . (is_string($level) ? $level : 'info') . '] ' . $text);
+        error_log(
+            '[' . (is_string($level) ? $level : 'info') . '] '
+            . LogRedactor::message((string) $message, $context),
+        );
     }
 }

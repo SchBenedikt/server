@@ -13,12 +13,9 @@ use AlohaSocial\Core\Platform\Http\BoundedHttpClient;
 use AlohaSocial\Core\Platform\Http\HttpResponse;
 use Psr\Log\LoggerInterface;
 
-use function array_unique;
-use function implode;
 use function is_array;
 use function is_string;
 use function json_decode;
-use function mb_substr;
 use function parse_url;
 use function preg_match;
 use function str_contains;
@@ -83,43 +80,42 @@ final class FederationHttpDiagnostics implements BoundedHttpClient
         }
 
         $this->logger->warning(
-            'Federation delivery to {url} failed with HTTP {status}: {peer_message}',
+            'Federation delivery to {url} failed with HTTP {status} ({code})',
             [
                 'url' => $url,
                 'status' => $response->status,
-                'peer_message' => $this->detail($response),
+                'code' => $this->peerCode($response),
             ],
         );
 
         return $response;
     }
 
-    private function detail(HttpResponse $response): string
+    /**
+     * A peer-controlled body is never copied into the log. Keep only a short
+     * JSON error code when it has a known machine-readable shape; everything
+     * else becomes a stable category, so arbitrary response text, tokens or
+     * private content cannot reach either sink.
+     */
+    private function peerCode(HttpResponse $response): string
     {
         $body = trim($response->body);
         if ($body === '') {
-            return '(empty response)';
+            return 'empty_response';
         }
 
         $data = json_decode($body, true);
         if (is_array($data)) {
-            $parts = [];
-            foreach (['error', 'message'] as $key) {
+            foreach (['error', 'code'] as $key) {
                 $value = $data[$key] ?? null;
-                if (is_string($value) && trim($value) !== '') {
-                    $parts[] = trim($value);
+                if (is_string($value) && preg_match('/^[A-Za-z0-9_.:-]{1,80}$/', $value) === 1) {
+                    return strtolower($value);
                 }
             }
 
-            if ($parts !== []) {
-                return mb_substr(implode(': ', array_unique($parts)), 0, 300);
-            }
+            return 'peer_rejected';
         }
 
-        if (str_contains($body, '<')) {
-            return '(non-JSON response)';
-        }
-
-        return mb_substr($body, 0, 300);
+        return str_contains($body, '<') ? 'non_json_response' : 'peer_response';
     }
 }
