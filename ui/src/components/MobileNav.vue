@@ -6,11 +6,18 @@
 import { computed, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { route } from '../lib/router';
+import { getApi } from '../lib/api';
 import { appState, openComposer, toggleTheme } from '../lib/state';
 
 const signedIn = computed(() => appState.session.user !== null);
 const handle = computed(() => appState.session.user?.handle ?? '');
 const sheetOpen = ref(false);
+const loggingOut = ref(false);
+
+const moreActive = computed(() => (
+	sheetOpen.value
+	|| sheetGroups.value.some((group) => group.items.some((item) => isActive(item.name)))
+));
 
 const primaryItems = [
 	{ name: 'home', label: 'Start', icon: 'home', href: '#/' },
@@ -119,6 +126,19 @@ function compose(): void {
 	openComposer();
 }
 
+async function logout(): Promise<void> {
+	if (loggingOut.value) {
+		return;
+	}
+
+	loggingOut.value = true;
+	try {
+		await getApi().logout();
+	} finally {
+		loggingOut.value = false;
+	}
+}
+
 watch(route, () => {
 	sheetOpen.value = false;
 }, { deep: true });
@@ -132,6 +152,7 @@ watch(route, () => {
 			:href="item.href"
 			class="a-mobile-nav__item"
 			:class="{ 'a-mobile-nav__item--active': isActive(item.name) }"
+			:aria-label="item.label"
 			:aria-current="isActive(item.name) ? 'page' : undefined"
 		>
 			<span class="a-mobile-nav__icon">
@@ -146,9 +167,10 @@ watch(route, () => {
 		<button
 			type="button"
 			class="a-mobile-nav__item"
-			:class="{ 'a-mobile-nav__item--active': sheetOpen }"
+			:class="{ 'a-mobile-nav__item--active': moreActive }"
 			:aria-expanded="sheetOpen"
 			aria-controls="a-mobile-sheet"
+			aria-label="More sections"
 			@click="sheetOpen = !sheetOpen"
 		>
 			<span class="a-mobile-nav__icon"><AppIcon name="list" :size="21" /></span>
@@ -193,6 +215,10 @@ watch(route, () => {
 					<button type="button" class="a-btn a-btn--ghost" @click="toggleTheme">
 						<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="17" />
 						{{ appState.theme === 'dark' ? 'Light mode' : 'Dark mode' }}
+					</button>
+					<button v-if="signedIn" type="button" class="a-btn a-btn--ghost" :disabled="loggingOut" @click="logout">
+						<AppIcon name="logout" :size="17" />
+						{{ loggingOut ? 'Signing out…' : 'Sign out' }}
 					</button>
 				</footer>
 			</div>

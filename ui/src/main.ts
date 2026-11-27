@@ -7,7 +7,7 @@ import { createAlohaUi } from '@alohasocial/ui';
 import '@alohasocial/ui/style.css';
 import './style.css';
 import './brand.css';
-import './reddit.css';
+import './modern.css';
 import './admin.css';
 import App from './App.vue';
 import { bridge } from './bridge';

@@ -126,7 +126,7 @@ function refresh(): void {
 </script>
 
 <template>
-	<div class="a-page">
+	<div class="a-page a-home">
 		<PageHeader title="Home" :subtitle="subtitle">
 			<template #actions>
 				<button type="button" class="a-icon-btn" aria-label="Feed refresh" title="Refresh" @click="refresh">
@@ -192,6 +192,7 @@ function refresh(): void {
 		<TimelineFeed
 			ref="feed"
 			:kind="currentTab"
+			:cards="true"
 			:empty-title="emptyTitle"
 			:empty-text="emptyText"
 			:empty-icon="currentTab === 'followed' ? 'hash' : 'sparkles'"

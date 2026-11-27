@@ -58,7 +58,6 @@ initTheme();
 
 let stopRouter: (() => void) | null = null;
 let unreadTimer = 0;
-const loggingOut = ref(false);
 const searchQuery = ref('');
 const topbarHandle = computed(() => appState.session.user?.handle ?? '');
 const topbarName = computed(() => (
@@ -228,19 +227,6 @@ function onVisibilityChange(): void {
 	}
 }
 
-async function logout(): Promise<void> {
-	if (loggingOut.value) {
-		return;
-	}
-
-	loggingOut.value = true;
-	try {
-		await getApi().logout();
-	} finally {
-		loggingOut.value = false;
-	}
-}
-
 onMounted(async () => {
 	stopRouter = initRouter();
 	await bootstrap();
@@ -337,21 +323,13 @@ watch(() => appState.instance?.name, (name) => {
 				<a class="a-icon-btn" href="#/search" aria-label="Search" title="Search">
 					<AppIcon name="search" :size="19" />
 				</a>
-				<button
-					v-if="appState.session.user !== null"
-					type="button"
-					class="a-icon-btn"
-					aria-label="Sign out"
-					title="Sign out"
-					:disabled="loggingOut"
-					@click="logout"
-				>
-					<AppIcon name="logout" :size="19" />
-				</button>
 				<button type="button" class="a-icon-btn" aria-label="Toggle theme" @click="toggleTheme">
 					<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="19" />
 				</button>
-				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+				<a v-if="appState.session.user !== null" :href="`#/u/${encodeURIComponent(topbarHandle)}`" class="a-topbar__me" :title="topbarName" :aria-label="`Profile of ${topbarName}`">
+					<Avatar :id="topbarHandle" :name="topbarName" :size="30" />
+				</a>
+				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 			</div>
 		</header>
 

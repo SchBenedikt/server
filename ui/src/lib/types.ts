@@ -32,6 +32,7 @@ export interface PostInteraction {
 	reblogs_count: number;
 	reblogged: boolean;
 	replies_count: number;
+	bookmarked?: boolean;
 	emoji_reactions?: EmojiReaction[];
 	atproto_mirror?: AtprotoMirrorStatus;
 }

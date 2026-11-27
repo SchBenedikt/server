@@ -66,6 +66,9 @@ $appShell = $appShell ?? false;
             --error: #a53232;
             --error-soft: #f8e3df;
             --success: #1d6b55;
+            --glow-one: rgb(223 84 61 / 0.12);
+            --glow-two: rgb(15 76 92 / 0.08);
+            --shadow: 0 18px 48px rgb(72 48 30 / 0.08);
             --font-sans: 'Public Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
             --font-brand: 'Fredoka', 'Public Sans', ui-sans-serif, system-ui, sans-serif;
             --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -89,6 +92,9 @@ $appShell = $appShell ?? false;
                 --error: #ff9b8c;
                 --error-soft: rgb(255 155 140 / 0.14);
                 --success: #8ad5bd;
+                --glow-one: rgb(255 100 75 / 0.16);
+                --glow-two: rgb(84 176 194 / 0.12);
+                --shadow: 0 20px 56px rgb(0 0 0 / 0.26);
             }
         }
 
@@ -99,14 +105,17 @@ $appShell = $appShell ?? false;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            background: var(--bg);
+            background:
+                radial-gradient(900px 520px at 8% -220px, var(--glow-one), transparent 72%),
+                radial-gradient(760px 520px at 96% 8%, var(--glow-two), transparent 72%),
+                var(--bg);
             color: var(--text);
             font: 15.5px/1.6 var(--font-sans);
             text-rendering: optimizeLegibility;
             -webkit-font-smoothing: antialiased;
         }
 
-        header, main, footer { width: min(760px, 100% - 2rem); margin-inline: auto; }
+        header, main, footer { width: min(560px, 100% - 2rem); margin-inline: auto; }
 
         header { padding: 2rem 0 1rem; }
 
@@ -160,8 +169,9 @@ $appShell = $appShell ?? false;
         .card {
             background: var(--card);
             border: 1px solid var(--border);
-            border-radius: 1rem;
+            border-radius: 1.25rem;
             padding: 1.75rem;
+            box-shadow: var(--shadow);
         }
 
         h1, h2 {
@@ -209,7 +219,7 @@ $appShell = $appShell ?? false;
             width: 100%;
             padding: 0.7rem 0.85rem;
             border: 1px solid var(--border);
-            border-radius: 0.65rem;
+            border-radius: 0.75rem;
             background: var(--soft);
             color: var(--text);
             font: inherit;
@@ -226,7 +236,7 @@ $appShell = $appShell ?? false;
             margin-top: 1.15rem;
             padding: 0.65rem 1.15rem;
             border: 1px solid var(--accent);
-            border-radius: 999px;
+            border-radius: 0.85rem;
             background: var(--accent);
             color: var(--accent-ink);
             font: inherit;

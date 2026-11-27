@@ -3,14 +3,15 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import FollowButton from './FollowButton.vue';
 import { accountFor, displayNameFor, hasDistinctDisplayName, resolveAccount } from '../lib/account';
 import { discover, discoveryPeople, loadDiscover, popularTags } from '../lib/discover';
 import { formatCount, handleLabel } from '../lib/format';
-import { appState, openComposer } from '../lib/state';
+import { navigate } from '../lib/router';
+import { appState, openComposer, setSearchSeed } from '../lib/state';
 
 const instance = computed(() => appState.instance);
 const signedIn = computed(() => appState.session.user !== null);
@@ -22,6 +23,7 @@ const selfName = computed(() => (
 ));
 const visibleTags = computed(() => popularTags.value.slice(0, 5));
 const visiblePeople = computed(() => discoveryPeople.value.slice(0, 3));
+const searchQuery = ref('');
 
 watch(visiblePeople, (people) => {
 	for (const person of people) {
@@ -41,10 +43,32 @@ function compose(): void {
 
 	openComposer();
 }
+
+function submitSearch(): void {
+	const query = searchQuery.value.trim();
+	if (query === '') {
+		navigate('/search');
+		return;
+	}
+
+	setSearchSeed(query);
+	navigate('/search');
+}
 </script>
 
 <template>
 	<aside class="a-rail" aria-label="Explore">
+		<form class="a-rail-search" role="search" @submit.prevent="submitSearch">
+			<AppIcon name="search" :size="18" />
+			<input
+				v-model="searchQuery"
+				type="search"
+				placeholder="Search Aloha"
+				aria-label="Search Aloha"
+				autocomplete="off"
+			/>
+		</form>
+
 		<section v-if="self" class="a-rail__card a-rail__me">
 			<Avatar :id="self.handle" :name="selfName" :size="46" />
 			<div>

@@ -456,7 +456,7 @@ onMounted(load);
 
 .a-starter-pack__header p {
 	margin: 0 0 0.35rem;
-	color: var(--a-text-muted, #6b6b6b);
+	color: var(--a-muted);
 }
 
 .a-starter-pack__actions {
@@ -491,7 +491,7 @@ onMounted(load);
 	align-items: center;
 	gap: 0.75rem;
 	padding: 0.55rem 0;
-	border-top: 1px solid var(--a-border, rgba(0, 0, 0, 0.1));
+	border-top: 1px solid var(--a-border);
 }
 
 .a-starter-members__identity {
@@ -504,7 +504,7 @@ onMounted(load);
 }
 
 .a-starter-members__identity small {
-	color: var(--a-text-muted, #6b6b6b);
+	color: var(--a-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

@@ -15,7 +15,7 @@ import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { hostDisplayName, refreshAccount, setAccount, setHostDisplayName } from '../lib/account';
 import { getApi, hydrateTimelineBoosts } from '../lib/api';
 import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
-import { accountName, absoluteTime, avatarStyle, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
+import { accountName, absoluteTime, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
 import { appState, openComposer, showToast } from '../lib/state';
 import type { Account, AtprotoFollowEntry, FeaturedTag, RemoteFollowingEntry, RemoteProfileData, TimelineItem } from '../lib/types';
@@ -138,7 +138,7 @@ const coverStyle = computed(() => {
 		};
 	}
 
-	return avatarStyle(handle.value || 'aloha');
+	return {};
 });
 const profileUrl = computed(() => `${window.location.origin}/app#/u/${encodeURIComponent(handle.value)}`);
 const relationship = computed(() => account.value?.relationship ?? null);

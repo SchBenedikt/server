@@ -50,7 +50,7 @@ final class PostInteractions
     /**
      * @param list<string> $postIds
      *
-     * @return array<string, array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int}>
+     * @return array<string, array{favourites_count: int, favourited: bool, reblogs_count: int, reblogged: bool, replies_count: int, bookmarked: bool}>
      */
     public function forPosts(array $postIds, ?string $viewerId): array
     {
@@ -77,6 +77,7 @@ final class PostInteractions
         $boostCounts = $boosts->countsForPosts($postIds);
         $favourited = $viewerId === null ? [] : $favourites->existsForPosts($viewerId, $postIds);
         $reblogged = $viewerId === null ? [] : $boosts->existsForPosts($viewerId, $postIds);
+        $bookmarked = $viewerId === null ? [] : $this->bookmarkedForPosts($viewerId, $postIds);
         $replyCounts = $this->replyCounts($postIds, $viewerId);
         $emoji = $this->emojiReactions($postIds);
 
@@ -93,6 +94,7 @@ final class PostInteractions
                 'reblogs_count' => ($boostCounts[$postId] ?? 0) + ($remoteCounts[$postId]['boosts'] ?? 0),
                 'reblogged' => $reblogged[$postId] ?? false,
                 'replies_count' => ($replyCounts[$postId] ?? 0) + ($remoteCounts[$postId]['replies'] ?? 0),
+                'bookmarked' => $bookmarked[$postId] ?? false,
                 'emoji_reactions' => $emoji[$postId] ?? [],
             ];
         }
@@ -286,6 +288,42 @@ final class PostInteractions
                 continue;
             }
             $result[$postId][] = ['emoji' => $value, 'count' => (int) ($row['total'] ?? 0)];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param list<string> $postIds
+     *
+     * @return array<string, bool>
+     */
+    private function bookmarkedForPosts(string $viewerId, array $postIds): array
+    {
+        $placeholders = [];
+        $parameters = ['viewer' => $viewerId];
+        foreach ($postIds as $index => $postId) {
+            $key = 'bookmark_' . $index;
+            $placeholders[] = ':' . $key;
+            $parameters[$key] = $postId;
+        }
+
+        try {
+            $rows = $this->db->fetchAll(
+                'SELECT post_id FROM social_bookmark'
+                . ' WHERE user_id = :viewer AND post_id IN (' . implode(', ', $placeholders) . ')',
+                $parameters,
+            );
+        } catch (DatabaseException) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($rows as $row) {
+            $postId = is_string($row['post_id'] ?? null) ? $row['post_id'] : '';
+            if ($postId !== '') {
+                $result[$postId] = true;
+            }
         }
 
         return $result;

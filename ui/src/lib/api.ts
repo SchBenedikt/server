@@ -542,6 +542,7 @@ function normalizeInteraction(value: unknown): PostInteraction | null {
 		reblogs_count: typeof value.reblogs_count === 'number' ? value.reblogs_count : 0,
 		reblogged: value.reblogged === true,
 		replies_count: typeof value.replies_count === 'number' ? value.replies_count : 0,
+		...(typeof value.bookmarked === 'boolean' ? { bookmarked: value.bookmarked } : {}),
 		emoji_reactions: Array.isArray(value.emoji_reactions)
 			? value.emoji_reactions
 				.filter((entry): entry is { emoji: string; count: number } => (

@@ -332,6 +332,12 @@ watch(() => props.post.bookmarked, (value) => {
 	}
 });
 
+watch(interaction, (value) => {
+	if (value?.bookmarked !== undefined) {
+		bookmarked.value = value.bookmarked;
+	}
+}, { immediate: true });
+
 const pollState = ref<Poll | null>(props.post.poll ?? null);
 const selectedChoices = ref<number[]>([]);
 const voting = ref(false);
@@ -402,11 +408,11 @@ watch(interactionId, (id) => {
 	ensureInteractions([id]);
 }, { immediate: true });
 
-watch(() => interaction.value?.reblogged, (value) => {
+watch(interaction, (value) => {
 	if (value !== undefined) {
-		boosted.value = value;
+		boosted.value = value.reblogged;
 	}
-});
+}, { immediate: true });
 
 const pollTotal = computed(() => {
 	const poll = pollState.value;
@@ -582,7 +588,7 @@ async function toggleLike(): Promise<void> {
 				: (
 					id === remoteTarget.value
 						? (saved.favourited ? 'Remote like queued.' : 'Remote unlike queued.')
-						: (saved.favourited ? 'Post upvoted.' : 'Upvote removed.')),
+						: (saved.favourited ? 'Post liked.' : 'Like removed.')),
 			mirrorProblem !== null ? 'error' : 'success',
 		);
 	} catch (error) {
@@ -634,6 +640,9 @@ async function toggleBookmark(): Promise<void> {
 			await getApi().bookmarkPost(localId.value);
 			bookmarked.value = true;
 			showToast('Post bookmarked.', 'success');
+		}
+		if (interaction.value !== undefined) {
+			rememberInteraction(localId.value, { ...interaction.value, bookmarked: bookmarked.value });
 		}
 		emit('bookmark', bookmarked.value);
 	} catch (error) {
@@ -1299,7 +1308,7 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action"
 				:class="{ 'a-post__action--active': boosted }"
-				:aria-label="boosted ? 'Remove boost' : 'Boost post'"
+				:aria-label="boosted ? 'Remove repost' : 'Repost'"
 				:title="boosted ? 'Remove boost' : 'Boost post'"
 				:disabled="boosting"
 				@click="toggleBoost"
@@ -1332,21 +1341,21 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action a-post__action--like"
 				:class="{ 'a-post__action--liked': liked }"
-				:aria-label="liked ? 'Remove upvote' : 'Upvote post'"
+				:aria-label="liked ? 'Unlike post' : 'Like post'"
 				:aria-pressed="liked"
-				:title="liked ? 'Remove upvote' : 'Upvote post'"
+				:title="liked ? 'Unlike post' : 'Like post'"
 				:disabled="liking"
 				@click="toggleLike"
 			>
-				<AppIcon name="arrowUp" :size="18" />
+				<AppIcon name="heart" :size="18" />
 				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 			</button>
 			<span
 				v-else
 				class="a-post__action a-post__action--static"
-				:title="`${likeCount} upvotes on ${handle}`"
+				:title="`${likeCount} likes on ${handle}`"
 			>
-				<AppIcon name="arrowUp" :size="18" />
+				<AppIcon name="heart" :size="18" />
 				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
 			</span>
 

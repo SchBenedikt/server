@@ -203,6 +203,7 @@ onUnmounted(() => {
 				:href="item.href"
 				class="a-nav__item"
 				:class="{ 'a-nav__item--active': isActive(item.id) }"
+				:aria-label="item.label"
 				:aria-current="isActive(item.id) ? 'page' : undefined"
 			>
 				<span class="a-nav__icon">
@@ -216,7 +217,7 @@ onUnmounted(() => {
 			</a>
 		</nav>
 
-		<button type="button" class="a-btn a-btn--primary a-sidebar__compose" @click="compose">
+		<button type="button" class="a-btn a-btn--primary a-sidebar__compose" :aria-label="signedIn ? 'New post' : 'Sign in'" @click="compose">
 			<AppIcon name="pen" :size="18" />
 			<span>{{ signedIn ? 'New post' : 'Sign in' }}</span>
 		</button>
@@ -228,6 +229,7 @@ onUnmounted(() => {
 				:class="{ 'a-nav__item--active': moreActive || moreOpen }"
 				:aria-expanded="moreOpen"
 				aria-haspopup="menu"
+				aria-label="More sections"
 				@click.stop="moreOpen = !moreOpen"
 			>
 				<span class="a-nav__icon"><AppIcon name="list" :size="21" /></span>
@@ -263,6 +265,7 @@ onUnmounted(() => {
 			v-if="!signedIn"
 			class="a-sidebar__guest"
 			href="/login"
+			aria-label="Sign in to take part"
 		>
 			<AppIcon name="globe" :size="17" />
 			<span>You are reading as a guest. Sign in to take part.</span>
@@ -276,6 +279,7 @@ onUnmounted(() => {
 				class="a-profile-menu__trigger"
 				:aria-expanded="menuOpen"
 				aria-haspopup="menu"
+				:aria-label="`Account menu for ${displayName}`"
 				@click="menuOpen = !menuOpen"
 			>
 				<Avatar :id="handle" :name="displayName" :size="40" />

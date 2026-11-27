@@ -17,8 +17,10 @@ const props = withDefaults(defineProps<{
 	emptyIcon?: string;
 	emptyTitle?: string;
 	emptyText?: string;
+	cards?: boolean;
 }>(), {
 	tag: '',
+	cards: false,
 	emptyIcon: 'sparkles',
 	emptyTitle: 'Nothing here yet',
 	emptyText: 'As soon as someone posts, it appears here.',
@@ -67,7 +69,7 @@ defineExpose({
 </script>
 
 <template>
-	<section ref="section" class="a-feed" aria-live="polite">
+	<section ref="section" class="a-feed" :class="{ 'a-feed--cards': cards }" aria-live="polite">
 		<div v-if="kind === 'for-you' && timeline.interests.value.length > 0" class="a-feed__interests">
 			<span class="a-feed__interests-label">Learning from your reading and reactions:</span>
 			<span v-for="interest in timeline.interests.value" :key="interest.key" class="a-feed__interest">
