@@ -15,6 +15,7 @@ use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Support\EnvFile;
 
@@ -146,8 +147,9 @@ final class SetupService
         if ($displayName !== '' && mb_strlen($displayName) > 80) {
             $fields['display_name'] = 'At most 80 characters.';
         }
-        if (mb_strlen($password) < 8) {
-            $fields['password'] = 'The password needs at least 8 characters.';
+        $passwordError = PasswordPolicy::error($password);
+        if ($passwordError !== null) {
+            $fields['password'] = $passwordError;
         }
         if ($password !== $confirmation) {
             $fields['password_confirm'] = 'The passwords do not match.';

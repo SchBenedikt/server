@@ -23,13 +23,25 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: alohasocial_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d alohasocial_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: curl, intl, mbstring, pdo_sqlite, sqlite3
+          extensions: curl, intl, mbstring, pcntl, pdo_pgsql, pdo_sqlite, sqlite3
           coverage: none
 
       - uses: actions/setup-node@v4
@@ -61,6 +73,13 @@ jobs:
           ALOHASOCIAL_S3_TEST_BUCKET: aloha-media-ci
           ALOHASOCIAL_S3_TEST_ACCESS_KEY: test-access-key
           ALOHASOCIAL_S3_TEST_SECRET_KEY: test-secret-key
+
+      - name: PostgreSQL password reset concurrency
+        run: vendor/bin/phpunit tests/PostgresPasswordResetTest.php
+        env:
+          ALOHASOCIAL_TEST_PG_DSN: pgsql:host=127.0.0.1;port=5432;dbname=alohasocial_test
+          ALOHASOCIAL_TEST_PG_USER: postgres
+          ALOHASOCIAL_TEST_PG_PASSWORD: postgres
 
       - name: Install previous release and upgrade its database
         run: bash tools/upgrade-smoke.sh 0.12.0

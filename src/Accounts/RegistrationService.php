@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Accounts;
 
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Config\HostConfig;
 use PDOException;
 
@@ -63,8 +64,9 @@ final class RegistrationService
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $fields['email'] = 'Please enter a valid email address.';
         }
-        if (mb_strlen($password) < 8) {
-            $fields['password'] = 'The password needs at least 8 characters.';
+        $passwordError = PasswordPolicy::error($password);
+        if ($passwordError !== null) {
+            $fields['password'] = $passwordError;
         }
         if ($displayName !== null && mb_strlen($displayName) > 80) {
             $fields['display_name'] = 'At most 80 characters.';

@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Bootstrap\ApplicationFactory;
 use AlohaSocial\Server\Config\HostConfig;
 
@@ -48,8 +49,9 @@ if ($password === null) {
     fwrite(STDERR, "Note: the password was read from standard input without echo suppression.\n");
 }
 
-if (strlen($password) < 8) {
-    fwrite(STDERR, "The password must have at least 8 characters.\n");
+$passwordError = PasswordPolicy::error($password);
+if ($passwordError !== null) {
+    fwrite(STDERR, $passwordError . "\n");
     exit(2);
 }
 

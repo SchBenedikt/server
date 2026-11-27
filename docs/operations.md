@@ -51,7 +51,11 @@ the account lifecycle before creating public identities.
 
 The login page links to `/forgot-password`. A request stores only a SHA-256
 hash of a single-use token, sends a link that expires after one hour, and a
-completed reset revokes every session.
+completed reset revokes every session. The token is claimed atomically inside
+the reset transaction, each account has at most one live link, and a link is
+bound to the credential generation it was issued for. A password changed by an
+administrator or the CLI therefore invalidates older emailed links instead of
+being overwritten by them.
 
 Development (`ALOHASOCIAL_MAIL_TRANSPORT=log`):
 

@@ -1987,7 +1987,7 @@ final class FrontController
         }
 
         if ($this->runtime->passwordHasher->needsRehash($account->passwordHash)) {
-            $this->runtime->accounts->updatePasswordHash($account->id, $this->runtime->passwordHasher->hash($password));
+            $this->runtime->accounts->rehashPasswordHash($account->id, $this->runtime->passwordHasher->hash($password));
         }
 
         $this->runtime->throttle->clear($handle, $ip);

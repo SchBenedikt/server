@@ -25,6 +25,7 @@ use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\AtprotoSessionRepository;
 use AlohaSocial\Server\Auth\MastodonOAuthRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
+use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
@@ -294,8 +295,9 @@ final class AdminService
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $fields['email'] = 'Please enter a valid email address.';
         }
-        if (mb_strlen($password) < 8) {
-            $fields['password'] = 'The password needs at least 8 characters.';
+        $passwordError = PasswordPolicy::error($password);
+        if ($passwordError !== null) {
+            $fields['password'] = $passwordError;
         }
         if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
             $fields['role'] = 'Unknown role.';
@@ -421,9 +423,10 @@ final class AdminService
     public function resetPassword(string $adminId, string $id, string $password): int
     {
         $this->requireUser($id);
-        if (mb_strlen($password) < 8) {
-            throw AdminException::invalid('The password needs at least 8 characters.', [
-                'password' => 'At least 8 characters.',
+        $passwordError = PasswordPolicy::error($password);
+        if ($passwordError !== null) {
+            throw AdminException::invalid($passwordError, [
+                'password' => $passwordError,
             ]);
         }
 

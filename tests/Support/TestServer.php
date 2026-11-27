@@ -45,6 +45,8 @@ final class TestServer
 
     private readonly string $directory;
 
+    private bool $cleanup = true;
+
     /**
      * @param array<string, mixed> $overrides
      */
@@ -228,9 +230,18 @@ final class TestServer
         return ['cookies' => $cookies, 'csrf' => $csrf, 'home' => $home];
     }
 
+    /**
+     * Keeps the throwaway directory when the test forks: the child process must
+     * not delete the database that its parent still uses.
+     */
+    public function preserveFiles(): void
+    {
+        $this->cleanup = false;
+    }
+
     public function __destruct()
     {
-        if (isset($this->directory) && is_dir($this->directory)) {
+        if ($this->cleanup && isset($this->directory) && is_dir($this->directory)) {
             self::removeDirectory($this->directory);
         }
     }
