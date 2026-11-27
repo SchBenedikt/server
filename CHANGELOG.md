@@ -54,6 +54,12 @@ entry below. `tests/VersionTest.php` fails when those three drift apart.
 
 ### Fixed
 
+- **Atomic rate limits:** each request now reserves its slot with one
+  conditional upsert instead of a read-then-write transaction. Concurrent PHP
+  workers therefore admit exactly the declared budget, the next request gets
+  `429` with the correct `Retry-After`, and SQLite/PostgreSQL no longer leak
+  duplicate-key or locked-database errors under a burst. Window rollover,
+  restarts, cleanup and database outages are covered by regression tests.
 - **Password validation parity:** setup no longer trims passwords, the CLI
   strips only the line ending, and every entry point uses the shared policy.
   Passwords are counted in Unicode characters, never silently truncated, and
