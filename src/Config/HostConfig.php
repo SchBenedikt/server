@@ -90,6 +90,7 @@ final readonly class HostConfig
          * @var list<string>
          */
         public array $externallyManagedSetupKeys = [],
+        public bool $smtpAllowPlaintextAuth = false,
     ) {
     }
 
@@ -223,6 +224,23 @@ final readonly class HostConfig
         $smtpHost = self::nullable($pick('smtp_host', 'ALOHASOCIAL_SMTP_HOST', null));
         if ($mailTransport === 'smtp' && $smtpHost === null) {
             throw new RuntimeException('mail_transport smtp needs ALOHASOCIAL_SMTP_HOST.');
+        }
+        $smtpUser = self::nullable($pick('smtp_user', 'ALOHASOCIAL_SMTP_USER', null));
+        $smtpAllowPlaintextAuth = in_array(
+            strtolower(trim((string) $pick('smtp_allow_plaintext_auth', 'ALOHASOCIAL_SMTP_ALLOW_PLAINTEXT_AUTH', 'false'))),
+            ['1', 'true', 'yes', 'on'],
+            true,
+        );
+        if ($mailTransport === 'smtp'
+            && $smtpEncryption === 'none'
+            && $smtpUser !== null
+            && !$smtpAllowPlaintextAuth
+        ) {
+            throw new RuntimeException(
+                'SMTP authentication over an unencrypted connection is disabled. '
+                . 'Use STARTTLS or implicit TLS, or set ALOHASOCIAL_SMTP_ALLOW_PLAINTEXT_AUTH=true '
+                . 'for local testing only.',
+            );
         }
 
         $mailFrom = trim((string) $pick(
@@ -400,9 +418,10 @@ final readonly class HostConfig
             mailLogDirectory: self::resolvePath((string) $pick('mail_log_directory', 'ALOHASOCIAL_MAIL_LOG_DIR', $varDirectory . '/mail'), $root),
             smtpHost: $smtpHost,
             smtpPort: (int) $pick('smtp_port', 'ALOHASOCIAL_SMTP_PORT', 587),
-            smtpUser: self::nullable($pick('smtp_user', 'ALOHASOCIAL_SMTP_USER', null)),
+            smtpUser: $smtpUser,
             smtpPassword: self::nullable($pick('smtp_password', 'ALOHASOCIAL_SMTP_PASSWORD', null)),
             smtpEncryption: $smtpEncryption,
+            smtpAllowPlaintextAuth: $smtpAllowPlaintextAuth,
             envFile: self::resolvePath((string) $pick('env_file', 'ALOHASOCIAL_ENV_FILE', $root . '/.env'), $root),
             atprotoJetstreamUrl: $atprotoJetstream,
             trustedProxies: $trustedProxies,

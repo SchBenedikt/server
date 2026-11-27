@@ -195,10 +195,13 @@ outbox are publicly dereferenceable.
 | `ALOHASOCIAL_SMTP_USER` | `smtp_user` | empty | AUTH LOGIN user; empty skips authentication. |
 | `ALOHASOCIAL_SMTP_PASSWORD` | `smtp_password` | empty | AUTH LOGIN password. |
 | `ALOHASOCIAL_SMTP_ENCRYPTION` | `smtp_encryption` | `starttls` | `starttls`, `tls` (implicit TLS), or `none`. |
+| `ALOHASOCIAL_SMTP_ALLOW_PLAINTEXT_AUTH` | `smtp_allow_plaintext_auth` | `false` | Explicitly permits AUTH LOGIN over an unencrypted connection. Use only for local testing. |
 
 The `log` transport is for development. Use `smtp` in production so password
 reset messages are delivered. A message that cannot be handed off returns
-`503` instead of being silently dropped.
+`503` instead of being silently dropped. STARTTLS and implicit TLS verify the
+peer certificate and hostname; plaintext AUTH is refused unless
+`ALOHASOCIAL_SMTP_ALLOW_PLAINTEXT_AUTH=true` is set.
 
 ## Debugging
 

@@ -275,6 +275,7 @@ final class ApplicationFactory
                 $this->config->smtpUser,
                 $this->config->smtpPassword,
                 $this->config->mailFrom,
+                smtpAllowPlaintextAuth: $this->config->smtpAllowPlaintextAuth,
             )
             : new LogMailer($this->config->mailLogDirectory, $this->config->mailFrom);
 

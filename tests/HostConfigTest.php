@@ -285,6 +285,30 @@ final class HostConfigTest extends TestCase
         ]);
     }
 
+    public function testSmtpPlaintextAuthRequiresExplicitOptIn(): void
+    {
+        try {
+            HostConfig::load($this->root, [
+                'mail_transport' => 'smtp',
+                'smtp_host' => '127.0.0.1',
+                'smtp_encryption' => 'none',
+                'smtp_user' => 'alice',
+            ]);
+            self::fail('Plaintext SMTP authentication must be rejected by default.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('ALOHASOCIAL_SMTP_ALLOW_PLAINTEXT_AUTH', $exception->getMessage());
+        }
+
+        $config = HostConfig::load($this->root, [
+            'mail_transport' => 'smtp',
+            'smtp_host' => '127.0.0.1',
+            'smtp_encryption' => 'none',
+            'smtp_user' => 'alice',
+            'smtp_allow_plaintext_auth' => true,
+        ]);
+        self::assertTrue($config->smtpAllowPlaintextAuth);
+    }
+
     public function testS3StorageRejectsCredentialPairAndUnsafePrefixErrors(): void
     {
         try {
