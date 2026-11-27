@@ -526,6 +526,32 @@ if ($remoteObjectId !== null) {
             check('A: deleted remote reply no longer resolves', $status === 404, 'status ' . $status . ' ' . $body);
         }
     }
+
+    // B likes the remote post. The Like is queued for the author inbox —
+    // resolved through the core's actor-inbox port — and A records it as a
+    // favourite notification on her local post.
+    [$status, $body] = httpRequest('POST', $baseB . '/api/v1/posts/' . rawurlencode($remoteObjectId) . '/like', [
+        'jar' => $jarB,
+        'headers' => ['Content-Type: application/json', 'X-CSRF-Token: ' . $csrfB],
+        'body' => '{}',
+    ]);
+    check('B: like on the remote post accepted', $status === 200, 'status ' . $status . ' ' . $body);
+
+    $code = runPhp($root, ['bin/worker.php', '--once'], $envB, $output);
+    check('B: worker delivered the like', $code === 0, (string) $output);
+    fwrite(STDOUT, '     worker: ' . str_replace("\n", ' | ', (string) $output) . "\n");
+
+    [$status, $body] = httpRequest('GET', $baseA . '/api/v1/notifications', ['jar' => $jarA]);
+    $liked = false;
+    if ($status === 200) {
+        foreach (json_decode($body, true)['notifications'] ?? [] as $notification) {
+            if (($notification['type'] ?? null) === 'favourite') {
+                $liked = true;
+                break;
+            }
+        }
+    }
+    check('A: remote like recorded a favourite notification', $liked, 'status ' . $status . ' ' . $body);
 }
 
 [$status, $body] = httpRequest('GET', $baseB . '/api/v1/timelines/public');
