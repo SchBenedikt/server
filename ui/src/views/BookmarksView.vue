@@ -11,6 +11,7 @@ import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { getApi } from '../lib/api';
 import { onPostDeleted } from '../lib/events';
+import { t } from '../lib/i18n';
 import { appState } from '../lib/state';
 import type { TimelineItem } from '../lib/types';
 
@@ -47,7 +48,7 @@ async function load(reset: boolean): Promise<void> {
 		cursor.value = page.length > 0 ? page[page.length - 1].id : null;
 		hasMore.value = page.length === 20;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Bookmarks could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('bookmarks.loadFailed');
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -64,11 +65,11 @@ function onBookmark(id: string, bookmarked: boolean): void {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Bookmarks"
-			subtitle="Private saved posts, visible only to you."
+			:title="t('nav.bookmarks')"
+			:subtitle="t('bookmarks.subtitle')"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load(true)">
+				<button type="button" class="a-icon-btn" :aria-label="t('common.reload')" :title="t('common.reload')" :disabled="loading" @click="load(true)">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -77,10 +78,10 @@ function onBookmark(id: string, bookmarked: boolean): void {
 		<EmptyState
 			v-if="!signedIn"
 			icon="bookmark"
-			title="Sign in to bookmark"
-			text="Bookmarks are private. Sign in to save posts and find them again later."
+			:title="t('bookmarks.loginTitle')"
+			:text="t('bookmarks.loginText')"
 		>
-			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+			<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
 		</EmptyState>
 
 		<TimelineSkeleton v-else-if="loading && items.length === 0" :count="4" />
@@ -93,8 +94,8 @@ function onBookmark(id: string, bookmarked: boolean): void {
 		<EmptyState
 			v-else-if="items.length === 0"
 			icon="bookmark"
-			title="No bookmarks yet"
-			text="Use the bookmark icon on a post to collect it here."
+			:title="t('bookmarks.emptyTitle')"
+			:text="t('bookmarks.emptyText')"
 		/>
 
 		<div v-else class="a-feed">
@@ -115,7 +116,7 @@ function onBookmark(id: string, bookmarked: boolean): void {
 				@click="load(false)"
 			>
 				<AppIcon v-if="loadingMore" name="refresh" :size="15" class="a-spin" />
-				{{ loadingMore ? 'Loading…' : 'More bookmarks' }}
+				{{ loadingMore ? t('common.loading') : t('bookmarks.more') }}
 			</button>
 		</div>
 	</div>

@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { navigate } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { Collection } from '../lib/types';
 
@@ -34,7 +35,7 @@ async function load(): Promise<void> {
 	try {
 		collections.value = await getApi().collections();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The collections could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('collections.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -53,17 +54,17 @@ async function create(): Promise<void> {
 		description.value = '';
 		isPublic.value = true;
 		creating.value = false;
-		showToast('Collection created.', 'success');
+		showToast(t('collections.created'), 'success');
 		navigate(`/c/${encodeURIComponent(collection.id)}`);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The collection could not be created.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('collections.createFailed'), 'error');
 	} finally {
 		saving.value = false;
 	}
 }
 
 async function remove(collection: Collection): Promise<void> {
-	if (deleting.value !== '' || !window.confirm(`Delete the collection “${collection.title}”?`)) {
+	if (deleting.value !== '' || !window.confirm(t('collections.deleteConfirm', { title: collection.title }))) {
 		return;
 	}
 
@@ -71,9 +72,9 @@ async function remove(collection: Collection): Promise<void> {
 	try {
 		await getApi().deleteCollection(collection.id);
 		collections.value = collections.value.filter((entry) => entry.id !== collection.id);
-		showToast('Collection deleted.', 'success');
+		showToast(t('collections.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The collection could not be deleted.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('collections.deleteFailed'), 'error');
 	} finally {
 		deleting.value = '';
 	}
@@ -85,15 +86,15 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Collections"
-			subtitle="Organize posts into named, ordered lists — public or just for you."
+			:title="t('nav.collections')"
+			:subtitle="t('collections.subtitle')"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = !creating">
 					<AppIcon name="plus" :size="15" />
-					New collection
+					{{ t('coll.new') }}
 				</button>
 			</template>
 		</PageHeader>
@@ -101,44 +102,44 @@ onMounted(load);
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Sign-in required</strong>
-				<p>Collections belong to an account.</p>
+				<strong>{{ t('common.signInRequired') }}</strong>
+				<p>{{ t('collections.signInText') }}</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<template v-else>
 			<form v-if="creating" class="a-panel a-collection-form" @submit.prevent="create">
 				<label>
-					<span>Name</span>
-					<input v-model="title" maxlength="100" required placeholder="For example: Good thoughts" />
+					<span>{{ t('lists.nameLabel') }}</span>
+					<input v-model="title" maxlength="100" required :placeholder="t('collections.namePlaceholder')" />
 				</label>
 				<label>
-					<span>Description</span>
-					<textarea v-model="description" maxlength="500" rows="2" placeholder="What is this collection about?" />
+					<span>{{ t('collections.descriptionLabel') }}</span>
+					<textarea v-model="description" maxlength="500" rows="2" :placeholder="t('collections.descriptionPlaceholder')" />
 				</label>
 				<label class="a-check">
 					<input v-model="isPublic" type="checkbox" />
-					<span>Publicly visible</span>
+					<span>{{ t('collections.public') }}</span>
 				</label>
 				<div class="a-collection-form__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = false">Cancel</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = false">{{ t('common.cancel') }}</button>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || title.trim() === ''">
-						{{ saving ? 'Saving…' : 'Create collection' }}
+						{{ saving ? t('common.saving') : t('collections.create') }}
 					</button>
 				</div>
 			</form>
 
 			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
-			<p v-if="loading && collections.length === 0" class="a-muted">Loading collections…</p>
+			<p v-if="loading && collections.length === 0" class="a-muted">{{ t('coll.loading') }}</p>
 
 			<EmptyState
 				v-else-if="collections.length === 0"
 				icon="list"
-				title="No collections yet"
-				text="Create a collection and add posts to it later from the post menu."
+				:title="t('collections.emptyTitle')"
+				:text="t('collections.emptyText')"
 			>
-				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = true">Create your first collection</button>
+				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = true">{{ t('collections.createFirst') }}</button>
 			</EmptyState>
 
 			<ul v-else class="a-collection-grid">
@@ -146,17 +147,17 @@ onMounted(load);
 					<a :href="`#/c/${encodeURIComponent(collection.id)}`" class="a-collection-card__link">
 						<span class="a-collection-card__badge">
 							<AppIcon :name="collection.is_public ? 'globe' : 'lock'" :size="13" />
-							{{ collection.is_public ? 'Public' : 'Private' }}
+							{{ collection.is_public ? t('visibility.public') : t('common.private') }}
 						</span>
 						<strong>{{ collection.title }}</strong>
 						<p v-if="collection.description !== ''">{{ collection.description }}</p>
-						<small>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Post' : 'Posts' }}</small>
+						<small>{{ collection.item_count }} {{ collection.item_count === 1 ? t('rail.post') : t('rail.posts') }}</small>
 					</a>
 					<button
 						type="button"
 						class="a-icon-btn a-icon-btn--danger"
-						aria-label="Delete collection"
-						title="Delete"
+						:aria-label="t('collections.deleteAria')"
+						:title="t('collections.deleteTitle')"
 						:disabled="deleting === collection.id"
 						@click="remove(collection)"
 					>

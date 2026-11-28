@@ -11,6 +11,7 @@ import PostCard from '../components/PostCard.vue';
 import { getApi } from '../lib/api';
 import { relativeTime } from '../lib/format';
 import { route } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { Collection, TimelineItem } from '../lib/types';
 
@@ -59,7 +60,7 @@ async function load(): Promise<void> {
 		const ids = value.post_ids ?? [];
 		posts.value = ids.length === 0 ? [] : Object.values(await getApi().posts(ids));
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The collection could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('collections.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -79,9 +80,9 @@ async function save(): Promise<void> {
 		});
 		collection.value = updated;
 		editing.value = false;
-		showToast('Collection updated.', 'success');
+		showToast(t('collections.updated'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The collection could not be saved.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('collections.saveFailed'), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -96,9 +97,9 @@ async function removePost(postId: string): Promise<void> {
 		const updated = await getApi().removeCollectionItem(collection.value.id, postId);
 		collection.value = updated;
 		posts.value = posts.value.filter((post) => post.id !== postId);
-		showToast('Post removed.', 'success');
+		showToast(t('collections.postRemoved'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The post could not be removed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('collections.postRemoveFailed'), 'error');
 	}
 }
 
@@ -109,15 +110,15 @@ watch(id, load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			:title="collection?.title ?? 'Collection'"
-			:subtitle="collection?.description || 'A curated list of posts.'"
+			:title="collection?.title ?? t('collections.fallback')"
+			:subtitle="collection?.description || t('collections.detailSubtitle')"
 			back-href="#/collections"
-			back-label="All collections"
+			:back-label="t('collections.backAll')"
 		>
 			<template #actions>
 				<button v-if="isOwner" type="button" class="a-btn a-btn--ghost a-btn--small" @click="editing = !editing">
 					<AppIcon name="pen" :size="15" />
-							Edit
+							{{ t('common.edit') }}
 
 				</button>
 			</template>
@@ -126,32 +127,32 @@ watch(id, load);
 		<p v-if="collection !== null" class="a-collection-meta">
 			<span>
 				<AppIcon :name="collection.is_public ? 'globe' : 'lock'" :size="14" />
-				{{ collection.is_public ? 'Public' : 'Private' }}
+				{{ collection.is_public ? t('visibility.public') : t('common.private') }}
 			</span>
 			<span>
 				<AppIcon name="clock" :size="14" />
-				Updated {{ relativeTime(collection.updated_at) }}
+				{{ t('collections.updatedAt', { time: relativeTime(collection.updated_at) }) }}
 			</span>
-			<span>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Post' : 'Posts' }}</span>
+			<span>{{ collection.item_count }} {{ collection.item_count === 1 ? t('rail.post') : t('rail.posts') }}</span>
 		</p>
 
 		<form v-if="editing && isOwner" class="a-panel a-collection-form" @submit.prevent="save">
 			<label>
-				<span>Name</span>
+				<span>{{ t('lists.nameLabel') }}</span>
 				<input v-model="title" maxlength="100" required />
 			</label>
 			<label>
-				<span>Description</span>
+				<span>{{ t('collections.descriptionLabel') }}</span>
 				<textarea v-model="description" maxlength="500" rows="2" />
 			</label>
 			<label class="a-check">
 				<input v-model="isPublic" type="checkbox" />
-				<span>Publicly visible</span>
+				<span>{{ t('collections.public') }}</span>
 			</label>
 			<div class="a-collection-form__actions">
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="editing = false">Cancel</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="editing = false">{{ t('common.cancel') }}</button>
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
-					{{ saving ? 'Saving…' : 'Save' }}
+					{{ saving ? t('common.saving') : t('common.save') }}
 				</button>
 			</div>
 		</form>
@@ -161,13 +162,13 @@ watch(id, load);
 			<span>{{ error }}</span>
 		</p>
 
-		<p v-else-if="loading && collection === null" class="a-muted">Loading collection…</p>
+		<p v-else-if="loading && collection === null" class="a-muted">{{ t('collections.loadingOne') }}</p>
 
 		<EmptyState
 			v-else-if="collection !== null && orderedPosts.length === 0"
 			icon="list"
-			title="This collection is still empty"
-			:text="isOwner ? 'Open a post and choose “Add to collection” from its menu.' : 'The owner has not added any posts yet.'"
+			:title="t('collections.emptyDetailTitle')"
+			:text="isOwner ? t('collections.emptyDetailOwner') : t('collections.emptyDetailOther')"
 		/>
 
 		<ol v-else-if="orderedPosts.length > 0" class="a-feed__list">
@@ -177,8 +178,8 @@ watch(id, load);
 					v-if="isOwner"
 					type="button"
 					class="a-collection-post__remove"
-					:aria-label="'Remove from collection'"
-					title="Remove from collection"
+					:aria-label="t('collections.removeFrom')"
+					:title="t('collections.removeFrom')"
 					@click="removePost(post.id)"
 				>
 					<AppIcon name="x" :size="14" />

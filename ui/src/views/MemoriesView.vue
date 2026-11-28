@@ -10,6 +10,7 @@ import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import { getApi } from '../lib/api';
 import { navigate } from '../lib/router';
+import { locale, t } from '../lib/i18n';
 import { appState } from '../lib/state';
 import type { MemoriesData, TimelineItem } from '../lib/types';
 
@@ -22,15 +23,12 @@ const signedIn = appState.session.user !== null;
 
 function dateLabel(): string {
 	if (data.value === null || data.value.date === '') {
-		return 'Today';
+		return t('memories.today');
 	}
 
 	const [month, day] = data.value.date.split('-');
-	const names = [
-		'January', 'February', 'March', 'April', 'May', 'June',
-		'July', 'August', 'September', 'October', 'November', 'December',
-	];
-	return `${names[Number(month) - 1] ?? ''} ${Number(day)}`;
+	const date = new Date(2000, Number(month) - 1, Number(day));
+	return new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric' }).format(date);
 }
 
 async function load(): Promise<void> {
@@ -45,7 +43,7 @@ async function load(): Promise<void> {
 		const ids = data.value.years.flatMap((year) => year.posts.map((post) => post.id));
 		posts.value = ids.length === 0 ? [] : Object.values(await getApi().posts(ids));
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Memories could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('memories.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -57,13 +55,13 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Memories"
-			:subtitle="`What you shared on this day in earlier years — ${dateLabel()}.`"
+			:title="t('nav.memories')"
+			:subtitle="t('memories.subtitle', { date: dateLabel() })"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Reload memories" title="Refresh" @click="load">
+				<button type="button" class="a-icon-btn" :aria-label="t('memories.reload')" :title="t('common.refresh')" @click="load">
 					<AppIcon name="refresh" :size="19" />
 				</button>
 			</template>
@@ -72,33 +70,33 @@ onMounted(load);
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Sign-in required</strong>
-				<p>Memories are private and visible only to you.</p>
+				<strong>{{ t('common.signInRequired') }}</strong>
+				<p>{{ t('memories.signInText') }}</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<p v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</p>
 
-		<div v-else-if="loading && data === null" class="a-muted">Loading memories…</div>
+		<div v-else-if="loading && data === null" class="a-muted">{{ t('memories.loading') }}</div>
 
 		<template v-else-if="data !== null">
 			<section v-if="data.total === 0" class="a-explore-section">
 				<EmptyState
 					icon="clock"
-					title="No memories yet"
-					text="Once you have posted on a day in an earlier year, the post reappears here."
+					:title="t('memories.emptyTitle')"
+					:text="t('memories.emptyText')"
 				/>
 			</section>
 
 			<section v-for="year in data.years" v-else :key="year.year" class="a-memories-year">
 				<header class="a-section-head">
 					<h2>{{ year.year }}</h2>
-					<span>{{ year.posts.length }} {{ year.posts.length === 1 ? 'Post' : 'Posts' }}</span>
+					<span>{{ year.posts.length }} {{ year.posts.length === 1 ? t('rail.post') : t('rail.posts') }}</span>
 				</header>
 				<ol class="a-feed__list">
 					<li v-for="post in posts.filter((item) => year.posts.some((entry) => entry.id === item.id))" :key="post.id">
@@ -109,7 +107,7 @@ onMounted(load);
 
 			<div class="a-feed__more">
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="navigate(`/u/${encodeURIComponent(appState.session.user?.handle ?? '')}`)">
-					View all your posts
+					{{ t('memories.viewAll') }}
 				</button>
 			</div>
 		</template>
