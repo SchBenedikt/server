@@ -76,6 +76,35 @@ final class PostHttpTest extends TestCase
         self::assertStringContainsString('Hello #fediverse', $timeline->body);
     }
 
+    public function testAuthorCanReadThePostSource(): void
+    {
+        $created = $this->server->json('POST', '/api/v1/posts', [
+            'content' => 'Source view **keeps** markup',
+            'content_warning' => 'Raw markup ahead',
+            'visibility' => 'public',
+        ], $this->cookies, $this->csrf);
+        self::assertSame(201, $created->status);
+
+        /** @var array{post: array{id: string}} $body */
+        $body = json_decode($created->body, true, 512, JSON_THROW_ON_ERROR);
+        $id = $body['post']['id'];
+
+        $source = $this->server->send('GET', '/api/v1/posts/' . rawurlencode($id) . '/source', [
+            'cookies' => $this->cookies,
+        ]);
+        self::assertSame(200, $source->status);
+        self::assertStringContainsString('Source view **keeps** markup', $source->body);
+        self::assertStringContainsString('Raw markup ahead', $source->body);
+
+        // The source read is author-only: another account gets a 404.
+        $this->server->createAccount('other');
+        $other = $this->server->signIn('other');
+        $denied = $this->server->send('GET', '/api/v1/posts/' . rawurlencode($id) . '/source', [
+            'cookies' => $other['cookies'],
+        ]);
+        self::assertSame(404, $denied->status);
+    }
+
     public function testLocalQuoteIsAcceptedAndResolvedForTheUi(): void
     {
         $original = $this->server->json('POST', '/api/v1/posts', [
