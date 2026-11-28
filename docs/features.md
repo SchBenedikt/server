@@ -344,8 +344,11 @@ comment is the only text that may leave the admin surface. Bulk imports go
 through `POST /api/v1/host/admin/domain-blocks/import`, which always answers
 with a per-domain verdict first — `apply` defaults to `false`, so nothing is
 written until the caller repeats the request with `apply: true`. Entries may
-be bare domains or `{domain, comment}` objects; invalid, duplicate and
-already-blocked domains are reported rather than skipped silently. Setting
+be bare domains or `{domain, comment}` objects; alternatively `content` plus
+`format` (`lines`, `csv` with an optional `domain,comment` header, or `json`)
+carries a whole file — the admin console's Upload file control uses this.
+Invalid, duplicate and already-blocked domains are reported rather than
+skipped silently. Setting
 `ALOHASOCIAL_PUBLISH_DOMAIN_BLOCKS=true` (or the matching admin toggle)
 exposes the list at `GET /api/v1/instance/domain_blocks` for Mastodon
 clients; the endpoint answers `404` while publishing is off.
