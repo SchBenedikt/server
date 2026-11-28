@@ -12,6 +12,7 @@ declare(strict_types=1);
  * @var string $handle
  * @var string $displayName
  * @var bool $isAdmin
+ * @var bool $isModerator
  */
 
 // The bundle filenames never change, so browsers and CDNs would keep serving
@@ -34,6 +35,7 @@ $assetVersion = static function (string $file): string {
     data-csrf="<?= $escape($csrf) ?>"
     data-signed-in="<?= $handle !== '' ? '1' : '0' ?>"
     data-is-admin="<?= ($isAdmin ?? false) ? '1' : '0' ?>"
+    data-is-moderator="<?= ($isModerator ?? false) ? '1' : '0' ?>"
     data-atproto="<?= ($atproto ?? false) ? '1' : '0' ?>"
     data-media="<?= ($media ?? false) ? '1' : '0' ?>"
 >

@@ -2819,6 +2819,7 @@ final class FrontController
             'handle' => $account?->handle ?? '',
             'displayName' => $account?->name() ?? '',
             'isAdmin' => $account?->isAdmin() === true,
+            'isModerator' => $account?->isModerator() === true,
             'media' => $this->runtime->app->media !== null,
             // A configured publisher is not enough: only advertise this
             // action when this signed-in account has an active Bluesky link.

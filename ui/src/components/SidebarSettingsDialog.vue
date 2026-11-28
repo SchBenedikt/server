@@ -22,7 +22,7 @@ const draft = ref<string[]>([]);
 
 const available = computed<SidebarItem[]>(() => SIDEBAR_CATALOG.filter((item) => (
 	(item.requiresAuth !== true || appState.session.user !== null)
-	&& (item.adminOnly !== true || appState.session.admin)
+	&& (item.adminOnly !== true || (appState.session.admin || appState.session.moderator))
 )));
 
 const ordered = computed<SidebarItem[]>(() => {

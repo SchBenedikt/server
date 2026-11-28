@@ -137,17 +137,17 @@ async function createUser(): Promise<void> {
 	}
 }
 
-async function toggleRole(user: AdminUser): Promise<void> {
-	if (busy.value !== '') {
+async function changeRole(user: AdminUser, role: string): Promise<void> {
+	if (busy.value !== '' || role === user.role || !['admin', 'moderator', 'user'].includes(role)) {
 		return;
 	}
 
-	const next = user.role === 'admin' ? 'user' : 'admin';
 	busy.value = `role:${user.id}`;
 	try {
-		const saved = await getAdminApi().updateUser(user.id, { role: next });
+		const saved = await getAdminApi().updateUser(user.id, { role: role as 'admin' | 'moderator' | 'user' });
 		replace(saved);
-		showToast(`@${user.handle} is now ${saved.role === 'admin' ? 'an administrator' : 'a member'}.`, 'success');
+		const label = saved.role === 'admin' ? 'an administrator' : saved.role === 'moderator' ? 'a moderator' : 'a member';
+		showToast(`@${user.handle} is now ${label}.`, 'success');
 	} catch (caught) {
 		showToast(caught instanceof Error ? caught.message : 'The role could not be changed.', 'error');
 	} finally {
@@ -321,7 +321,7 @@ onMounted(() => {
 							</td>
 							<td>
 								<span class="a-admin-badge" :class="user.role === 'admin' ? 'a-admin-badge--primary' : ''">
-									{{ user.role === 'admin' ? 'Admin' : 'Member' }}
+									{{ user.role === 'admin' ? 'Admin' : user.role === 'moderator' ? 'Moderator' : 'Member' }}
 								</span>
 							</td>
 							<td>
@@ -338,16 +338,18 @@ onMounted(() => {
 							</td>
 							<td>
 								<div class="a-admin-row-actions">
-									<button
-										type="button"
-										class="a-icon-btn"
-										:title="user.role === 'admin' ? 'Make member' : 'Make admin'"
-										:aria-label="user.role === 'admin' ? 'Make member' : 'Make administrator'"
+									<select
+										class="a-admin-select a-admin-select--role"
+										:title="`Role for @${user.handle}`"
+										:aria-label="`Role for @${user.handle}`"
+										:value="user.role"
 										:disabled="busy !== ''"
-										@click="toggleRole(user)"
+										@change="changeRole(user, ($event.target as HTMLSelectElement).value)"
 									>
-										<AppIcon :name="user.role === 'admin' ? 'user' : 'shield'" :size="16" />
-									</button>
+										<option value="user">Member</option>
+										<option value="moderator">Moderator</option>
+										<option value="admin">Admin</option>
+									</select>
 									<button
 										type="button"
 										class="a-icon-btn"
@@ -448,6 +450,7 @@ onMounted(() => {
 						<label class="a-profile-edit__label" for="a-admin-role">role</label>
 						<select id="a-admin-role" v-model="draft.role" class="a-admin-select">
 							<option value="user">Member</option>
+							<option value="moderator">Moderator</option>
 							<option value="admin">Administrator</option>
 						</select>
 					</div>

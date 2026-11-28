@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Tests;
 use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Core\Platform\Storage\S3ObjectPage;
 use AlohaSocial\Core\Jobs\JobSubject;
+use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Support\RuntimeLogger;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
@@ -54,6 +55,58 @@ final class AdminTest extends TestCase
         $forbidden = $server->send('GET', '/api/v1/host/admin/overview', ['cookies' => $session['cookies']]);
         self::assertSame(403, $forbidden->status);
         self::assertStringContainsString('admin_required', $forbidden->body);
+    }
+
+    public function testModeratorRoleReachesOnlyTheModerationConsole(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('root', 'root@example.test', TestServer::PASSWORD, true);
+        $server->createAccount('mod', 'mod@example.test', TestServer::PASSWORD, false, Account::ROLE_MODERATOR);
+        $mod = $server->signIn('mod');
+
+        // The moderation console is reachable.
+        self::assertSame(200, $server->send('GET', '/api/v1/host/admin/reports', ['cookies' => $mod['cookies']])->status);
+        self::assertSame(200, $server->send('GET', '/api/v1/host/admin/moderation', ['cookies' => $mod['cookies']])->status);
+        self::assertSame(200, $server->send('GET', '/api/v1/host/admin/domain-blocks', ['cookies' => $mod['cookies']])->status);
+
+        // Everything else under /admin stays closed.
+        foreach ([
+            '/api/v1/host/admin/overview',
+            '/api/v1/host/admin/users',
+            '/api/v1/host/admin/settings',
+            '/api/v1/host/admin/audit',
+            '/api/v1/host/admin/invitations',
+            '/api/v1/host/admin/federation',
+        ] as $path) {
+            self::assertSame(403, $server->send('GET', $path, ['cookies' => $mod['cookies']])->status, $path);
+        }
+
+        // Bulk imports are instance policy: administrators only.
+        self::assertSame(403, $server->send(
+            'POST',
+            '/api/v1/host/admin/domain-blocks/import',
+            ['cookies' => $mod['cookies']],
+        )->status);
+    }
+
+    public function testAdminCanAssignTheModeratorRole(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        $created = $server->json('POST', '/api/v1/host/admin/users', [
+            'handle' => 'carol',
+            'email' => 'carol@example.test',
+            'password' => 'correct-horse-battery-staple',
+            'role' => 'moderator',
+        ], $cookies, $csrf);
+        self::assertSame(201, $created->status);
+        self::assertSame('moderator', $this->decoded($created)['user']['role']);
+
+        $promoted = $server->json('PATCH', '/api/v1/host/admin/users/carol', [
+            'role' => 'admin',
+        ], $cookies, $csrf);
+        self::assertSame(200, $promoted->status);
+        self::assertSame('admin', $this->decoded($promoted)['user']['role']);
     }
 
     public function testAnonymousSessionIsRedirectedToLoginInsteadOfForbidden(): void

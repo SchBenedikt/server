@@ -19,6 +19,8 @@ final readonly class Account
 {
     public const ROLE_ADMIN = 'admin';
 
+    public const ROLE_MODERATOR = 'moderator';
+
     public const ROLE_USER = 'user';
 
     public function __construct(
@@ -38,6 +40,15 @@ final readonly class Account
     public function isAdmin(): bool
     {
         return $this->role === self::ROLE_ADMIN;
+    }
+
+    /**
+     * Moderators handle reports and moderation actions but never instance
+     * settings, accounts, pages or other administrative surfaces.
+     */
+    public function isModerator(): bool
+    {
+        return $this->role === self::ROLE_MODERATOR;
     }
 
     public function isDisabled(): bool

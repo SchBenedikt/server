@@ -15,7 +15,7 @@ import {
 	type ModerationKind,
 } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
-import { showToast } from '../../lib/state';
+import { appState, showToast } from '../../lib/state';
 
 const actions = ref<ModerationActionList | null>(null);
 const blocks = ref<DomainBlock[]>([]);
@@ -337,7 +337,7 @@ onMounted(() => {
 					</form>
 				</section>
 
-				<section class="a-admin-card">
+				<section v-if="appState.session.admin" class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
 							<h3>Import blocklist</h3>

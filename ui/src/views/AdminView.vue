@@ -7,6 +7,7 @@ import { computed } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { ADMIN_SECTIONS, adminSectionDefinition } from '../lib/admin';
+import type { AdminSection } from '../lib/admin';
 import { route } from '../lib/router';
 import { appState } from '../lib/state';
 import AdminAnnouncements from './admin/AdminAnnouncements.vue';
@@ -23,8 +24,20 @@ import AdminSettings from './admin/AdminSettings.vue';
 import AdminUsers from './admin/AdminUsers.vue';
 
 const isAdmin = computed(() => appState.session.admin === true);
+const isModerator = computed(() => appState.session.moderator === true);
+const canModerate = computed(() => isAdmin.value || isModerator.value);
 const signedIn = computed(() => appState.session.user !== null);
-const section = computed(() => route.value.name === 'admin' ? route.value.section : 'overview');
+const MODERATOR_SECTIONS = new Set(['reports', 'moderation']);
+const section = computed<AdminSection>(() => {
+	const requested = route.value.name === 'admin' ? route.value.section : 'overview';
+	if (!isAdmin.value && !MODERATOR_SECTIONS.has(requested)) {
+		return 'moderation';
+	}
+	return requested;
+});
+const visibleSections = computed(() => (
+	isAdmin.value ? ADMIN_SECTIONS : ADMIN_SECTIONS.filter((entry) => MODERATOR_SECTIONS.has(entry.id))
+));
 const current = computed(() => adminSectionDefinition(section.value));
 
 const sectionView = computed(() => {
@@ -70,6 +83,10 @@ const sectionView = computed(() => {
 					<AppIcon name="shield" :size="15" />
 					Administrator
 				</span>
+				<span v-else-if="isModerator" class="a-admin-role">
+					<AppIcon name="shield" :size="15" />
+					Moderator
+				</span>
 			</template>
 		</PageHeader>
 
@@ -82,7 +99,7 @@ const sectionView = computed(() => {
 			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
 		</div>
 
-		<div v-else-if="!isAdmin" class="a-error-panel">
+		<div v-else-if="!canModerate" class="a-error-panel">
 			<AppIcon name="shield" :size="22" />
 			<div>
 				<strong>No access</strong>
@@ -94,7 +111,7 @@ const sectionView = computed(() => {
 		<template v-else>
 			<nav class="a-admin-tabs" aria-label="Admin areas">
 				<a
-					v-for="entry in ADMIN_SECTIONS"
+					v-for="entry in visibleSections"
 					:key="entry.id"
 					:href="`#/admin/${entry.id}`"
 					class="a-admin-tab"
