@@ -443,6 +443,44 @@ checkout with dev dependencies installed.
 The unread-notification badge is polled by the UI every 60 seconds. It is a
 convenience, not a monitoring signal.
 
+## Verifying federation end-to-end
+
+When a remote Like, reply, follow or boost fails, work through this
+checklist before changing configuration:
+
+1. **Discovery from outside.** From a shell that is *not* the server:
+   `curl -s 'https://your.domain/.well-known/webfinger?resource=acct:alice@your.domain'`
+   must return the actor URL; `curl -sI https://your.domain/nodeinfo/2.0`
+   must answer 200. If these fail, the problem is DNS, TLS or the reverse
+   proxy — federation peers cannot even find the instance. Check that the
+   proxy forwards `Host` unchanged and does not cache `/.well-known/*` or
+   `/users/*` responses.
+2. **Local health.** `php bin/doctor.php` reports `core_version` and
+   `core_reference` (the exact Core build), `schema_version`,
+   `pending_migrations`, `worker` heartbeat and `secret_key_valid`. A
+   pending migration or invalid key breaks signing and delivery even when
+   pages load.
+3. **Queue state.** `/readyz` distinguishes liveness from a degraded
+   queue (`dead > 0` is `warn`, not `fail`). In the admin queue view, the
+   `last_error` column names the sanitized failure —
+   `remote_delivery_unreachable` means DNS/TLS/inbox reachability,
+   HTTP 4xx/5xx labels mean the remote rejected or is down, local
+   exception classes mean this instance. See "Dead queue jobs and
+   federation delivery failures" above for the retry workflow.
+4. **Full round trip in a disposable environment.**
+   `php bin/federation-smoke.php` boots two real servers with separate
+   databases, keys and blob stores and runs a signed follow → accept →
+   post → remote delivery → like → notification round trip through the
+   production code path (no mocks). It exits non-zero with the failing
+   step named; `FEDERATION SMOKE PASS` means discovery, signatures,
+   inbox, queue and worker all work on this build. Run it after Core or
+   proxy changes, not against production data.
+5. **Version match.** `php bin/doctor.php` prints `core_version` and
+   `core_reference` — the exact Core build serving requests. When
+   reporting a federation bug, include both plus the deployed UI bundle
+   (`public/ui`): behaviour differs between Core builds and a stale UI
+   bundle can hide working backend fixes.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Action |
