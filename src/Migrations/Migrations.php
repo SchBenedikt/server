@@ -99,6 +99,7 @@ final class Migrations
             new Version202611280042PostDeliveries(),
             new Version202611280043AccountDisabledReason(),
             new Version202611280044UiDensity(),
+            new Version202611280045StreamEventStatusId(),
         ];
     }
 }

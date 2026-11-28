@@ -47,11 +47,14 @@ final class PdoEventBroker implements EventBroker
                 && is_string($event->payload['notification_id'] ?? null)
                 ? $event->payload['notification_id']
                 : null;
+            $statusId = isset($event->payload['status_id']) && is_string($event->payload['status_id'])
+                ? $event->payload['status_id']
+                : null;
             $this->db->execute(
                 'INSERT INTO mastodon_stream_event'
-                . ' (event_id, event_name, audience, actor_id, payload_json, occurred_at, notification_id)'
+                . ' (event_id, event_name, audience, actor_id, payload_json, occurred_at, notification_id, status_id)'
                 . ' VALUES (:event_id, :event_name, :audience, :actor_id, :payload_json, :occurred_at,'
-                . ' :notification_id)',
+                . ' :notification_id, :status_id)',
                 [
                     'event_id' => $id,
                     'event_name' => $event->name,
@@ -60,6 +63,7 @@ final class PdoEventBroker implements EventBroker
                     'payload_json' => json_encode($event->payload, JSON_THROW_ON_ERROR),
                     'occurred_at' => $event->occurredAt,
                     'notification_id' => $notificationId,
+                    'status_id' => $statusId,
                 ],
             );
             $sequence = $this->db->fetchValue(
@@ -122,6 +126,14 @@ final class PdoEventBroker implements EventBroker
                 'user' => 'e.actor_id = :actor_user_id',
                 'user:notification' => "e.event_name = 'notification.created' AND recipient.account_id IS NOT NULL",
                 'direct' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'direct' AND recipient.account_id IS NOT NULL",
+                'hashtag' => "e.event_name IN ('status.created', 'status.updated', 'status.deleted') AND e.audience = 'public'"
+                    . ' AND e.status_id IS NOT NULL'
+                    . ' AND EXISTS (SELECT 1 FROM social_post_hashtag stream_hashtag'
+                    . ' WHERE stream_hashtag.post_id = e.status_id'
+                    . ' AND stream_hashtag.hashtag IN (' . implode(',', array_map(
+                        static fn (int $index): string => ':stream_hashtag_' . $index,
+                        array_keys($subscription->hashtags),
+                    )) . '))',
                 default => throw new InvalidArgumentException('This Mastodon stream channel is not available yet.'),
             };
         }
@@ -136,6 +148,9 @@ final class PdoEventBroker implements EventBroker
         }
         if (isset($channels['list'])) {
             $parameters['stream_list_id'] = $subscription->listId;
+        }
+        foreach ($subscription->hashtags as $index => $hashtag) {
+            $parameters['stream_hashtag_' . $index] = $hashtag;
         }
         $rows = $this->db->fetchAll(
             'SELECT DISTINCT e.sequence, e.event_id, e.event_name, e.audience, e.actor_id, e.payload_json, e.occurred_at'

@@ -119,14 +119,20 @@ final class MastodonEventBrokerTest extends TestCase
 		self::assertSame(0, (int) $server->runtime->database->fetchValue('SELECT COUNT(*) FROM mastodon_stream_event'));
 	}
 
-	public function testRejectsUnsupportedStreamChannelsInsteadOfSilentlyReturningEmpty(): void
+	public function testHashtagStreamReadsOnlyPostsCarryingTheTag(): void
 	{
 		$server = new TestServer();
+		$server->createAccount('alice');
+		$tagged = $server->runtime->app->posts->create(new CreatePost('alice', 'a #cats post'));
+		$untagged = $server->runtime->app->posts->create(new CreatePost('alice', 'plain post'));
 		$broker = $server->runtime->app->eventBroker;
 		self::assertNotNull($broker);
 
-		$this->expectException(\InvalidArgumentException::class);
-		$broker->read(new StreamSubscription('alice', ['hashtag'], hashtags: ['cats']), null, 10);
+		$events = $broker->read(new StreamSubscription('alice', ['hashtag'], hashtags: ['cats']), null, 10);
+		self::assertCount(1, $events);
+		self::assertSame('status.created', $events[0]->name);
+		self::assertSame($tagged->id, $events[0]->payload['status_id']);
+		self::assertNotSame($untagged->id, $events[0]->payload['status_id']);
 	}
 
     public function testReplayLogExpiresAfterSevenDays(): void
@@ -292,6 +298,44 @@ final class MastodonEventBrokerTest extends TestCase
         $frames = iterator_to_array($response->chunks(), false);
         self::assertCount(1, $frames);
         self::assertStringContainsString("event: delete\ndata: \"{$post->id}\"", $frames[0]);
+    }
+
+    public function testHashtagStreamingDeliversOnlyTaggedPublicStatuses(): void
+    {
+        $server = new TestServer(['mastodon_api' => true]);
+        $server->createAccount('alice');
+        $tagged = $server->runtime->app->posts->create(new CreatePost('alice', 'hello #Fixture world'));
+        $untagged = $server->runtime->app->posts->create(new CreatePost('alice', 'nothing to see'));
+        $token = $this->issueToken($server, 'alice');
+
+        $missing = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle(new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'hashtag'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        ));
+        self::assertSame(422, $missing?->status);
+
+        $request = new Request(
+            'GET',
+            '/api/mastodon/v1/streaming',
+            query: ['stream' => 'hashtag', 'tag' => '#Fixture'],
+            headers: ['Authorization' => 'Bearer ' . $token],
+            attributes: ['mastodon_oauth' => true],
+            userId: 'alice',
+            scopes: ['read:statuses'],
+        );
+        $response = (new MastodonStreamingController($server->runtime, 1, 10_000))->handle($request);
+        self::assertNotNull($response);
+        self::assertSame(200, $response->status);
+        $frames = iterator_to_array($response->chunks(), false);
+        $body = implode('', $frames);
+
+        self::assertStringContainsString((string) $tagged->id, $body);
+        self::assertStringNotContainsString((string) $untagged->id, $body);
     }
 
     public function testStreamingRendersTheCurrentStatusAfterAnEdit(): void
