@@ -167,6 +167,13 @@ export interface MfaEnrollment {
 	otpauth_uri: string;
 }
 
+export interface PushSubscriptionInfo {
+	id: string;
+	endpoint: string;
+	created_at: string;
+	last_seen_at: string;
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
@@ -269,6 +276,10 @@ export interface Api {
 	mfaBegin(): Promise<MfaEnrollment>;
 	mfaConfirm(code: string): Promise<{ recovery_codes: string[] }>;
 	mfaDisable(code: string): Promise<void>;
+	pushVapidKey(): Promise<string>;
+	pushSubscriptions(): Promise<PushSubscriptionInfo[]>;
+	subscribePush(endpoint: string, keys: { p256dh: string; auth: string }): Promise<PushSubscriptionInfo>;
+	unsubscribePush(endpoint: string): Promise<boolean>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
 		context?: string;
@@ -3224,6 +3235,55 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		async mfaDisable(code: string): Promise<void> {
 			await request<unknown>('POST', '/api/v1/host/mfa/totp/disable', undefined, { code });
+		},
+
+		async pushVapidKey(): Promise<string> {
+			const data = await request<{ key?: unknown }>('GET', '/api/v1/host/push/vapid-key');
+			if (typeof data?.key !== 'string' || data.key === '') {
+				throw new ApiError(502, 'invalid_response', 'The push key is invalid.');
+			}
+
+			return data.key;
+		},
+
+		async pushSubscriptions(): Promise<PushSubscriptionInfo[]> {
+			const data = await request<{ subscriptions?: unknown }>('GET', '/api/v1/host/push/subscriptions');
+			return Array.isArray(data?.subscriptions)
+				? data.subscriptions.filter(isRecord).map((row) => ({
+					id: typeof row.id === 'string' ? row.id : '',
+					endpoint: typeof row.endpoint === 'string' ? row.endpoint : '',
+					created_at: typeof row.created_at === 'string' ? row.created_at : '',
+					last_seen_at: typeof row.last_seen_at === 'string' ? row.last_seen_at : '',
+				})).filter((entry) => entry.id !== '' && entry.endpoint !== '')
+				: [];
+		},
+
+		async subscribePush(endpoint: string, keys: { p256dh: string; auth: string }): Promise<PushSubscriptionInfo> {
+			const data = await request<{ subscription?: unknown }>(
+				'POST',
+				'/api/v1/host/push/subscriptions',
+				undefined,
+				{ endpoint, keys },
+			);
+			const row = isRecord(data?.subscription) ? data.subscription : {};
+
+			return {
+				id: typeof row.id === 'string' ? row.id : '',
+				endpoint: typeof row.endpoint === 'string' ? row.endpoint : endpoint,
+				created_at: typeof row.created_at === 'string' ? row.created_at : '',
+				last_seen_at: typeof row.last_seen_at === 'string' ? row.last_seen_at : '',
+			};
+		},
+
+		async unsubscribePush(endpoint: string): Promise<boolean> {
+			const data = await request<{ removed?: unknown }>(
+				'DELETE',
+				'/api/v1/host/push/subscriptions',
+				undefined,
+				{ endpoint },
+			);
+
+			return data?.removed === true;
 		},
 
 		async atprotoIdentity(): Promise<AtprotoIdentityData> {

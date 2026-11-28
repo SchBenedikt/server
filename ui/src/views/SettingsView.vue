@@ -7,6 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type HostSession, type MfaEnrollment, type MfaStatus } from '../lib/api';
+import { disablePush, enablePush, pushSupport, subscribed as pushSubscribed } from '../lib/push';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
 	AccountPreferences,
@@ -68,6 +69,8 @@ const sessions = ref<HostSession[]>([]);
 const sessionsBusy = ref(false);
 const confirmRevokeOthers = ref(false);
 const mfa = ref<MfaStatus>({ enabled: false, pending: false });
+const pushState = ref<'loading' | 'unsupported' | 'denied' | 'off' | 'on'>('loading');
+const pushBusy = ref(false);
 const mfaEnrollment = ref<MfaEnrollment | null>(null);
 const mfaRecoveryCodes = ref<string[]>([]);
 const mfaCode = ref('');
@@ -143,6 +146,7 @@ async function load(): Promise<void> {
 		} catch {
 			mfa.value = { enabled: false, pending: false };
 		}
+		pushState.value = await resolvePushState();
 		try {
 			notificationPolicy.value = await getApi().notificationPolicy();
 			newAccountDays.value = notificationPolicy.value.new_account_days;
@@ -488,6 +492,43 @@ async function disableMfa(): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'A current code is required to disable.', 'error');
 	} finally {
 		mfaBusy.value = false;
+	}
+}
+
+async function resolvePushState(): Promise<'unsupported' | 'denied' | 'off' | 'on'> {
+	const support = pushSupport();
+	if (support === 'unsupported' || support === 'denied') {
+		return support;
+	}
+
+	try {
+		return (await pushSubscribed(getApi())) ? 'on' : 'off';
+	} catch {
+		return 'off';
+	}
+}
+
+async function togglePush(): Promise<void> {
+	if (pushBusy.value || pushState.value === 'unsupported' || pushState.value === 'denied' || pushState.value === 'loading') {
+		return;
+	}
+
+	pushBusy.value = true;
+	try {
+		if (pushState.value === 'on') {
+			await disablePush(getApi());
+			pushState.value = 'off';
+			showToast('Browser notifications are off for this device.', 'success');
+		} else {
+			await enablePush(getApi());
+			pushState.value = 'on';
+			showToast('Browser notifications are on for this device.', 'success');
+		}
+	} catch (caught) {
+		pushState.value = await resolvePushState();
+		showToast(caught instanceof Error ? caught.message : 'Push notifications could not be changed.', 'error');
+	} finally {
+		pushBusy.value = false;
 	}
 }
 
@@ -935,6 +976,42 @@ watch(signedIn, (value) => {
 						<AppIcon :name="mfaBusy ? 'refresh' : 'lock'" :size="15" :class="{ 'a-spin': mfaBusy }" />
 						{{ mfaBusy ? 'Starting…' : mfa.pending ? 'Resume setup' : 'Enable two-factor sign-in' }}
 					</button>
+				</template>
+			</section>
+
+			<section class="a-settings__section">
+				<h2>Browser notifications</h2>
+				<p class="a-settings__hint">
+					Get a notification on this device when someone interacts with you.
+					Notifications carry a generic message only — post text and names stay
+					inside the app.
+				</p>
+				<template v-if="pushState === 'unsupported'">
+					<p class="a-settings__hint">This browser does not support push notifications.</p>
+				</template>
+				<template v-else-if="pushState === 'denied'">
+					<p class="a-settings__hint">
+						Notifications are blocked for this site. Allow them in the browser's
+						site settings, then reload this page.
+					</p>
+				</template>
+				<template v-else>
+					<label class="a-settings__row">
+						<span>
+							<strong>{{ pushState === 'on' ? 'Enabled on this device' : 'Enable on this device' }}</strong>
+							<small v-if="pushState === 'on'">This browser receives pushes for your account.</small>
+							<small v-else>Asks for notification permission once, then subscribes this browser.</small>
+						</span>
+						<button
+							type="button"
+							class="a-btn a-btn--ghost a-btn--small"
+							:disabled="pushBusy || pushState === 'loading'"
+							@click="togglePush"
+						>
+							<AppIcon :name="pushBusy ? 'refresh' : 'bell'" :size="15" :class="{ 'a-spin': pushBusy }" />
+							{{ pushBusy ? 'Working…' : pushState === 'on' ? 'Turn off' : 'Turn on' }}
+						</button>
+					</label>
 				</template>
 			</section>
 
