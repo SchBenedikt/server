@@ -8,6 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { formatCount, handleLabel } from '../lib/format';
+import { t } from '../lib/i18n';
 import { appState } from '../lib/state';
 import type { InstancePageSummary } from '../lib/types';
 
@@ -27,10 +28,10 @@ onMounted(async () => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="About this instance"
-			subtitle="Who gathers here and how the instance connects to the fediverse."
+			:title="t('about.title')"
+			:subtitle="t('about.subtitle')"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		/>
 
 		<section class="a-about-hero">
@@ -40,26 +41,26 @@ onMounted(async () => {
 				<h2>{{ instance?.name ?? 'Aloha Social' }}</h2>
 				<p class="a-about-hero__host">@{{ host }}</p>
 				<p>
-					{{ instance?.description || 'An independent, open instance in the fediverse. Posts, images and conversations belong to the people who share them.' }}
+					{{ instance?.description || t('about.descDefault') }}
 				</p>
 			</div>
 		</section>
 
 		<dl v-if="instance" class="a-about-stats">
 			<div>
-				<dt>People</dt>
+				<dt>{{ t('about.people') }}</dt>
 				<dd>{{ formatCount(instance.stats.user_count) }}</dd>
 			</div>
 			<div>
-				<dt>Posts</dt>
+				<dt>{{ t('about.posts') }}</dt>
 				<dd>{{ formatCount(instance.stats.status_count) }}</dd>
 			</div>
 			<div>
-				<dt>Known Server</dt>
+				<dt>{{ t('about.knownServers') }}</dt>
 				<dd>{{ formatCount(instance.stats.domain_count) }}</dd>
 			</div>
 			<div>
-				<dt>API</dt>
+				<dt>{{ t('about.api') }}</dt>
 				<dd>{{ instance.api }}</dd>
 			</div>
 		</dl>
@@ -68,28 +69,24 @@ onMounted(async () => {
 			<article class="a-rail__card">
 				<h3><AppIcon name="globe" :size="18" /> Federation</h3>
 				<p>
-					{{ instance?.federation
-						? 'This instance speaks ActivityPub and can communicate with other servers in the fediverse.'
-						: 'Federation is currently disabled on this instance.' }}
+					{{ t(instance?.federation ? 'about.federationOn' : 'about.federationOff') }}
 				</p>
 				<p v-if="instance?.languages?.length" class="a-muted">
-					Languages: {{ instance.languages.join(', ') }}
+					{{ t('about.languages', { langs: instance.languages.join(', ') }) }}
 				</p>
 			</article>
 
 			<article class="a-rail__card">
-				<h3><AppIcon name="users" :size="18" /> Join in</h3>
+				<h3><AppIcon name="users" :size="18" /> {{ t('about.joinTitle') }}</h3>
 				<p>
-					{{ instance?.registrations
-						? 'New accounts can register.'
-						: 'This instance only accepts new accounts through invitations or the administration.' }}
+					{{ t(instance?.registrations ? 'about.regOpen' : 'about.regClosed') }}
 				</p>
-				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
-				<a v-else class="a-btn a-btn--ghost a-btn--small" href="#/explore">Discover people</a>
+				<a v-if="appState.session.user === null" class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('about.signIn') }}</a>
+				<a v-else class="a-btn a-btn--ghost a-btn--small" href="#/explore">{{ t('about.discover') }}</a>
 			</article>
 
 			<article class="a-rail__card">
-				<h3><AppIcon name="message" :size="18" /> Contact</h3>
+				<h3><AppIcon name="message" :size="18" /> {{ t('about.contactTitle') }}</h3>
 				<p v-if="instance?.contact_account">
 					<a :href="`#/u/${encodeURIComponent(instance.contact_account)}`">
 						{{ handleLabel(instance.contact_account) }}
@@ -99,12 +96,12 @@ onMounted(async () => {
 					<a :href="`mailto:${instance.email}`">{{ instance.email }}</a>
 				</p>
 				<p v-if="!instance?.contact_account && !instance?.email" class="a-muted">
-					The administration has not published any public contact details yet.
+					{{ t('about.noContact') }}
 				</p>
 			</article>
 
 			<article v-if="pages.length > 0" class="a-rail__card">
-				<h3><AppIcon name="pen" :size="18" /> Instance pages</h3>
+				<h3><AppIcon name="pen" :size="18" /> {{ t('about.pagesTitle') }}</h3>
 				<ul class="a-about-pages">
 					<li v-for="entry in pages" :key="entry.slug">
 						<a :href="`#/pages/${encodeURIComponent(entry.slug)}`">{{ entry.title }}</a>
@@ -113,27 +110,26 @@ onMounted(async () => {
 			</article>
 
 			<article class="a-rail__card">
-				<h3><AppIcon name="info" :size="18" /> Technology</h3>
+				<h3><AppIcon name="info" :size="18" /> {{ t('about.techTitle') }}</h3>
 				<p>
-					Aloha Social {{ instance?.version ?? '' }} on an independent PHP host.
-					The source code is freely available.
+					{{ t('about.techBody', { version: instance?.version ?? '' }) }}
 				</p>
 				<div class="a-about-links">
 					<a href="https://github.com/SchBenedikt/server" target="_blank" rel="noopener noreferrer">
-						Server <AppIcon name="external" :size="13" />
+						{{ t('about.serverLink') }} <AppIcon name="external" :size="13" />
 					</a>
 					<a href="https://github.com/SchBenedikt/core" target="_blank" rel="noopener noreferrer">
-						Core <AppIcon name="external" :size="13" />
+						{{ t('about.coreLink') }} <AppIcon name="external" :size="13" />
 					</a>
 					<a href="/api/v1/instance" target="_blank" rel="noopener noreferrer">
-						API <AppIcon name="external" :size="13" />
+						{{ t('about.apiLink') }} <AppIcon name="external" :size="13" />
 					</a>
 				</div>
 			</article>
 		</section>
 
 		<p class="a-about-footnote">
-			Aloha Social is free software under AGPL-3.0-or-later. No ads, no algorithmic pressure — just a place for people.
+			{{ t('about.footnote') }}
 		</p>
 	</div>
 </template>
