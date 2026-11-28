@@ -878,7 +878,7 @@ onUnmounted(() => {
 			:title="t('profile.title')"
 			:subtitle="handleText"
 			back-href="#/"
-			:back-label="t('nav.home')"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
 				<button type="button" class="a-icon-btn" :aria-label="t('profile.shareAria')" :title="t('profile.shareTitle')" @click="share">
