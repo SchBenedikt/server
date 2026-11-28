@@ -383,6 +383,20 @@ async function loadPollState(): Promise<void> {
 
 onMounted(() => {
 	void loadPollState();
+
+	const element = rootEl.value;
+	if (element !== null && typeof IntersectionObserver === 'function') {
+		viewportObserver = new IntersectionObserver((entries) => {
+			if (entries.some((entry) => entry.isIntersecting)) {
+				viewportObserver?.disconnect();
+				viewportObserver = null;
+				requestInteractions();
+			}
+		}, { rootMargin: '200px' });
+		viewportObserver.observe(element);
+	} else {
+		requestInteractions();
+	}
 });
 
 function storageKey(): string {
@@ -405,8 +419,25 @@ watch(interactionId, (id) => {
 	if (id !== null && (id.startsWith('http://') || id.startsWith('https://'))) {
 		boosted.value = false;
 	}
-	ensureInteractions([id]);
 }, { immediate: true });
+
+// Interaction state is only fetched once the card approaches the viewport:
+// a long timeline must not fan out one batched request per off-screen card.
+const rootEl = ref<HTMLElement | null>(null);
+let viewportObserver: IntersectionObserver | null = null;
+
+function requestInteractions(): void {
+	const id = interactionId.value;
+	if (id !== null) {
+		ensureInteractions([id]);
+	}
+}
+
+watch(interactionId, () => {
+	if (viewportObserver === null) {
+		requestInteractions();
+	}
+});
 
 watch(interaction, (value) => {
 	if (value !== undefined) {
@@ -899,12 +930,14 @@ watch(menuOpen, (open) => {
 onUnmounted(() => {
 	blueskyPublicationLookup += 1;
 	activityPubDeliveryLookup += 1;
+	viewportObserver?.disconnect();
 	document.removeEventListener('click', onDocumentClick);
 });
 </script>
 
 <template>
 	<article
+		ref="rootEl"
 		class="a-post"
 		:class="{ 'a-post--detail': detail, 'a-post--boost': post.kind === 'boost' }"
 		:aria-label="`Post by ${handle}`"
