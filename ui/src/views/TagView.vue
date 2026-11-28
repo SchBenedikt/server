@@ -10,6 +10,7 @@ import PostCard from '../components/PostCard.vue';
 import TimelineFeed from '../components/TimelineFeed.vue';
 import { getApi } from '../lib/api';
 import { route } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { TimelineItem } from '../lib/types';
 
@@ -85,7 +86,7 @@ async function loadRemote(more = false): Promise<void> {
 		remoteLoaded.value = true;
 	} catch (error) {
 		if (current === remoteGeneration) {
-			remoteError.value = error instanceof Error ? error.message : 'Federated posts could not be loaded.';
+			remoteError.value = error instanceof Error ? error.message : t('tag.loadFailed');
 		}
 	} finally {
 		if (current === remoteGeneration) {
@@ -123,14 +124,14 @@ async function toggleFollow(): Promise<void> {
 		if (following.value) {
 			await getApi().unfollowTag(tag.value);
 			following.value = false;
-			showToast(`#${tag.value} is no longer followed.`, 'success');
+			showToast(t('tag.unfollowed', { tag: tag.value }), 'success');
 		} else {
 			await getApi().followTag(tag.value);
 			following.value = true;
-			showToast(`You now follow #${tag.value}.`, 'success');
+			showToast(t('tag.followed', { tag: tag.value }), 'success');
 		}
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The hashtag could not be changed.', 'error');
+		showToast(error instanceof Error ? error.message : t('tag.followFailed'), 'error');
 	} finally {
 		busy.value = false;
 	}
@@ -141,9 +142,9 @@ async function toggleFollow(): Promise<void> {
 	<div class="a-page">
 		<PageHeader
 			:title="`#${tag}`"
-			subtitle="Public posts with this hashtag, newest first."
+			:subtitle="t('tag.subtitle')"
 			back-href="#/explore"
-			back-label="Back to Explore"
+			:back-label="t('tag.backExplore')"
 		>
 			<template #actions>
 				<button
@@ -156,9 +157,9 @@ async function toggleFollow(): Promise<void> {
 					@click="toggleFollow"
 				>
 					<AppIcon :name="following ? 'check' : 'plus'" :size="15" />
-					{{ following ? 'Following' : 'Follow hashtag' }}
+					{{ following ? t('tag.following') : t('tag.follow') }}
 				</button>
-				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Sign in to follow</a>
+				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('tag.signInFollow') }}</a>
 			</template>
 		</PageHeader>
 
@@ -166,8 +167,8 @@ async function toggleFollow(): Promise<void> {
 			kind="tag"
 			:tag="tag"
 			empty-icon="hash"
-			:empty-title="`Nothing under #${tag} yet`"
-			:empty-text="tag !== '' ? `Be the first person to use #${tag}.` : 'This hashtag is empty.'"
+			:empty-title="t('tag.emptyTitle', { tag })"
+			:empty-text="tag !== '' ? t('tag.emptyText', { tag }) : t('tag.emptyFallback')"
 		/>
 
 		<section
@@ -177,15 +178,15 @@ async function toggleFollow(): Promise<void> {
 			<header class="a-section-head">
 				<h2>
 					<AppIcon name="globe" :size="16" />
-					From the fediverse
+					{{ t('tag.fediverse') }}
 				</h2>
-				<span>Public posts other servers delivered to this instance</span>
+				<span>{{ t('tag.fediverseHint') }}</span>
 			</header>
 
 			<p v-if="remoteError !== ''" class="a-feed__inline-error" role="alert">
 				{{ remoteError }}
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadRemote()">
-					Try again
+					{{ t('common.tryAgain') }}
 				</button>
 			</p>
 
@@ -196,7 +197,7 @@ async function toggleFollow(): Promise<void> {
 			</ol>
 
 			<p v-else-if="remoteLoaded && !remoteLoading && remoteError === ''" class="a-muted">
-				No federated posts under #{{ tag }} have reached this instance yet.
+				{{ t('tag.fediverseEmpty', { tag }) }}
 			</p>
 
 			<button
@@ -207,9 +208,9 @@ async function toggleFollow(): Promise<void> {
 				@click="loadRemote(true)"
 			>
 				<AppIcon v-if="remoteLoading" name="refresh" :size="16" class="a-spin" />
-				{{ remoteLoading ? 'Loading…' : 'More federated posts' }}
+				{{ remoteLoading ? t('common.loading') : t('tag.moreFederated') }}
 			</button>
-			<p v-else-if="remoteLoading" class="a-muted">Loading federated posts…</p>
+			<p v-else-if="remoteLoading" class="a-muted">{{ t('tag.loadingFederated') }}</p>
 		</section>
 	</div>
 </template>

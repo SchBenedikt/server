@@ -15,6 +15,7 @@ import { getApi, loadErrorMessage } from '../lib/api';
 import { handleLabel } from '../lib/format';
 import { onPostCreated, onPostDeleted } from '../lib/events';
 import { navigate, route } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, openDirectMessage } from '../lib/state';
 import type { Account, TimelineItem } from '../lib/types';
 
@@ -44,7 +45,7 @@ const hasMore = ref(false);
 const cursor = ref<{ before: string; beforeId: string } | null>(null);
 let generation = 0;
 
-const title = computed(() => person.value?.display_name || (counterpart.value !== '' ? handleLabel(counterpart.value) : 'Conversation'));
+const title = computed(() => person.value?.display_name || (counterpart.value !== '' ? handleLabel(counterpart.value) : t('conversation.fallback')));
 
 onMounted(() => {
 	void load();
@@ -112,7 +113,7 @@ async function load(): Promise<void> {
 		}
 	} catch (caught) {
 		if (current === generation) {
-			error.value = loadErrorMessage(caught, 'The conversation could not be loaded.');
+			error.value = loadErrorMessage(caught, t('conversation.loadFailed'));
 		}
 	} finally {
 		if (current === generation) {
@@ -141,7 +142,7 @@ async function loadMore(): Promise<void> {
 		))].sort(compareOldToNew);
 	} catch (caught) {
 		if (current === generation) {
-			error.value = loadErrorMessage(caught, 'Older messages could not be loaded.');
+			error.value = loadErrorMessage(caught, t('conversation.olderFailed'));
 		}
 	} finally {
 		if (current === generation) {
@@ -229,19 +230,19 @@ void stopDeleted;
 	<div class="a-page">
 		<PageHeader
 			:title="title"
-			:subtitle="counterpart !== '' ? handleLabel(counterpart) : 'Private Conversation'"
+			:subtitle="counterpart !== '' ? handleLabel(counterpart) : t('conversation.privateSubtitle')"
 			back-href="#/messages"
-			back-label="All messages"
+			:back-label="t('conversation.back')"
 		>
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
 					<AppIcon name="pen" :size="15" />
-					Write
+					{{ t('conversation.write') }}
 				</button>
 			</template>
 		</PageHeader>
 
-		<p v-if="!signedIn" class="a-muted">Sign in to see this conversation.</p>
+		<p v-if="!signedIn" class="a-muted">{{ t('conversation.signIn') }}</p>
 
 		<template v-else>
 			<div v-if="person" class="a-dm-person">
@@ -251,14 +252,14 @@ void stopDeleted;
 					<span>{{ person.handle }}</span>
 				</div>
 				<a :href="`#/u/${encodeURIComponent(person.handle || person.id)}`" class="a-btn a-btn--ghost a-btn--small">
-					Profile
+					{{ t('nav.profile') }}
 				</a>
 			</div>
 
 			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">
 				{{ error }}
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">
-					Try again
+					{{ t('common.tryAgain') }}
 				</button>
 			</p>
 
@@ -277,19 +278,19 @@ void stopDeleted;
 			<EmptyState
 				v-else-if="!loading"
 				icon="message"
-				title="No messages yet"
-				text="Write the first private message. Only you and this account can see it."
+				:title="t('conversation.emptyTitle')"
+				:text="t('conversation.emptyText')"
 			>
-				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Write message</button>
+				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">{{ t('conversation.writeMessage') }}</button>
 			</EmptyState>
 
 			<button v-if="hasMore" type="button" class="a-btn a-btn--ghost" :disabled="loadingMore" @click="loadMore">
-				{{ loadingMore ? 'Loading…' : 'Load older messages' }}
+				{{ loadingMore ? t('common.loading') : t('conversation.loadOlder') }}
 			</button>
 
 			<button v-if="items.length > 0" type="button" class="a-inline-reply" @click="compose">
 				<AppIcon name="pen" :size="18" />
-				<span>Write a message to {{ title }}…</span>
+				<span>{{ t('conversation.writeTo', { name: title }) }}</span>
 			</button>
 		</template>
 	</div>
