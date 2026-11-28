@@ -89,5 +89,8 @@ jobs:
           npm ci --prefix ui
           npm run build --prefix ui
 
+      - name: Frontend tests
+        run: npm test --prefix ui
+
       - name: Committed UI bundle is current
         run: git diff --exit-code -- public/ui

@@ -126,7 +126,21 @@ Accounts, sessions and CSRF are host-owned per
   presence of `/ui/app.js` and `/ui/app.css`, markers in the committed bundle,
   and the dashboard link to `/app`. `tests/HostExtensionTest.php` covers the
   likes API, viewer-specific interaction batch, post hydration and profile
-  update, including authentication and CSRF rejection.
+  update, including authentication and CSRF rejection. The UI's own Vitest
+  suite (`cd ui && npm test`) covers the API client, formatting, account
+  helpers and connectivity handling, and runs in CI.
+- **Browser state and account isolation.** The service worker
+  (`public/sw.js`) is push-only and caches nothing; the app shell is
+  versioned by the PHP template. Composer drafts are stored per handle
+  (`aloha.draft.v1.<handle>`), announcement dismissals per handle once
+  signed in (server-side preferences are authoritative), and per-post
+  boost flags in `sessionStorage`. Logout is a full page redirect, so all
+  in-memory feed state is discarded; nothing private is kept in a
+  cross-account browser key. Every dynamic response carries
+  `Cache-Control: no-store` plus `CDN-Cache-Control`/`Cloudflare-CDN-Cache-Control:
+  no-store`, so a shared proxy cannot serve one account's private payload
+  to another. The tradeoff is deliberate: the UI never serves cached API
+  data offline beyond what the current page already rendered.
 
 The operational summary is also in [the README](../README.md#shared-ui).
 
