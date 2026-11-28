@@ -61,7 +61,7 @@ function open(index: number): void {
 						? { alt: attachment.alt_text }
 						: { n: index + 1, total: attachments.length })"
 				/>
-				<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
+				<span v-if="attachment.alt_text" class="a-media__alt" :title="t('mediagrid.hasAlt')">ALT</span>
 			</div>
 
 			<div
@@ -100,7 +100,7 @@ function open(index: number): void {
 					<AppIcon name="image" :size="28" />
 					<span>{{ t('mediagrid.unavailable') }}</span>
 				</span>
-				<span v-if="attachment.alt_text" class="a-media__alt">ALT</span>
+				<span v-if="attachment.alt_text" class="a-media__alt" :title="t('mediagrid.hasAlt')">ALT</span>
 			</button>
 		</template>
 	</div>
