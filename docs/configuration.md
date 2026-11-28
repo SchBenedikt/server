@@ -310,6 +310,13 @@ password; the client receives Bearer tokens and can use the same
 as any other PDS. Public posts are also written into the native repository by
 the background worker, so the local post and its ATProto record stay in sync.
 
+Members can review and revoke those client sessions under **Settings → AT
+Protocol → Connected apps**. The list shows each live session's creation and
+refresh-token expiry times plus a short public identifier derived from the
+stored token hash — token material itself is never displayed. Revoking deletes
+the session row, so the client's access and refresh tokens stop working
+immediately; only the owning account can list or revoke its own sessions.
+
 After creating an identity and publishing a public post, verify discovery from
 outside the instance with:
 

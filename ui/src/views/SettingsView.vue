@@ -6,7 +6,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type AtprotoSessionEntry, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus } from '../lib/api';
+import { relativeTime } from '../lib/format';
 import { disablePush, enablePush, pushSupport, subscribed as pushSubscribed } from '../lib/push';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
@@ -43,6 +44,8 @@ const blueskyBusy = ref(false);
 const atproto = ref<AtprotoIdentityData | null>(null);
 const atprotoHandle = ref('');
 const atprotoBusy = ref(false);
+const atprotoSessions = ref<AtprotoSessionEntry[]>([]);
+const atprotoSessionBusy = ref('');
 
 async function copyHandleVerification(field: 'dns_name' | 'dns_value'): Promise<void> {
 	const verification = atproto.value?.identity?.verification ?? null;
@@ -139,8 +142,12 @@ async function load(): Promise<void> {
 		}
 		try {
 			atproto.value = await getApi().atprotoIdentity();
+			atprotoSessions.value = atproto.value.identity === null
+				? []
+				: await getApi().atprotoSessions();
 		} catch {
 			atproto.value = null;
+			atprotoSessions.value = [];
 		}
 		try {
 			accountMove.value = await getApi().accountMove();
@@ -243,6 +250,27 @@ async function rotateIdentityKeys(): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'The keys could not be rotated.', 'error');
 	} finally {
 		atprotoBusy.value = false;
+	}
+}
+
+async function revokeAtprotoSession(id: string): Promise<void> {
+	if (atprotoSessionBusy.value !== '') {
+		return;
+	}
+
+	atprotoSessionBusy.value = id;
+	try {
+		const removed = await getApi().revokeAtprotoSession(id);
+		if (removed) {
+			atprotoSessions.value = atprotoSessions.value.filter((session) => session.id !== id);
+			showToast('The connected app was signed out.', 'success');
+		} else {
+			showToast('That session was already gone.', 'error');
+		}
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The session could not be revoked.', 'error');
+	} finally {
+		atprotoSessionBusy.value = '';
 	}
 }
 
@@ -960,6 +988,29 @@ watch(signedIn, (value) => {
 						<AppIcon name="refresh" :size="15" :class="{ 'a-spin': atprotoBusy }" />
 						Rotate signing keys
 					</button>
+
+					<div v-if="atprotoSessions.length > 0" class="a-settings__sessions">
+						<strong>Connected apps</strong>
+						<p class="a-settings__hint">
+							Apps and clients signed in to your repository. Revoking signs the app out.
+						</p>
+						<ul class="a-settings__session-list">
+							<li v-for="session in atprotoSessions" :key="session.id" class="a-settings__session">
+								<span class="a-settings__session-id"><code>{{ session.id }}…</code></span>
+								<span class="a-settings__hint">
+									Signed in {{ relativeTime(session.created_at) }} · refresh token valid until {{ relativeTime(session.refresh_expires_at) }}
+								</span>
+								<button
+									type="button"
+									class="a-btn a-btn--ghost a-btn--small"
+									:disabled="atprotoSessionBusy !== ''"
+									@click="revokeAtprotoSession(session.id)"
+								>
+									{{ atprotoSessionBusy === session.id ? 'Revoking…' : 'Revoke' }}
+								</button>
+							</li>
+						</ul>
+					</div>
 				</div>
 
 				<form v-else-if="atproto.enabled" class="a-settings__bluesky" @submit.prevent="createIdentity">

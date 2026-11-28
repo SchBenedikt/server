@@ -6606,3 +6606,38 @@ dialog.a-modal::backdrop {
 	font-size: 12px;
 	line-height: 1.45;
 }
+
+.a-settings__sessions {
+	display: grid;
+	gap: 8px;
+	width: 100%;
+	padding-top: 10px;
+	border-top: 1px solid var(--a-border);
+}
+
+.a-settings__session-list {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.a-settings__session {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 8px 10px;
+	border: 1px solid var(--a-border);
+	border-radius: 10px;
+	background: var(--a-surface);
+}
+
+.a-settings__session-id code {
+	font-size: 12px;
+}
+
+.a-settings__session .a-btn {
+	margin-left: auto;
+}
