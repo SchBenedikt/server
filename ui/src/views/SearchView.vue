@@ -12,6 +12,7 @@ import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { ApiError, getApi, loadErrorMessage } from '../lib/api';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { Account, HashtagResult, SearchResults, TimelineItem } from '../lib/types';
 
@@ -54,12 +55,12 @@ async function search(): Promise<void> {
 			results.value = await getApi().search(value, 30);
 		} catch (caught) {
 			results.value = { accounts: [], statuses: [], hashtags: [] };
-			error.value = loadErrorMessage(caught, 'The local search failed.');
+			error.value = loadErrorMessage(caught, t('search.localFailed'));
 		}
 	} else {
 		results.value = { accounts: [], statuses: [], hashtags: [] };
 		if (!looksRemote(value)) {
-			error.value = 'Sign in to search posts, local accounts and hashtags.';
+			error.value = t('search.guestNotice');
 		}
 	}
 
@@ -75,17 +76,17 @@ async function search(): Promise<void> {
 	} catch (caught) {
 		remote.value = null;
 		if (caught instanceof ApiError && (caught.status === 404 || caught.code === 'bluesky_handle_unknown')) {
-			remoteError.value = 'No remote profile matched this exact address. Local results are still shown.';
+			remoteError.value = t('search.errNotFound');
 		} else if (caught instanceof ApiError && caught.status === 401) {
-			remoteError.value = 'Sign in to resolve remote profiles on this instance.';
+			remoteError.value = t('search.errSignin');
 		} else if (caught instanceof ApiError && caught.status === 403) {
-			remoteError.value = 'Remote profile lookup is not available for this account.';
+			remoteError.value = t('search.errForbidden');
 		} else if (caught instanceof ApiError && caught.status === 429) {
-			remoteError.value = 'Profile lookups are temporarily rate limited. Wait a moment and retry.';
+			remoteError.value = t('search.errRateLimit');
 		} else if (caught instanceof ApiError && caught.status >= 500) {
-			remoteError.value = 'The remote server could not be reached right now. Local results are still shown.';
+			remoteError.value = t('search.errRemoteDown');
 		} else if (!(caught instanceof ApiError)) {
-			remoteError.value = 'A network error interrupted the remote lookup. Local results are still shown.';
+			remoteError.value = t('search.errNetwork');
 		} else {
 			remoteError.value = caught.message;
 		}
@@ -118,33 +119,33 @@ function hashtagHref(tag: HashtagResult): string {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Search" subtitle="Accounts, posts and hashtags on this instance." />
+		<PageHeader :title="t('nav.search')" :subtitle="t('search.subtitle')" />
 
 		<form class="a-search" role="search" @submit.prevent="search">
 			<AppIcon name="search" :size="19" />
 			<input
 				v-model="query"
 				type="search"
-				placeholder="Search for @account, #hashtag or a word…"
-				aria-label="Search term"
+				:placeholder="t('search.placeholder')"
+				:aria-label="t('search.aria')"
 				autocomplete="off"
 			/>
 			<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="searching || query.trim() === ''">
 				<AppIcon v-if="searching" name="refresh" :size="15" class="a-spin" />
-				{{ searching ? 'Searching…' : 'Search' }}
+				{{ searching ? t('common.searching') : t('common.search') }}
 			</button>
 		</form>
 
 		<p v-if="!signedIn" class="a-search-hint">
 			<AppIcon name="lock" :size="14" />
-			<span>Sign in to search local posts, accounts and hashtags. Exact remote profile lookup is public.</span>
-			<a href="/login">Sign in</a>
+			<span>{{ t('search.signInHint') }}</span>
+			<a href="/login">{{ t('common.signIn') }}</a>
 		</p>
 
 		<p v-if="error" class="a-form-error" role="alert">
 			{{ error }}
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="search">
-				Try again
+				{{ t('common.tryAgain') }}
 			</button>
 		</p>
 
@@ -154,13 +155,13 @@ function hashtagHref(tag: HashtagResult): string {
 			<EmptyState
 				v-if="!hasResults && error === '' && remoteError === ''"
 				icon="search"
-				title="No results"
-				text="Try another term, an account with @ or a hashtag with #."
+				:title="t('search.noResults')"
+				:text="t('search.noResultsText')"
 			/>
 
 			<section v-if="remote" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>Remote profile</h2>
+					<h2>{{ t('search.remoteProfile') }}</h2>
 					<span>{{ remote.network === 'bluesky' ? 'Bluesky' : 'ActivityPub' }}</span>
 				</div>
 				<AccountRow :account="remote" :href="`#/u/${encodeURIComponent(remote.handle || remote.id)}`" />
@@ -169,13 +170,13 @@ function hashtagHref(tag: HashtagResult): string {
 
 			<section v-if="results.accounts.length > 0" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>On this instance</h2>
+					<h2>{{ t('search.onInstance') }}</h2>
 					<span>{{ results.accounts.length }}</span>
 				</div>
 				<div class="a-people">
 					<AccountRow v-for="account in results.accounts" :key="account.id" :account="account">
 						<template #actions>
-							<FollowButton :account="account" compact @changed="showToast($event ? `You now follow @${account.handle}.` : `You no longer follow @${account.handle}.`, 'success')" />
+							<FollowButton :account="account" compact @changed="showToast($event ? t('search.followed', { handle: account.handle }) : t('search.unfollowed', { handle: account.handle }), 'success')" />
 						</template>
 					</AccountRow>
 				</div>
@@ -183,7 +184,7 @@ function hashtagHref(tag: HashtagResult): string {
 
 			<section v-if="results.hashtags.length > 0" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>hashtags</h2>
+					<h2>{{ t('search.hashtags') }}</h2>
 					<span>{{ results.hashtags.length }}</span>
 				</div>
 				<div class="a-tag-cloud">
@@ -195,7 +196,7 @@ function hashtagHref(tag: HashtagResult): string {
 
 			<section v-if="results.statuses.length > 0" class="a-explore-section">
 				<div class="a-section-head">
-					<h2>Posts on this instance</h2>
+					<h2>{{ t('search.postsOnInstance') }}</h2>
 					<span>{{ results.statuses.length }}</span>
 				</div>
 				<div class="a-feed__list">
@@ -207,8 +208,8 @@ function hashtagHref(tag: HashtagResult): string {
 		<EmptyState
 			v-else
 			icon="search"
-			title="Find people and conversations"
-			text="Search finds local accounts, public posts and hashtags. An @account@server is also resolved in the fediverse."
+			:title="t('search.emptyTitle')"
+			:text="t('search.emptyText')"
 		/>
 	</div>
 </template>

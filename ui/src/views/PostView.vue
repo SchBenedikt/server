@@ -15,6 +15,7 @@ import { getApi, loadErrorMessage } from '../lib/api';
 import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { handleLabel, isRemoteId, postRouteId, truncate } from '../lib/format';
 import { navigate, route } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, openComposer } from '../lib/state';
 import type { Account, TimelineItem } from '../lib/types';
 
@@ -55,13 +56,13 @@ const remoteHostName = computed(() => {
 	}
 });
 const remoteNetworkLabel = computed(() => (
-	remoteNetwork.value === 'bluesky' ? 'Bluesky · AT Protocol' : `fediverse · ${remoteHostName.value}`
+	remoteNetwork.value === 'bluesky' ? 'Bluesky · AT Protocol' : t('post.networkFediverse', { host: remoteHostName.value })
 ));
 const replyTotal = computed(() => post.value?.replies_count ?? replies.value.length);
 const emptyRepliesText = computed(() => (
 	isRemoteTarget.value
-		? 'This post has no public replies yet.'
-		: 'Start the conversation — your reply appears right here.'
+		? t('post.remoteRepliesEmpty')
+		: t('post.repliesEmpty')
 ));
 
 // --- Remote engagement lists ---------------------------------------------
@@ -125,7 +126,7 @@ async function loadEngagement(tab: 'likes' | 'reposts', reset: boolean): Promise
 		engagementCursor.value = { ...engagementCursor.value, [tab]: data.cursor };
 		engagementLoaded.value = { ...engagementLoaded.value, [tab]: true };
 	} catch (error) {
-		engagementError.value = loadErrorMessage(error, 'The list could not be loaded.');
+		engagementError.value = loadErrorMessage(error, t('post.listLoadFailed'));
 	} finally {
 		engagementLoading.value = false;
 	}
@@ -165,7 +166,7 @@ async function load(): Promise<void> {
 	remoteProfile.value = null;
 
 	if (id.value === '') {
-		error.value = 'This post does not exist.';
+		error.value = t('post.notExist');
 		return;
 	}
 
@@ -204,7 +205,7 @@ async function load(): Promise<void> {
 		await loadReplies(current);
 	} catch (caught) {
 		if (current === generation) {
-			error.value = loadErrorMessage(caught, 'The post could not be loaded.');
+			error.value = loadErrorMessage(caught, t('post.loadFailed'));
 		}
 	} finally {
 		if (current === generation) {
@@ -237,7 +238,7 @@ async function loadRemote(current: number): Promise<void> {
 		await loadReplies(current, true);
 	} catch (caught) {
 		if (current === generation) {
-			error.value = loadErrorMessage(caught, 'The remote post could not be loaded.');
+			error.value = loadErrorMessage(caught, t('post.remoteLoadFailed'));
 		}
 	} finally {
 		if (current === generation) {
@@ -422,18 +423,18 @@ onUnmounted(() => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Post"
-			:subtitle="post !== null ? `by ${itemHandle(post)}` : 'Conversation'"
+			:title="t('post.title')"
+			:subtitle="post !== null ? t('post.byAuthor', { handle: itemHandle(post) }) : t('post.conversation')"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		/>
 
 		<TimelineSkeleton v-if="loading" :count="2" />
 
 		<div v-else-if="error !== '' || post === null" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Post not found</strong><p>{{ error || 'This post is no longer available.' }}</p></div>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/">Back to home</a>
+			<div><strong>{{ t('post.notFound') }}</strong><p>{{ error || t('post.unavailable') }}</p></div>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/">{{ t('common.backHome') }}</a>
 		</div>
 
 		<template v-else>
@@ -462,11 +463,11 @@ onUnmounted(() => {
 						{{ remoteNetworkLabel }}
 					</p>
 					<p v-if="remoteProfile" class="a-remote-detail__author">
-						Profile by <strong>{{ remoteProfile.display_name }}</strong>
+						{{ t('post.profileBy') }} <strong>{{ remoteProfile.display_name }}</strong>
 						<span>{{ remoteProfile.handle }}</span>
 					</p>
 					<p class="a-remote-detail__hint">
-						This post is read live from the original server. Replies and reactions stay there.
+						{{ t('post.remoteHint') }}
 					</p>
 				</div>
 				<a
@@ -477,17 +478,17 @@ onUnmounted(() => {
 					rel="noopener noreferrer"
 				>
 					<AppIcon name="external" :size="15" />
-					Open original
+					{{ t('post.openOriginal') }}
 				</a>
 			</section>
 
 			<section v-if="isRemoteTarget && remoteEngagementTarget !== ''" class="a-engagement">
 				<header class="a-section-head">
-					<h2>Reactions</h2>
-					<span>public on {{ remoteHostName }}</span>
+					<h2>{{ t('post.reactions') }}</h2>
+					<span>{{ t('post.publicOn', { host: remoteHostName }) }}</span>
 				</header>
 
-				<div class="a-chip-row" role="group" aria-label="Reactions">
+				<div class="a-chip-row" role="group" :aria-label="t('post.reactionsAria')">
 					<button
 						type="button"
 						class="a-tag-chip"
@@ -495,7 +496,7 @@ onUnmounted(() => {
 						@click="openEngagement('likes')"
 					>
 						<AppIcon name="heart" :size="14" />
-						{{ likeTotal }} Likes
+						{{ t('post.likesCount', { count: likeTotal }) }}
 					</button>
 					<button
 						type="button"
@@ -504,7 +505,7 @@ onUnmounted(() => {
 						@click="openEngagement('reposts')"
 					>
 						<AppIcon name="repeat" :size="14" />
-						{{ boostTotal }} Boosts
+						{{ t('post.boostsCount', { count: boostTotal }) }}
 					</button>
 				</div>
 
@@ -529,7 +530,7 @@ onUnmounted(() => {
 					</ul>
 
 					<p v-else-if="!engagementLoading" class="a-muted">
-						{{ engagementTab === 'likes' ? 'No public likes yet.' : 'No public boosts yet.' }}
+						{{ engagementTab === 'likes' ? t('post.noLikes') : t('post.noBoosts') }}
 					</p>
 
 					<button
@@ -539,20 +540,20 @@ onUnmounted(() => {
 						:disabled="engagementLoading"
 						@click="loadEngagement(engagementTab, false)"
 					>
-						{{ engagementLoading ? 'Loading…' : 'Load more' }}
+						{{ engagementLoading ? t('common.loading') : t('common.more') }}
 					</button>
 				</template>
 			</section>
 
 			<section class="a-replies">
 				<header class="a-section-head">
-					<h2>Replies</h2>
-					<span>{{ replyTotal }} {{ replyTotal === 1 ? 'Reply' : 'Replies' }}</span>
+					<h2>{{ t('post.replies') }}</h2>
+					<span>{{ replyTotal }} {{ replyTotal === 1 ? t('post.reply') : t('post.replies') }}</span>
 				</header>
 
 				<button v-if="canReplyHere" type="button" class="a-inline-reply" @click="reply">
 					<AppIcon name="reply" :size="18" />
-					<span>Write a reply to {{ itemHandle(post) }}…</span>
+					<span>{{ t('post.writeReply', { handle: itemHandle(post) }) }}</span>
 				</button>
 				<a
 					v-else-if="externalUrl !== ''"
@@ -562,7 +563,7 @@ onUnmounted(() => {
 					rel="noopener noreferrer"
 				>
 					<AppIcon name="reply" :size="18" />
-					<span>Reply on {{ remoteHostName }}…</span>
+					<span>{{ t('post.replyOn', { host: remoteHostName }) }}</span>
 				</a>
 
 				<TimelineSkeleton v-if="repliesLoading && replies.length === 0" :count="1" />
@@ -570,7 +571,7 @@ onUnmounted(() => {
 				<EmptyState
 					v-else-if="replies.length === 0"
 					icon="message"
-					title="No replies yet"
+					:title="t('post.noRepliesTitle')"
 					:text="emptyRepliesText"
 				/>
 
