@@ -11,6 +11,7 @@ declare(strict_types=1);
  * @var array<string, string> $errors
  * @var array<string, string> $values
  * @var bool $approval
+ * @var bool $verify
  */
 
 $error = $errors['_form'] ?? null;
@@ -21,7 +22,9 @@ $error = $errors['_form'] ?? null;
     <p class="muted">
         <?= $approval
             ? 'New accounts are reviewed by an administrator before they can sign in.'
-            : 'Your account is active immediately.' ?>
+            : ($verify
+                ? 'We will email you a verification link to activate your account.'
+                : 'Your account is active immediately.') ?>
     </p>
 
     <?php if ($error !== null): ?>

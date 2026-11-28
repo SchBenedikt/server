@@ -201,6 +201,8 @@ final class FrontController
             $notice = null;
             if ($request->queryParam('registered') === '1') {
                 $notice = 'Your account is ready. You can sign in now.';
+            } elseif ($request->queryParam('verify') === '1') {
+                $notice = 'Check your email for a verification link to activate your account.';
             } elseif ($request->queryParam('pending') === '1') {
                 $notice = 'Your account was created. An administrator still has to approve it.';
             } elseif ($request->queryParam('reset') === '1') {
@@ -255,6 +257,14 @@ final class FrontController
 
         if ($request->method === 'POST' && $request->path === '/reset-password') {
             return $this->resetPassword($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/verify-email') {
+            return $this->verifyEmail($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/verify-email/resend') {
+            return $this->resendVerification($request, $session, $rawCookie, $userAgent, $ip);
         }
 
         if ($request->method === 'GET' && $request->path === '/app') {
@@ -1879,6 +1889,7 @@ final class FrontController
             'errors' => $errors,
             'values' => $values,
             'approval' => $this->runtime->registration->approvalRequired(),
+            'verify' => $this->runtime->registration->emailVerificationRequired(),
         ], 'Create account', $status, $issue);
     }
 
@@ -1922,6 +1933,10 @@ final class FrontController
             }
 
             return $this->signupForm($session, $rawCookie, $userAgent, $ip, $errors, $values, $exception->status);
+        }
+
+        if ($this->runtime->registration->emailVerificationRequired()) {
+            return $this->redirect('/login?verify=1');
         }
 
         return $this->redirect($this->runtime->registration->approvalRequired()
@@ -2129,6 +2144,77 @@ final class FrontController
             'error' => $error,
             'value' => $value,
         ], 'Reset password', $error === null ? 200 : 503, $issue);
+    }
+
+    /**
+     * GET /verify-email?token=… consumes the mailed link. The token itself is
+     * the capability, so no form round-trip or session is required.
+     */
+    private function verifyEmail(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        $token = (string) $request->queryParam('token', '');
+        $ok = $this->runtime->emailVerification->verify(
+            $token,
+            !$this->runtime->registration->approvalRequired(),
+        );
+
+        // A failed link offers a resend form, which needs a session CSRF.
+        $params = ['instance' => $this->runtime->config->instanceName, 'ok' => $ok];
+        $issue = null;
+        if (!$ok) {
+            [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+            $params['csrf'] = $session->session->csrfToken;
+        }
+
+        return $this->page('verify-email', $params, $ok ? 'Email verified' : 'Verification failed', $ok ? 200 : 400, $issue);
+    }
+
+    /**
+     * POST /verify-email/resend issues a fresh link for an unverified
+     * account. The response is identical for unknown and verified
+     * identifiers so the endpoint cannot enumerate accounts.
+     */
+    private function resendVerification(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        [$session, $issue] = $this->anonymousSession($session, $rawCookie, $userAgent, $ip);
+        $params = $this->formParams($request);
+
+        if (!$this->runtime->sessions->csrfMatches($session, $this->csrfToken($request))) {
+            return $this->page('verify-email', [
+                'instance' => $this->runtime->config->instanceName,
+                'ok' => false,
+                'error' => 'Your session has expired. Please try again.',
+            ], 'Verification failed', 403, $issue);
+        }
+
+        if ($ip !== null && $this->runtime->rateLimiter->attempt('host.email_verify_resend', $ip, 5, 900) !== null) {
+            return $this->page('verify-email', [
+                'instance' => $this->runtime->config->instanceName,
+                'ok' => false,
+                'error' => 'Too many requests. Please try again later.',
+            ], 'Verification failed', 429, $issue);
+        }
+
+        if ($this->runtime->registration->emailVerificationRequired()) {
+            $this->runtime->emailVerification->resend((string) ($params['identifier'] ?? ''));
+        }
+
+        return $this->page('verify-email', [
+            'instance' => $this->runtime->config->instanceName,
+            'ok' => true,
+            'sent' => true,
+            'csrf' => $session->session->csrfToken,
+        ], 'Verification email', 200, $issue);
     }
 
     private function resetPasswordForm(

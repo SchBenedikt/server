@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Accounts;
 
+use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Config\HostConfig;
@@ -27,6 +28,8 @@ final class RegistrationService
         private readonly HostConfig $config,
         private readonly AccountRepository $accounts,
         private readonly PasswordHasher $hasher,
+        private readonly ?Connection $db = null,
+        private readonly ?EmailVerificationService $verification = null,
     ) {
     }
 
@@ -38,6 +41,11 @@ final class RegistrationService
     public function approvalRequired(): bool
     {
         return $this->config->registrationApproval;
+    }
+
+    public function emailVerificationRequired(): bool
+    {
+        return $this->verification !== null && $this->config->registrationEmailVerification;
     }
 
     /**
@@ -79,18 +87,29 @@ final class RegistrationService
             throw new RegistrationException('Handle or email address is already in use.');
         }
 
-        try {
-            // Approval-required accounts are inserted disabled. There is no
-            // active intermediate state for a concurrent login to observe and
-            // no second write that could fail open.
-            return $this->accounts->create(
+        $verify = $this->emailVerificationRequired();
+        $create = function () use ($handle, $email, $password, $displayName, $verify): Account {
+            // Approval-required or unverified accounts are inserted disabled.
+            // There is no active intermediate state for a concurrent login to
+            // observe and no second write that could fail open.
+            $account = $this->accounts->create(
                 $handle,
                 $email,
                 $this->hasher->hash($password),
                 Account::ROLE_USER,
                 $displayName,
-                $this->approvalRequired(),
+                $this->approvalRequired() || $verify,
             );
+
+            if ($verify) {
+                $this->verification?->issue($account);
+            }
+
+            return $account;
+        };
+
+        try {
+            return $this->db === null ? $create() : $this->db->transaction($create);
         } catch (PDOException $exception) {
             if ($exception->getCode() === '23000') {
                 throw new RegistrationException('Handle or email address is already in use.', 409);

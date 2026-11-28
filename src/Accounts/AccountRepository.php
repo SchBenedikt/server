@@ -258,6 +258,7 @@ final class AccountRepository
             createdAt: (string) $row['created_at'],
             disabledAt: $row['disabled_at'] === null ? null : (string) $row['disabled_at'],
             credentialVersion: (int) ($row['credential_version'] ?? 1),
+            emailVerifiedAt: ($row['email_verified_at'] ?? null) === null ? null : (string) $row['email_verified_at'],
         );
     }
 }

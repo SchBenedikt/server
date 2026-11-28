@@ -41,6 +41,8 @@ final class MailOutbox
 {
     public const KIND_PASSWORD_RESET = 'password_reset';
 
+    public const KIND_EMAIL_VERIFICATION = 'email_verification';
+
     private const DEFAULT_MAX_ATTEMPTS = 8;
 
     private const BASE_RETRY_SECONDS = 60;
@@ -197,14 +199,19 @@ final class MailOutbox
      */
     private function stillApplicable(array $row): bool
     {
-        if (($row['kind'] ?? '') !== self::KIND_PASSWORD_RESET) {
+        // The dedup key is the token hash; the link is only useful while the
+        // token row is unused and unexpired. Each kind names its token table.
+        $table = match ((string) $row['kind']) {
+            self::KIND_PASSWORD_RESET => 'password_reset',
+            self::KIND_EMAIL_VERIFICATION => 'email_verification',
+            default => null,
+        };
+        if ($table === null) {
             return true;
         }
 
-        // The dedup key is the token hash; the link is only useful while the
-        // token row is unused and unexpired.
         return (int) $this->db->fetchValue(
-            'SELECT COUNT(*) FROM password_reset'
+            'SELECT COUNT(*) FROM ' . $table
             . ' WHERE token_hash = :hash AND used_at IS NULL AND expires_at > :now',
             ['hash' => (string) $row['dedup_key'], 'now' => Time::format($this->clock->now())],
         ) > 0;
