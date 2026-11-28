@@ -58,6 +58,7 @@ use AlohaSocial\Server\Http\View;
 use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\Mailer;
+use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Setup\SetupService;
 
 /**
@@ -83,6 +84,7 @@ final readonly class Runtime
         public PasswordHasher $passwordHasher,
         public PasswordResetService $passwordReset,
         public Mailer $mailer,
+        public MailOutbox $mailOutbox,
         public View $view,
         public Clock $clock,
         public PostInteractions $interactions,

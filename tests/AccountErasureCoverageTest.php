@@ -39,6 +39,7 @@ final class AccountErasureCoverageTest extends TestCase
         'follow_request',
         'kokua',
         'kokua_help',
+        'mail_outbox',
         'mastodon_oauth_code',
         'mastodon_oauth_token',
         'mastodon_stream_event',

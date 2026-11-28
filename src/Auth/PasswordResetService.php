@@ -14,7 +14,7 @@ use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
-use AlohaSocial\Server\Mail\Mailer;
+use AlohaSocial\Server\Mail\MailOutbox;
 
 use function base64_encode;
 use function bin2hex;
@@ -53,7 +53,7 @@ final class PasswordResetService
         private readonly Connection $db,
         private readonly AccountRepository $accounts,
         private readonly PasswordHasher $hasher,
-        private readonly Mailer $mailer,
+        private readonly MailOutbox $outbox,
         private readonly Clock $clock,
         private readonly string $instanceUrl,
     ) {
@@ -83,10 +83,22 @@ final class PasswordResetService
         $now = $this->clock->now();
         $expires = $now->modify('+' . self::TTL_SECONDS . ' seconds');
 
+        $link = rtrim($this->instanceUrl, '/') . '/reset-password?token=' . rawurlencode($token);
+        $name = $account->name();
+        $body = "Hello " . $name . ",\n\n"
+            . "for your account @" . $account->handle . " a new password was requested.\n"
+            . "Open this link to set it:\n\n"
+            . $link . "\n\n"
+            . "The link is valid for one hour and can only be used once.\n"
+            . "If you did not request this, ignore this email; your password stays unchanged.\n";
+
         // The lock makes two simultaneous requests for one account serialize:
         // the later request replaces the earlier token instead of leaving two
-        // live links behind.
-        $current = $this->db->transaction(function () use ($account, $token, $now, $expires): ?Account {
+        // live links behind. The mail is queued in the same transaction, so
+        // an SMTP outage delays delivery instead of losing the reset or
+        // failing the request; the superseded link is cancelled before the
+        // new one is queued, so an obsolete token is never mailed.
+        $current = $this->db->transaction(function () use ($account, $token, $now, $expires, $body): ?Account {
             $this->lockAccount($account->id);
 
             $current = $this->accounts->find($account->id);
@@ -107,6 +119,16 @@ final class PasswordResetService
                 ],
             );
 
+            $this->outbox->cancelPending(MailOutbox::KIND_PASSWORD_RESET, $current->id);
+            $this->outbox->enqueue(
+                MailOutbox::KIND_PASSWORD_RESET,
+                $current->id,
+                self::hashToken($token),
+                $current->email,
+                'Password for ' . $this->instanceUrl . ' reset',
+                $body,
+            );
+
             return $current;
         });
 
@@ -114,20 +136,6 @@ final class PasswordResetService
             // The account was disabled or removed while the request waited.
             return false;
         }
-
-        $link = rtrim($this->instanceUrl, '/') . '/reset-password?token=' . rawurlencode($token);
-        $name = $current->name();
-
-        $this->mailer->send(
-            $current->email,
-            'Password for ' . $this->instanceUrl . ' reset',
-            "Hello " . $name . ",\n\n"
-            . "for your account @" . $current->handle . " a new password was requested.\n"
-            . "Open this link to set it:\n\n"
-            . $link . "\n\n"
-            . "The link is valid for one hour and can only be used once.\n"
-            . "If you did not request this, ignore this email; your password stays unchanged.\n",
-        );
 
         return true;
     }
