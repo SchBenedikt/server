@@ -369,6 +369,7 @@ final class AdminService
             'generated_at' => Time::format($now),
             'stats' => $stats,
             'health' => $this->health($stats),
+            'checklist' => $this->firstRunChecklist($stats),
             'worker' => $this->workerStatus(),
             'recent_users' => $this->recentUsers(5),
             'recent_posts' => $this->recentPosts(6),
@@ -2277,6 +2278,79 @@ final class AdminService
         $latest = $applied === [] ? 'none' : (string) max(array_keys($applied));
 
         return ['status' => 'ok', 'detail' => count($applied) . ' applied · latest ' . $latest];
+    }
+
+    /**
+     * First-run checklist for #190: the same signals the health grid reports,
+     * flattened into ordered setup steps an operator can work through. Items
+     * are derived live, so completing a step flips its status on the next
+     * overview load — nothing is stored or dismissed server-side.
+     *
+     * @param array<string, mixed> $stats
+     *
+     * @return list<array{id: string, label: string, status: string, hint: string, href: string}>
+     */
+    private function firstRunChecklist(array $stats): array
+    {
+        $worker = $this->workerStatus();
+        $schema = $this->schemaStatus();
+        $pages = $this->pages();
+        $publishedPages = $pages === null ? 0 : count($pages->published());
+        $adminsWithoutMfa = (int) ($stats['accounts']['admins_without_mfa'] ?? 0);
+
+        return [
+            [
+                'id' => 'worker',
+                'label' => 'Run the background worker',
+                'status' => $worker['online'] ? 'done' : 'warn',
+                'hint' => 'Mail, federation delivery and cleanup only happen while bin/worker.php runs.',
+                'href' => '#/admin/overview',
+            ],
+            [
+                'id' => 'schema',
+                'label' => 'Apply pending migrations',
+                'status' => $schema['status'] === 'ok' ? 'done' : 'warn',
+                'hint' => $schema['status'] === 'ok' ? $schema['detail'] : 'Run php bin/update.php until the schema is current.',
+                'href' => '#/admin/overview',
+            ],
+            [
+                'id' => 'mail',
+                'label' => 'Configure outgoing mail',
+                'status' => $this->config->mailTransport === 'smtp' ? 'done' : 'todo',
+                'hint' => 'Without SMTP, password resets, invitations and email changes are only written to log files.',
+                'href' => '#/admin/settings',
+            ],
+            [
+                'id' => 'admin-mfa',
+                'label' => 'Two-factor for every admin',
+                'status' => $adminsWithoutMfa === 0 ? 'done' : 'todo',
+                'hint' => $adminsWithoutMfa === 0
+                    ? 'Every administrator uses two-factor sign-in.'
+                    : $adminsWithoutMfa . ' admin account(s) still sign in with a password alone.',
+                'href' => '#/admin/users',
+            ],
+            [
+                'id' => 'https',
+                'label' => 'Serve the instance over HTTPS',
+                'status' => $this->httpsStatus() === 'ok' ? 'done' : 'todo',
+                'hint' => 'Federation partners prefer signed HTTPS deliveries; plain HTTP is only acceptable on localhost.',
+                'href' => '#/admin/settings',
+            ],
+            [
+                'id' => 'instance-page',
+                'label' => 'Publish an instance page',
+                'status' => $publishedPages > 0 ? 'done' : 'todo',
+                'hint' => 'An about, terms or code-of-conduct page helps visitors and other servers understand this instance.',
+                'href' => '#/admin/pages',
+            ],
+            [
+                'id' => 'federation-preflight',
+                'label' => 'Verify federation reachability',
+                'status' => 'todo',
+                'hint' => 'Run the preflight under Settings — it checks DNS, HTTPS, WebFinger and NodeInfo from outside the instance.',
+                'href' => '#/admin/settings',
+            ],
+        ];
     }
 
     /**

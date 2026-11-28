@@ -1528,3 +1528,46 @@ body.app-shell *::after {
 	box-shadow: none !important;
 	text-shadow: none !important;
 }
+
+.a-admin-checklist {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0 0 4px;
+	list-style: none;
+}
+
+.a-admin-checklist__item {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px;
+	border: 1px solid var(--a-border);
+	border-radius: 10px;
+	background: var(--a-surface);
+}
+
+.a-admin-checklist__mark {
+	flex: none;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--a-muted);
+}
+
+.a-admin-checklist__mark--warn {
+	background: var(--a-warn, #d97706);
+}
+
+.a-admin-checklist__copy {
+	display: grid;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+
+.a-admin-checklist__copy small {
+	color: var(--a-muted);
+	font-size: 12px;
+	line-height: 1.4;
+}

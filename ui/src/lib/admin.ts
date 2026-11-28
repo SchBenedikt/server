@@ -174,10 +174,19 @@ export interface AuditEntry {
 	created_at: string;
 }
 
+export interface ChecklistItem {
+	id: string;
+	label: string;
+	status: 'done' | 'todo' | 'warn' | string;
+	hint: string;
+	href: string;
+}
+
 export interface AdminOverview {
 	generated_at: string;
 	stats: AdminStats;
 	health: HealthCheck[];
+	checklist: ChecklistItem[];
 	worker: WorkerStatus;
 	recent_users: AdminUser[];
 	recent_posts: AdminRecentPost[];
