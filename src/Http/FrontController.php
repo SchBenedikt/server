@@ -715,12 +715,13 @@ final class FrontController
             }
 
             // Every time a card is displayed it asks for its interaction
-            // state. Use that request to refresh counters that are older than
-            // the view TTL, bounded so a large page cannot fan out.
+            // state. Use that request to queue a counter refresh for entries
+            // older than the view TTL; the worker drains the queue, so the
+            // response never waits on a remote origin.
             if ($remote !== []) {
                 $stale = $this->runtime->remoteEngagement->staleObjects(array_keys($remote), 60);
                 if ($stale !== []) {
-                    $this->runtime->remoteEngagementRefresher->refreshIds($stale, 4);
+                    $this->runtime->remoteEngagementRefresher->requestRefresh($stale);
                 }
             }
 

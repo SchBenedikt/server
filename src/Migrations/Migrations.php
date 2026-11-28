@@ -81,6 +81,7 @@ final class Migrations
             new Version202611280024JobLastError(),
             new Version202611280025Mfa(),
             new Version202611280026AtprotoRemoteAudience(),
+            new Version202611280027RemoteEngagementRequest(),
         ];
     }
 }
