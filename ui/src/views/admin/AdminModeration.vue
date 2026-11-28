@@ -15,6 +15,7 @@ import {
 	type ModerationKind,
 } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
+import { t } from '../../lib/i18n';
 import { appState, showToast } from '../../lib/state';
 
 const actions = ref<ModerationActionList | null>(null);
@@ -40,10 +41,10 @@ const reverseOpen = ref(false);
 const reverseTarget = ref<ModerationAction | null>(null);
 const reverseBusy = ref(false);
 
-const kindOptions: { id: ModerationKind; label: string; hint: string }[] = [
-	{ id: 'silence_actor', label: 'Silence actor', hint: 'Hidden from timelines and search; still reachable directly.' },
-	{ id: 'suspend_actor', label: 'Suspend actor', hint: 'Content hidden and interactions refused.' },
-	{ id: 'block_domain', label: 'Block domain', hint: 'Rejects the whole domain for federation and feeds.' },
+const kindOptions: { id: ModerationKind; labelKey: string; hintKey: string }[] = [
+	{ id: 'silence_actor', labelKey: 'amod.kind.silence_actor', hintKey: 'amod.kind.silence_actor.hint' },
+	{ id: 'suspend_actor', labelKey: 'amod.kind.suspend_actor', hintKey: 'amod.kind.suspend_actor.hint' },
+	{ id: 'block_domain', labelKey: 'amod.kind.block_domain', hintKey: 'amod.kind.block_domain.hint' },
 ];
 
 const activeActions = computed(() => (actions.value?.actions ?? []).filter((action) => action.reversed_at === null));
@@ -81,7 +82,7 @@ async function load(): Promise<void> {
 		actions.value = actionList;
 		blocks.value = domainBlocks;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Moderation data could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('amod.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -100,13 +101,13 @@ async function submitAction(): Promise<void> {
 			note: note.value.trim() === '' ? null : note.value,
 			public_comment: publicComment.value.trim() === '' ? null : publicComment.value,
 		});
-		showToast('Moderation action applied.', 'success');
+		showToast(t('amod.applied'), 'success');
 		target.value = '';
 		note.value = '';
 		publicComment.value = '';
 		await load();
 	} catch (caught) {
-		actionError.value = caught instanceof Error ? caught.message : 'The action could not be applied.';
+		actionError.value = caught instanceof Error ? caught.message : t('amod.applyFailed');
 	} finally {
 		actionBusy.value = false;
 	}
@@ -142,7 +143,7 @@ async function pickImportFile(event: Event): Promise<void> {
 		importResult.value = await getAdminApi().importDomainBlockFile(content, format, false);
 	} catch (caught) {
 		importFile.value = null;
-		importError.value = caught instanceof Error ? caught.message : 'The import file could not be read.';
+		importError.value = caught instanceof Error ? caught.message : t('amod.fileFailed');
 	} finally {
 		importBusy.value = false;
 	}
@@ -168,7 +169,7 @@ async function previewImport(): Promise<void> {
 				false,
 			);
 		} catch (caught) {
-			importError.value = caught instanceof Error ? caught.message : 'The import could not be checked.';
+			importError.value = caught instanceof Error ? caught.message : t('amod.checkFailed');
 		} finally {
 			importBusy.value = false;
 		}
@@ -185,7 +186,7 @@ async function previewImport(): Promise<void> {
 	try {
 		importResult.value = await getAdminApi().importDomainBlocks(entries, false);
 	} catch (caught) {
-		importError.value = caught instanceof Error ? caught.message : 'The import could not be checked.';
+		importError.value = caught instanceof Error ? caught.message : t('amod.checkFailed');
 	} finally {
 		importBusy.value = false;
 	}
@@ -201,12 +202,12 @@ async function applyImport(): Promise<void> {
 		importResult.value = importFile.value !== null
 			? await getAdminApi().importDomainBlockFile(importFile.value.content, importFile.value.format, true)
 			: await getAdminApi().importDomainBlocks(parseImportLines(), true);
-		showToast(`${importResult.value.applied_count} domain(s) blocked.`, 'success');
+		showToast(t('amod.importApplied', { count: importResult.value.applied_count }), 'success');
 		importText.value = '';
 		importFile.value = null;
 		await load();
 	} catch (caught) {
-		importError.value = caught instanceof Error ? caught.message : 'The import could not be applied.';
+		importError.value = caught instanceof Error ? caught.message : t('amod.importFailed');
 	} finally {
 		importBusy.value = false;
 	}
@@ -224,19 +225,26 @@ async function confirmReverse(): Promise<void> {
 	reverseBusy.value = true;
 	try {
 		await getAdminApi().reverseModeration(reverseTarget.value.id);
-		showToast('Moderation action reversed.', 'success');
+		showToast(t('amod.reversed'), 'success');
 		reverseOpen.value = false;
 		reverseTarget.value = null;
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The action could not be reversed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('amod.reverseFailed'), 'error');
 	} finally {
 		reverseBusy.value = false;
 	}
 }
 
 function kindLabel(value: string): string {
-	return kindOptions.find((option) => option.id === value)?.label ?? value;
+	const option = kindOptions.find((entry) => entry.id === value);
+	return option === undefined ? value : t(option.labelKey);
+}
+
+function verdictLabel(status: string): string {
+	const key = `amod.verdict.${status}`;
+	const translated = t(key);
+	return translated === key ? status.replace('_', ' ') : translated;
 }
 
 function verdictBadge(status: string): string {
@@ -258,16 +266,15 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Safety</p>
-				<h2>Moderation</h2>
+				<p class="a-admin-eyebrow">{{ t('amod.eyebrow') }}</p>
+				<h2>{{ t('amod.title') }}</h2>
 				<p class="a-admin-lead">
-					Silence or suspend actors, block whole domains and import blocklists.
-					Every action is reversible and written to the audit log.
+					{{ t('amod.lead') }}
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Refresh
+				{{ t('amod.refresh') }}
 			</button>
 		</div>
 
@@ -282,17 +289,17 @@ onMounted(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="shield" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Active actions</p>
+						<p class="a-admin-stat__label">{{ t('amod.statActive') }}</p>
 						<strong class="a-admin-stat__value">{{ actions?.active ?? 0 }}</strong>
-						<p class="a-admin-stat__meta">{{ activeActions.length }} listed below</p>
+						<p class="a-admin-stat__meta">{{ t('amod.statListed', { count: activeActions.length }) }}</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="ban" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Blocked domains</p>
+						<p class="a-admin-stat__label">{{ t('amod.statBlocked') }}</p>
 						<strong class="a-admin-stat__value">{{ blocks.length }}</strong>
-						<p class="a-admin-stat__meta">Published when enabled in settings</p>
+						<p class="a-admin-stat__meta">{{ t('amod.statPublished') }}</p>
 					</div>
 				</article>
 			</div>
@@ -301,37 +308,37 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>New action</h3>
-							<p>Actor actions need an absolute actor URL; domain actions take a bare domain.</p>
+							<h3>{{ t('amod.newAction') }}</h3>
+							<p>{{ t('amod.newActionHint') }}</p>
 						</div>
 					</header>
 					<form class="a-admin-form" @submit.prevent="submitAction">
 						<div class="a-admin-form__grid">
 							<label>
-								<span>Action</span>
+								<span>{{ t('amod.fieldAction') }}</span>
 								<select v-model="kind" class="a-input">
-									<option v-for="option in kindOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
+									<option v-for="option in kindOptions" :key="option.id" :value="option.id">{{ t(option.labelKey) }}</option>
 								</select>
-								<small class="a-admin-muted">{{ kindOptions.find((option) => option.id === kind)?.hint }}</small>
+								<small class="a-admin-muted">{{ t(kindOptions.find((option) => option.id === kind)?.hintKey ?? '') }}</small>
 							</label>
 							<label>
-								<span>Target</span>
-								<input v-model="target" type="text" class="a-input" :placeholder="kind === 'block_domain' ? 'example.com' : 'https://peer.example/users/alice'" />
+								<span>{{ t('amod.fieldTarget') }}</span>
+								<input v-model="target" type="text" class="a-input" :placeholder="t(kind === 'block_domain' ? 'amod.targetPlaceholderDomain' : 'amod.targetPlaceholderActor')" />
 							</label>
 							<label>
-								<span>Private note</span>
-								<input v-model="note" type="text" class="a-input" placeholder="Only visible to admins" />
+								<span>{{ t('amod.fieldNote') }}</span>
+								<input v-model="note" type="text" class="a-input" :placeholder="t('amod.notePlaceholder')" />
 							</label>
 							<label>
-								<span>Public comment</span>
-								<input v-model="publicComment" type="text" class="a-input" placeholder="Optional reason shown on domain_blocks" />
+								<span>{{ t('amod.fieldPublic') }}</span>
+								<input v-model="publicComment" type="text" class="a-input" :placeholder="t('amod.publicPlaceholder')" />
 							</label>
 						</div>
 						<p v-if="actionError !== ''" class="a-form-error" role="alert">{{ actionError }}</p>
 						<div class="a-admin-form__actions">
 							<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="actionBusy || target.trim() === ''">
 								<AppIcon v-if="actionBusy" name="refresh" :size="15" class="a-spin" />
-								{{ actionBusy ? 'Applying…' : 'Apply action' }}
+								{{ actionBusy ? t('amod.applying') : t('amod.apply') }}
 							</button>
 						</div>
 					</form>
@@ -340,8 +347,8 @@ onMounted(() => {
 				<section v-if="appState.session.admin" class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Import blocklist</h3>
-							<p>Paste one domain per line (<code># comment</code> for a public reason) or upload a <code>.txt</code>, <code>.csv</code> (<code>domain,comment</code>) or <code>.json</code> file. Always dry-run first.</p>
+							<h3>{{ t('amod.importTitle') }}</h3>
+							<p>{{ t('amod.importHint') }}</p>
 						</div>
 					</header>
 					<div class="a-admin-import-source">
@@ -354,14 +361,14 @@ onMounted(() => {
 						/>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="importBusy" @click="importFileInput?.click()">
 							<AppIcon name="archive" :size="15" />
-							Upload file
+							{{ t('amod.upload') }}
 						</button>
 						<span v-if="importFile !== null" class="a-admin-import-file">
 							{{ importFile.name }} ({{ importFile.format }})
-							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="clearImportFile">Clear</button>
+							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="clearImportFile">{{ t('amod.clear') }}</button>
 						</span>
 					</div>
-					<textarea v-model="importText" class="a-admin-textarea" rows="7" placeholder="spam.example&#10;bad.example # repeated abuse" :disabled="importFile !== null" />
+					<textarea v-model="importText" class="a-admin-textarea" rows="7" :placeholder="'spam.example\nbad.example # repeated abuse'" :disabled="importFile !== null" />
 					<p v-if="importError !== ''" class="a-form-error" role="alert">{{ importError }}</p>
 					<div class="a-admin-form__actions">
 						<button
@@ -370,10 +377,10 @@ onMounted(() => {
 							:disabled="importBusy || (importFile === null && importText.trim() === '')"
 							@click="previewImport"
 						>
-							Check import
+							{{ t('amod.checkImport') }}
 						</button>
 						<button type="button" class="a-btn a-btn--danger a-btn--small" :disabled="importBusy || !canApplyImport" @click="applyImport">
-							Apply import
+							{{ t('amod.applyImport') }}
 						</button>
 					</div>
 
@@ -381,23 +388,26 @@ onMounted(() => {
 						<table class="a-admin-table a-admin-table--compact">
 							<thead>
 								<tr>
-									<th scope="col">Input</th>
-									<th scope="col">Domain</th>
-									<th scope="col">Verdict</th>
+									<th scope="col">{{ t('amod.colInput') }}</th>
+									<th scope="col">{{ t('amod.colDomain') }}</th>
+									<th scope="col">{{ t('amod.colVerdict') }}</th>
 								</tr>
 							</thead>
 							<tbody>
 								<tr v-for="(entry, index) in importResult.entries" :key="index">
 									<td>{{ entry.input }}</td>
 									<td>{{ entry.domain ?? '—' }}</td>
-									<td><span class="a-admin-badge" :class="verdictBadge(entry.status)">{{ entry.status.replace('_', ' ') }}</span></td>
+									<td><span class="a-admin-badge" :class="verdictBadge(entry.status)">{{ verdictLabel(entry.status) }}</span></td>
 								</tr>
 							</tbody>
 						</table>
 						<p class="a-admin-muted">
-							{{ importCounts['new'] ?? 0 }} new · {{ importCounts['duplicate'] ?? 0 }} duplicate ·
-							{{ importCounts['already_blocked'] ?? 0 }} already blocked · {{ importCounts['invalid'] ?? 0 }} invalid
-							<template v-if="importResult.applied"> · {{ importResult.applied_count }} applied</template>
+							{{ t('amod.importCounts', {
+								new: importCounts['new'] ?? 0,
+								duplicate: importCounts['duplicate'] ?? 0,
+								blocked: importCounts['already_blocked'] ?? 0,
+								invalid: importCounts['invalid'] ?? 0,
+							}) }}<template v-if="importResult.applied">{{ t('amod.importAppliedCount', { count: importResult.applied_count }) }}</template>
 						</p>
 					</div>
 				</section>
@@ -407,8 +417,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Blocked domains</h3>
-							<p>Active domain blocks with their publishable comment.</p>
+							<h3>{{ t('amod.blockedTitle') }}</h3>
+							<p>{{ t('amod.blockedHint') }}</p>
 						</div>
 					</header>
 					<ul class="a-admin-list">
@@ -419,15 +429,15 @@ onMounted(() => {
 							</div>
 							<span class="a-admin-badge a-admin-badge--danger">{{ block.severity }}</span>
 						</li>
-						<li v-if="blocks.length === 0" class="a-admin-empty">No domain blocks.</li>
+						<li v-if="blocks.length === 0" class="a-admin-empty">{{ t('amod.noBlocks') }}</li>
 					</ul>
 				</section>
 
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Active actions</h3>
-							<p>Silences, suspensions and domain blocks currently in force.</p>
+							<h3>{{ t('amod.activeTitle') }}</h3>
+							<p>{{ t('amod.activeHint') }}</p>
 						</div>
 					</header>
 					<ul class="a-admin-list">
@@ -438,9 +448,9 @@ onMounted(() => {
 									{{ relativeTime(action.created_at) }}<template v-if="action.note"> · {{ action.note }}</template>
 								</small>
 							</div>
-							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="askReverse(action)">Reverse</button>
+							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="askReverse(action)">{{ t('amod.reverse') }}</button>
 						</li>
-						<li v-if="activeActions.length === 0" class="a-admin-empty">No active actions.</li>
+						<li v-if="activeActions.length === 0" class="a-admin-empty">{{ t('amod.noActive') }}</li>
 					</ul>
 				</section>
 			</div>
@@ -448,19 +458,19 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>History</h3>
-						<p>Every moderation action, including reversed ones.</p>
+						<h3>{{ t('amod.historyTitle') }}</h3>
+						<p>{{ t('amod.historyHint') }}</p>
 					</div>
 				</header>
 				<div class="a-admin-table-wrap">
 					<table class="a-admin-table a-admin-table--compact">
 						<thead>
 							<tr>
-								<th scope="col">Action</th>
-								<th scope="col">Target</th>
-								<th scope="col">Moderator</th>
-								<th scope="col">Created</th>
-								<th scope="col">State</th>
+								<th scope="col">{{ t('colAction') }}</th>
+								<th scope="col">{{ t('colDomain') }}</th>
+								<th scope="col">{{ t('colModerator') }}</th>
+								<th scope="col">{{ t('ausers.colCreated') }}</th>
+								<th scope="col">{{ t('colState') }}</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -470,12 +480,12 @@ onMounted(() => {
 								<td>{{ action.moderator_id }}</td>
 								<td>{{ absoluteTime(action.created_at) }}</td>
 								<td>
-									<span v-if="action.reversed_at === null" class="a-admin-badge a-admin-badge--ok">active</span>
-									<span v-else class="a-admin-badge a-admin-badge--muted">reversed {{ relativeTime(action.reversed_at) }}</span>
+									<span v-if="action.reversed_at === null" class="a-admin-badge a-admin-badge--ok">{{ t('amod.stateActive') }}</span>
+									<span v-else class="a-admin-badge a-admin-badge--muted">{{ t('amod.stateReversed', { time: relativeTime(action.reversed_at) }) }}</span>
 								</td>
 							</tr>
 							<tr v-if="historyActions.length === 0">
-								<td colspan="5" class="a-admin-empty">No moderation actions yet.</td>
+								<td colspan="5" class="a-admin-empty">{{ t('amod.noHistory') }}</td>
 							</tr>
 						</tbody>
 					</table>
@@ -485,9 +495,9 @@ onMounted(() => {
 
 		<ConfirmDialog
 			:open="reverseOpen"
-			title="Reverse moderation action"
-			:message="reverseTarget === null ? '' : `${kindLabel(reverseTarget.kind)} on ${reverseTarget.target} will be lifted.`"
-			confirm-label="Reverse"
+			:title="t('amod.confirmTitle')"
+			:message="reverseTarget === null ? '' : t('amod.confirmMessage', { kind: kindLabel(reverseTarget.kind), target: reverseTarget.target })"
+			:confirm-label="t('amod.reverse')"
 			tone="danger"
 			:busy="reverseBusy"
 			@confirm="confirmReverse"
