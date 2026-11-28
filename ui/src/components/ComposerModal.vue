@@ -61,6 +61,7 @@ const content = ref('');
 const contentWarning = ref('');
 const showWarning = ref(false);
 const visibility = ref<'public' | 'unlisted' | 'followers'>('public');
+const postLanguage = ref('');
 const images = ref<PendingImage[]>([]);
 const existing = ref<Attachment[]>([]);
 const submitting = ref(false);
@@ -109,6 +110,12 @@ const showBlueskyConnectionHint = computed(() => (
 	&& !blueskyConnected.value
 	&& canCrossPostBluesky.value
 ));
+const languageOptions = computed(() => {
+	const configured = appState.instance?.languages ?? [];
+	return postLanguage.value !== '' && !configured.includes(postLanguage.value)
+		? [...configured, postLanguage.value]
+		: configured;
+});
 const hasMediaAttachments = computed(() => (
 	images.value.length > 0 || existing.value.length > 0 || restoredAttachmentIds.value.length > 0
 ));
@@ -228,6 +235,7 @@ function populateDraft(draft: Draft): void {
 	visibility.value = draft.visibility === 'unlisted' || draft.visibility === 'followers'
 		? draft.visibility
 		: 'public';
+	postLanguage.value = draft.language ?? '';
 
 	if (draft.poll !== null) {
 		showPoll.value = true;
@@ -257,6 +265,7 @@ function saveDraft(): void {
 					contentWarning: contentWarning.value,
 					showWarning: showWarning.value,
 					visibility: visibility.value,
+					language: postLanguage.value,
 				}));
 			}
 		} catch {
@@ -297,6 +306,9 @@ function restoreDraft(): void {
 		if (parsed.visibility === 'public' || parsed.visibility === 'unlisted' || parsed.visibility === 'followers') {
 			visibility.value = parsed.visibility;
 		}
+		if (typeof parsed.language === 'string') {
+			postLanguage.value = parsed.language;
+		}
 	} catch {
 		// A malformed or unavailable draft just starts an empty composer.
 	}
@@ -310,7 +322,7 @@ function clearDraft(): void {
 	}
 }
 
-watch([content, contentWarning, showWarning, visibility], saveDraft, { deep: true });
+watch([content, contentWarning, showWarning, visibility, postLanguage], saveDraft, { deep: true });
 
 function populateEditor(post: TimelineItem): void {
 	resetImages();
@@ -322,10 +334,12 @@ function populateEditor(post: TimelineItem): void {
 	visibility.value = post.visibility === 'unlisted' || post.visibility === 'followers'
 		? post.visibility
 		: 'public';
+	postLanguage.value = post.language ?? '';
 }
 
 function resetExtras(): void {
 	restoredAttachmentIds.value = [];
+	postLanguage.value = '';
 	scheduledAt.value = '';
 	scheduleOpen.value = false;
 	showPoll.value = false;
@@ -544,6 +558,7 @@ async function saveAsDraft(): Promise<void> {
 			content: content.value,
 			content_warning: showWarning.value && contentWarning.value.trim() !== '' ? contentWarning.value : null,
 			visibility: visibility.value,
+			language: postLanguage.value === '' ? null : postLanguage.value,
 			attachment_ids: [...restoredAttachmentIds.value, ...uploaded],
 			in_reply_to_id: replyId.value,
 			quoted_post_id: isQuote.value ? quoteTargetId.value : null,
@@ -609,6 +624,7 @@ async function submit(): Promise<void> {
 				content: content.value,
 				visibility: visibility.value,
 				content_warning: showWarning.value ? contentWarning.value : null,
+				language: postLanguage.value === '' ? null : postLanguage.value,
 				attachment_ids: [
 					...existing.value.map((attachment) => attachment.id),
 					...attachments.map((attachment) => attachment.id),
@@ -636,6 +652,7 @@ async function submit(): Promise<void> {
 				content: content.value,
 				visibility: visibility.value,
 				content_warning: showWarning.value ? contentWarning.value : null,
+				language: postLanguage.value === '' ? null : postLanguage.value,
 				in_reply_to_id: replyId.value,
 				attachment_ids: attachmentIds,
 				scheduled_at: scheduleDate.value.toISOString(),
@@ -667,6 +684,7 @@ async function submit(): Promise<void> {
 				status: content.value,
 				visibility: visibility.value,
 				spoiler_text: showWarning.value ? contentWarning.value : null,
+				language: postLanguage.value === '' ? null : postLanguage.value,
 				media_ids: attachmentIds,
 				in_reply_to_id: replyId.value,
 				poll: {
@@ -697,6 +715,7 @@ async function submit(): Promise<void> {
 			content: content.value,
 			visibility: direct ? 'direct' : visibility.value,
 			content_warning: showWarning.value ? contentWarning.value : null,
+			language: postLanguage.value === '' ? null : postLanguage.value,
 			in_reply_to_id: replyId.value,
 			quoted_post_id: isQuote.value ? quoteTargetId.value : null,
 			attachment_ids: attachmentIds,
@@ -1017,6 +1036,13 @@ async function submit(): Promise<void> {
 							<option value="public">Public</option>
 							<option value="unlisted">Unlisted</option>
 							<option value="followers">Followers only</option>
+						</select>
+					</label>
+					<label v-if="languageOptions.length > 0 && !isDirect" class="a-composer__visibility">
+						<span>Language</span>
+						<select v-model="postLanguage" aria-label="Language">
+							<option value="">Auto</option>
+							<option v-for="language in languageOptions" :key="language" :value="language">{{ language }}</option>
 						</select>
 					</label>
 					<label v-if="showBlueskyCrossPost" class="a-composer__visibility a-composer__cross-post">

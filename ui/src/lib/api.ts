@@ -299,6 +299,7 @@ export interface Api {
 		content: string;
 		content_warning?: string | null;
 		visibility?: string;
+		language?: string | null;
 		attachment_ids?: string[];
 		in_reply_to_id?: string | null;
 		quoted_post_id?: string | null;
@@ -451,6 +452,7 @@ export function normalizeTimelineItem(value: unknown): TimelineItem | null {
 		content: typeof value.content === 'string' ? value.content : '',
 		content_warning: typeof value.content_warning === 'string' ? value.content_warning : null,
 		visibility: typeof value.visibility === 'string' ? value.visibility : null,
+		language: typeof value.language === 'string' ? value.language : null,
 		published_at: typeof value.published_at === 'string' ? value.published_at : '',
 		edited_at: typeof value.edited_at === 'string' ? value.edited_at : null,
 		revision: typeof value.revision === 'number' ? value.revision : undefined,
@@ -940,6 +942,7 @@ function normalizeScheduledPost(value: unknown): ScheduledPost | null {
 			: [],
 		in_reply_to_id: typeof value.in_reply_to_id === 'string' ? value.in_reply_to_id : null,
 		scheduled_at: typeof value.scheduled_at === 'string' ? value.scheduled_at : '',
+		language: typeof value.language === 'string' ? value.language : null,
 		created_at: typeof value.created_at === 'string' ? value.created_at : '',
 		state,
 		published_at: typeof value.published_at === 'string' ? value.published_at : null,
@@ -1144,6 +1147,7 @@ function normalizeDraft(value: unknown): Draft | null {
 		content: typeof value.content === 'string' ? value.content : '',
 		content_warning: typeof value.content_warning === 'string' ? value.content_warning : null,
 		visibility: typeof value.visibility === 'string' ? value.visibility : 'public',
+		language: typeof value.language === 'string' ? value.language : null,
 		attachment_ids: Array.isArray(value.attachment_ids)
 			? value.attachment_ids.filter((id): id is string => typeof id === 'string')
 			: [],
@@ -1949,6 +1953,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			if (payload.content_warning !== undefined && payload.content_warning !== null && payload.content_warning.trim() !== '') {
 				body.content_warning = payload.content_warning;
 			}
+			if (payload.language !== undefined && payload.language !== null && payload.language.trim() !== '') {
+				body.language = payload.language;
+			}
 			if (payload.in_reply_to_id !== undefined && payload.in_reply_to_id !== null && payload.in_reply_to_id !== '') {
 				body.in_reply_to_id = payload.in_reply_to_id;
 			}
@@ -1979,6 +1986,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 			if (payload.spoiler_text !== undefined && payload.spoiler_text !== null && payload.spoiler_text.trim() !== '') {
 				body.spoiler_text = payload.spoiler_text;
+			}
+			if (payload.language !== undefined && payload.language !== null && payload.language.trim() !== '') {
+				body.language = payload.language;
 			}
 			if (payload.media_ids !== undefined && payload.media_ids.length > 0) {
 				body.media_ids = payload.media_ids;
@@ -2275,6 +2285,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			};
 			if (payload.revision !== undefined) {
 				body.revision = payload.revision;
+			}
+			if (payload.language !== undefined) {
+				body.language = payload.language;
 			}
 
 			const data = await request<{ post?: unknown }>(
@@ -2954,6 +2967,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			content: string;
 			content_warning?: string | null;
 			visibility?: string;
+			language?: string | null;
 			attachment_ids?: string[];
 			in_reply_to_id?: string | null;
 			quoted_post_id?: string | null;

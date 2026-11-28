@@ -238,6 +238,11 @@ cannot be combined with scheduling, because a schedule stores no poll. First-par
 sessions receive the `['*']` scope, so these routes work without a separately
 issued bearer token; bearer clients keep their own scopes.
 
+The composer also offers a language picker populated from the instance's
+configured `instance.languages` list (Auto is the default). The chosen tag is
+sent as `language` on post create/edit, scheduled posts, polls and drafts, and
+round-trips through `GET /api/v1/host/drafts` and the local-draft backup.
+
 ## Remote profiles and Bluesky
 
 `#/u/<handle>` opens a profile that is not hosted here. The handle may be an

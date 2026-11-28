@@ -128,7 +128,7 @@ final class Exports
             'collections' => $this->collections($accountId),
             'starter_packs' => $this->starterPacks($accountId),
             'drafts' => $this->rows(
-                'SELECT context, content, content_warning, visibility, attachment_ids, in_reply_to_id,'
+                'SELECT context, content, content_warning, visibility, language, attachment_ids, in_reply_to_id,'
                 . ' quoted_post_id, poll_options, poll_multiple, poll_hide_totals, poll_expires_in, updated_at'
                 . ' FROM draft WHERE account_id = :account_id ORDER BY updated_at ASC',
                 ['account_id' => $accountId],
