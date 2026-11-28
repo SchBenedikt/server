@@ -3,14 +3,25 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
+import { getApi } from '../lib/api';
 import { formatCount, handleLabel } from '../lib/format';
 import { appState } from '../lib/state';
+import type { InstancePageSummary } from '../lib/types';
 
 const instance = computed(() => appState.instance);
 const host = computed(() => typeof window === 'undefined' ? '' : window.location.host);
+const pages = ref<InstancePageSummary[]>([]);
+
+onMounted(async () => {
+	try {
+		pages.value = await getApi().instancePages();
+	} catch {
+		pages.value = [];
+	}
+});
 </script>
 
 <template>
@@ -90,6 +101,15 @@ const host = computed(() => typeof window === 'undefined' ? '' : window.location
 				<p v-if="!instance?.contact_account && !instance?.email" class="a-muted">
 					The administration has not published any public contact details yet.
 				</p>
+			</article>
+
+			<article v-if="pages.length > 0" class="a-rail__card">
+				<h3><AppIcon name="pen" :size="18" /> Instance pages</h3>
+				<ul class="a-about-pages">
+					<li v-for="entry in pages" :key="entry.slug">
+						<a :href="`#/pages/${encodeURIComponent(entry.slug)}`">{{ entry.title }}</a>
+					</li>
+				</ul>
 			</article>
 
 			<article class="a-rail__card">

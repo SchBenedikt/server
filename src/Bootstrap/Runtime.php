@@ -38,6 +38,7 @@ use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FederatedTimeline;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
+use AlohaSocial\Server\Community\InstancePages;
 use AlohaSocial\Server\Community\KokuaBoard;
 use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
@@ -107,6 +108,7 @@ final readonly class Runtime
         public FederatedTimeline $federatedTimeline,
         public LiveUpdates $liveUpdates,
         public AdminService $admin,
+        public InstancePages $instancePages,
         public Announcements $announcements,
         public FeaturedTags $featuredTags,
         public Trends $trends,

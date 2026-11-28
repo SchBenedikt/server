@@ -164,6 +164,84 @@ final class CommunityTest extends TestCase
         self::assertNull($this->server->runtime->announcements->find($announcement['id']));
     }
 
+    public function testInstancePagesAreAdminOnlyDraftsUntilPublished(): void
+    {
+        $empty = $this->server->send('GET', '/api/v1/host/pages');
+        self::assertSame(200, $empty->status);
+        self::assertSame([], $this->decoded($empty)['pages']);
+
+        $anonymous = $this->server->json('PUT', '/api/v1/host/admin/pages/rules', [
+            'title' => 'Rules',
+            'body' => 'Be kind.',
+            'published' => true,
+        ]);
+        self::assertSame(401, $anonymous->status);
+
+        $nonAdmin = $this->server->json('PUT', '/api/v1/host/admin/pages/rules', [
+            'title' => 'Rules',
+            'body' => 'Be kind.',
+            'published' => true,
+        ], $this->bobCookies, $this->bobCsrf);
+        self::assertSame(403, $nonAdmin->status);
+
+        $badSlug = $this->server->json('PUT', '/api/v1/host/admin/pages/Bad_Slug!', [
+            'title' => 'Rules',
+            'body' => 'Be kind.',
+            'published' => true,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(422, $badSlug->status);
+
+        $draft = $this->server->json('PUT', '/api/v1/host/admin/pages/rules', [
+            'title' => '  Community rules  ',
+            'body' => "Be kind.\nNo spam.",
+            'published' => false,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $draft->status);
+        $page = $this->decoded($draft)['page'];
+        self::assertSame('rules', $page['slug']);
+        self::assertSame('Community rules', $page['title']);
+        self::assertFalse($page['published']);
+        self::assertSame($this->alice, $page['updated_by']);
+
+        $public = $this->server->send('GET', '/api/v1/host/pages');
+        self::assertSame([], $this->decoded($public)['pages']);
+        $missing = $this->server->send('GET', '/api/v1/host/pages/rules');
+        self::assertSame(404, $missing->status);
+
+        $published = $this->server->json('PUT', '/api/v1/host/admin/pages/rules', [
+            'title' => 'Community rules',
+            'body' => 'Be kind. No spam.',
+            'published' => true,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $published->status);
+        self::assertTrue($this->decoded($published)['page']['published']);
+
+        $list = $this->server->send('GET', '/api/v1/host/pages');
+        $pages = $this->decoded($list)['pages'];
+        self::assertCount(1, $pages);
+        self::assertSame('rules', $pages[0]['slug']);
+        self::assertArrayNotHasKey('body', $pages[0]);
+
+        $found = $this->server->send('GET', '/api/v1/host/pages/rules');
+        self::assertSame(200, $found->status);
+        self::assertSame('Be kind. No spam.', $this->decoded($found)['page']['body']);
+
+        $adminList = $this->server->send('GET', '/api/v1/host/admin/pages', [
+            'cookies' => $this->aliceCookies,
+        ]);
+        self::assertSame(200, $adminList->status);
+        self::assertCount(1, $this->decoded($adminList)['pages']);
+
+        $deleted = $this->server->json('DELETE', '/api/v1/host/admin/pages/rules', [], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $deleted->status);
+        self::assertSame(404, $this->server->send('GET', '/api/v1/host/pages/rules')->status);
+
+        $audit = $this->server->runtime->database->fetchAll(
+            "SELECT action FROM admin_audit WHERE target_type = 'instance_page' ORDER BY created_at, action",
+        );
+        self::assertSame(['page.delete', 'page.save', 'page.save'], array_column($audit, 'action'));
+    }
+
     public function testFeaturedTagsAreNormalisedAndKeepTheirOrder(): void
     {
         $replaced = $this->server->json('PUT', '/api/v1/host/featured-tags', [

@@ -117,6 +117,29 @@ final class MastodonInstanceTest extends TestCase
         self::assertSame(404, $missing->status);
     }
 
+    public function testRulesProjectFromThePublishedRulesPage(): void
+    {
+        $this->server->runtime->instancePages->save(
+            'admin',
+            'rules',
+            'Community rules',
+            "Be kind.\n\nNo spam or harassment.",
+            true,
+        );
+
+        $rules = $this->decoded($this->server->send('GET', self::PREFIX . '/instance/rules'));
+        self::assertCount(2, $rules);
+        self::assertSame('Community rules', $rules[0]['short_name']);
+        self::assertSame('Be kind.', $rules[0]['text']);
+        self::assertSame('No spam or harassment.', $rules[1]['text']);
+
+        $this->server->runtime->instancePages->save('admin', 'rules', 'Community rules', 'Be kind.', false);
+        self::assertSame([], json_decode(
+            $this->server->send('GET', self::PREFIX . '/instance/rules')->body,
+            true,
+        ));
+    }
+
     public function testSubroutesRequireGetAndEnabledApi(): void
     {
         $post = $this->server->send('POST', self::PREFIX . '/instance/peers');

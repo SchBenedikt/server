@@ -16,6 +16,7 @@ export type AdminSection =
 	| 'queue'
 	| 'settings'
 	| 'announcements'
+	| 'pages'
 	| 'audit';
 
 export interface AdminSectionDefinition {
@@ -34,6 +35,7 @@ export const ADMIN_SECTIONS: AdminSectionDefinition[] = [
 	{ id: 'queue', label: 'Queue', icon: 'server', hint: 'Jobs, retries and dead tasks' },
 	{ id: 'settings', label: 'Instance', icon: 'settings', hint: 'Runtime, limits and configuration warnings' },
 	{ id: 'announcements', label: 'Announcements', icon: 'bell', hint: 'Publish notices as a banner on the home page' },
+	{ id: 'pages', label: 'Pages', icon: 'pen', hint: 'Rules, terms and other public pages readers can open' },
 	{ id: 'audit', label: 'Audit log', icon: 'shield', hint: 'Every administrative change, fully traceable' },
 ];
 
@@ -386,6 +388,16 @@ export interface PreflightReport {
 	summary: { ok: number; warn: number; fail: number; skip: number };
 }
 
+export interface AdminInstancePage {
+	slug: string;
+	title: string;
+	body: string;
+	published: boolean;
+	created_at: string;
+	updated_at: string;
+	updated_by: string;
+}
+
 export interface AdminApi {
 	overview(): Promise<AdminOverview>;
 	preflight(external?: boolean): Promise<PreflightReport>;
@@ -411,6 +423,9 @@ export interface AdminApi {
 	instance(): Promise<AdminInstance>;
 	settings(): Promise<AdminSettingsData>;
 	updateSettings(payload: AdminSettingsPayload): Promise<AdminSettingsData>;
+	instancePages(): Promise<AdminInstancePage[]>;
+	saveInstancePage(slug: string, payload: { title: string; body: string; published: boolean }): Promise<AdminInstancePage>;
+	deleteInstancePage(slug: string): Promise<void>;
 	audit(limit?: number): Promise<AuditEntry[]>;
 	createReport(payload: ReportPayload): Promise<AdminReport>;
 }
@@ -641,6 +656,27 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 
 		async updateSettings(payload: AdminSettingsPayload): Promise<AdminSettingsData> {
 			return request<AdminSettingsData>('POST', '/api/v1/host/admin/settings', undefined, payload);
+		},
+
+		async instancePages(): Promise<AdminInstancePage[]> {
+			const data = await request<{ pages?: AdminInstancePage[] }>('GET', '/api/v1/host/admin/pages');
+
+			return Array.isArray(data.pages) ? data.pages : [];
+		},
+
+		async saveInstancePage(slug, payload): Promise<AdminInstancePage> {
+			const data = await request<{ page: AdminInstancePage }>(
+				'PUT',
+				`/api/v1/host/admin/pages/${encodeURIComponent(slug)}`,
+				undefined,
+				payload,
+			);
+
+			return data.page;
+		},
+
+		async deleteInstancePage(slug): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/admin/pages/${encodeURIComponent(slug)}`);
 		},
 
 		async audit(limit = 100): Promise<AuditEntry[]> {

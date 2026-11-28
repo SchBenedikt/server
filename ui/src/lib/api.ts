@@ -64,6 +64,8 @@ import type {
 	KokuaEntry,
 	KokuaPage,
 	KokuaStatus,
+	InstancePage,
+	InstancePageSummary,
 } from './types';
 
 type JsonRecord = Record<string, unknown>;
@@ -226,6 +228,8 @@ export interface Api {
 	createAnnouncement(content: string, expiresAt?: string | null): Promise<Announcement>;
 	updateAnnouncement(id: string, payload: { content?: string; active?: boolean; expires_at?: string | null }): Promise<Announcement>;
 	deleteAnnouncement(id: string): Promise<void>;
+	instancePages(): Promise<InstancePageSummary[]>;
+	instancePage(slug: string): Promise<InstancePage | null>;
 	featuredTags(account?: string): Promise<FeaturedTag[]>;
 	setFeaturedTags(tags: string[]): Promise<FeaturedTag[]>;
 	trends(days?: number, limit?: number): Promise<TrendsData>;
@@ -2409,6 +2413,43 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		async deleteAnnouncement(id: string): Promise<void> {
 			await request<unknown>('DELETE', `/api/v1/host/announcements/${encodeURIComponent(id)}`);
+		},
+
+		async instancePages(): Promise<InstancePageSummary[]> {
+			const data = await request<{ pages?: unknown }>('GET', '/api/v1/host/pages');
+
+			return Array.isArray(data?.pages)
+				? data.pages.filter(isRecord).map((row) => ({
+					slug: String(row.slug ?? ''),
+					title: String(row.title ?? ''),
+					updated_at: String(row.updated_at ?? ''),
+				})).filter((row) => row.slug !== '')
+				: [];
+		},
+
+		async instancePage(slug: string): Promise<InstancePage | null> {
+			try {
+				const data = await request<{ page?: unknown }>(
+					'GET',
+					`/api/v1/host/pages/${encodeURIComponent(slug)}`,
+				);
+				const row = isRecord(data?.page) ? data.page : null;
+				if (row === null || typeof row.body !== 'string') {
+					return null;
+				}
+
+				return {
+					slug: String(row.slug ?? slug),
+					title: String(row.title ?? ''),
+					body: row.body,
+					updated_at: String(row.updated_at ?? ''),
+				};
+			} catch (error) {
+				if (error instanceof ApiError && error.status === 404) {
+					return null;
+				}
+				throw error;
+			}
 		},
 
 		async featuredTags(account?: string): Promise<FeaturedTag[]> {

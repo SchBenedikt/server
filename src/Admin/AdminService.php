@@ -29,6 +29,7 @@ use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Community\InstancePages;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Support\EnvFile;
@@ -100,6 +101,7 @@ final class AdminService
         private readonly HostConfig $config,
         private readonly ?S3CompatibleClient $s3Client = null,
         private readonly ?EmailChangeService $emailChange = null,
+        private readonly ?InstancePages $instancePages = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
         $this->mastodonOAuth = new MastodonOAuthRepository($db);
@@ -1074,6 +1076,47 @@ final class AdminService
             'checks' => $required,
             'warnings' => $this->configurationWarnings(),
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function instancePages(): array
+    {
+        return $this->pages()?->all() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function saveInstancePage(string $adminId, string $slug, mixed $title, mixed $body, mixed $published): array
+    {
+        $pages = $this->pages();
+        if ($pages === null) {
+            throw new \LogicException('Instance pages are not configured.');
+        }
+        $page = $pages->save($adminId, $slug, $title, $body, $published);
+        $this->record($adminId, 'page.save', 'instance_page', (string) $page['slug'], [
+            'title' => (string) $page['title'],
+            'published' => $page['published'],
+        ]);
+
+        return $page;
+    }
+
+    public function deleteInstancePage(string $adminId, string $slug): void
+    {
+        $pages = $this->pages();
+        if ($pages === null) {
+            throw new \LogicException('Instance pages are not configured.');
+        }
+        $pages->delete($slug);
+        $this->record($adminId, 'page.delete', 'instance_page', $slug, []);
+    }
+
+    private function pages(): ?InstancePages
+    {
+        return $this->instancePages;
     }
 
     /**
