@@ -103,10 +103,10 @@ final class Drafts
         if ($existing === null) {
             $id = bin2hex(random_bytes(12));
             $this->db->execute(
-                'INSERT INTO draft (id, account_id, context, content, content_warning, visibility, attachment_ids,'
+                'INSERT INTO draft (id, account_id, context, content, content_warning, visibility, language, attachment_ids,'
                 . ' in_reply_to_id, quoted_post_id, poll_options, poll_multiple, poll_hide_totals, poll_expires_in,'
                 . ' created_at, updated_at)'
-                . ' VALUES (:id, :account_id, :context, :content, :content_warning, :visibility, :attachment_ids,'
+                . ' VALUES (:id, :account_id, :context, :content, :content_warning, :visibility, :language, :attachment_ids,'
                 . ' :in_reply_to_id, :quoted_post_id, :poll_options, :poll_multiple, :poll_hide_totals, :poll_expires_in,'
                 . ' :created_at, :updated_at)',
                 $this->parameters($id, $accountId, $draft, $now) + ['created_at' => $now],
@@ -115,7 +115,7 @@ final class Drafts
             $id = (string) $existing['id'];
             $this->db->execute(
                 'UPDATE draft SET context = :context, content = :content, content_warning = :content_warning,'
-                . ' visibility = :visibility, attachment_ids = :attachment_ids, in_reply_to_id = :in_reply_to_id,'
+                . ' visibility = :visibility, language = :language, attachment_ids = :attachment_ids, in_reply_to_id = :in_reply_to_id,'
                 . ' quoted_post_id = :quoted_post_id, poll_options = :poll_options, poll_multiple = :poll_multiple,'
                 . ' poll_hide_totals = :poll_hide_totals, poll_expires_in = :poll_expires_in, updated_at = :updated_at'
                 . ' WHERE id = :id AND account_id = :account_id',
@@ -156,6 +156,7 @@ final class Drafts
         $warning = trim(is_string($payload['content_warning'] ?? null) ? $payload['content_warning'] : '');
         $visibility = is_string($payload['visibility'] ?? null) ? $payload['visibility'] : 'public';
         $context = trim(is_string($payload['context'] ?? null) ? $payload['context'] : '');
+        $language = is_string($payload['language'] ?? null) ? trim($payload['language']) : '';
 
         $attachmentIds = $this->stringList($payload['attachment_ids'] ?? [], self::MAX_ATTACHMENTS);
         $poll = $this->poll($payload['poll'] ?? null);
@@ -172,6 +173,9 @@ final class Drafts
         if (!in_array($visibility, ['public', 'unlisted', 'followers'], true)) {
             throw CommunityException::invalid('This visibility is invalid.', ['visibility' => 'Please choose public, unlisted or followers.']);
         }
+        if (mb_strlen($language) > 35) {
+            throw CommunityException::invalid('The language tag is too long.', ['language' => 'At most 35 characters.']);
+        }
         if ($content === '' && $attachmentIds === [] && $poll === null) {
             throw CommunityException::invalid('The draft is empty.', ['content' => 'Write something or attach an image.']);
         }
@@ -181,6 +185,7 @@ final class Drafts
             'content' => $content,
             'content_warning' => $warning === '' ? null : $warning,
             'visibility' => $visibility,
+            'language' => $language === '' ? null : $language,
             'attachment_ids' => $attachmentIds,
             'in_reply_to_id' => $this->optionalId($payload['in_reply_to_id'] ?? null),
             'quoted_post_id' => $this->optionalId($payload['quoted_post_id'] ?? null),
@@ -270,6 +275,7 @@ final class Drafts
             'content' => $draft['content'],
             'content_warning' => $draft['content_warning'],
             'visibility' => $draft['visibility'],
+            'language' => $draft['language'],
             'attachment_ids' => json_encode($draft['attachment_ids'], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
             'in_reply_to_id' => $draft['in_reply_to_id'],
             'quoted_post_id' => $draft['quoted_post_id'],
@@ -298,6 +304,7 @@ final class Drafts
             'content' => (string) $row['content'],
             'content_warning' => is_string($row['content_warning'] ?? null) ? $row['content_warning'] : null,
             'visibility' => (string) $row['visibility'],
+            'language' => is_string($row['language'] ?? null) ? $row['language'] : null,
             'attachment_ids' => is_array($attachments) ? array_values(array_filter($attachments, 'is_string')) : [],
             'in_reply_to_id' => is_string($row['in_reply_to_id'] ?? null) ? $row['in_reply_to_id'] : null,
             'quoted_post_id' => is_string($row['quoted_post_id'] ?? null) ? $row['quoted_post_id'] : null,

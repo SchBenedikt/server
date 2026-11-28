@@ -70,6 +70,7 @@ export interface TimelineItem {
 	content: string;
 	content_warning: string | null;
 	visibility: string | null;
+	language?: string | null;
 	published_at: string;
 	edited_at?: string | null;
 	revision?: number;
@@ -298,6 +299,7 @@ export interface CreatePostPayload {
 	content: string;
 	visibility: 'public' | 'unlisted' | 'followers' | 'direct';
 	content_warning?: string | null;
+	language?: string | null;
 	in_reply_to_id?: string | null;
 	quoted_post_id?: string | null;
 	attachment_ids?: string[];
@@ -308,6 +310,7 @@ export interface UpdatePostPayload {
 	content: string;
 	visibility: 'public' | 'unlisted' | 'followers';
 	content_warning: string | null;
+	language?: string | null;
 	attachment_ids?: string[];
 	revision?: number;
 }
@@ -356,6 +359,7 @@ export interface ScheduledPost {
 	recipient_ids: string[];
 	in_reply_to_id: string | null;
 	scheduled_at: string;
+	language?: string | null;
 	created_at: string;
 	state: 'scheduled' | 'published' | 'failed' | 'cancelled';
 	published_at: string | null;
@@ -370,6 +374,7 @@ export interface ScheduledPostPayload {
 	recipient_ids?: string[];
 	in_reply_to_id?: string | null;
 	scheduled_at: string;
+	language?: string | null;
 }
 
 export interface BlockEntry {
@@ -400,6 +405,7 @@ export interface CreateStatusPayload {
 	status: string;
 	visibility: 'public' | 'unlisted' | 'followers' | 'direct';
 	spoiler_text?: string | null;
+	language?: string | null;
 	media_ids?: string[];
 	in_reply_to_id?: string | null;
 	recipient_ids?: string[];
@@ -615,6 +621,7 @@ export interface Draft {
 	content: string;
 	content_warning: string | null;
 	visibility: string;
+	language?: string | null;
 	attachment_ids: string[];
 	in_reply_to_id: string | null;
 	quoted_post_id: string | null;

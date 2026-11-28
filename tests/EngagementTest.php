@@ -93,6 +93,7 @@ final class EngagementTest extends TestCase
             'content' => 'Gedanke zu Ende',
             'content_warning' => 'CW',
             'visibility' => 'followers',
+            'language' => 'de',
             'poll' => [
                 'options' => ['Ja', 'Nein'],
                 'multiple' => false,
@@ -107,6 +108,7 @@ final class EngagementTest extends TestCase
         self::assertSame('Gedanke zu Ende', $updated['content']);
         self::assertSame('CW', $updated['content_warning']);
         self::assertSame('followers', $updated['visibility']);
+        self::assertSame('de', $updated['language']);
         self::assertTrue($updated['poll']['hide_totals']);
         self::assertSame(['Ja', 'Nein'], $updated['poll']['options']);
 
