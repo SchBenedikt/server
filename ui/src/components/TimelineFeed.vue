@@ -77,6 +77,16 @@ defineExpose({
 			</span>
 		</div>
 
+		<button
+			v-if="timeline.pendingNew.value.length > 0"
+			type="button"
+			class="a-feed__new"
+			@click="timeline.showNewPosts"
+		>
+			<AppIcon name="arrowUp" :size="14" />
+			{{ timeline.pendingNew.value.length }} new post{{ timeline.pendingNew.value.length === 1 ? '' : 's' }}
+		</button>
+
 		<TimelineSkeleton v-if="timeline.loading.value && timeline.posts.value.length === 0" />
 
 		<div v-else-if="timeline.error.value !== '' && timeline.posts.value.length === 0" class="a-error-panel">
