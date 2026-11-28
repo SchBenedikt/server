@@ -152,6 +152,14 @@ and lifecycle are documented in [Mastodon streaming](mastodon-streaming.md).
 The standalone supports SSE; WebSocket and third-party-client compatibility
 are not implied.
 
+Browser-based Mastodon clients (Elk, Phanpy, Pinafore and the like) call the
+compatibility surface, `POST /api/v1/apps` and `/oauth/token` +
+`/oauth/revoke` cross-origin. Those routes answer with
+`Access-Control-Allow-Origin: *` — never a reflected origin and never
+`Allow-Credentials` — and `OPTIONS` preflights on them return 204 without
+authentication. The session-authenticated first-party API stays same-origin
+only.
+
 | Screen | Route | What it uses |
 | --- | --- | --- |
 | Lesezeichen | `#/bookmarks` | `GET /bookmarks`, `POST /statuses/{id}/bookmark` and `/unbookmark`. Bookmark state is also rendered on every post. |

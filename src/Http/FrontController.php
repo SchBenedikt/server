@@ -73,6 +73,8 @@ final class FrontController
 
     private readonly MastodonStreamingController $mastodonStreaming;
 
+    private readonly ClientApiCors $clientApiCors;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
@@ -84,6 +86,7 @@ final class FrontController
         $this->atprotoOAuth = new AtprotoOAuthController($runtime);
         $this->mastodonOAuth = new MastodonOAuthController($runtime);
         $this->mastodonStreaming = new MastodonStreamingController($runtime);
+        $this->clientApiCors = new ClientApiCors($runtime->config->mastodonPrefix);
     }
 
     /**
@@ -102,6 +105,10 @@ final class FrontController
         $response = $this->withDynamicCachePolicy(
             $this->dispatch($request, $cookies, $userAgent, $ip),
         );
+
+        if ($this->clientApiCors->isScoped($request->path)) {
+            $response = $this->clientApiCors->apply($response);
+        }
 
         $route = Metrics::routeTemplate($request->path);
         $statusClass = intdiv($response->status, 100) . 'xx';
@@ -213,6 +220,13 @@ final class FrontController
      */
     private function dispatch(Request $request, array $cookies = [], ?string $userAgent = null, ?string $ip = null): Response
     {
+        // CORS preflights carry no credentials and must be answered before
+        // any session or bearer work; the call that follows is authenticated
+        // exactly as a same-origin request would be.
+        if ($request->method === 'OPTIONS' && $this->clientApiCors->isScoped($request->path)) {
+            return $this->clientApiCors->preflight();
+        }
+
         $cookieName = $this->runtime->config->sessionCookieName;
         $rawCookie = $cookies[$cookieName] ?? null;
         $rawCookie = is_string($rawCookie) && $rawCookie !== '' ? $rawCookie : null;
