@@ -11,6 +11,7 @@ export type Route =
 	| { name: 'explore' }
 	| { name: 'notifications' }
 	| { name: 'about' }
+	| { name: 'page'; slug: string }
 	| { name: 'profile'; handle: string; tab?: 'posts' | 'media' }
 	| { name: 'post'; id: string }
 	| { name: 'tag'; tag: string }
@@ -63,6 +64,10 @@ export function parseHash(hash: string): Route {
 
 	if (parts[0] === 'about' && parts.length === 1) {
 		return { name: 'about' };
+	}
+
+	if (parts[0] === 'pages' && parts[1] !== undefined && parts.length === 2) {
+		return { name: 'page', slug: decode(parts[1]) };
 	}
 
 	if (parts[0] === 'bookmarks' && parts.length === 1) {
@@ -223,6 +228,8 @@ export function routeTitle(current: Route): string {
 			return 'Notifications';
 		case 'about':
 			return 'About this instance';
+		case 'page':
+			return 'Instance page';
 		case 'profile':
 			return `@${current.handle}`;
 		case 'post':

@@ -140,6 +140,28 @@ of `CommunityApiController`. Authors alone can complete, reopen or delete a
 card, and the author cannot offer help on their own request. Offers are
 idempotent: a second click updates the note instead of inflating the count.
 
+## Instance pages
+
+Administrators can publish public pages — community rules, terms, a privacy
+notice — from **Administration → Pages**. Each page has a slug address
+(`rules`, `terms`, `privacy`, …), a title and plain-text body; blank lines
+start a new paragraph and markup is never interpreted, so an editor cannot
+inject HTML into a public surface. Pages stay invisible until published:
+`GET /api/v1/host/pages` lists only published entries and
+`GET /api/v1/host/pages/{slug}` returns 404 for drafts and unknown slugs —
+an unconfigured instance honestly has no rules text rather than a
+fabricated one.
+
+Readers open them at `#/pages/{slug}` and find the published list under
+"Instance pages" on `#/about`. Every save and delete is written to the
+admin audit log (`page.save` / `page.delete` on the `instance_page`
+target). When a page with the slug `rules` is published, its paragraphs are
+also projected into the Mastodon `instance/rules` endpoint so compatible
+clients show the same text.
+
+The `instance_page` table is created by host migration `202611280030`; the
+service is `src/Community/InstancePages.php`.
+
 ## Reading, organising and scheduling
 
 The core's Mastodon-compatible API at `/api/mastodon/v1` is enabled by default
@@ -164,9 +186,10 @@ only.
 probe the v2 path. The compatibility prefix also serves the public instance
 sub-resources Mastodon clients read alongside it:
 `{prefix}/instance/peers` (domains this instance exchanges content with),
-`{prefix}/instance/rules` and `{prefix}/instance/custom_emojis` (empty —
-the product has no rules text or custom emoji), and
-`{prefix}/instance/announcements` (+ `/{id}`) projecting the admin
+`{prefix}/instance/rules` projects the published `rules` instance page
+(each paragraph becomes one rule; empty until configured),
+`{prefix}/instance/custom_emojis` (empty — the product has no custom emoji),
+and `{prefix}/instance/announcements` (+ `/{id}`) projecting the admin
 announcement board into the Mastodon announcement shape.
 
 | Screen | Route | What it uses |

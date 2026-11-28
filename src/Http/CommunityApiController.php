@@ -242,6 +242,19 @@ final class CommunityApiController
                 ]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/pages') {
+                return Response::json(['pages' => $this->runtime->instancePages->published()]);
+            }
+
+            if ($method === 'GET' && preg_match('#^/api/v1/host/pages/([^/]+)$#', $path, $matches) === 1) {
+                $page = $this->runtime->instancePages->find(rawurldecode($matches[1]));
+                if ($page === null) {
+                    return $this->error(404, 'not_found', 'This page does not exist.');
+                }
+
+                return Response::json(['page' => $page]);
+            }
+
             if ($method === 'GET' && $path === '/api/v1/host/featured-tags') {
                 $account = $this->account($request, $session, 'account');
                 if ($account === null) {

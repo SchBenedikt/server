@@ -14,6 +14,7 @@ import AdminAudit from './admin/AdminAudit.vue';
 import AdminErrors from './admin/AdminErrors.vue';
 import AdminFederation from './admin/AdminFederation.vue';
 import AdminOverview from './admin/AdminOverview.vue';
+import AdminPages from './admin/AdminPages.vue';
 import AdminQueue from './admin/AdminQueue.vue';
 import AdminReports from './admin/AdminReports.vue';
 import AdminSettings from './admin/AdminSettings.vue';
@@ -40,6 +41,8 @@ const sectionView = computed(() => {
 			return AdminSettings;
 		case 'announcements':
 			return AdminAnnouncements;
+		case 'pages':
+			return AdminPages;
 		case 'audit':
 			return AdminAudit;
 		default:

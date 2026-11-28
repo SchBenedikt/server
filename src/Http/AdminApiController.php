@@ -14,6 +14,7 @@ use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Server\Admin\AdminException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Bootstrap\Runtime;
+use AlohaSocial\Server\Community\CommunityException;
 use Throwable;
 
 use function array_key_exists;
@@ -86,6 +87,13 @@ final class AdminApiController
             }
 
             return $this->admin($request, $userId);
+        } catch (CommunityException $exception) {
+            return $this->error(
+                $exception->status,
+                $exception->errorCode,
+                $exception->getMessage(),
+                $exception->fields,
+            );
         } catch (AdminException $exception) {
             return $this->error(
                 $exception->status,
@@ -292,6 +300,30 @@ final class AdminApiController
 
         if ($method === 'GET' && $path === self::PREFIX . '/instance') {
             return Response::json($this->runtime->admin->instance());
+        }
+
+        if ($method === 'GET' && $path === self::PREFIX . '/pages') {
+            return Response::json(['pages' => $this->runtime->admin->instancePages()]);
+        }
+
+        if ($method === 'PUT' && preg_match('#^' . self::PREFIX . '/pages/([^/]+)$#', $path, $match) === 1) {
+            $body = $this->jsonBody($request);
+
+            return Response::json([
+                'page' => $this->runtime->admin->saveInstancePage(
+                    $userId,
+                    rawurldecode($match[1]),
+                    $body['title'] ?? null,
+                    $body['body'] ?? null,
+                    $body['published'] ?? false,
+                ),
+            ]);
+        }
+
+        if ($method === 'DELETE' && preg_match('#^' . self::PREFIX . '/pages/([^/]+)$#', $path, $match) === 1) {
+            $this->runtime->admin->deleteInstancePage($userId, rawurldecode($match[1]));
+
+            return Response::json(['deleted' => true]);
         }
 
         if ($method === 'GET' && $path === self::PREFIX . '/settings') {

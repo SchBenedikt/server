@@ -81,6 +81,7 @@ use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FederatedTimeline;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
+use AlohaSocial\Server\Community\InstancePages;
 use AlohaSocial\Server\Community\KokuaBoard;
 use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
@@ -320,6 +321,8 @@ final class ApplicationFactory
             $preferences,
         );
 
+        $instancePages = new InstancePages($database, $clock);
+
         return new Runtime(
             config: $this->config,
             database: $database,
@@ -376,7 +379,9 @@ final class ApplicationFactory
                 $this->config,
                 $storage->s3Client,
                 $emailChange,
+                $instancePages,
             ),
+            instancePages: $instancePages,
             announcements: new Announcements($database, $clock),
             featuredTags: new FeaturedTags($database, $clock),
             trends: new Trends($database, $clock),
