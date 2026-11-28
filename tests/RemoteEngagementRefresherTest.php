@@ -33,18 +33,23 @@ final class RemoteEngagementRefresherTest extends TestCase
         });
     }
 
-    private function seedRemotePost(TestServer $server, string $objectId, string $actorId): void
-    {
+    private function seedRemotePost(
+        TestServer $server,
+        string $objectId,
+        string $actorId,
+        string $publishedAt = '2026-11-20T10:00:00Z',
+    ): void {
         $server->runtime->database->execute(
             'INSERT INTO social_remote_post'
             . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, audience)'
             . " VALUES (:activity_id, :object_id, :author, :actor, 'post', 'Federated post',"
-            . " '2026-11-20T10:00:00Z', 'public')",
+            . ' :published_at, \'public\')',
             [
                 'activity_id' => $objectId,
                 'object_id' => $objectId,
                 'author' => $actorId,
                 'actor' => $actorId,
+                'published_at' => $publishedAt,
             ],
         );
         $server->runtime->database->execute(
@@ -136,6 +141,46 @@ final class RemoteEngagementRefresherTest extends TestCase
         );
         self::assertArrayHasKey($queuedId, $server->runtime->remoteEngagement->counts([$queuedId]));
         self::assertArrayNotHasKey($scanId, $server->runtime->remoteEngagement->counts([$scanId]));
+    }
+
+    public function testAgeAdaptiveTtlSkipsFreshOldPosts(): void
+    {
+        $http = new FakeBoundedHttpClient();
+        $server = $this->server($http);
+        $server->createAccount('alice', 'alice@example.test');
+
+        // Both snapshots were fetched an hour ago — older than the 15 minute
+        // base TTL, so the SQL candidate scan returns both.
+        $fetchedAt = gmdate('Y-m-d\TH:i:s\Z', time() - 3600);
+        $oldId = 'https://mastodon.test/users/alice/statuses/900';
+        $youngId = 'https://mastodon.test/users/bob/statuses/901';
+        $this->seedRemotePost($server, $oldId, 'https://mastodon.test/users/alice', '2020-01-01T00:00:00Z');
+        $this->seedRemotePost($server, $youngId, 'https://mastodon.test/users/bob', gmdate('Y-m-d\TH:i:s\Z'));
+
+        foreach ([$oldId, $youngId] as $objectId) {
+            $server->runtime->database->execute(
+                'INSERT INTO social_remote_engagement (object_id, likes, boosts, replies, fetched_at)'
+                . ' VALUES (:object_id, 3, 1, 2, :fetched_at)',
+                ['object_id' => $objectId, 'fetched_at' => $fetchedAt],
+            );
+        }
+
+        $http->json('https://mastodon.test/api/v1/statuses/901', [
+            'id' => '901',
+            'favourites_count' => 4,
+            'replies_count' => 0,
+            'reblogs_count' => 0,
+        ]);
+
+        $refreshed = $server->runtime->remoteEngagementRefresher->refresh(10);
+
+        // The six-year-old post earns the 8x TTL and stays fresh; only the
+        // young post is re-fetched.
+        self::assertSame(1, $refreshed);
+        self::assertSame(
+            ['https://mastodon.test/api/v1/statuses/901'],
+            $http->requests,
+        );
     }
 
     public function testRequestRefreshDeduplicatesAndValidatesIds(): void
