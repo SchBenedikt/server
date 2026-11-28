@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, reactive, watch, type ComputedRef } from 'vue';
-import { getApi } from './api';
+import { ApiError, getApi } from './api';
 import { accountName, handleLabel, isRemoteId } from './format';
 import type { Account, Relationship } from './types';
 
@@ -12,7 +12,30 @@ export const directory = reactive({
 	loading: {} as Record<string, boolean>,
 });
 
-const pending = new Set<string>();
+/**
+ * Bookkeeping behind the public `directory` map: when a negative or failed
+ * entry stops being authoritative, and how often a transient failure has
+ * retried. Kept out of the reactive state because it is not rendered.
+ */
+interface ResolveMeta {
+	until: number;
+	attempts: number;
+}
+
+const pending = new Map<string, Promise<Account | null>>();
+const meta = new Map<string, ResolveMeta>();
+
+/**
+ * A confirmed-absent profile stays absent briefly so scrolling back and
+ * forth does not refetch it; a transient failure retries with bounded
+ * exponential backoff instead of being cached as a permanent null.
+ */
+const MISSING_TTL_MS = 60_000;
+const FAILED_BASE_MS = 1_000;
+const FAILED_MAX_MS = 30_000;
+const MAX_CACHED_ACCOUNTS = 500;
+
+let directoryEpoch = 0;
 const hostNames = reactive<Record<string, string>>({});
 let hostNamesRequested = false;
 
@@ -49,34 +72,103 @@ export async function resolveAccount(id: string): Promise<Account | null> {
 		return null;
 	}
 
-	if (Object.prototype.hasOwnProperty.call(directory.accounts, id)) {
-		return directory.accounts[id];
+	const cached = directory.accounts[id];
+	if (cached !== undefined) {
+		if (cached !== null) {
+			return cached;
+		}
+
+		const entry = meta.get(id);
+		if (entry !== undefined && entry.until > Date.now()) {
+			return null;
+		}
+
+		// The negative entry expired: drop it and resolve again below.
+		delete directory.accounts[id];
+		meta.delete(id);
 	}
 
-	if (pending.has(id)) {
-		return null;
+	const inflight = pending.get(id);
+	if (inflight !== undefined) {
+		return inflight;
 	}
 
-	pending.add(id);
-	directory.loading[id] = true;
+	const epoch = directoryEpoch;
+	const request = (async (): Promise<Account | null> => {
+		directory.loading[id] = true;
 
-	try {
-		const account = await getApi().account(id);
-		const name = hostDisplayName(id);
-		const resolved = name === '' ? account : { ...account, display_name: name };
-		directory.accounts[id] = resolved;
-		return resolved;
-	} catch {
-		directory.accounts[id] = null;
-		return null;
-	} finally {
-		pending.delete(id);
-		delete directory.loading[id];
+		try {
+			const account = await getApi().account(id);
+			if (epoch !== directoryEpoch) {
+				return null;
+			}
+
+			const name = hostDisplayName(id);
+			rememberAccount(id, name === '' ? account : { ...account, display_name: name });
+			return directory.accounts[id] ?? null;
+		} catch (error) {
+			if (epoch === directoryEpoch) {
+				noteFailure(id, error);
+			}
+
+			return null;
+		} finally {
+			pending.delete(id);
+			if (epoch === directoryEpoch) {
+				delete directory.loading[id];
+			}
+		}
+	})();
+
+	pending.set(id, request);
+	return request;
+}
+
+function rememberAccount(id: string, account: Account): void {
+	meta.delete(id);
+	directory.accounts[id] = account;
+
+	const keys = Object.keys(directory.accounts);
+	const overflow = keys.length - MAX_CACHED_ACCOUNTS;
+	for (const key of keys.slice(0, Math.max(0, overflow))) {
+		delete directory.accounts[key];
+		meta.delete(key);
 	}
+}
+
+function noteFailure(id: string, error: unknown): void {
+	directory.accounts[id] = null;
+
+	if (error instanceof ApiError && (error.status === 404 || error.status === 410)) {
+		meta.set(id, { until: Date.now() + MISSING_TTL_MS, attempts: 0 });
+		return;
+	}
+
+	const attempts = (meta.get(id)?.attempts ?? 0) + 1;
+	const delay = Math.min(FAILED_MAX_MS, FAILED_BASE_MS * 2 ** (attempts - 1));
+	meta.set(id, { until: Date.now() + delay, attempts });
+}
+
+/**
+ * Drops every cached profile and discards in-flight results. Logout and
+ * account switches call this so relationship state from one session can
+ * never leak into the next.
+ */
+export function resetAccountDirectory(): void {
+	directoryEpoch++;
+	for (const key of Object.keys(directory.accounts)) {
+		delete directory.accounts[key];
+	}
+	for (const key of Object.keys(directory.loading)) {
+		delete directory.loading[key];
+	}
+	meta.clear();
+	pending.clear();
 }
 
 export async function refreshAccount(id: string): Promise<Account | null> {
 	delete directory.accounts[id];
+	meta.delete(id);
 	return resolveAccount(id);
 }
 
@@ -125,6 +217,7 @@ export function applyRelationship(id: string, relationship: Relationship): void 
 }
 
 export function setAccount(account: Account): void {
+	meta.delete(account.id);
 	const name = hostDisplayName(account.id);
 	directory.accounts[account.id] = name === '' ? account : { ...account, display_name: name };
 }

@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { route } from '../lib/router';
 import { getApi } from '../lib/api';
+import { resetAccountDirectory } from '../lib/account';
 import { appState, openComposer, toggleTheme } from '../lib/state';
 
 const signedIn = computed(() => appState.session.user !== null);
@@ -132,6 +133,7 @@ async function logout(): Promise<void> {
 	}
 
 	loggingOut.value = true;
+	resetAccountDirectory();
 	try {
 		await getApi().logout();
 	} finally {
