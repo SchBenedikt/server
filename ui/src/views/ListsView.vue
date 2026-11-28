@@ -8,6 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { AccountList } from '../lib/types';
 
@@ -44,7 +45,7 @@ async function load(): Promise<void> {
 	try {
 		lists.value = await getApi().lists();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Lists could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('lists.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -77,11 +78,11 @@ function closeDialog(): void {
 async function save(): Promise<void> {
 	const title = dialogTitle.value.trim();
 	if (title === '') {
-		dialogError.value = 'Please enter a name for the list.';
+		dialogError.value = t('lists.nameRequired');
 		return;
 	}
 	if (Array.from(title).length > 80) {
-		dialogError.value = 'The name may be at most 80 characters long.';
+		dialogError.value = t('lists.nameTooLong');
 		return;
 	}
 
@@ -92,15 +93,15 @@ async function save(): Promise<void> {
 			const list = await getApi().createList(title);
 			lists.value = [list, ...lists.value];
 			creating.value = false;
-			showToast('List created.', 'success');
+			showToast(t('lists.created'), 'success');
 		} else if (editing.value !== null) {
 			const updated = await getApi().updateList(editing.value.id, title);
 			lists.value = lists.value.map((entry) => entry.id === updated.id ? updated : entry);
 			editing.value = null;
-			showToast('List renamed.', 'success');
+			showToast(t('lists.renamed'), 'success');
 		}
 	} catch (caught) {
-		dialogError.value = caught instanceof Error ? caught.message : 'The list could not be saved.';
+		dialogError.value = caught instanceof Error ? caught.message : t('lists.saveFailed');
 	} finally {
 		saving.value = false;
 	}
@@ -126,9 +127,9 @@ async function remove(list: AccountList): Promise<void> {
 		await getApi().deleteList(list.id);
 		lists.value = lists.value.filter((entry) => entry.id !== list.id);
 		confirmDelete.value = '';
-		showToast('List deleted.', 'success');
+		showToast(t('lists.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The list could not be deleted.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('lists.deleteFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -137,7 +138,7 @@ async function remove(list: AccountList): Promise<void> {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Lists" subtitle="Private collections of accounts with their own timeline.">
+		<PageHeader :title="t('nav.lists')" :subtitle="t('lists.subtitle')">
 			<template #actions>
 				<button
 					v-if="signedIn"
@@ -145,16 +146,16 @@ async function remove(list: AccountList): Promise<void> {
 					class="a-btn a-btn--primary a-btn--small"
 					@click="openCreate"
 				>
-					<AppIcon name="plus" :size="15" /> New list
+					<AppIcon name="plus" :size="15" /> {{ t('lists.newList') }}
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="list" :size="26" /></span>
-			<h2>Lists for your circles</h2>
-			<p>Sign in to sort accounts into private lists and read only their posts.</p>
-			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+			<h2>{{ t('lists.loginTitle') }}</h2>
+			<p>{{ t('lists.loginText') }}</p>
+			<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<div v-else-if="loading && lists.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -163,18 +164,18 @@ async function remove(list: AccountList): Promise<void> {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Lists unavailable</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			<div><strong>{{ t('lists.unavailable') }}</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</div>
 
 		<EmptyState
 			v-else-if="lists.length === 0"
 			icon="list"
-			title="No lists yet"
-			text="A list groups selected accounts. Create a list and then add accounts to it."
+			:title="t('lists.emptyTitle')"
+			:text="t('lists.emptyText')"
 		>
 			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">
-				Create your first list
+				{{ t('lists.createFirst') }}
 			</button>
 		</EmptyState>
 
@@ -184,15 +185,15 @@ async function remove(list: AccountList): Promise<void> {
 					<span class="a-management-item__icon"><AppIcon name="list" :size="19" /></span>
 					<span class="a-management-item__copy">
 						<strong>{{ list.title }}</strong>
-						<small>{{ list.exclusive ? 'Exclusive list' : 'Also included on Home' }}</small>
+						<small>{{ list.exclusive ? t('lists.exclusive') : t('lists.alsoOnHome') }}</small>
 					</span>
 				</a>
 				<div class="a-management-item__actions">
 					<button
 						type="button"
 						class="a-icon-btn"
-						aria-label="Rename list"
-						title="Rename"
+						:aria-label="t('lists.renameTitle')"
+						:title="t('lists.rename')"
 						@click="openEdit(list)"
 					>
 						<AppIcon name="pen" :size="16" />
@@ -201,8 +202,8 @@ async function remove(list: AccountList): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--danger': confirmDelete === list.id }"
-						aria-label="Delete list"
-						:title="confirmDelete === list.id ? 'Really delete?' : 'Delete'"
+						:aria-label="t('lists.deleteTitle')"
+						:title="confirmDelete === list.id ? t('lists.confirmDelete') : t('lists.delete')"
 						:disabled="busy === list.id"
 						@click="remove(list)"
 					>
@@ -223,24 +224,24 @@ async function remove(list: AccountList): Promise<void> {
 				<form class="a-management-dialog" role="dialog" aria-modal="true" aria-labelledby="a-list-dialog-title" @submit.prevent="save">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Private list</p>
-							<h2 id="a-list-dialog-title">{{ creating ? 'New list' : 'Rename list' }}</h2>
+							<p class="a-profile-edit__eyebrow">{{ t('lists.dialogEyebrow') }}</p>
+							<h2 id="a-list-dialog-title">{{ creating ? t('lists.newList') : t('lists.renameTitle') }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Close dialog" @click="closeDialog">
+						<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" @click="closeDialog">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 
-					<label class="a-profile-edit__label" for="a-list-title">Name</label>
+					<label class="a-profile-edit__label" for="a-list-title">{{ t('lists.nameLabel') }}</label>
 					<input id="a-list-title" v-model="dialogTitle" type="text" maxlength="80" required autocomplete="off">
-					<p class="a-profile-edit__hint">Only you can see this list and its timeline.</p>
+					<p class="a-profile-edit__hint">{{ t('lists.dialogHint') }}</p>
 					<p v-if="dialogError !== ''" class="a-form-error" role="alert">{{ dialogError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="closeDialog">Cancel</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="closeDialog">{{ t('common.cancel') }}</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
 							<AppIcon v-if="saving" name="refresh" :size="15" class="a-spin" />
-							{{ saving ? 'Saving…' : creating ? 'Create' : 'Save' }}
+							{{ saving ? t('common.saving') : creating ? t('lists.create') : t('common.save') }}
 						</button>
 					</footer>
 				</form>
