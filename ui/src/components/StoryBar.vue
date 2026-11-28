@@ -7,6 +7,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import { getApi } from '../lib/api';
+import { t } from '../lib/i18n';
 import { handleLabel, relativeTime } from '../lib/format';
 import { appState, showToast } from '../lib/state';
 import type { Story, StoryGroup } from '../lib/types';
@@ -15,12 +16,12 @@ const STORY_DURATION = 8000;
 const TICK = 80;
 
 const backgrounds = [
-	{ id: 'ocean', label: 'Ocean' },
-	{ id: 'sunset', label: 'Sunset' },
-	{ id: 'forest', label: 'Forest' },
-	{ id: 'berry', label: 'Berry' },
-	{ id: 'night', label: 'Night' },
-	{ id: 'sand', label: 'Sand' },
+	{ id: 'ocean', labelKey: 'story.tone.ocean' },
+	{ id: 'sunset', labelKey: 'story.tone.sunset' },
+	{ id: 'forest', labelKey: 'story.tone.forest' },
+	{ id: 'berry', labelKey: 'story.tone.berry' },
+	{ id: 'night', labelKey: 'story.tone.night' },
+	{ id: 'sand', labelKey: 'story.tone.sand' },
 ];
 
 const groups = ref<StoryGroup[]>([]);
@@ -186,9 +187,9 @@ async function submit(): Promise<void> {
 		draft.value = '';
 		composing.value = false;
 		await load();
-		showToast('Your story is visible for 24 hours.', 'success');
+		showToast(t('story.saved'), 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The story could not be saved.', 'error');
+		showToast(error instanceof Error ? error.message : t('story.saveFailed'), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -205,9 +206,9 @@ async function removeActive(): Promise<void> {
 		await getApi().deleteStory(story.id);
 		step(1);
 		await load();
-		showToast('Story deleted.', 'success');
+		showToast(t('story.deleted'), 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The story could not be deleted.', 'error');
+		showToast(error instanceof Error ? error.message : t('story.deleteFailed'), 'error');
 	} finally {
 		deleting.value = '';
 	}
@@ -251,9 +252,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<section v-if="loading || visibleGroups.length > 0 || signedIn" class="a-stories" aria-label="Stories">
+	<section v-if="loading || visibleGroups.length > 0 || signedIn" class="a-stories" :aria-label="t('story.aria')">
 		<header class="a-stories__head">
-			<h2>Stories</h2>
+			<h2>{{ t('story.title') }}</h2>
 			<button
 				v-if="signedIn"
 				type="button"
@@ -261,13 +262,13 @@ onUnmounted(() => {
 				@click="composing = !composing"
 			>
 				<AppIcon name="plus" :size="15" />
-				Share a story
+				{{ t('story.share') }}
 			</button>
 		</header>
 
 		<p v-if="loadFailed" class="a-form-error" role="alert">
-			Stories could not be loaded.
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			{{ t('story.loadFailed') }}
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</p>
 
 		<div class="a-stories__row">
@@ -275,13 +276,13 @@ onUnmounted(() => {
 				v-if="signedIn"
 				type="button"
 				class="a-story a-story--add"
-				aria-label="Write a new story"
+				:aria-label="t('story.writeNew')"
 				@click="composing = true"
 			>
 				<span class="a-story__add">
 					<AppIcon name="plus" :size="20" />
 				</span>
-				<small>{{ ownGroupIndex >= 0 ? 'Add to your story' : 'Your story' }}</small>
+				<small>{{ ownGroupIndex >= 0 ? t('story.addToYours') : t('story.yours') }}</small>
 			</button>
 
 			<button
@@ -290,47 +291,47 @@ onUnmounted(() => {
 				type="button"
 				class="a-story"
 				:class="{ 'a-story--own': group.account_id === selfId, 'a-story--seen': group.unseen === false }"
-				:aria-label="`View the story by ${authorName(group.account_id, group.handle, group.name)}`"
+				:aria-label="t('story.viewBy', { name: authorName(group.account_id, group.handle, group.name) })"
 				@click="open(index)"
 			>
 				<span class="a-story__ring">
 					<Avatar :id="group.handle ?? group.account_id" :name="authorName(group.account_id, group.handle, group.name)" :size="54" />
 				</span>
-				<small>{{ group.account_id === selfId ? 'You' : authorName(group.account_id, group.handle, group.name) }}</small>
+				<small>{{ group.account_id === selfId ? t('story.you') : authorName(group.account_id, group.handle, group.name) }}</small>
 			</button>
 		</div>
 
 		<form v-if="composing" class="a-story-compose" @submit.prevent="submit">
 			<label>
-				<span>Story text</span>
+				<span>{{ t('story.textLabel') }}</span>
 				<textarea
 					v-model="draft"
 					maxlength="500"
 					rows="3"
-					placeholder="What is happening right now?"
+					:placeholder="t('story.placeholder')"
 				/>
 			</label>
-			<div class="a-story-compose__tones" role="group" aria-label="Background">
+			<div class="a-story-compose__tones" role="group" :aria-label="t('story.background')">
 				<button
 					v-for="background in backgrounds"
 					:key="background.id"
 					type="button"
 					class="a-story-tone"
 					:class="[`a-story-tone--${background.id}`, { 'a-story-tone--active': tone === background.id }]"
-					:aria-label="background.label"
+					:aria-label="t(background.labelKey)"
 					:aria-pressed="tone === background.id"
 					@click="tone = background.id"
 				/>
 			</div>
 			<div class="a-story-compose__actions">
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="composing = false">Cancel</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="composing = false">{{ t('common.cancel') }}</button>
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || draft.trim() === ''">
-					{{ saving ? 'Sharing…' : 'Share story' }}
+					{{ saving ? t('story.sharing') : t('story.shareSubmit') }}
 				</button>
 			</div>
 		</form>
 
-		<div v-if="activeStory" class="a-story-viewer" role="dialog" aria-modal="true" aria-label="Story">
+		<div v-if="activeStory" class="a-story-viewer" role="dialog" aria-modal="true" :aria-label="t('story.viewerAria')">
 			<div class="a-story-viewer__backdrop" @click="close" />
 			<article class="a-story-viewer__card" :class="`a-story-tone--${activeStory.background}`">
 				<header class="a-story-viewer__head">
@@ -339,7 +340,7 @@ onUnmounted(() => {
 						<strong>{{ authorName(activeStory.account_id, activeStory.author_handle, activeStory.author_name) }}</strong>
 						<small>{{ relativeTime(activeStory.created_at) }}</small>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close story" @click="close">
+					<button type="button" class="a-icon-btn" :aria-label="t('story.close')" @click="close">
 						<AppIcon name="x" :size="20" />
 					</button>
 				</header>
@@ -362,12 +363,12 @@ onUnmounted(() => {
 				<p class="a-story-viewer__text">{{ activeStory.content }}</p>
 
 				<footer class="a-story-viewer__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="step(-1)">Back</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="step(-1)">{{ t('common.back') }}</button>
 					<button v-if="canDeleteActive" type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="deleting !== ''" @click="removeActive">
 						<AppIcon name="trash" :size="15" />
-						Delete
+						{{ t('story.delete') }}
 					</button>
-					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="step(1)">Next</button>
+					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="step(1)">{{ t('common.next') }}</button>
 				</footer>
 			</article>
 		</div>

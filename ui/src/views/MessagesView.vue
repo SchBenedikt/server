@@ -9,6 +9,7 @@ import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
+import { t } from '../lib/i18n';
 import { resolveAccount } from '../lib/account';
 import { getApi, loadErrorMessage } from '../lib/api';
 import { handleLabel, relativeTime, truncate } from '../lib/format';
@@ -132,7 +133,7 @@ async function load(): Promise<void> {
 			void resolveAccount(conversation.counterpart.split(',')[0] ?? '');
 		}
 	} catch (caught) {
-		error.value = loadErrorMessage(caught, 'Messages could not be loaded.');
+		error.value = loadErrorMessage(caught, t('msg.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -155,7 +156,7 @@ async function loadMore(): Promise<void> {
 			void resolveAccount(conversation.counterpart.split(',')[0] ?? '');
 		}
 	} catch (caught) {
-		error.value = loadErrorMessage(caught, 'Older messages could not be loaded.');
+		error.value = loadErrorMessage(caught, t('msg.loadMoreFailed'));
 	} finally {
 		loadingMore.value = false;
 	}
@@ -163,7 +164,7 @@ async function loadMore(): Promise<void> {
 
 function openConversation(conversation: ConversationSummary): void {
 	void getApi().markConversationRead(conversation.last.id).catch((caught: unknown) => {
-		showToast(loadErrorMessage(caught, 'The conversation could not be marked as read.'), 'error');
+		showToast(loadErrorMessage(caught, t('msg.markReadFailed')), 'error');
 	});
 	navigate(`/messages/${encodeURIComponent(`thread:${conversation.id}`)}`);
 }
@@ -175,13 +176,13 @@ async function dismissConversation(conversation: ConversationSummary): Promise<v
 			? { ...message, dismissed: true }
 			: message);
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The conversation could not be dismissed.'), 'error');
+		showToast(loadErrorMessage(caught, t('msg.dismissFailed')), 'error');
 	}
 }
 
 function preview(message: TimelineItem): string {
 	const text = message.content.trim();
-	return text !== '' ? truncate(text, 90) : 'attachment';
+	return text !== '' ? truncate(text, 90) : t('msg.attachment');
 }
 
 function openPicker(): void {
@@ -213,7 +214,7 @@ function searchPeople(): void {
 			const results = await getApi().search(term, 12);
 			pickerResults.value = results.accounts.filter((account) => account.id !== myId.value);
 		} catch (caught) {
-			showToast(loadErrorMessage(caught, 'The search failed.'), 'error');
+			showToast(loadErrorMessage(caught, t('explore.searchFailed')), 'error');
 			pickerResults.value = [];
 		} finally {
 			pickerLoading.value = false;
@@ -234,22 +235,22 @@ function startWith(account: Account): void {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Messages" subtitle="Private conversations between accounts on this instance.">
+		<PageHeader :title="t('nav.messages')" :subtitle="t('msg.subtitle')">
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="openPicker">
 					<AppIcon name="pen" :size="15" />
-					New message
+					{{ t('msg.newMessage') }}
 				</button>
 			</template>
 		</PageHeader>
 
-		<p v-if="!signedIn" class="a-muted">Sign in to see your messages.</p>
+		<p v-if="!signedIn" class="a-muted">{{ t('msg.signInText') }}</p>
 
 		<template v-else>
 			<div v-if="pickerOpen" class="a-dm-picker">
 				<header class="a-section-head">
-					<h2>Send to?</h2>
-					<button type="button" class="a-icon-btn" aria-label="Close selection" @click="closePicker">
+					<h2>{{ t('msg.sendTo') }}</h2>
+					<button type="button" class="a-icon-btn" :aria-label="t('msg.closePicker')" @click="closePicker">
 						<AppIcon name="x" :size="16" />
 					</button>
 				</header>
@@ -258,12 +259,12 @@ function startWith(account: Account): void {
 					<input
 						v-model="pickerQuery"
 						type="search"
-						placeholder="Name or @account"
-						aria-label="Search accounts"
+						:placeholder="t('msg.pickerPlaceholder')"
+						:aria-label="t('msg.pickerAria')"
 						@input="searchPeople"
 					/>
 				</div>
-				<p v-if="pickerLoading" class="a-muted">Searching…</p>
+				<p v-if="pickerLoading" class="a-muted">{{ t('common.searching') }}</p>
 				<ul v-else-if="pickerResults.length > 0" class="a-people">
 					<li v-for="account in pickerResults" :key="account.id" class="a-person">
 						<button type="button" class="a-person__link" @click="startWith(account)">
@@ -275,13 +276,13 @@ function startWith(account: Account): void {
 						</button>
 					</li>
 				</ul>
-				<p v-else class="a-muted">Type a name to find an account.</p>
+				<p v-else class="a-muted">{{ t('msg.pickerHint') }}</p>
 			</div>
 
 			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">
 				{{ error }}
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">
-					Try again
+					{{ t('common.tryAgain') }}
 				</button>
 			</p>
 
@@ -296,7 +297,7 @@ function startWith(account: Account): void {
 							:size="44"
 						/>
 						<span class="a-dm-row__copy">
-							<strong>{{ counterpartLabel(conversation.counterpart) }} <span v-if="conversation.unread" class="a-dm-unread">Unread</span></strong>
+							<strong>{{ counterpartLabel(conversation.counterpart) }} <span v-if="conversation.unread" class="a-dm-unread">{{ t('msg.unread') }}</span></strong>
 							<small>{{ preview(conversation.last) }}</small>
 						</span>
 						<span class="a-dm-row__meta">
@@ -304,23 +305,23 @@ function startWith(account: Account): void {
 							<small v-if="conversation.count > 1">{{ conversation.count }}</small>
 						</span>
 					</button>
-					<button type="button" class="a-icon-btn a-dm-dismiss" :aria-label="`Dismiss conversation with ${counterpartLabel(conversation.counterpart)}`" @click="dismissConversation(conversation)">
+					<button type="button" class="a-icon-btn a-dm-dismiss" :aria-label="t('msg.dismissAria', { name: counterpartLabel(conversation.counterpart) })" @click="dismissConversation(conversation)">
 						<AppIcon name="x" :size="15" />
 					</button>
 				</li>
 			</ul>
 
 			<button v-if="hasMore" type="button" class="a-btn a-btn--ghost" :disabled="loadingMore" @click="loadMore">
-				{{ loadingMore ? 'Loading…' : 'Load older messages' }}
+				{{ loadingMore ? t('common.loading') : t('msg.loadOlder') }}
 			</button>
 
 			<EmptyState
 				v-if="conversations.length === 0 && !loading"
 				icon="message"
-				title="No messages yet"
-				text="Private messages stay between the accounts on this instance. Start a new conversation."
+				:title="t('msg.emptyTitle')"
+				:text="t('msg.emptyText')"
 			>
-				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openPicker">New message</button>
+				<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openPicker">{{ t('msg.newMessage') }}</button>
 			</EmptyState>
 		</template>
 	</div>

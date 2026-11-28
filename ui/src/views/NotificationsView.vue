@@ -9,6 +9,7 @@ import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
+import { t } from '../lib/i18n';
 import { accountName, handleLabel, notificationPostHref, relativeTime, truncate } from '../lib/format';
 import { getApi, loadErrorMessage } from '../lib/api';
 import { appState, setUnread, showToast } from '../lib/state';
@@ -27,14 +28,14 @@ const senderRequests = ref<NotificationSenderRequest[]>([]);
 const requestsError = ref('');
 const mutatingSender = ref('');
 
-const typeMeta: Record<string, { icon: string; label: string; tone: string }> = {
-	favourite: { icon: 'heart', label: 'liked your post', tone: 'rose' },
-	follow: { icon: 'user', label: 'now follows you', tone: 'mint' },
-	mention: { icon: 'message', label: 'mentioned you', tone: 'violet' },
-	reblog: { icon: 'repeat', label: 'boosted your post', tone: 'amber' },
-	poll: { icon: 'hash', label: 'voted in your poll', tone: 'amber' },
-	update: { icon: 'pen', label: 'edited a post', tone: 'violet' },
-	'follow_request': { icon: 'user', label: 'wants to follow you', tone: 'mint' },
+const typeMeta: Record<string, { icon: string; labelKey: string; tone: string }> = {
+	favourite: { icon: 'heart', labelKey: 'notif.type.favourite', tone: 'rose' },
+	follow: { icon: 'user', labelKey: 'notif.type.follow', tone: 'mint' },
+	mention: { icon: 'message', labelKey: 'notif.type.mention', tone: 'violet' },
+	reblog: { icon: 'repeat', labelKey: 'notif.type.reblog', tone: 'amber' },
+	poll: { icon: 'hash', labelKey: 'notif.type.poll', tone: 'amber' },
+	update: { icon: 'pen', labelKey: 'notif.type.update', tone: 'violet' },
+	'follow_request': { icon: 'user', labelKey: 'notif.type.follow_request', tone: 'mint' },
 };
 
 onMounted(() => {
@@ -75,7 +76,7 @@ async function load(reset: boolean): Promise<void> {
 			// The Mastodon surface has no unread counter; the core one is optional.
 		}
 	} catch (caught) {
-		error.value = loadErrorMessage(caught, 'Notifications could not be loaded.');
+		error.value = loadErrorMessage(caught, t('notif.loadFailed'));
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -86,7 +87,7 @@ async function load(reset: boolean): Promise<void> {
 			senderRequests.value = await getApi().notificationRequests();
 			requestsError.value = '';
 		} catch (caught) {
-			requestsError.value = loadErrorMessage(caught, 'Notification requests could not be loaded.');
+			requestsError.value = loadErrorMessage(caught, t('notif.requestsLoadFailed'));
 		}
 	}
 }
@@ -102,14 +103,17 @@ async function reviewSender(id: string, decision: 'accept' | 'dismiss'): Promise
 			: await getApi().dismissNotificationSender(id);
 		senderRequests.value = senderRequests.value.filter((request) => request.id !== id);
 		showToast(
-			decision === 'accept'
-				? `Sender accepted; ${count} held ${count === 1 ? 'notification was' : 'notifications were'} released.`
-				: `Sender dismissed; ${count} held ${count === 1 ? 'notification was' : 'notifications were'} suppressed.`,
+			t(
+				decision === 'accept'
+					? (count === 1 ? 'notif.acceptedOne' : 'notif.accepted')
+					: (count === 1 ? 'notif.dismissedOne' : 'notif.dismissed'),
+				{ count },
+			),
 			'success',
 		);
 		await load(true);
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The sender request could not be updated.'), 'error');
+		showToast(loadErrorMessage(caught, t('notif.requestUpdateFailed')), 'error');
 	} finally {
 		mutatingSender.value = '';
 	}
@@ -134,9 +138,9 @@ async function toggleConversationMute(postId: string): Promise<void> {
 	mutating.value = key;
 	try {
 		const isMuted = await getApi().toggleConversationMute(postId);
-		showToast(isMuted ? 'Conversation notifications muted.' : 'Conversation notifications resumed.', 'success');
+		showToast(t(isMuted ? 'notif.conversationMuted' : 'notif.conversationResumed'), 'success');
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The conversation setting could not be updated.'), 'error');
+		showToast(loadErrorMessage(caught, t('notif.conversationFailed')), 'error');
 	} finally {
 		mutating.value = '';
 	}
@@ -153,7 +157,7 @@ async function dismiss(item: NotificationItem): Promise<void> {
 		items.value = items.value.filter((entry) => entry.id !== item.id);
 		appState.unread = Math.max(0, appState.unread - 1);
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The notification could not be removed.'), 'error');
+		showToast(loadErrorMessage(caught, t('notif.dismissFailed')), 'error');
 	} finally {
 		mutating.value = '';
 	}
@@ -175,15 +179,15 @@ async function clearAll(): Promise<void> {
 		hasMore.value = false;
 		setUnread(0);
 		confirmClear.value = false;
-		showToast(`${cleared} ${cleared === 1 ? 'notification' : 'Notifications'} marked as read.`, 'success');
+		showToast(t(cleared === 1 ? 'notif.clearToastOne' : 'notif.clearToast', { count: cleared }), 'success');
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'Notifications could not be cleared.'), 'error');
+		showToast(loadErrorMessage(caught, t('notif.clearFailed')), 'error');
 	} finally {
 		mutating.value = '';
 	}
 }
 
-function metaFor(type: string): { icon: string; label: string; tone: string } {
+function metaFor(type: string): { icon: string; labelKey: string; tone: string } {
 	return typeMeta[type] ?? typeMeta.mention;
 }
 
@@ -224,8 +228,8 @@ function statusPreview(item: NotificationItem): string {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Notifications"
-			:subtitle="appState.unread > 0 ? `${appState.unread} unread` : 'All read.'"
+			:title="t('notif.title')"
+			:subtitle="appState.unread > 0 ? t('notif.unreadCount', { count: appState.unread }) : t('notif.allRead')"
 		>
 			<template #actions>
 				<button
@@ -237,14 +241,14 @@ function statusPreview(item: NotificationItem): string {
 					@click="clearAll"
 				>
 					<AppIcon name="check" :size="15" />
-					{{ mutating === 'clear' ? 'Clearing…' : confirmClear ? 'Really all?' : 'Mark all as read' }}
+					{{ mutating === 'clear' ? t('notif.clearing') : confirmClear ? t('notif.reallyAll') : t('notif.markAllRead') }}
 				</button>
 			</template>
 		</PageHeader>
 
 		<section v-if="signedIn && (senderRequests.length > 0 || requestsError !== '')" class="a-notification-requests">
 			<div class="a-section-head">
-				<div><h2>Notification requests</h2><p>Review senders whose notifications are held by your policy.</p></div>
+				<div><h2>{{ t('notif.requestsTitle') }}</h2><p>{{ t('notif.requestsHint') }}</p></div>
 				<span>{{ senderRequests.length }}</span>
 			</div>
 			<p v-if="requestsError !== ''" class="a-form-error" role="alert">{{ requestsError }}</p>
@@ -254,34 +258,34 @@ function statusPreview(item: NotificationItem): string {
 					<small>{{ request.category }} · {{ relativeTime(request.created_at) }}</small>
 				</div>
 				<div class="a-notification-request__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="mutatingSender !== ''" @click="reviewSender(request.id, 'dismiss')">Dismiss</button>
-					<button type="button" class="a-btn a-btn--primary a-btn--small" :disabled="mutatingSender !== ''" @click="reviewSender(request.id, 'accept')">Accept</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="mutatingSender !== ''" @click="reviewSender(request.id, 'dismiss')">{{ t('notif.dismiss') }}</button>
+					<button type="button" class="a-btn a-btn--primary a-btn--small" :disabled="mutatingSender !== ''" @click="reviewSender(request.id, 'accept')">{{ t('notif.accept') }}</button>
 				</div>
 			</article>
 		</section>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="bell" :size="26" /></span>
-			<h2>Don't miss a thing</h2>
-			<p>Sign in to see who follows you, shares your posts or mentions you.</p>
-			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+			<h2>{{ t('notif.loginTitle') }}</h2>
+			<p>{{ t('notif.loginText') }}</p>
+			<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<TimelineSkeleton v-else-if="loading && items.length === 0" :count="3" />
 
 		<div v-else-if="error !== '' && items.length === 0" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Notifications unavailable</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load(true)">Try again</button>
+			<div><strong>{{ t('notif.unavailable') }}</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load(true)">{{ t('common.tryAgain') }}</button>
 		</div>
 
 		<EmptyState
 			v-else-if="items.length === 0"
 			icon="bell"
-			title="No notifications yet"
-			text="As soon as someone interacts with you, it appears here."
+			:title="t('notif.emptyTitle')"
+			:text="t('notif.emptyText')"
 		>
-			<a class="a-btn a-btn--primary a-btn--small" href="#/explore">Discover people</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="#/explore">{{ t('home.discoverPeople') }}</a>
 		</EmptyState>
 
 		<ol v-else class="a-notifications">
@@ -305,7 +309,7 @@ function statusPreview(item: NotificationItem): string {
 							:target="actorIsExternal(item) ? '_blank' : undefined"
 							:rel="actorIsExternal(item) ? 'noopener noreferrer' : undefined"
 						>{{ actorName(item) }}</a>
-						{{ metaFor(item.type).label }}
+						{{ t(metaFor(item.type).labelKey) }}
 					</p>
 					<p class="a-notification__meta">
 						<span>{{ actorHandle(item) }}</span>
@@ -322,7 +326,7 @@ function statusPreview(item: NotificationItem): string {
 						:href="statusHref(item) ?? '#'"
 						class="a-notification__post-link"
 					>
-						View post <AppIcon name="arrowLeft" :size="13" />
+						{{ t('notif.viewPost') }} <AppIcon name="arrowLeft" :size="13" />
 					</a>
 					<button
 						v-if="conversationPostId(item)"
@@ -331,13 +335,13 @@ function statusPreview(item: NotificationItem): string {
 						:disabled="mutating !== ''"
 						@click="toggleNotificationConversation(item)"
 					>
-		Toggle conversation alerts
+		{{ t('notif.toggleAlerts') }}
 					</button>
 				</div>
 				<button
 					type="button"
 					class="a-icon-btn a-notification__dismiss"
-					aria-label="Dismiss notification"
+					:aria-label="t('notif.dismissAria')"
 					:disabled="mutating === item.id"
 					@click="dismiss(item)"
 				>
@@ -353,7 +357,7 @@ function statusPreview(item: NotificationItem): string {
 			:disabled="loadingMore"
 			@click="load(false)"
 		>
-			{{ loadingMore ? 'Loading…' : 'Older notifications' }}
+			{{ loadingMore ? t('common.loading') : t('notif.older') }}
 		</button>
 	</div>
 </template>
