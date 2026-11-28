@@ -231,6 +231,72 @@ final class AdminTest extends TestCase
         self::assertContains('moderation.import', array_column($audit['entries'], 'action'));
     }
 
+    public function testDomainBlockImportAcceptsFileContentInLinesCsvAndJson(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        // Plain lines with the `# comment` suffix.
+        $lines = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'lines',
+            'content' => "spam.example # Spam network\n\nother.example\n",
+        ], $cookies, $csrf));
+        self::assertSame(['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0], $lines['counts']);
+        $spam = array_values(array_filter($lines['entries'], static fn (array $e): bool => $e['domain'] === 'spam.example'))[0];
+        self::assertSame('Spam network', $spam['comment']);
+
+        // CSV with a header row and a quoted comment.
+        $csv = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'csv',
+            'content' => "domain,comment\nthird.example,\"Repeated, scripted abuse\"\n",
+        ], $cookies, $csrf));
+        self::assertSame(['new' => 1, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0], $csv['counts']);
+        self::assertSame('Repeated, scripted abuse', $csv['entries'][0]['comment']);
+
+        // JSON array of strings and {domain, comment} objects.
+        $json = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'json',
+            'content' => '["fourth.example", {"domain": "fifth.example", "comment": "Phishing"}]',
+        ], $cookies, $csrf));
+        self::assertSame(['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0], $json['counts']);
+
+        // Apply once through the file path; the earlier calls were dry runs,
+        // so both CSV rows are new and get written.
+        $applied = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'csv',
+            'content' => "domain,comment\nsixth.example,First\nspam.example,Duplicate\n",
+            'apply' => true,
+        ], $cookies, $csrf));
+        self::assertSame(2, $applied['applied_count']);
+
+        $blocks = $this->decoded($server->send('GET', '/api/v1/host/admin/domain-blocks', ['cookies' => $cookies]));
+        self::assertSame(
+            ['sixth.example', 'spam.example'],
+            array_column($blocks['blocks'], 'domain'),
+        );
+    }
+
+    public function testDomainBlockImportRejectsMalformedContent(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        $badJson = $server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'json',
+            'content' => '{"domain": "example.com"}',
+        ], $cookies, $csrf);
+        self::assertSame(422, $badJson->status);
+
+        $badFormat = $server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'yaml',
+            'content' => 'example.com',
+        ], $cookies, $csrf);
+        self::assertSame(422, $badFormat->status);
+
+        $neither = $server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'apply' => false,
+        ], $cookies, $csrf);
+        self::assertSame(422, $neither->status);
+    }
+
     public function testAdminCanSendATestMailToTheirOwnAddress(): void
     {
         ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();

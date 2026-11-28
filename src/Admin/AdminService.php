@@ -41,6 +41,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Throwable;
 
+use function array_is_list;
 use function array_map;
 use function array_slice;
 use function arsort;
@@ -58,17 +59,22 @@ use function is_readable;
 use function is_scalar;
 use function is_string;
 use function is_writable;
+use function json_decode;
 use function max;
 use function mb_strlen;
 use function mb_substr;
 use function min;
 use function parse_url;
 use function preg_match;
+use function preg_split;
 use function rawurlencode;
 use function round;
 use function rtrim;
 use function sprintf;
 use function str_contains;
+use function str_getcsv;
+use function strlen;
+use function strpos;
 use function strrpos;
 use function str_starts_with;
 use function strstr;
@@ -1056,6 +1062,100 @@ final class AdminService
             'severity' => 'suspend',
             'comment' => (string) ($row['public_comment'] ?? ''),
         ], $rows);
+    }
+
+    /**
+     * Parses a pasted or uploaded import file into entry rows for
+     * {@see importDomainBlocks()}. `lines` is the plain blocklist format —
+     * one domain per line with an optional `# comment` suffix. `csv` accepts
+     * `domain,comment` rows with an optional header line, quoted cells
+     * included. `json` accepts a top-level array of domain strings or
+     * `{domain, comment}` objects.
+     *
+     * @return list<mixed>
+     */
+    public static function parseDomainBlockImport(string $content, string $format): array
+    {
+        if (strlen($content) > 1024 * 1024) {
+            throw AdminException::invalid('The import file is too large.', [
+                'content' => 'Files are limited to 1 MB.',
+            ]);
+        }
+
+        return match ($format) {
+            'lines' => self::parseDomainBlockLines($content),
+            'csv' => self::parseDomainBlockCsv($content),
+            'json' => self::parseDomainBlockJson($content),
+            default => throw AdminException::invalid('Unknown import format.', [
+                'format' => 'Use lines, csv or json.',
+            ]),
+        };
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private static function parseDomainBlockLines(string $content): array
+    {
+        $entries = [];
+        foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            $hash = strpos($line, '#');
+            if ($hash === false) {
+                $entries[] = $line;
+
+                continue;
+            }
+            $domain = trim(substr($line, 0, $hash));
+            $comment = trim(substr($line, $hash + 1));
+            $entries[] = $comment === '' ? $domain : ['domain' => $domain, 'comment' => $comment];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private static function parseDomainBlockCsv(string $content): array
+    {
+        $entries = [];
+        $first = true;
+        foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            $cells = str_getcsv($line, ',', '"', '');
+            if ($first) {
+                $first = false;
+                if (strtolower(trim((string) ($cells[0] ?? ''))) === 'domain') {
+                    continue;
+                }
+            }
+            $domain = trim((string) ($cells[0] ?? ''));
+            $comment = trim((string) ($cells[1] ?? ''));
+            $entries[] = $comment === '' ? $domain : ['domain' => $domain, 'comment' => $comment];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private static function parseDomainBlockJson(string $content): array
+    {
+        $decoded = json_decode($content, true);
+        if (!is_array($decoded) || !array_is_list($decoded)) {
+            throw AdminException::invalid('The JSON import must be a top-level array.', [
+                'content' => 'Expected a list of domains or {domain, comment} objects.',
+            ]);
+        }
+
+        return $decoded;
     }
 
     /**

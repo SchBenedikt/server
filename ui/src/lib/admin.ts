@@ -470,6 +470,11 @@ export interface AdminApi {
 		entries: (string | { domain: string; comment?: string | null })[],
 		apply?: boolean,
 	): Promise<DomainImportResult>;
+	importDomainBlockFile(
+		content: string,
+		format: 'lines' | 'csv' | 'json',
+		apply?: boolean,
+	): Promise<DomainImportResult>;
 	deletePost(id: string): Promise<void>;
 	jobs(state?: 'all' | 'pending' | 'running' | 'dead'): Promise<JobList>;
 	retryJob(id: string): Promise<AdminJob>;
@@ -696,6 +701,15 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 				'/api/v1/host/admin/domain-blocks/import',
 				undefined,
 				{ entries, apply },
+			);
+		},
+
+		async importDomainBlockFile(content, format, apply = false): Promise<DomainImportResult> {
+			return request<DomainImportResult>(
+				'POST',
+				'/api/v1/host/admin/domain-blocks/import',
+				undefined,
+				{ content, format, apply },
 			);
 		},
 

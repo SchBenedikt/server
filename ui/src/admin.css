@@ -1296,6 +1296,21 @@
 	border-color: var(--a-primary);
 }
 
+.a-admin-import-source {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+.a-admin-import-file {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--a-muted);
+	font-size: 12px;
+}
+
 .a-admin-user-dialog {
 	width: min(470px, 100%);
 }
