@@ -375,7 +375,9 @@ host-only APIs and native PDS sessions are blocked too; a repeated deletion
 request can resume cleanup after an interrupted attempt. Operator-managed web
 server and proxy logs follow their own retention policy. Remote copies and
 remote AT Protocol data are outside this instance's control and may remain on
-peer servers.
+peer servers. The deletion response enumerates the retained categories
+explicitly (`host_data_retained`): the disabled account tombstone, the
+deletion record, audit and moderation records, and remote copies.
 
 ## Reading lists and text stories
 
