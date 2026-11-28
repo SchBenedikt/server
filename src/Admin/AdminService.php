@@ -39,6 +39,8 @@ use RecursiveIteratorIterator;
 use Throwable;
 
 use function array_map;
+use function array_slice;
+use function arsort;
 use function basename;
 use function count;
 use function explode;
@@ -62,6 +64,7 @@ use function round;
 use function rtrim;
 use function sprintf;
 use function str_starts_with;
+use function strstr;
 use function strtolower;
 use function substr;
 use function time;
@@ -661,7 +664,35 @@ final class AdminService
             'jobs' => array_map(fn (array $row): array => $this->jobRow($row), $rows),
             'counts' => $this->queueCounts(),
             'state' => $state,
+            'error_classes' => $this->errorClasses($rows),
         ];
+    }
+
+    /**
+     * Failure classification for the listed dead jobs: the exception class
+     * prefix of each sanitized last_error, counted so an operator can see
+     * at a glance whether deaths cluster on one cause (for example a remote
+     * rejection) instead of reading every row.
+     *
+     * @param list<array<string, mixed>> $rows
+     *
+     * @return array<string, int>
+     */
+    private function errorClasses(array $rows): array
+    {
+        $classes = [];
+        foreach ($rows as $row) {
+            if ($row['dead_at'] === null || !is_string($row['last_error'] ?? null) || $row['last_error'] === '') {
+                continue;
+            }
+
+            $class = strstr((string) $row['last_error'], ':', true);
+            $class = is_string($class) && $class !== '' ? $class : 'unknown';
+            $classes[$class] = ($classes[$class] ?? 0) + 1;
+        }
+        arsort($classes);
+
+        return array_slice($classes, 0, 10, true);
     }
 
     /**

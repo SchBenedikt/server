@@ -448,6 +448,13 @@ final class AdminTest extends TestCase
             . " VALUES ('job-live', 'deliver', '{}', :now, 0, NULL, NULL, NULL, NULL, NULL)",
             ['now' => $now],
         );
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts, reserved_at, dead_at,'
+            . ' subject_type, subject_id, last_error)'
+            . " VALUES ('job-dead-2', 'deliver', '{}', :now, 5, NULL, :now, NULL, NULL,"
+            . " 'RuntimeException: remote inbox rejected the activity')",
+            ['now' => $now],
+        );
 
         $dead = $server->send('GET', '/api/v1/host/admin/jobs?state=dead', ['cookies' => $cookies]);
         self::assertSame(200, $dead->status);
@@ -456,6 +463,11 @@ final class AdminTest extends TestCase
         self::assertArrayHasKey('job-dead', $byId);
         self::assertSame('RuntimeException: remote inbox rejected the activity', $byId['job-dead']['last_error']);
         self::assertTrue($byId['job-dead']['retryable']);
+
+        // Dead jobs cluster into failure classes so one cause is visible
+        // without reading every row; live jobs never classify.
+        $body = $this->decoded($dead);
+        self::assertSame(['RuntimeException' => 2], $body['error_classes']);
 
         // A live job cannot be "retried" — there is nothing to recover.
         $live = $server->send('POST', '/api/v1/host/admin/jobs/job-live/retry', [
