@@ -280,6 +280,38 @@ final class FrontController
                 $gauges['aloha_worker_heartbeat_age_seconds'] = max(0.0, (float) (time() - (int) $beat));
             }
 
+            // Per-pipeline worker health: the same runtime_state rows the
+            // admin "Background tasks" card reads, so a stalled atproto-sync,
+            // mail or queue drain is visible per task instead of only as a
+            // single worker heartbeat. Task names are a bounded set written
+            // by bin/worker.php; the LIKE prefix keeps the scrape to one
+            // indexed read of a tiny table.
+            $taskNow = time();
+            foreach ($db->fetchAll(
+                "SELECT name, value FROM runtime_state WHERE name LIKE 'worker_task.%'",
+            ) as $row) {
+                $task = Metrics::sanitizeLabelValue(
+                    substr((string) $row['name'], strlen('worker_task.')),
+                );
+                $data = json_decode((string) $row['value'], true);
+                if (!is_array($data)) {
+                    continue;
+                }
+
+                $ok = isset($data['ok']) && is_numeric($data['ok']) ? (int) $data['ok'] : null;
+                $fail = isset($data['fail']) && is_numeric($data['fail']) ? (int) $data['fail'] : null;
+                if ($ok !== null) {
+                    $seriesGauges['aloha_worker_task_last_ok_age_seconds']['task=' . $task]
+                        = max(0.0, (float) ($taskNow - $ok));
+                }
+                if ($fail !== null) {
+                    $seriesGauges['aloha_worker_task_last_failure_age_seconds']['task=' . $task]
+                        = max(0.0, (float) ($taskNow - $fail));
+                }
+                $seriesGauges['aloha_worker_task_failing']['task=' . $task]
+                    = $fail !== null && ($ok === null || $fail > $ok) ? 1.0 : 0.0;
+            }
+
             // Oldest job already due but not yet picked up — a stalled or
             // backlogged worker shows up here before the dead count moves.
             $oldest = $db->fetchValue(
