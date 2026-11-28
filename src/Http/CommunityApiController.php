@@ -58,8 +58,13 @@ final class CommunityApiController
     ) {
     }
 
+    private ?string $requestId = null;
+
     public function handle(Request $request, ?AuthenticatedSession $session, ?string $ip = null): ?Response
     {
+        $requestId = $request->attribute('request_id');
+        $this->requestId = is_string($requestId) ? $requestId : null;
+
         $path = $request->path;
         $method = $request->method;
         $userId = $session?->userId();
@@ -1220,6 +1225,9 @@ final class CommunityApiController
     private function error(int $status, string $code, string $message, array $fields = []): Response
     {
         $error = ['code' => $code, 'message' => $message];
+        if ($this->requestId !== null) {
+            $error['request_id'] = $this->requestId;
+        }
         if ($fields !== []) {
             $error['fields'] = $fields;
         }
