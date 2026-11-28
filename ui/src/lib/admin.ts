@@ -208,6 +208,10 @@ export interface AdminReport {
 	updated_at: string;
 	resolved_at: string | null;
 	resolved_by: string | null;
+	assigned_to: string | null;
+	assigned_at: string | null;
+	assignee_name: string | null;
+	assignee_handle: string | null;
 }
 
 export interface ReportList {
@@ -393,6 +397,8 @@ export interface AdminApi {
 	revokeSessions(id: string): Promise<number>;
 	reports(state?: 'open' | 'resolved' | 'dismissed' | 'all'): Promise<ReportList>;
 	resolveReport(id: string, state: 'resolved' | 'dismissed', note?: string): Promise<AdminReport>;
+	assignReport(id: string, assignedTo: string | null): Promise<AdminReport>;
+	reopenReport(id: string): Promise<AdminReport>;
 	deletePost(id: string): Promise<void>;
 	jobs(state?: 'all' | 'pending' | 'running' | 'dead'): Promise<JobList>;
 	retryJob(id: string): Promise<AdminJob>;
@@ -551,6 +557,26 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 				`/api/v1/host/admin/reports/${encodeURIComponent(id)}/resolve`,
 				undefined,
 				{ state, note: note ?? '' },
+			);
+
+			return data.report;
+		},
+
+		async assignReport(id, assignedTo): Promise<AdminReport> {
+			const data = await request<{ report: AdminReport }>(
+				'POST',
+				`/api/v1/host/admin/reports/${encodeURIComponent(id)}/assign`,
+				undefined,
+				{ assigned_to: assignedTo },
+			);
+
+			return data.report;
+		},
+
+		async reopenReport(id): Promise<AdminReport> {
+			const data = await request<{ report: AdminReport }>(
+				'POST',
+				`/api/v1/host/admin/reports/${encodeURIComponent(id)}/reopen`,
 			);
 
 			return data.report;

@@ -382,6 +382,75 @@ final class AdminTest extends TestCase
         self::assertContains('user.create', $actions);
     }
 
+    public function testReportsCanBeAssignedAndReopened(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+        // Account ids are handles; alice is the administrator here.
+        $adminId = 'alice';
+        $server->createAccount('bob', 'bob@example.test', TestServer::PASSWORD, false);
+        $reporter = $server->signIn('bob');
+        $post = $server->json('POST', '/api/v1/posts', [
+            'content' => 'A post that will be triaged',
+            'visibility' => 'public',
+        ], $reporter['cookies'], $reporter['csrf']);
+        self::assertSame(201, $post->status);
+        $postId = $this->decoded($post)['post']['id'];
+
+        $report = $server->json('POST', '/api/v1/host/reports', [
+            'target_type' => 'post',
+            'target_id' => $postId,
+            'category' => 'spam',
+        ], $reporter['cookies'], $reporter['csrf']);
+        self::assertSame(201, $report->status);
+        $reportId = $this->decoded($report)['report']['id'];
+
+        $assigned = $server->json('POST', '/api/v1/host/admin/reports/' . $reportId . '/assign', [
+            'assigned_to' => $adminId,
+        ], $cookies, $csrf);
+        self::assertSame(200, $assigned->status);
+        $assignedReport = $this->decoded($assigned)['report'];
+        self::assertSame($adminId, $assignedReport['assigned_to']);
+        self::assertNotNull($assignedReport['assigned_at']);
+        self::assertSame('open', $assignedReport['state']);
+
+        // A non-admin account cannot be an assignee.
+        $invalid = $server->json('POST', '/api/v1/host/admin/reports/' . $reportId . '/assign', [
+            'assigned_to' => 'bob',
+        ], $cookies, $csrf);
+        self::assertSame(422, $invalid->status);
+
+        $resolved = $server->json('POST', '/api/v1/host/admin/reports/' . $reportId . '/resolve', [
+            'state' => 'dismissed',
+        ], $cookies, $csrf);
+        self::assertSame(200, $resolved->status);
+
+        // A closed report cannot be reassigned.
+        $lateAssign = $server->json('POST', '/api/v1/host/admin/reports/' . $reportId . '/assign', [
+            'assigned_to' => $adminId,
+        ], $cookies, $csrf);
+        self::assertSame(409, $lateAssign->status);
+
+        $reopened = $server->json('POST', '/api/v1/host/admin/reports/' . $reportId . '/reopen', [], $cookies, $csrf);
+        self::assertSame(200, $reopened->status);
+        $reopenedReport = $this->decoded($reopened)['report'];
+        self::assertSame('open', $reopenedReport['state']);
+        self::assertNull($reopenedReport['resolved_at']);
+        self::assertNull($reopenedReport['resolved_by']);
+        self::assertSame($adminId, $reopenedReport['assigned_to']);
+
+        $unassigned = $server->json('POST', '/api/v1/host/admin/reports/' . $reportId . '/assign', [
+            'assigned_to' => null,
+        ], $cookies, $csrf);
+        self::assertSame(200, $unassigned->status);
+        self::assertNull($this->decoded($unassigned)['report']['assigned_to']);
+
+        $audit = $server->send('GET', '/api/v1/host/admin/audit', ['cookies' => $cookies]);
+        $actions = array_column($this->decoded($audit)['entries'], 'action');
+        self::assertContains('report.assign', $actions);
+        self::assertContains('report.unassign', $actions);
+        self::assertContains('report.reopen', $actions);
+    }
+
     public function testRemoteTargetsCanBeReportedWithoutALocalCacheEntry(): void
     {
         ['server' => $server, 'cookies' => $cookies] = $this->admin();
