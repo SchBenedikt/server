@@ -69,6 +69,7 @@ final class Preferences
      *     notify_mentions: bool,
      *     mirror_likes_to_atproto: bool,
      *     mirror_boosts_to_atproto: bool,
+     *     recommendations_opt_out: bool,
      *     mirror_atproto_account_did: string|null,
      *     onboarding_dismissed: bool,
      *     onboarding_dismissed_at: string|null,
@@ -107,6 +108,7 @@ final class Preferences
             'notify_mentions' => (bool) ($row['notify_mentions'] ?? true),
             'mirror_likes_to_atproto' => (bool) ($row['mirror_likes_to_atproto'] ?? false),
             'mirror_boosts_to_atproto' => (bool) ($row['mirror_boosts_to_atproto'] ?? false),
+            'recommendations_opt_out' => (bool) ($row['recommendations_opt_out'] ?? false),
             'mirror_atproto_account_did' => is_string($row['mirror_atproto_account_did'] ?? null)
                 && $row['mirror_atproto_account_did'] !== '' ? (string) $row['mirror_atproto_account_did'] : null,
             'onboarding_dismissed' => is_string($row['onboarding_dismissed_at'] ?? null)
@@ -153,7 +155,7 @@ final class Preferences
             );
         }
 
-        foreach (['show_boosts', 'discoverable', 'locked', 'notify_follows', 'notify_favourites', 'notify_boosts', 'notify_mentions', 'mirror_likes_to_atproto', 'mirror_boosts_to_atproto'] as $flag) {
+        foreach (['show_boosts', 'discoverable', 'locked', 'notify_follows', 'notify_favourites', 'notify_boosts', 'notify_mentions', 'mirror_likes_to_atproto', 'mirror_boosts_to_atproto', 'recommendations_opt_out'] as $flag) {
             if (array_key_exists($flag, $payload)) {
                 if (!is_bool($payload[$flag])) {
                     throw CommunityException::invalid(
@@ -199,9 +201,9 @@ final class Preferences
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, recommendations_opt_out, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :recommendations_opt_out, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -215,6 +217,7 @@ final class Preferences
             . ' notify_mentions = excluded.notify_mentions,'
             . ' mirror_likes_to_atproto = excluded.mirror_likes_to_atproto,'
             . ' mirror_boosts_to_atproto = excluded.mirror_boosts_to_atproto,'
+            . ' recommendations_opt_out = excluded.recommendations_opt_out,'
             . ' mirror_atproto_account_did = excluded.mirror_atproto_account_did,'
             . ' onboarding_dismissed_at = excluded.onboarding_dismissed_at,'
             . ' dismissed_announcements = excluded.dismissed_announcements,'
@@ -233,12 +236,24 @@ final class Preferences
                 'notify_mentions' => $next['notify_mentions'] ? 1 : 0,
                 'mirror_likes_to_atproto' => $next['mirror_likes_to_atproto'] ? 1 : 0,
                 'mirror_boosts_to_atproto' => $next['mirror_boosts_to_atproto'] ? 1 : 0,
+                'recommendations_opt_out' => $next['recommendations_opt_out'] ? 1 : 0,
                 'mirror_atproto_account_did' => $next['mirror_atproto_account_did'],
                 'onboarding_dismissed_at' => $dismissedAt,
                 'dismissed_announcements' => $dismissedIds === [] ? null : json_encode($dismissedIds),
                 'updated_at' => $now,
             ],
         );
+
+        // Opting out must not leave a derived interest profile behind: the
+        // snapshot, explicit feedback and dwell impressions are all deleted.
+        if ($next['recommendations_opt_out']) {
+            foreach (['recommendation_snapshot', 'recommendation_feedback', 'recommendation_impression'] as $table) {
+                $this->db->execute(
+                    'DELETE FROM ' . $table . ' WHERE account_id = :account_id',
+                    ['account_id' => $accountId],
+                );
+            }
+        }
 
         return $this->forAccount($accountId);
     }
@@ -262,6 +277,7 @@ final class Preferences
             'notify_mentions' => true,
             'mirror_likes_to_atproto' => false,
             'mirror_boosts_to_atproto' => false,
+            'recommendations_opt_out' => false,
             'mirror_atproto_account_did' => null,
             'onboarding_dismissed' => false,
             'onboarding_dismissed_at' => null,

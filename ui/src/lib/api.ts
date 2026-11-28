@@ -1193,6 +1193,7 @@ function normalizePreferences(value: unknown): AccountPreferences {
 			? value.mirror_atproto_account_did
 			: null,
 		onboarding_dismissed: value.onboarding_dismissed === true,
+		recommendations_opt_out: value.recommendations_opt_out === true,
 		dismissed_announcements: Array.isArray(value.dismissed_announcements)
 			? value.dismissed_announcements.filter((id): id is string => typeof id === 'string')
 			: [],

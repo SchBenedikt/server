@@ -129,6 +129,10 @@ final class ForYouFeed
         $limit = max(1, min(self::MAX_LIMIT, $limit));
         $offset = max(0, $offset);
 
+        if ($this->recommendationsOptedOut($accountId)) {
+            return ['posts' => [], 'reasons' => [], 'next' => null, 'total' => 0];
+        }
+
         if ($cursor !== null) {
             return $this->continueSnapshot(self::KIND_FOR_YOU, $accountId, $cursor, $limit);
         }
@@ -973,6 +977,10 @@ final class ForYouFeed
      */
     public function recordImpressions(string $accountId, array $items): int
     {
+        if ($this->recommendationsOptedOut($accountId)) {
+            return 0;
+        }
+
         return $this->interests->record($accountId, $items);
     }
 
@@ -996,6 +1004,12 @@ final class ForYouFeed
                 ['kind' => 'Allowed values are "less" and "more".'],
             );
         }
+        if ($this->recommendationsOptedOut($accountId)) {
+            throw CommunityException::invalid(
+                'Personalized recommendations are turned off.',
+                ['recommendations' => 'Enable personalized recommendations in Settings first.'],
+            );
+        }
 
         $now = Time::format($this->clock->now());
         $this->db->execute(
@@ -1011,6 +1025,18 @@ final class ForYouFeed
         );
 
         return ['post_id' => $postId, 'kind' => $kind];
+    }
+
+    /**
+     * Whether the account turned personalized recommendations off. Opted-out
+     * accounts get an empty feed and no new interest signals are stored.
+     */
+    private function recommendationsOptedOut(string $accountId): bool
+    {
+        return (bool) $this->db->fetchValue(
+            'SELECT recommendations_opt_out FROM account_preference WHERE account_id = :account_id',
+            ['account_id' => $accountId],
+        );
     }
 
     /**
