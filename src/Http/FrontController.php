@@ -267,6 +267,10 @@ final class FrontController
             return $this->resendVerification($request, $session, $rawCookie, $userAgent, $ip);
         }
 
+        if ($request->method === 'GET' && $request->path === '/verify-email-change') {
+            return $this->verifyEmailChange($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
         if ($request->method === 'GET' && $request->path === '/app') {
             return $this->appPage($session);
         }
@@ -806,6 +810,33 @@ final class FrontController
                     'display_name' => $account?->name() ?? $userId,
                 ],
             ]);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/api/v1/host/email-change') {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $rateLimited = $this->enforceIdentityRateLimit('host.email_change', $userId, 5, 900);
+            if ($rateLimited !== null) {
+                return $rateLimited;
+            }
+
+            $body = json_decode($request->body, true);
+            $email = is_array($body) && is_string($body['email'] ?? null) ? $body['email'] : '';
+            $password = is_array($body) && is_string($body['password'] ?? null) ? $body['password'] : '';
+
+            $error = $this->runtime->emailChange->request($userId, $email, $password);
+            if ($error !== null) {
+                return match ($error) {
+                    'invalid_password' => $this->apiError(403, 'invalid_password', 'The password is incorrect.'),
+                    'email_taken' => $this->apiError(409, 'email_taken', 'This email address is already in use.'),
+                    'email_unchanged' => $this->apiError(422, 'email_unchanged', 'This is already the account email address.'),
+                    default => $this->apiError(422, 'invalid_email', 'Please enter a valid email address.'),
+                };
+            }
+
+            return Response::json(['pending_email' => strtolower(trim($email))]);
         }
 
         if (preg_match('#^/api/v1/posts/([^/]+)/boost$#', $request->path, $matches) === 1
@@ -2172,6 +2203,29 @@ final class FrontController
         }
 
         return $this->page('verify-email', $params, $ok ? 'Email verified' : 'Verification failed', $ok ? 200 : 400, $issue);
+    }
+
+    /**
+     * GET /verify-email-change?token=… consumes the mailed confirmation
+     * link. The token itself is the capability, so no form round-trip or
+     * session is required.
+     */
+    private function verifyEmailChange(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        $token = (string) $request->queryParam('token', '');
+        $ok = $this->runtime->emailChange->confirm($token);
+
+        return $this->page(
+            'verify-email-change',
+            ['instance' => $this->runtime->config->instanceName, 'ok' => $ok],
+            $ok ? 'Email changed' : 'Confirmation failed',
+            $ok ? 200 : 400,
+        );
     }
 
     /**

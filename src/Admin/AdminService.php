@@ -22,6 +22,7 @@ use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Accounts\EmailChangeService;
 use AlohaSocial\Server\Auth\AtprotoSessionRepository;
 use AlohaSocial\Server\Auth\MastodonOAuthRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
@@ -95,6 +96,7 @@ final class AdminService
         private readonly Application $app,
         private readonly HostConfig $config,
         private readonly ?S3CompatibleClient $s3Client = null,
+        private readonly ?EmailChangeService $emailChange = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
         $this->mastodonOAuth = new MastodonOAuthRepository($db);
@@ -392,6 +394,8 @@ final class AdminService
         }
 
         $this->accounts->disable($id);
+        // A suspended account must not complete an in-flight email move.
+        $this->emailChange?->cancelForAccount($id);
         $cancelled = $this->app->queue->cancelBySubject(JobSubject::account($id));
         $revoked = $this->sessions->revokeAccount($id);
         $revoked += $this->atprotoSessions->deleteForAccount($id);
