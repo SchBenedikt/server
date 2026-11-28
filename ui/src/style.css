@@ -3576,6 +3576,11 @@ dialog.a-modal::backdrop {
 	object-fit: contain;
 }
 
+.a-composer__image-order {
+	display: flex;
+	gap: 4px;
+}
+
 .a-composer__audio {
 	display: flex;
 	align-items: center;
