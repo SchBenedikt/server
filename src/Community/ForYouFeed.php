@@ -80,6 +80,15 @@ final class ForYouFeed
     private const TAG_SNAPSHOT_LIMIT = 10;
 
     /**
+     * Snapshot kinds carry a version suffix so a ranking change orphans the
+     * stored pages instead of serving ids ranked under the old rules. Rows
+     * under the old kinds are unreachable and expire on their own TTL.
+     */
+    private const KIND_FOR_YOU = 'for-you.v2';
+
+    private const KIND_TRENDING = 'trending.v2';
+
+    /**
      * How many older archive slices one scroll session may continue into.
      * Each round ranks the posts older than the previous round's oldest post,
      * so the feed keeps producing material instead of ending.
@@ -121,7 +130,7 @@ final class ForYouFeed
         $offset = max(0, $offset);
 
         if ($cursor !== null) {
-            return $this->continueSnapshot('for-you', $accountId, $cursor, $limit);
+            return $this->continueSnapshot(self::KIND_FOR_YOU, $accountId, $cursor, $limit);
         }
 
         $candidates = $this->candidates($accountId, $olderThan);
@@ -270,7 +279,7 @@ final class ForYouFeed
         }
 
         $page = $this->rankedPage(
-            'for-you',
+            self::KIND_FOR_YOU,
             $accountId,
             $scored,
             $limit,
@@ -311,7 +320,7 @@ final class ForYouFeed
         $offset = max(0, $offset);
 
         if ($cursor !== null) {
-            return $this->continueSnapshot('trending', null, $cursor, $limit);
+            return $this->continueSnapshot(self::KIND_TRENDING, null, $cursor, $limit);
         }
         $now = $this->clock->now();
         $since = Time::format($now->modify('-7 days'));
@@ -333,6 +342,11 @@ final class ForYouFeed
             . ' FROM social_post p'
             . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.in_reply_to_id IS NULL"
             . $localWindow
+            // Trending is anonymous and instance-wide, so a non-discoverable
+            // author never appears here at all.
+            . ' AND NOT EXISTS ('
+            . ' SELECT 1 FROM account_preference ap'
+            . ' WHERE ap.account_id = p.author_id AND ap.discoverable = 0)'
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             $localParameters,
         );
@@ -399,7 +413,7 @@ final class ForYouFeed
         $scored = $this->spreadAuthorsAndTags($scored);
 
         return $this->rankedPage(
-            'trending',
+            self::KIND_TRENDING,
             null,
             $scored,
             $limit,
@@ -680,7 +694,7 @@ final class ForYouFeed
         // This ranking snapshot is used up. Rank an older slice of the archive
         // and return it as the next page, so scrolling continues with older
         // posts instead of stopping at "You're all caught up".
-        $next = $kind === 'for-you' && $accountId !== null
+        $next = $kind === self::KIND_FOR_YOU && $accountId !== null
             ? $this->page($accountId, $limit, 0, null, $decoded['round'] + 1, $decoded['oldest'])
             : $this->trending($limit, 0, null, $decoded['round'] + 1, $decoded['oldest']);
 
@@ -757,6 +771,13 @@ final class ForYouFeed
             . 'SELECT actor_id FROM social_mute WHERE user_id = :muted_viewer'
             . ' AND (expires_at IS NULL OR expires_at > :local_mute_now))'
             . ' AND p.author_id NOT IN (SELECT actor_id FROM social_block WHERE local_user_id = :blocked_viewer)'
+            // An author who turned off discoverability leaves every
+            // recommendation surface for other readers; their own feed
+            // still shows their posts.
+            . ' AND NOT EXISTS ('
+            . ' SELECT 1 FROM account_preference ap'
+            . ' WHERE ap.account_id = p.author_id AND ap.discoverable = 0'
+            . ' AND p.author_id <> :discoverable_viewer)'
             . $olderLocal
             . ' ORDER BY p.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             array_merge(
@@ -764,6 +785,7 @@ final class ForYouFeed
                     'muted_viewer' => $accountId,
                     'local_mute_now' => Time::format($now),
                     'blocked_viewer' => $accountId,
+                    'discoverable_viewer' => $accountId,
                 ],
                 $olderThan === null ? [] : ['older_local' => $olderThan],
             ),

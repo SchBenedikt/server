@@ -68,6 +68,9 @@ final class Trends
             . ' FROM social_post_hashtag h'
             . ' JOIN social_post p ON p.id = h.post_id'
             . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.published_at >= :since"
+            . ' AND NOT EXISTS ('
+            . ' SELECT 1 FROM account_preference ap'
+            . ' WHERE ap.account_id = p.author_id AND ap.discoverable = 0)'
             . ' GROUP BY h.hashtag'
             . ' ORDER BY posts DESC, accounts DESC, h.hashtag ASC LIMIT ' . $limit,
             ['since' => $this->since($days)],
@@ -92,9 +95,12 @@ final class Trends
         $limit = max(1, min(25, $limit));
 
         $rows = $this->db->fetchAll(
-            'SELECT content FROM social_post'
-            . " WHERE deleted_at IS NULL AND visibility = 'public' AND published_at >= :since"
-            . ' ORDER BY published_at DESC LIMIT 500',
+            'SELECT p.content FROM social_post p'
+            . " WHERE p.deleted_at IS NULL AND p.visibility = 'public' AND p.published_at >= :since"
+            . ' AND NOT EXISTS ('
+            . ' SELECT 1 FROM account_preference ap'
+            . ' WHERE ap.account_id = p.author_id AND ap.discoverable = 0)'
+            . ' ORDER BY p.published_at DESC LIMIT 500',
             ['since' => $this->since($days)],
         );
 
