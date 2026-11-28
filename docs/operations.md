@@ -335,6 +335,38 @@ An interrupted `bin/update.php` run is recoverable in every supported state:
 `schema_version`, `pending_migrations`, `core_version` and
 `core_reference` before and after an upgrade.
 
+### Dead queue jobs and federation delivery failures
+
+When `/readyz` reports `queue: warn` with `dead > 0`, diagnose before
+touching anything:
+
+1. Open the administration queue (`/admin` → Queue, or the app's admin
+   section). Each job row shows type, state, attempts, availability, the
+   sanitized `last_error` (`ExceptionClass: message`, never payloads or
+   credentials) and, for dead jobs, when it died.
+2. Match the failure to its cause: `remote_delivery_unreachable` or HTTP
+   4xx/5xx in `last_error` points at the remote inbox or network; a local
+   exception class points at this instance. A single historical dead job
+   does not make the service unhealthy — `/readyz` stays `ok` while
+   pending/running queues drain.
+3. Retry **one** dead job at a time from the queue view (audited as
+   `job.retry`). Only dead jobs are retryable; pending and running jobs
+   are refused because there is nothing to recover. Bulk "retry dead" is
+   available for correlated outages (for example after the remote instance
+   comes back), is audited as `job.retry_all`, and re-checks job
+   applicability when the handler runs — an obsolete delivery whose
+   subject was deleted or cancelled is skipped by the handler, not
+   replayed blindly.
+4. Verify the fix end-to-end: the retried job leaves `dead`, `attempts`
+   resets, and the remote side shows the activity. If it dies again with
+   the same `last_error`, the cause is still present — do not keep
+   retrying; fix the remote reachability, signature clock or payload
+   problem first.
+
+Never regenerate keys, reset the installation or wipe `social_job` to fix
+a delivery failure: the durable queue and replay log exist precisely so a
+dead job can be inspected and retried safely.
+
 ### Core release upgrade and rollback
 
 For a tagged Core release, select **Release** and the exact Core version in

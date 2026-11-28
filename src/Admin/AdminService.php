@@ -673,6 +673,9 @@ final class AdminService
         if ($row === null) {
             throw AdminException::notFound('This job does not exist.');
         }
+        if ($row['dead_at'] === null) {
+            throw AdminException::conflict('Only dead jobs can be retried; pending and running jobs need no intervention.');
+        }
 
         $now = Time::format($this->clock->now());
         $this->db->execute(
@@ -1422,6 +1425,8 @@ final class AdminService
             'available_at' => (string) $row['available_at'],
             'reserved_at' => $row['reserved_at'] === null ? null : (string) $row['reserved_at'],
             'dead_at' => $row['dead_at'] === null ? null : (string) $row['dead_at'],
+            'last_error' => ($row['last_error'] ?? null) === null ? null : (string) $row['last_error'],
+            'retryable' => $row['dead_at'] !== null,
             'payload' => $this->decodeDetails($row['payload']),
         ];
     }

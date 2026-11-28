@@ -1185,6 +1185,12 @@
 	font-size: 10.5px;
 }
 
+.a-admin-job-error {
+	display: block;
+	color: var(--a-danger);
+	overflow-wrap: anywhere;
+}
+
 .a-admin-mention {
 	color: var(--a-text);
 	font-weight: 650;
