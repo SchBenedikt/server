@@ -85,6 +85,8 @@ function refreshRemoteActorProfiles(Runtime $runtime, int $limit = 8): void
 function dispatchMailOutbox(Runtime $runtime): void
 {
     try {
+        $runtime->passwordReset->prune();
+        $runtime->mailOutbox->prune();
         $result = $runtime->mailOutbox->dispatch(10);
         if ($result['failed'] > 0) {
             fwrite(STDERR, 'Mail outbox marked ' . $result['failed'] . " message(s) failed.\n");

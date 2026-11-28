@@ -25,7 +25,7 @@ final class MailOutboxTest extends TestCase
         $outbox = $this->outbox($server, $mailer);
 
         $outbox->enqueue(
-            MailOutbox::KIND_PASSWORD_RESET,
+            'test.kind',
             'alice',
             'token-hash-1',
             'alice@example.test',
@@ -57,7 +57,7 @@ final class MailOutboxTest extends TestCase
         $mailer->failuresRemaining = 2;
         $outbox = $this->outbox($server, $mailer);
 
-        $outbox->enqueue(MailOutbox::KIND_PASSWORD_RESET, 'alice', 'k1', 'a@b.test', 's', 'b');
+        $outbox->enqueue('test.kind', 'alice', 'k1', 'a@b.test', 's', 'b');
 
         self::assertSame(1, $outbox->dispatch()['retried']);
         self::assertCount(0, $mailer->messages);
@@ -87,7 +87,7 @@ final class MailOutboxTest extends TestCase
         $mailer->failuresRemaining = 100;
         $outbox = $this->outbox($server, $mailer);
 
-        $outbox->enqueue(MailOutbox::KIND_PASSWORD_RESET, 'alice', 'k1', 'a@b.test', 's', 'b');
+        $outbox->enqueue('test.kind', 'alice', 'k1', 'a@b.test', 's', 'b');
         $server->runtime->database->execute('UPDATE mail_outbox SET max_attempts = 2');
 
         self::assertSame(1, $outbox->dispatch()['retried']);
@@ -107,10 +107,10 @@ final class MailOutboxTest extends TestCase
         $mailer = new RecordingMailer();
         $outbox = $this->outbox($server, $mailer);
 
-        $outbox->enqueue(MailOutbox::KIND_PASSWORD_RESET, 'alice', 'old-token', 'a@b.test', 's', 'old body');
-        $outbox->enqueue(MailOutbox::KIND_PASSWORD_RESET, 'alice', 'old-token', 'a@b.test', 's', 'old body');
-        $outbox->cancelPending(MailOutbox::KIND_PASSWORD_RESET, 'alice');
-        $outbox->enqueue(MailOutbox::KIND_PASSWORD_RESET, 'alice', 'new-token', 'a@b.test', 's', 'new body');
+        $outbox->enqueue('test.kind', 'alice', 'old-token', 'a@b.test', 's', 'old body');
+        $outbox->enqueue('test.kind', 'alice', 'old-token', 'a@b.test', 's', 'old body');
+        $outbox->cancelPending('test.kind', 'alice');
+        $outbox->enqueue('test.kind', 'alice', 'new-token', 'a@b.test', 's', 'new body');
 
         self::assertSame(2, (int) $server->runtime->database->fetchValue('SELECT COUNT(*) FROM mail_outbox'));
 
@@ -119,6 +119,58 @@ final class MailOutboxTest extends TestCase
         self::assertSame(1, $result['cancelled']);
         self::assertCount(1, $mailer->messages);
         self::assertStringContainsString('new body', $mailer->messages[0]['body']);
+    }
+
+    public function testResetMailIsCancelledWhenItsTokenExpiredOrWasUsed(): void
+    {
+        $server = new TestServer();
+        $mailer = new RecordingMailer();
+        $outbox = $this->outbox($server, $mailer);
+
+        $server->runtime->database->execute(
+            'INSERT INTO password_reset (token_hash, account_id, created_at, expires_at, used_at)'
+            . " VALUES ('dead-token', 'alice', '2000-01-01T00:00:00Z', '2000-01-01T01:00:00Z', NULL)",
+        );
+        $outbox->enqueue(
+            MailOutbox::KIND_PASSWORD_RESET,
+            'alice',
+            'dead-token',
+            'alice@example.test',
+            'Reset',
+            'dead link',
+        );
+
+        // The token expired while the mail sat in the queue.
+        $result = $outbox->dispatch();
+        self::assertSame(1, $result['cancelled']);
+        self::assertCount(0, $mailer->messages);
+    }
+
+    public function testPruneRemovesOnlyTerminalRowsPastRetention(): void
+    {
+        $server = new TestServer();
+        $mailer = new RecordingMailer();
+        $outbox = $this->outbox($server, $mailer);
+
+        $outbox->enqueue('test.kind', 'alice', 'old', 'a@b.test', 's', 'b');
+        $outbox->enqueue('test.kind', 'alice', 'pending', 'a@b.test', 's', 'b');
+        // Only the first row is due; hold the second back.
+        $server->runtime->database->execute(
+            "UPDATE mail_outbox SET next_attempt_at = '2999-01-01T00:00:00Z' WHERE dedup_key = 'pending'",
+        );
+        $outbox->dispatch();
+        self::assertSame(1, $outbox->pendingCount());
+
+        $server->runtime->database->execute(
+            "UPDATE mail_outbox SET created_at = '2000-01-01T00:00:00Z' WHERE dedup_key = 'old'",
+        );
+        self::assertSame(1, $outbox->prune(7));
+
+        $remaining = array_column(
+            $server->runtime->database->fetchAll('SELECT dedup_key, status FROM mail_outbox'),
+            'dedup_key',
+        );
+        self::assertSame(['pending'], $remaining);
     }
 
     private function outbox(TestServer $server, RecordingMailer $mailer): MailOutbox
