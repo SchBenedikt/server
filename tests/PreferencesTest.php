@@ -359,6 +359,55 @@ final class PreferencesTest extends TestCase
         self::assertSame('Because you follow this account', $body['reasons'][$followedPost]);
     }
 
+    public function testUndiscoverableAuthorLeavesRecommendationSurfaces(): void
+    {
+        $post = $this->server->runtime->app->posts->create(
+            new CreatePost('bob', 'Verborgen #secret', Visibility::Public),
+        )->id;
+        $mine = $this->server->runtime->app->posts->create(
+            new CreatePost('alice', 'Sichtbar #open', Visibility::Public),
+        )->id;
+
+        $bob = $this->server->signIn('bob');
+        $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'discoverable' => false,
+        ], $bob['cookies'], $bob['csrf']);
+
+        // Another reader's For You drops the post; the author's own feed
+        // still shows it.
+        $aliceFeed = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]),
+        );
+        self::assertNotContains($post, $aliceFeed['posts']);
+        self::assertContains($mine, $aliceFeed['posts']);
+
+        $bobFeed = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $bob['cookies']]),
+        );
+        self::assertContains($post, $bobFeed['posts']);
+
+        // Anonymous trending and the hashtag trends drop it too.
+        $trending = $this->decoded($this->server->send('GET', '/api/v1/host/trending'));
+        self::assertNotContains($post, $trending['posts']);
+        self::assertContains($mine, $trending['posts']);
+
+        $tags = array_column(
+            $this->decoded($this->server->send('GET', '/api/v1/host/trends'))['tags'],
+            'tag',
+        );
+        self::assertContains('open', $tags);
+        self::assertNotContains('secret', $tags);
+
+        // Re-enabling restores the surfaces.
+        $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'discoverable' => true,
+        ], $bob['cookies'], $bob['csrf']);
+        $restored = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]),
+        );
+        self::assertContains($post, $restored['posts']);
+    }
+
     public function testPreferencesAreScopedToOneAccount(): void
     {
         $this->server->json('PATCH', '/api/v1/host/preferences', [
