@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { displayNameFor, handleFor, resolveAccount } from '../lib/account';
 import { getApi } from '../lib/api';
+import { locale, t } from '../lib/i18n';
 import { relativeTime } from '../lib/format';
 import { appState, showToast } from '../lib/state';
 import type {
@@ -26,11 +27,11 @@ type CategoryFilter = 'all' | KokuaCategory;
 type StateFilter = KokuaStatus;
 
 const categoryLabels: Record<KokuaCategory, string> = {
-	everyday: 'Everyday',
-	skills: 'Skills',
-	company: 'Company',
-	goods: 'Goods',
-	other: 'Other',
+	everyday: 'kokua.cat.everyday',
+	skills: 'kokua.cat.skills',
+	company: 'kokua.cat.company',
+	goods: 'kokua.cat.goods',
+	other: 'kokua.cat.other',
 };
 
 const kind = ref<KindFilter>('all');
@@ -61,11 +62,11 @@ const counts = computed(() => data.value?.counts ?? { open_requests: 0, open_off
 const hasMore = computed(() => data.value !== null && data.value.items.length < data.value.total);
 
 function kindLabel(value: KokuaKind): string {
-	return value === 'request' ? 'Needs help' : 'Offers help';
+	return t(`kokua.kindName.${value}`);
 }
 
 function categoryLabel(value: KokuaCategory): string {
-	return categoryLabels[value] ?? 'Other';
+	return t(categoryLabels[value] ?? 'kokua.cat.other');
 }
 
 function authorName(entry: KokuaEntry): string {
@@ -86,18 +87,18 @@ function formatDate(value: string | null): string {
 		return value;
 	}
 
-	return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+	return new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric' }).format(date);
 }
 
 function helperSummary(entry: KokuaEntry): string {
 	if (entry.help_count === 0) {
-		return 'No offers yet';
+		return t('kokua.noOffers');
 	}
 	if (entry.help_count === 1) {
-		return '1 person offered a hand';
+		return t('kokua.oneOffer');
 	}
 
-	return `${entry.help_count} people offered a hand`;
+	return t('kokua.offersCount', { count: entry.help_count });
 }
 
 async function resolvePeople(page: KokuaPage): Promise<void> {
@@ -139,7 +140,7 @@ async function load(reset = true): Promise<void> {
 		}
 		await resolvePeople(page);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The Kokua board could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('kokua.loadFailed');
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -183,10 +184,10 @@ async function create(): Promise<void> {
 		});
 		resetForm();
 		formOpen.value = false;
-		showToast('Your Kokua is on the board.', 'success');
+		showToast(t('kokua.posted'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The Kokua could not be posted.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('kokua.postFailed'), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -208,9 +209,9 @@ async function submitHelp(entry: KokuaEntry): Promise<void> {
 		replaceEntry(updated);
 		helpingId.value = '';
 		helpMessage.value = '';
-		showToast(updated.viewer_helping ? 'Your private note is visible to the author.' : 'Your offer was saved.', 'success');
+		showToast(t(updated.viewer_helping ? 'kokua.helpPrivate' : 'kokua.helpSaved'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Your offer could not be sent.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('kokua.helpFailed'), 'error');
 	} finally {
 		busyId.value = '';
 	}
@@ -225,9 +226,9 @@ async function withdraw(entry: KokuaEntry): Promise<void> {
 	try {
 		const updated = await getApi().withdrawKokuaHelp(entry.id);
 		replaceEntry(updated);
-		showToast('Your offer was withdrawn.', 'success');
+		showToast(t('kokua.withdrawn'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Your offer could not be withdrawn.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('kokua.withdrawFailed'), 'error');
 	} finally {
 		busyId.value = '';
 	}
@@ -241,27 +242,27 @@ async function setStatus(entry: KokuaEntry, status: KokuaStatus): Promise<void> 
 	busyId.value = entry.id;
 	try {
 		await getApi().setKokuaStatus(entry.id, status);
-		showToast(status === 'done' ? 'Kokua marked as done.' : 'Kokua reopened.', 'success');
+		showToast(t(status === 'done' ? 'kokua.markedDone' : 'kokua.reopened'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The Kokua could not be changed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('kokua.changeFailed'), 'error');
 	} finally {
 		busyId.value = '';
 	}
 }
 
 async function remove(entry: KokuaEntry): Promise<void> {
-	if (busyId.value !== '' || !window.confirm(`Remove “${entry.title}” from the Kokua board?`)) {
+	if (busyId.value !== '' || !window.confirm(t('kokua.removeConfirm', { title: entry.title }))) {
 		return;
 	}
 
 	busyId.value = entry.id;
 	try {
 		await getApi().deleteKokua(entry.id);
-		showToast('Kokua removed.', 'success');
+		showToast(t('kokua.removed'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The Kokua could not be removed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('kokua.removeFailedToast'), 'error');
 	} finally {
 		busyId.value = '';
 	}
@@ -280,9 +281,9 @@ onMounted(() => {
 	<div class="a-page">
 		<PageHeader
 			title="Kokua"
-			subtitle="Help, offered and asked. A board for the practical things neighbours can do for each other."
+			:subtitle="t('kokua.subtitle')"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
 				<button
@@ -292,9 +293,9 @@ onMounted(() => {
 					@click="formOpen = !formOpen"
 				>
 					<AppIcon name="plus" :size="15" />
-					Post a Kokua
+					{{ t('kokua.post') }}
 				</button>
-				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Sign in to take part</a>
+				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('kokua.signInToTakePart') }}</a>
 			</template>
 		</PageHeader>
 
@@ -302,25 +303,24 @@ onMounted(() => {
 			<div class="a-kokua-intro__copy">
 				<span class="a-kokua-intro__mark" aria-hidden="true"><AppIcon name="handHeart" :size="27" /></span>
 				<div>
-					<p class="a-welcome__eyebrow">Kokua means help</p>
-					<h2>Ask for a hand. Offer one. Mark it done.</h2>
+					<p class="a-welcome__eyebrow">{{ t('kokua.eyebrow') }}</p>
+					<h2>{{ t('kokua.heading') }}</h2>
 					<p>
-						This is not a marketplace and it is not a feed. It is a small, public noticeboard for
-						everyday help — a lift, a tool, a skill, company, or an extra pair of hands.
+						{{ t('kokua.intro') }}
 					</p>
 				</div>
 			</div>
 			<dl class="a-kokua-counts">
 				<div>
-					<dt>Open requests</dt>
+					<dt>{{ t('kokua.count.requests') }}</dt>
 					<dd>{{ counts.open_requests }}</dd>
 				</div>
 				<div>
-					<dt>Open offers</dt>
+					<dt>{{ t('kokua.count.offers') }}</dt>
 					<dd>{{ counts.open_offers }}</dd>
 				</div>
 				<div>
-					<dt>Completed</dt>
+					<dt>{{ t('kokua.count.done') }}</dt>
 					<dd>{{ counts.done }}</dd>
 				</div>
 			</dl>
@@ -329,24 +329,24 @@ onMounted(() => {
 		<form v-if="formOpen && signedIn" class="a-panel a-kokua-form" @submit.prevent="create">
 			<div class="a-kokua-form__head">
 				<div>
-					<h2>Put something on the board</h2>
-					<p>Be specific enough that someone can say yes.</p>
+					<h2>{{ t('kokua.formTitle') }}</h2>
+					<p>{{ t('kokua.formHint') }}</p>
 				</div>
-				<button type="button" class="a-icon-btn" aria-label="Close form" @click="formOpen = false">
+				<button type="button" class="a-icon-btn" :aria-label="t('kokua.closeForm')" @click="formOpen = false">
 					<AppIcon name="x" :size="19" />
 				</button>
 			</div>
 
 			<div class="a-kokua-form__grid">
 				<label>
-					<span>I am…</span>
+					<span>{{ t('kokua.kindLabel') }}</span>
 					<select v-model="form.kind">
-						<option value="request">asking for help</option>
-						<option value="offer">offering help</option>
+						<option value="request">{{ t('kokua.kind.request') }}</option>
+						<option value="offer">{{ t('kokua.kind.offer') }}</option>
 					</select>
 				</label>
 				<label>
-					<span>Category</span>
+					<span>{{ t('kokua.category') }}</span>
 					<select v-model="form.category">
 						<option v-for="(label, value) in categoryLabels" :key="value" :value="value">{{ label }}</option>
 					</select>
@@ -354,43 +354,43 @@ onMounted(() => {
 			</div>
 
 			<label>
-				<span>Short title</span>
-				<input v-model="form.title" maxlength="100" required placeholder="For example: A lift to the station on Friday" />
+				<span>{{ t('kokua.titleLabel') }}</span>
+				<input v-model="form.title" maxlength="100" required :placeholder="t('kokua.titlePlaceholder')" />
 			</label>
 
 			<label>
-				<span>Details</span>
+				<span>{{ t('kokua.detailsLabel') }}</span>
 				<textarea
 					v-model="form.details"
 					maxlength="1000"
 					rows="3"
-					placeholder="What do you need or offer, and what would make it easy to say yes?"
+					:placeholder="t('kokua.detailsPlaceholder')"
 				/>
 			</label>
 
 			<div class="a-kokua-form__grid">
 				<label>
-					<span>Place <small>(optional)</small></span>
-					<input v-model="form.place" maxlength="80" placeholder="Neighbourhood or meeting point" />
+					<span>{{ t('kokua.placeLabel') }} <small>{{ t('kokua.optional') }}</small></span>
+					<input v-model="form.place" maxlength="80" :placeholder="t('kokua.placePlaceholder')" />
 				</label>
 				<label>
-					<span>Needed by <small>(optional)</small></span>
+					<span>{{ t('kokua.neededBy') }} <small>{{ t('kokua.optional') }}</small></span>
 					<input v-model="form.needed_by" type="date" />
 				</label>
 			</div>
 
 			<div class="a-kokua-form__actions">
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="formOpen = false">Cancel</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="formOpen = false">{{ t('common.cancel') }}</button>
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || form.title.trim() === ''">
-					{{ saving ? 'Posting…' : 'Post to the board' }}
+					{{ saving ? t('kokua.posting') : t('kokua.postToBoard') }}
 				</button>
 			</div>
 		</form>
 
 		<div class="a-kokua-filters">
-			<div class="a-chip-row" role="group" aria-label="Kind of Kokua">
+			<div class="a-chip-row" role="group" :aria-label="t('kokua.kindFilter')">
 				<button
-					v-for="option in ([['all', 'Everything'], ['request', 'Needs help'], ['offer', 'Offers help']] as const)"
+					v-for="option in ([['all', t('kokua.filter.everything')], ['request', t('kokua.filter.needsHelp')], ['offer', t('kokua.filter.offersHelp')]] as const)"
 					:key="option[0]"
 					type="button"
 					class="a-tag-chip"
@@ -401,9 +401,9 @@ onMounted(() => {
 				</button>
 			</div>
 
-			<div class="a-chip-row" role="group" aria-label="Category">
+			<div class="a-chip-row" role="group" :aria-label="t('kokua.category')">
 				<button
-					v-for="option in ([['all', 'All categories'], ['everyday', 'Everyday'], ['skills', 'Skills'], ['company', 'Company'], ['goods', 'Goods'], ['other', 'Other']] as const)"
+					v-for="option in ([['all', t('kokua.filter.allCategories')], ['everyday', t('kokua.cat.everyday')], ['skills', t('kokua.cat.skills')], ['company', t('kokua.cat.company')], ['goods', t('kokua.cat.goods')], ['other', t('kokua.cat.other')]] as const)"
 					:key="option[0]"
 					type="button"
 					class="a-tag-chip"
@@ -414,14 +414,14 @@ onMounted(() => {
 				</button>
 			</div>
 
-			<div class="a-chip-row" role="group" aria-label="State">
+			<div class="a-chip-row" role="group" :aria-label="t('kokua.stateFilter')">
 				<button
 					type="button"
 					class="a-tag-chip"
 					:class="{ 'a-kokua-filter--active': state === 'open' }"
 					@click="state = 'open'"
 				>
-					Open
+					{{ t('kokua.filter.open') }}
 				</button>
 				<button
 					type="button"
@@ -429,7 +429,7 @@ onMounted(() => {
 					:class="{ 'a-kokua-filter--active': state === 'done' }"
 					@click="state = 'done'"
 				>
-					Completed
+					{{ t('kokua.filter.completed') }}
 				</button>
 			</div>
 		</div>
@@ -437,21 +437,19 @@ onMounted(() => {
 		<p v-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load()">Try again</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load()">{{ t('common.tryAgain') }}</button>
 		</p>
 
-		<p v-else-if="loading && entries.length === 0" class="a-muted">Loading the Kokua board…</p>
+		<p v-else-if="loading && entries.length === 0" class="a-muted">{{ t('kokua.loading') }}</p>
 
 		<EmptyState
 			v-else-if="entries.length === 0"
 			icon="handHeart"
-			:title="state === 'done' ? 'No completed Kokua yet' : 'The board is quiet'"
-			:text="state === 'done'
-				? 'When a request or offer has been resolved, it appears here.'
-				: 'Be the first to ask for a hand or offer something you are good at.'"
+			:title="t(state === 'done' ? 'kokua.emptyDoneTitle' : 'kokua.emptyTitle')"
+			:text="t(state === 'done' ? 'kokua.emptyDoneText' : 'kokua.emptyText')"
 		>
 			<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="formOpen = true">
-				Post the first Kokua
+				{{ t('kokua.postFirst') }}
 			</button>
 		</EmptyState>
 
@@ -469,7 +467,7 @@ onMounted(() => {
 					</span>
 					<span class="a-kokua-card__category">{{ categoryLabel(entry.category) }}</span>
 					<span v-if="entry.status === 'done'" class="a-kokua-card__done">
-						<AppIcon name="check" :size="13" /> Done
+						<AppIcon name="check" :size="13" /> {{ t('kokua.done') }}
 					</span>
 				</header>
 
@@ -478,11 +476,11 @@ onMounted(() => {
 
 				<dl v-if="entry.place !== '' || entry.needed_by !== null" class="a-kokua-card__meta">
 					<div v-if="entry.place !== ''">
-						<dt>Place</dt>
+						<dt>{{ t('kokua.place') }}</dt>
 						<dd>{{ entry.place }}</dd>
 					</div>
 					<div v-if="entry.needed_by !== null">
-						<dt>Needed by</dt>
+						<dt>{{ t('kokua.neededByMeta') }}</dt>
 						<dd>{{ formatDate(entry.needed_by) }}</dd>
 					</div>
 				</dl>
@@ -504,14 +502,14 @@ onMounted(() => {
 						<li v-for="helper in entry.helpers.slice(0, 3)" :key="helper.account_id">
 							<strong>{{ displayNameFor(helper.account_id) }}</strong>
 							<span v-if="helper.message !== ''">{{ helper.message }}</span>
-							<span v-else class="a-muted">Can help.</span>
+							<span v-else class="a-muted">{{ t('kokua.canHelp') }}</span>
 						</li>
 					</ul>
 				</section>
 
 				<footer class="a-kokua-card__actions">
 					<template v-if="!signedIn">
-						<a class="a-btn a-btn--ghost a-btn--small" href="/login">Sign in to help</a>
+						<a class="a-btn a-btn--ghost a-btn--small" href="/login">{{ t('kokua.signInToHelp') }}</a>
 					</template>
 
 					<template v-else-if="entry.is_owner">
@@ -522,7 +520,7 @@ onMounted(() => {
 							:disabled="busyId === entry.id"
 							@click="setStatus(entry, 'done')"
 						>
-							<AppIcon name="check" :size="15" /> Mark as done
+							<AppIcon name="check" :size="15" /> {{ t('kokua.markDone') }}
 						</button>
 						<button
 							v-else
@@ -531,7 +529,7 @@ onMounted(() => {
 							:disabled="busyId === entry.id"
 							@click="setStatus(entry, 'open')"
 						>
-							<AppIcon name="refresh" :size="15" /> Reopen
+							<AppIcon name="refresh" :size="15" /> {{ t('kokua.reopen') }}
 						</button>
 						<button
 							type="button"
@@ -539,7 +537,7 @@ onMounted(() => {
 							:disabled="busyId === entry.id"
 							@click="remove(entry)"
 						>
-							<AppIcon name="trash" :size="15" /> Remove
+							<AppIcon name="trash" :size="15" /> {{ t('kokua.remove') }}
 						</button>
 					</template>
 
@@ -551,7 +549,7 @@ onMounted(() => {
 							:disabled="busyId === entry.id"
 							@click="withdraw(entry)"
 						>
-							<AppIcon name="x" :size="15" /> Withdraw offer
+							<AppIcon name="x" :size="15" /> {{ t('kokua.withdraw') }}
 						</button>
 						<button
 							v-else
@@ -560,11 +558,11 @@ onMounted(() => {
 							:disabled="busyId === entry.id || helpingId === entry.id"
 							@click="startHelp(entry)"
 						>
-							<AppIcon name="heart" :size="15" /> I can help
+							<AppIcon name="heart" :size="15" /> {{ t('kokua.iCanHelp') }}
 						</button>
 					</template>
 
-					<span v-else class="a-kokua-card__closed">This Kokua is complete.</span>
+					<span v-else class="a-kokua-card__closed">{{ t('kokua.complete') }}</span>
 				</footer>
 
 				<form
@@ -573,18 +571,18 @@ onMounted(() => {
 					@submit.prevent="submitHelp(entry)"
 				>
 					<label>
-						<span>Add a private note for {{ authorName(entry) }} <small>(optional — only the author can read it)</small></span>
+						<span>{{ t('kokua.noteLabel', { name: authorName(entry) }) }} <small>{{ t('kokua.noteHint') }}</small></span>
 						<textarea
 							v-model="helpMessage"
 							maxlength="300"
 							rows="2"
-							placeholder="How can you help, and when?"
+							:placeholder="t('kokua.notePlaceholder')"
 						/>
 					</label>
 					<div>
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="helpingId = ''">Cancel</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="helpingId = ''">{{ t('common.cancel') }}</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="busyId === entry.id">
-							{{ busyId === entry.id ? 'Sending…' : 'Send offer' }}
+							{{ busyId === entry.id ? t('kokua.sending') : t('kokua.sendOffer') }}
 						</button>
 					</div>
 				</form>
@@ -593,7 +591,7 @@ onMounted(() => {
 
 		<div v-if="hasMore" class="a-feed__more">
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loadingMore" @click="load(false)">
-				{{ loadingMore ? 'Loading…' : 'Load more Kokua' }}
+				{{ loadingMore ? t('common.loading') : t('kokua.loadMore') }}
 			</button>
 		</div>
 	</div>
