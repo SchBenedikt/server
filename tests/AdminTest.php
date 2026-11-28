@@ -101,13 +101,20 @@ final class AdminTest extends TestCase
         self::assertNotEmpty($body['health']);
 
         $mfa = null;
+        $schema = null;
         foreach ($body['health'] as $check) {
             if ($check['id'] === 'admin-mfa') {
                 $mfa = $check;
             }
+            if ($check['id'] === 'schema') {
+                $schema = $check;
+            }
         }
         self::assertNotNull($mfa);
         self::assertSame('warn', $mfa['status']);
+        self::assertNotNull($schema);
+        self::assertSame('ok', $schema['status']);
+        self::assertStringContainsString('applied', $schema['detail']);
     }
 
     public function testCommunicationErrorsAreListedForTheAdministration(): void
