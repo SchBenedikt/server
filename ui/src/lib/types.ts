@@ -647,6 +647,7 @@ export interface AccountPreferences {
 	mirror_likes_to_atproto: boolean;
 	mirror_boosts_to_atproto: boolean;
 	mirror_atproto_account_did: string | null;
+	onboarding_dismissed: boolean;
 	updated_at: string | null;
 }
 

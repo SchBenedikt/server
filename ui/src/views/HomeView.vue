@@ -3,20 +3,35 @@
  * SPDX-FileCopyrightText: 2026 Aloha Social contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AnnouncementBanner from '../components/AnnouncementBanner.vue';
 import AppIcon from '../components/AppIcon.vue';
 import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
+import OnboardingCard from '../components/OnboardingCard.vue';
 import PageHeader from '../components/PageHeader.vue';
 import StoryBar from '../components/StoryBar.vue';
 import TimelineFeed from '../components/TimelineFeed.vue';
+import { getApi } from '../lib/api';
 import { formatCount, handleLabel } from '../lib/format';
 import { appState, openComposer, setHomeTab } from '../lib/state';
 import type { FeedKind } from '../lib/timelines';
 
 const feed = ref<{ refresh: () => void } | null>(null);
 const signedIn = computed(() => appState.session.user !== null);
+const onboardingVisible = ref(false);
+
+onMounted(async () => {
+	if (!signedIn.value) {
+		return;
+	}
+	try {
+		const preferences = await getApi().preferences();
+		onboardingVisible.value = !preferences.onboarding_dismissed;
+	} catch {
+		// The guide is an enhancement; a failed lookup simply keeps it hidden.
+	}
+});
 const currentTab = computed<FeedKind>(() => {
 	if (!signedIn.value) {
 		return 'public';
@@ -138,6 +153,8 @@ function refresh(): void {
 		<AnnouncementBanner />
 
 		<StoryBar v-if="signedIn" />
+
+		<OnboardingCard v-if="onboardingVisible" @dismissed="onboardingVisible = false" />
 
 		<section v-if="!signedIn" class="a-welcome">
 			<div class="a-welcome__glow" aria-hidden="true" />

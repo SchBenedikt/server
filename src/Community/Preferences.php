@@ -63,6 +63,8 @@ final class Preferences
      *     mirror_likes_to_atproto: bool,
      *     mirror_boosts_to_atproto: bool,
      *     mirror_atproto_account_did: string|null,
+     *     onboarding_dismissed: bool,
+     *     onboarding_dismissed_at: string|null,
      *     updated_at: string|null
      * }
      */
@@ -99,6 +101,10 @@ final class Preferences
             'mirror_boosts_to_atproto' => (bool) ($row['mirror_boosts_to_atproto'] ?? false),
             'mirror_atproto_account_did' => is_string($row['mirror_atproto_account_did'] ?? null)
                 && $row['mirror_atproto_account_did'] !== '' ? (string) $row['mirror_atproto_account_did'] : null,
+            'onboarding_dismissed' => is_string($row['onboarding_dismissed_at'] ?? null)
+                && $row['onboarding_dismissed_at'] !== '',
+            'onboarding_dismissed_at' => is_string($row['onboarding_dismissed_at'] ?? null)
+                && $row['onboarding_dismissed_at'] !== '' ? (string) $row['onboarding_dismissed_at'] : null,
             'updated_at' => is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null,
         ];
     }
@@ -161,12 +167,27 @@ final class Preferences
             $next['mirror_atproto_account_did'] = $did;
         }
 
+        $dismissedAt = $current['onboarding_dismissed_at'];
+        if (array_key_exists('onboarding_dismissed', $payload)) {
+            if (!is_bool($payload['onboarding_dismissed'])) {
+                throw CommunityException::invalid(
+                    'This setting is invalid.',
+                    ['onboarding_dismissed' => 'Please choose on or off.'],
+                );
+            }
+            if ($payload['onboarding_dismissed']) {
+                $dismissedAt ??= Time::format($this->clock->now());
+            } else {
+                $dismissedAt = null;
+            }
+        }
+
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, mirror_atproto_account_did, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, mirror_atproto_account_did, onboarding_dismissed_at, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :mirror_atproto_account_did, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :mirror_atproto_account_did, :onboarding_dismissed_at, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -181,6 +202,7 @@ final class Preferences
             . ' mirror_likes_to_atproto = excluded.mirror_likes_to_atproto,'
             . ' mirror_boosts_to_atproto = excluded.mirror_boosts_to_atproto,'
             . ' mirror_atproto_account_did = excluded.mirror_atproto_account_did,'
+            . ' onboarding_dismissed_at = excluded.onboarding_dismissed_at,'
             . ' updated_at = excluded.updated_at',
             [
                 'account_id' => $accountId,
@@ -197,6 +219,7 @@ final class Preferences
                 'mirror_likes_to_atproto' => $next['mirror_likes_to_atproto'] ? 1 : 0,
                 'mirror_boosts_to_atproto' => $next['mirror_boosts_to_atproto'] ? 1 : 0,
                 'mirror_atproto_account_did' => $next['mirror_atproto_account_did'],
+                'onboarding_dismissed_at' => $dismissedAt,
                 'updated_at' => $now,
             ],
         );
@@ -224,6 +247,8 @@ final class Preferences
             'mirror_likes_to_atproto' => false,
             'mirror_boosts_to_atproto' => false,
             'mirror_atproto_account_did' => null,
+            'onboarding_dismissed' => false,
+            'onboarding_dismissed_at' => null,
             'updated_at' => null,
         ];
     }
