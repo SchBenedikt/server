@@ -324,20 +324,20 @@ watch(() => appState.instance?.name, (name) => {
 				<span class="a-brand__mark" aria-hidden="true"><img :src="'/ui/brand/aloha-mark.svg'" alt="" /></span>
 				<span class="a-brand__copy">
 					<strong>{{ appState.instance?.name ?? 'Aloha Social' }}</strong>
-					<small>open &amp; federated</small>
+					<small>{{ t('common.openAndFederated') }}</small>
 				</span>
 			</a>
 			<div class="a-mobile-head__actions">
-				<a class="a-icon-btn" href="#/search" aria-label="Search" title="Search">
+				<a class="a-icon-btn" href="#/search" :aria-label="t('nav.search')" :title="t('nav.search')">
 					<AppIcon name="search" :size="19" />
 				</a>
-				<button type="button" class="a-icon-btn" aria-label="Toggle theme" @click="toggleTheme">
+				<button type="button" class="a-icon-btn" :aria-label="t('common.toggleTheme')" :title="t('common.toggleTheme')" @click="toggleTheme">
 					<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="19" />
 				</button>
-				<a v-if="appState.session.user !== null" :href="`#/u/${encodeURIComponent(topbarHandle)}`" class="a-topbar__me" :title="topbarName" :aria-label="`Profile of ${topbarName}`">
+				<a v-if="appState.session.user !== null" :href="`#/u/${encodeURIComponent(topbarHandle)}`" class="a-topbar__me" :title="topbarName" :aria-label="t('card.profileOf', { name: topbarName })">
 					<Avatar :id="topbarHandle" :name="topbarName" :size="30" />
 				</a>
-				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+				<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('common.signIn') }}</a>
 			</div>
 		</header>
 
