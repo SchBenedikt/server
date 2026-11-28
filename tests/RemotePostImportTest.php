@@ -407,6 +407,45 @@ final class RemotePostImportTest extends TestCase
         self::assertSame('public', $stored['audience'] ?? null);
     }
 
+    public function testLikeRevivesATombstonedPlaceholderUnderTheObjectId(): void
+    {
+        // An inbox Create that shared the placeholder's activity id used to
+        // tombstone the row and then conflict with its own primary key,
+        // leaving a permanently deleted row that answered 404 to likes.
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at, deleted_at)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at, :deleted_at)',
+            [
+                'activity_id' => self::OBJECT,
+                'object_id' => self::OBJECT,
+                'author' => self::ACTOR,
+                'actor' => self::ACTOR,
+                'content' => '<p>Placeholder.</p>',
+                'published_at' => '2026-11-01T10:00:00Z',
+                'deleted_at' => '2026-11-10T10:00:00Z',
+            ],
+        );
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode(self::OBJECT) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $stored = $this->server->runtime->database->fetchOne(
+            'SELECT deleted_at, content FROM social_remote_post WHERE object_id = :object',
+            ['object' => self::OBJECT],
+        );
+        self::assertIsArray($stored);
+        self::assertNull($stored['deleted_at']);
+        self::assertSame('A post found through search.', $stored['content']);
+    }
+
     public function testLikeKeepsTheFollowGateWhenOriginCannotProvePublic(): void
     {
         $this->http->json(self::OBJECT, [
