@@ -1,0 +1,102 @@
+name: Compose smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.postgres.yml'
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'bin/**'
+      - 'src/**'
+      - 'public/**'
+      - '.github/workflows/compose-smoke.yml'
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.postgres.yml'
+      - 'Dockerfile'
+      - 'docker/**'
+      - '.github/workflows/compose-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose files parse for both profiles
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.postgres.yml config -q
+
+  deploy:
+    # Full image build + deploy is too slow for every PR; it runs on main and
+    # on demand so the shipped template is proven against the real runtime.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the production image
+        run: docker compose build
+
+      - name: Start the stack
+        run: |
+          cat > .env <<'EOF'
+          ALOHASOCIAL_INSTANCE_URL=http://localhost:3000
+          ALOHASOCIAL_ADMIN_HANDLE=admin
+          ALOHASOCIAL_ADMIN_EMAIL=admin@example.test
+          ALOHASOCIAL_ADMIN_PASSWORD=compose-smoke-password
+          ALOHASOCIAL_ADMIN_DISPLAY_NAME=Compose Smoke
+          EOF
+          docker compose up -d
+
+      - name: Wait for the app to become healthy
+        run: |
+          for i in $(seq 1 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q app)" 2>/dev/null || echo starting)
+            echo "attempt $i: $status"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 5
+          done
+          echo "app never became healthy" >&2
+          docker compose logs --tail=100 app >&2
+          exit 1
+
+      - name: Smoke the public surface
+        run: |
+          curl -fsS http://localhost:3000/healthz
+          echo
+          curl -fsS http://localhost:3000/readyz
+          echo
+          curl -fsS -o /dev/null -w 'login: %{http_code}\n' http://localhost:3000/login
+          curl -fsS -o /dev/null -w 'webfinger: %{http_code}\n' \
+            'http://localhost:3000/.well-known/webfinger?resource=acct:admin@localhost'
+
+      - name: Verify worker and firehose are running
+        run: |
+          docker compose ps
+          test "$(docker inspect --format '{{.State.Running}}' "$(docker compose ps -q worker)")" = "true"
+          test "$(docker inspect --format '{{.State.Running}}' "$(docker compose ps -q firehose)")" = "true"
+
+      - name: Sign in through the real UI flow
+        run: |
+          curl -fsS -c /tmp/cookies.txt http://localhost:3000/login -o /tmp/login.html
+          csrf=$(grep -o 'name="_csrf" value="[^"]*"' /tmp/login.html | head -1 | sed 's/.*value="//;s/"//')
+          test -n "$csrf"
+          curl -fsS -b /tmp/cookies.txt -c /tmp/cookies.txt -o /dev/null \
+            -X POST http://localhost:3000/login \
+            --data-urlencode "_csrf=$csrf" \
+            --data-urlencode 'handle=admin' \
+            --data-urlencode 'password=compose-smoke-password'
+          curl -fsS -b /tmp/cookies.txt -o /dev/null -w 'signed-in home: %{http_code}\n' http://localhost:3000/
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

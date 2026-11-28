@@ -185,6 +185,14 @@ the second app with a readable boot error instead of silently sharing accounts.
 
 ## Coolify and other Compose panels
 
+CI proves the template end to end: `compose-smoke.yml` parses both Compose
+profiles on pull requests and, on every main push, builds the image,
+`docker compose up -d`, waits for the app healthcheck, curls `/healthz`,
+`/readyz`, `/login` and WebFinger, verifies the worker and firehose
+containers are running, signs in through the real login form and tears the
+stack down again. A green run means the checked-in template deploys from a
+clean checkout with only the variables below.
+
 - Mount persistent storage at `/var/www/html/var` and keep one volume per
   application. Do not select the existing `aloha-social_aloha-var` volume for a
   new app.
