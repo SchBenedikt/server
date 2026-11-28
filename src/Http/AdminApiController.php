@@ -186,6 +186,34 @@ final class AdminApiController
             ]);
         }
 
+        if ($method === 'GET' && $path === self::PREFIX . '/invitations') {
+            return Response::json($this->runtime->admin->invitations());
+        }
+
+        if ($method === 'POST' && $path === self::PREFIX . '/invitations') {
+            $body = $this->jsonBody($request);
+            $maxUses = $body['max_uses'] ?? 1;
+            $expiresInDays = $body['expires_in_days'] ?? null;
+            if (!is_int($maxUses) || !is_int($expiresInDays) && $expiresInDays !== null) {
+                throw AdminException::invalid('max_uses and expires_in_days must be integers.', [
+                    'max_uses' => 'Whole numbers only.',
+                ]);
+            }
+
+            return Response::json($this->runtime->admin->createInvitation(
+                $userId,
+                $maxUses,
+                $expiresInDays,
+                $this->optionalText($body, 'note'),
+            ), 201);
+        }
+
+        if ($method === 'POST' && preg_match('#^' . self::PREFIX . '/invitations/([^/]+)/revoke$#', $path, $match) === 1) {
+            return Response::json(
+                $this->runtime->admin->revokeInvitation($userId, rawurldecode($match[1])),
+            );
+        }
+
         if ($method === 'GET' && $path === self::PREFIX . '/reports') {
             return Response::json($this->runtime->admin->reports(
                 (string) ($request->queryParam('state') ?? 'open'),

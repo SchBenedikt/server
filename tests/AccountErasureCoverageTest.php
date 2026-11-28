@@ -64,6 +64,7 @@ final class AccountErasureCoverageTest extends TestCase
     /** Tables kept after erasure, with the reason they hold no erasable account data. */
     private const RETAINED = [
         'account' => 'tombstoned in place: handle and email rewritten, credentials destroyed',
+        'account_invitation' => 'instance-issued registration records; created_by is an audit reference',
         'admin_audit' => 'operator audit trail',
         'installation_identity' => 'instance origin binding, not account data',
         'instance_key' => 'instance signing key',

@@ -322,6 +322,7 @@ the core deliberately has no administration API.
 | Federation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
 | Warteschlange | Pending, running and dead jobs with payload inspection, single retry/delete, retry-all, purge of old dead jobs and an immediate worker run. |
 | Instance | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
+| Invitations | Issue registration codes with a use cap, optional expiry and note; the plaintext code is shown once and only its hash is stored. A redeemed code satisfies closed registration and the approval queue; codes can be revoked at any time. |
 | Protokoll | Every administrative mutation with actor, action, target, details and time. |
 
 Every signed-in reader can report a post from its action bar or a profile from
@@ -352,6 +353,19 @@ skipped silently. Setting
 `ALOHASOCIAL_PUBLISH_DOMAIN_BLOCKS=true` (or the matching admin toggle)
 exposes the list at `GET /api/v1/instance/domain_blocks` for Mastodon
 clients; the endpoint answers `404` while publishing is off.
+
+Registration invitations live in `account_invitation` (migration
+`202611280035`). An administrator creates a code under Administration →
+Invitations with a use cap (1–500), an optional expiry (1–3650 days) and an
+optional note; the plaintext `inv_…` code is returned once and only its
+SHA-256 hash plus a short `code_prefix` are stored. The signup form carries an
+optional *Invitation code* field: redeeming a live code inside the
+registration transaction consumes one use atomically with the account insert,
+so a failed registration never burns a use. An invited signup satisfies a
+closed registration and skips the approval queue — the issuing administrator
+already vouched for it — while email verification still applies when enabled.
+Unknown, expired, exhausted or revoked codes are refused with a field error,
+and every create/revoke is written to the audit log.
 
 `GET /api/v1/host/admin/preflight` runs a read-only readiness check. Local
 checks cover the instance URL, database, pending migrations, worker heartbeat,

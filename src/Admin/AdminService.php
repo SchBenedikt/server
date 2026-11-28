@@ -23,6 +23,7 @@ use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Accounts\EmailChangeService;
+use AlohaSocial\Server\Accounts\Invitations;
 use AlohaSocial\Server\Auth\AtprotoSessionRepository;
 use AlohaSocial\Server\Auth\MastodonOAuthRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
@@ -115,6 +116,7 @@ final class AdminService
         private readonly ?EmailChangeService $emailChange = null,
         private readonly ?InstancePages $instancePages = null,
         private readonly ?Mailer $mailer = null,
+        private readonly ?Invitations $invitations = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
         $this->mastodonOAuth = new MastodonOAuthRepository($db);
@@ -1241,6 +1243,58 @@ final class AdminService
             'applied_count' => $applied,
             'entries' => $verdicts,
         ];
+    }
+
+    /**
+     * @return array{invitations: list<array<string, mixed>>}
+     */
+    public function invitations(): array
+    {
+        return ['invitations' => $this->requireInvitations()->all()];
+    }
+
+    /**
+     * Issues a registration invitation. The plaintext code is returned once
+     * and never stored; only its hash persists.
+     *
+     * @return array<string, mixed>
+     */
+    public function createInvitation(string $adminId, int $maxUses, ?int $expiresInDays, ?string $note): array
+    {
+        try {
+            $result = $this->requireInvitations()->create($adminId, $maxUses, $expiresInDays, $note);
+        } catch (\InvalidArgumentException $exception) {
+            throw AdminException::invalid($exception->getMessage());
+        }
+
+        $this->record($adminId, 'invitation.create', 'account_invitation', (string) ($result['invitation']['id'] ?? ''), [
+            'max_uses' => $maxUses,
+            'expires_in_days' => $expiresInDays,
+        ]);
+
+        return $result;
+    }
+
+    public function revokeInvitation(string $adminId, string $id): array
+    {
+        if (!$this->requireInvitations()->revoke($id)) {
+            throw AdminException::invalid('This invitation does not exist or is already revoked.', [
+                'id' => 'Unknown invitation.',
+            ]);
+        }
+
+        $this->record($adminId, 'invitation.revoke', 'account_invitation', $id, []);
+
+        return ['revoked' => true];
+    }
+
+    private function requireInvitations(): Invitations
+    {
+        if ($this->invitations === null) {
+            throw new \LogicException('Invitations are not wired into this runtime.');
+        }
+
+        return $this->invitations;
     }
 
     /**

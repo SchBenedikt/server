@@ -89,6 +89,7 @@ final class Migrations
             new Version202611280032PushDelivery(),
             new Version202611280033ModerationPublicComment(),
             new Version202611280034DraftLanguage(),
+            new Version202611280035AccountInvitations(),
         ];
     }
 }
