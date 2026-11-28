@@ -19,6 +19,7 @@ bin/set-password.php      password reset by CLI, revokes the account's sessions
 bin/routes.php            served route manifest
 bin/federation-smoke.php  two real instances exchanging a signed Follow + Create
 bin/user-journey-smoke.php one instance running the essential user journeys
+bin/seed-fixture.php       deterministic synthetic accounts/posts/follows/likes
 ui/                       host Vue app and HostBridge for @alohasocial/ui
 public/ui/                committed bundle served at /app
 
@@ -190,6 +191,15 @@ federation smoke does not: sign-in, profile edit, local search and follow,
 media upload, post, home timeline, like/reply/boost, notifications, edit,
 public timeline and search, preferences, delete and sign-out. It uses
 loopback only — no federation — so it runs anywhere `php -S` does.
+
+`php bin/seed-fixture.php` seeds a deterministic synthetic graph for
+performance and parity fixtures: `fx-actor-NNNN` accounts, posts (some
+replies, content warnings, `de`/`en` languages, occasional unlisted), a ring
+of local follows, and optional likes/boosts via `--likes`/`--boosts`. Every
+value derives from `--seed` (default 187) and posts carry deterministic ids,
+so re-running with the same arguments never duplicates rows. Fixture accounts
+sign in with password `Fixture!Passw0rd-<seed>`; `--dry-run` prints the plan
+without writing.
 
 The PostgreSQL path is exercised separately: migrations twice, account
 creation, login, post write/read, media upload/serve and WebFinger against a
