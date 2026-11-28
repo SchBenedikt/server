@@ -37,32 +37,14 @@ const MAX_CACHED_ACCOUNTS = 500;
 
 let directoryEpoch = 0;
 const hostNames = reactive<Record<string, string>>({});
-let hostNamesRequested = false;
 
 /**
- * Load the host's public display names. The core account contract only knows
- * handles, so the host's own account table remains the authority for names.
+ * Names learned from authoritative per-account responses. The core account
+ * contract only knows handles, so resolved profiles keep their display name
+ * here as a fallback for `displayNameFor` before the account is cached;
+ * entries are always refreshed by `resolveAccount`, never stale bootstrap
+ * data.
  */
-export async function loadHostDisplayNames(): Promise<void> {
-	if (hostNamesRequested) {
-		return;
-	}
-
-	hostNamesRequested = true;
-	try {
-		const names = await getApi().hostProfiles();
-		for (const [id, name] of Object.entries(names)) {
-			hostNames[id] = name;
-			const account = directory.accounts[id];
-			if (account !== null && account !== undefined) {
-				account.display_name = name;
-			}
-		}
-	} catch {
-		// A host without the optional directory endpoint keeps handle titles.
-	}
-}
-
 export function hostDisplayName(id: string): string {
 	return hostNames[id] ?? '';
 }
@@ -166,6 +148,9 @@ export function resetAccountDirectory(): void {
 	}
 	meta.clear();
 	pending.clear();
+	for (const key of Object.keys(hostNames)) {
+		delete hostNames[key];
+	}
 }
 
 export async function refreshAccount(id: string): Promise<Account | null> {
