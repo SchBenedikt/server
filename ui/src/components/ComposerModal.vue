@@ -12,6 +12,7 @@ import { accountName, handleLabel, isRemoteId, postReplyTargetId, postRouteId, t
 import { getApi } from '../lib/api';
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { announcePostCreated, announcePostUpdated } from '../lib/events';
+import { t } from '../lib/i18n';
 import { appState, closeComposer, showToast } from '../lib/state';
 import type { Attachment, Draft, TimelineItem } from '../lib/types';
 
@@ -139,22 +140,36 @@ const quoteTargetId = computed(() => {
 
 	return target.object_id ?? target.id;
 });
-const title = computed(() => (
-	isEdit.value ? 'Edit post' : isDirect.value ? 'New message' : isQuote.value ? 'Quote post' : isReply.value ? 'Write a reply' : 'New post'
-));
+const title = computed(() => t(isEdit.value
+	? 'composer.titleEdit'
+	: isDirect.value
+		? 'composer.titleDirect'
+		: isQuote.value
+			? 'composer.titleQuote'
+			: isReply.value
+				? 'composer.titleReply'
+				: 'composer.titleNew'));
 const submitLabel = computed(() => {
 	if (submitting.value) {
-		return isEdit.value ? 'Saving…' : 'Sending…';
+		return t(isEdit.value ? 'common.saving' : 'composer.sending');
 	}
 	if (crossPostBluesky.value) {
-		return 'Post & Bluesky';
+		return t('composer.postBsky');
 	}
 
 	if (scheduledAt.value !== '') {
-		return 'Schedule';
+		return t('composer.scheduleLabel');
 	}
 
-	return isEdit.value ? 'Save' : isDirect.value ? 'Send' : isReply.value ? 'Reply' : isQuote.value ? 'Quote' : 'Post';
+	return t(isEdit.value
+		? 'common.save'
+		: isDirect.value
+			? 'composer.send'
+			: isReply.value
+				? 'composer.reply'
+				: isQuote.value
+					? 'composer.quote'
+					: 'composer.post');
 });
 const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(replyTo.value));
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
@@ -617,22 +632,25 @@ function addFiles(event: Event): void {
 	const selected = Array.from(input.files ?? []);
 	input.value = '';
 	if (!canUploadMedia.value) {
-		showToast('Media uploads are not configured on this instance.', 'error');
+		showToast(t('composer.mediaNotConfigured'), 'error');
 		return;
 	}
 
 	for (const file of selected) {
 		if (images.value.length + existing.value.length >= MAX_FILES) {
-			showToast(`Up to ${MAX_FILES} attachments per post.`, 'error');
+			showToast(t('composer.maxAttachments', { count: MAX_FILES }), 'error');
 			break;
 		}
 		const kind = ACCEPTED_TYPES[file.type];
 		if (kind === undefined) {
-			showToast('Supported formats: JPEG, PNG, WebP, GIF, MP4/WebM, MP3, M4A, Ogg and WAV.', 'error');
+			showToast(t('composer.badFormats'), 'error');
 			continue;
 		}
 		if (file.size > MAX_BYTES[kind]) {
-			showToast(`A ${kind === 'image' ? 'image' : kind === 'video' ? 'video' : 'audio file'} may be at most ${MAX_BYTES[kind] / 1024 / 1024} MiB.`, 'error');
+			showToast(t('composer.tooLarge', {
+				kind: t(kind === 'image' ? 'composer.kindImage' : kind === 'video' ? 'composer.kindVideo' : 'composer.kindAudio'),
+				size: MAX_BYTES[kind] / 1024 / 1024,
+			}), 'error');
 			continue;
 		}
 
@@ -697,11 +715,11 @@ async function saveAsDraft(): Promise<void> {
 		return;
 	}
 	if (isRemoteReply.value) {
-		showToast('Replies to external posts cannot be saved as drafts.', 'error');
+		showToast(t('composer.replyDraftBlocked'), 'error');
 		return;
 	}
 	if (!canUploadMedia.value && hasMediaAttachments.value) {
-		showToast('Remove the media attachments before saving; media uploads are unavailable on this instance.', 'error');
+		showToast(t('composer.removeMediaForDraft'), 'error');
 		return;
 	}
 
@@ -712,7 +730,7 @@ async function saveAsDraft(): Promise<void> {
 		&& restoredAttachmentIds.value.length === 0
 		&& !showPoll.value
 	) {
-		showToast('The draft is empty.', 'error');
+		showToast(t('composer.draftEmpty'), 'error');
 		return;
 	}
 
@@ -746,10 +764,10 @@ async function saveAsDraft(): Promise<void> {
 		appState.composer.draft = draft;
 		clearDraft();
 		resetImages();
-		showToast('Draft saved. You can find it under “Drafts”.', 'success');
+		showToast(t('composer.draftSaved', { drafts: t('composer.draftsName') }), 'success');
 		closeComposer();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The draft could not be saved.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('composer.draftFailed'), 'error');
 	} finally {
 		savingDraft.value = false;
 	}
@@ -770,13 +788,13 @@ function discardSavedDraft(): void {
 async function submit(): Promise<void> {
 	error.value = '';
 	if (!canUploadMedia.value && hasMediaAttachments.value) {
-		error.value = 'Remove the media attachments before publishing; media uploads are unavailable on this instance.';
+		error.value = t('composer.removeMediaForPublish');
 		return;
 	}
 
 	if (!canSubmit.value) {
 		if (content.value.trim() === '' && images.value.length === 0 && restoredAttachmentIds.value.length === 0) {
-			error.value = 'A post needs text, media or a poll.';
+			error.value = t('composer.needContent');
 		}
 		return;
 	}
@@ -807,7 +825,7 @@ async function submit(): Promise<void> {
 			resetImages();
 			existing.value = [];
 			closeComposer();
-			showToast('Post updated.', 'success');
+			showToast(t('composer.updated'), 'success');
 			return;
 		}
 
@@ -816,7 +834,7 @@ async function submit(): Promise<void> {
 
 		if (scheduledAt.value !== '') {
 			if (scheduleDate.value === null) {
-				throw new Error('Please choose a valid time.');
+				throw new Error(t('composer.invalidTime'));
 			}
 
 			const pollOptionsClean = pollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
@@ -847,17 +865,14 @@ async function submit(): Promise<void> {
 			showWarning.value = false;
 			resetExtras();
 			closeComposer();
-			showToast(
-				`Post scheduled for ${new Date(scheduled.scheduled_at).toLocaleString()}.`,
-				'success',
-			);
+			showToast(t('composer.scheduledFor', { time: new Date(scheduled.scheduled_at).toLocaleString() }), 'success');
 			return;
 		}
 
 		if (showPoll.value) {
 			const options = pollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
 			if (options.length < 2) {
-				throw new Error('A poll needs at least two options.');
+				throw new Error(t('composer.pollMinOptions'));
 			}
 
 			const post = await getApi().createStatus({
@@ -885,7 +900,7 @@ async function submit(): Promise<void> {
 			showWarning.value = false;
 			resetExtras();
 			closeComposer();
-			showToast('Post saved. Delivery to other servers runs in the background.', 'success');
+			showToast(t('composer.savedBg'), 'success');
 			return;
 		}
 
@@ -917,29 +932,26 @@ async function submit(): Promise<void> {
 		if (publishOnBluesky) {
 			try {
 			await getApi().publishToBluesky(post.id, selectedBlueskyDid.value || undefined);
-				showToast('Post saved here and published to Bluesky.', 'success');
+				showToast(t('composer.savedBsky'), 'success');
 			} catch (caught) {
 				const reason = caught instanceof Error ? ` ${caught.message}` : '';
-				showToast(`Post saved here, but Bluesky publishing failed.${reason} Retry from the post menu.`, 'error');
+				showToast(t('composer.bskyFailed', { reason }), 'error');
 			}
 		} else {
-			showToast(
-				direct
-					? 'Message saved. Delivery to the recipient’s server runs in the background.'
-					: replying
-						? 'Reply saved. Delivery to other servers runs in the background.'
-						: quoting
-							? 'Quote saved. Delivery to other servers runs in the background.'
-							: 'Post saved. Delivery to other servers runs in the background.',
-				'success',
-			);
+			showToast(t(direct
+				? 'composer.msgSaved'
+				: replying
+					? 'composer.replySaved'
+					: quoting
+						? 'composer.quoteSaved'
+						: 'composer.savedBg'), 'success');
 		}
 	} catch (caught) {
 		error.value = caught instanceof Error
 			? caught.message
 			: isEdit.value
-				? 'The post could not be saved.'
-				: 'The post could not be published.';
+				? t('composer.saveFailed')
+				: t('composer.publishFailed');
 	} finally {
 		submitting.value = false;
 	}
@@ -950,7 +962,7 @@ async function submit(): Promise<void> {
 	<dialog ref="dialog" class="a-modal a-composer" aria-labelledby="a-composer-title" @cancel.prevent="requestClose">
 		<div class="a-modal__panel">
 			<header class="a-modal__head">
-				<button type="button" class="a-icon-btn" aria-label="Close composer" @click="requestClose">
+				<button type="button" class="a-icon-btn" :aria-label="t('composer.close')" @click="requestClose">
 					<AppIcon name="x" :size="20" />
 				</button>
 				<h2 id="a-composer-title">{{ title }}</h2>
@@ -964,7 +976,7 @@ async function submit(): Promise<void> {
 					<span v-if="replyAuthor !== replyHandle">{{ replyHandle }}</span>
 					<p>{{ truncate(replyTo.content, 160) }}</p>
 					<p v-if="replyTargetUnavailable" class="a-composer__hint">
-						This post can't be replied to from here.
+						{{ t('composer.replyUnavailable') }}
 					</p>
 				</div>
 			</div>
@@ -972,19 +984,19 @@ async function submit(): Promise<void> {
 			<div v-if="directTo" class="a-composer__direct">
 				<Avatar :id="directTo.id" :name="directName" :src="directTo.avatar" :size="30" />
 				<div>
-					<strong>message to {{ directName }}</strong>
-					<span>{{ directHandle }} · visible only to this account</span>
+					<strong>{{ t('composer.msgTo', { name: directName }) }}</strong>
+					<span>{{ directHandle }} · {{ t('composer.visibleOnly') }}</span>
 				</div>
 			</div>
 
 			<div v-if="quoteTo" class="a-composer__quote">
 				<p class="a-composer__quote-head">
 					<AppIcon name="quote" :size="15" />
-					<span>You are quoting <strong>{{ quoteHandle }}</strong></span>
+					<span>{{ t('composer.quoting') }} <strong>{{ quoteHandle }}</strong></span>
 				</p>
 				<p class="a-composer__quote-text">{{ truncate(quoteTo.content, 240) }}</p>
 				<p v-if="quoteTo.quote_state === 'pending'" class="a-composer__hint">
-					Remote posts may still be awaiting approval; the post will be published anyway.
+					{{ t('composer.quotePending') }}
 				</p>
 			</div>
 
@@ -995,7 +1007,7 @@ async function submit(): Promise<void> {
 						:name="appState.session.user?.displayName || appState.session.profile?.display_name"
 						:size="38"
 					/>
-					<span>Post as <strong>@{{ appState.session.user?.handle ?? 'Guest' }}</strong></span>
+					<span>{{ t('composer.postAs') }} <strong>@{{ appState.session.user?.handle ?? t('composer.guest') }}</strong></span>
 				</div>
 
 				<div class="a-composer__field-wrap">
@@ -1005,8 +1017,8 @@ async function submit(): Promise<void> {
 						class="a-composer__textarea"
 						rows="5"
 						maxlength="5200"
-						placeholder="What's on your mind?"
-						aria-label="Post text"
+						:placeholder="t('composer.placeholder')"
+						:aria-label="t('composer.postTextAria')"
 						@input="onTextareaCaret"
 						@keyup="onTextareaCaret"
 						@click="onTextareaCaret"
@@ -1031,15 +1043,15 @@ async function submit(): Promise<void> {
 				</div>
 
 				<div v-if="showPreview" class="a-composer__preview" aria-live="polite">
-					<p class="a-composer__preview-head">Preview</p>
+					<p class="a-composer__preview-head">{{ t('composer.preview') }}</p>
 					<p v-if="contentWarning.trim() !== ''" class="a-composer__preview-cw">
 						<AppIcon name="info" :size="13" />
-						Content warning: <strong>{{ contentWarning }}</strong>
+						{{ t('composer.cwPreview') }} <strong>{{ contentWarning }}</strong>
 					</p>
 					<div v-if="content.trim() !== ''" class="a-composer__preview-body">
 						<RichText :text="content" />
 					</div>
-					<p v-else class="a-composer__preview-empty">Nothing written yet.</p>
+					<p v-else class="a-composer__preview-empty">{{ t('composer.previewEmpty') }}</p>
 					<ul v-if="showPoll" class="a-composer__preview-poll">
 						<li v-for="(option, index) in pollOptions.filter((entry) => entry.trim() !== '')" :key="index">
 							{{ option }}
@@ -1068,13 +1080,13 @@ async function submit(): Promise<void> {
 				</div>
 
 				<div v-if="showWarning" class="a-composer__cw">
-					<label for="a-composer-cw">Content warning</label>
+					<label for="a-composer-cw">{{ t('composer.cwLabel') }}</label>
 					<input
 						id="a-composer-cw"
 						v-model="contentWarning"
 						type="text"
 						maxlength="220"
-						placeholder="What is it about? (optional)"
+						:placeholder="t('composer.cwPlaceholder')"
 					/>
 					<span :class="{ 'a-count--over': warningOverLimit }">{{ warningLength }} / {{ MAX_WARNING }}</span>
 				</div>
@@ -1082,73 +1094,71 @@ async function submit(): Promise<void> {
 				<div v-if="scheduleOpen && !isEdit" class="a-composer__extras">
 					<div class="a-composer__extras-head">
 						<AppIcon name="calendar" :size="16" />
-						<strong>Schedule post</strong>
+						<strong>{{ t('composer.scheduleTitle') }}</strong>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="scheduleOpen = false; scheduledAt = ''">
-							Remove
+							{{ t('common.remove') }}
 						</button>
 					</div>
 					<label class="a-composer__field">
-						<span>Publish at</span>
+						<span>{{ t('composer.publishAt') }}</span>
 						<input v-model="scheduledAt" type="datetime-local" />
 					</label>
 					<p v-if="scheduledAt !== '' && !scheduleReady" class="a-form-error" role="alert">
-						The time must be in the future.
+						{{ t('composer.timeFuture') }}
 					</p>
 					<p class="a-composer__hint">
-						The poll duration counts from the scheduled publish time.
+						{{ t('composer.pollFromSchedule') }}
 					</p>
 				</div>
 
 				<div v-if="showPoll && !isEdit" class="a-composer__extras">
 					<div class="a-composer__extras-head">
 						<AppIcon name="hash" :size="16" />
-						<strong>poll</strong>
+						<strong>{{ t('composer.pollTitle') }}</strong>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="showPoll = false">
-							Remove
+							{{ t('common.remove') }}
 						</button>
 					</div>
 					<label v-for="(option, index) in pollOptions" :key="index" class="a-composer__field a-composer__poll-option">
-						<span>Reply {{ index + 1 }}</span>
-						<input v-model="pollOptions[index]" type="text" maxlength="50" :placeholder="`Reply ${index + 1}`" />
+						<span>{{ t('composer.pollOption', { n: index + 1 }) }}</span>
+						<input v-model="pollOptions[index]" type="text" maxlength="50" :placeholder="t('composer.pollOption', { n: index + 1 })" />
 						<button
 							v-if="pollOptions.length > 2"
 							type="button"
 							class="a-icon-btn"
-							:aria-label="`Remove option ${index + 1}`"
+							:aria-label="t('composer.removeOption', { n: index + 1 })"
 							@click="removePollOption(index)"
 						>
 							<AppIcon name="x" :size="16" />
 						</button>
 					</label>
 					<button v-if="pollOptions.length < 4" type="button" class="a-btn a-btn--ghost a-btn--small" @click="addPollOption">
-						<AppIcon name="plus" :size="14" /> Add option
+						<AppIcon name="plus" :size="14" /> {{ t('composer.addOption') }}
 					</button>
 					<div class="a-composer__poll-settings">
 						<label class="a-composer__field">
-							<span>Duration</span>
+							<span>{{ t('composer.durationLabel') }}</span>
 							<select v-model="pollExpiresIn">
-								<option value="300">5 minutes</option>
-								<option value="3600">1 hour</option>
-								<option value="86400">1 Tag</option>
-								<option value="259200">3 days</option>
-								<option value="604800">7 days</option>
+								<option v-for="secs in [300, 3600, 86400, 259200, 604800]" :key="secs" :value="secs">
+									{{ t(`poll.duration.${secs}`) }}
+								</option>
 							</select>
 						</label>
 						<label class="a-composer__check">
 							<input v-model="pollMultiple" type="checkbox" />
-							<span>Multiple choice</span>
+							<span>{{ t('poll.multiple') }}</span>
 						</label>
 						<label class="a-composer__check">
 							<input v-model="pollHideTotals" type="checkbox" />
-							<span>Results only after the poll closes</span>
+							<span>{{ t('poll.hideTotals') }}</span>
 						</label>
 					</div>
 				</div>
 
 				<p v-if="restoredAttachmentIds.length > 0" class="a-composer__hint">
-					{{ restoredAttachmentIds.length }} saved {{ restoredAttachmentIds.length === 1 ? 'attachment' : 'attachments' }} from the draft will be sent too.
+					{{ t(restoredAttachmentIds.length === 1 ? 'composer.restoredOne' : 'composer.restoredMany', { count: restoredAttachmentIds.length }) }}
 					<button v-if="!canUploadMedia" type="button" class="a-btn a-btn--ghost a-btn--small" @click="removeRestoredAttachments">
-						Remove saved attachments
+						{{ t('composer.removeSaved') }}
 					</button>
 				</p>
 				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
@@ -1158,7 +1168,7 @@ async function submit(): Promise<void> {
 								type="button"
 								class="a-btn a-btn--ghost a-btn--small"
 								:disabled="index === 0"
-								aria-label="Move attachment earlier"
+								:aria-label="t('composer.moveEarlier')"
 								@click="moveExisting(index, -1)"
 							>
 								<AppIcon name="arrowLeft" :size="13" />
@@ -1167,7 +1177,7 @@ async function submit(): Promise<void> {
 								type="button"
 								class="a-btn a-btn--ghost a-btn--small"
 								:disabled="index === existing.length - 1"
-								aria-label="Move attachment later"
+								:aria-label="t('composer.moveLater')"
 								@click="moveExisting(index, 1)"
 							>
 								<AppIcon name="arrowRight" :size="13" />
@@ -1188,17 +1198,17 @@ async function submit(): Promise<void> {
 						/>
 						<span v-else class="a-composer__audio">
 							<AppIcon :name="attachment.mime_type.startsWith('audio/') ? 'music' : 'image'" :size="18" />
-							{{ attachment.mime_type.startsWith('audio/') ? 'Audio' : 'attachment' }}
+							{{ t(attachment.mime_type.startsWith('audio/') ? 'composer.audio' : 'composer.attachment') }}
 						</span>
 						<button
 							type="button"
 							class="a-composer__image-remove"
-							:aria-label="`${attachment.media_type === 'image' ? 'Image' : 'attachment'} removed`"
+							:aria-label="t('composer.removedAria', { label: t(attachment.media_type === 'image' ? 'composer.image' : 'composer.attachment') })"
 							@click="removeExisting(attachment.id)"
 						>
 							<AppIcon name="x" :size="15" />
 						</button>
-						<span class="a-composer__image-note">Existing attachment</span>
+						<span class="a-composer__image-note">{{ t('composer.existingAttachment') }}</span>
 					</figure>
 					<figure v-for="(image, index) in images" :key="image.key" class="a-composer__image">
 						<span v-if="images.length > 1" class="a-composer__image-order">
@@ -1206,7 +1216,7 @@ async function submit(): Promise<void> {
 								type="button"
 								class="a-btn a-btn--ghost a-btn--small"
 								:disabled="index === 0"
-								aria-label="Move attachment earlier"
+								:aria-label="t('composer.moveEarlier')"
 								@click="moveImage(image.key, -1)"
 							>
 								<AppIcon name="arrowLeft" :size="13" />
@@ -1215,7 +1225,7 @@ async function submit(): Promise<void> {
 								type="button"
 								class="a-btn a-btn--ghost a-btn--small"
 								:disabled="index === images.length - 1"
-								aria-label="Move attachment later"
+								:aria-label="t('composer.moveLater')"
 								@click="moveImage(image.key, 1)"
 							>
 								<AppIcon name="arrowRight" :size="13" />
@@ -1233,16 +1243,16 @@ async function submit(): Promise<void> {
 							{{ image.file.name }}
 						</span>
 						<img v-else :src="image.preview" :alt="image.alt || `Image ${index + 1}`" />
-						<button type="button" class="a-composer__image-remove" aria-label="Remove attachment" @click="removeImage(image.key)">
+						<button type="button" class="a-composer__image-remove" :aria-label="t('composer.removeAttachment')" @click="removeImage(image.key)">
 							<AppIcon name="x" :size="15" />
 						</button>
 						<label>
-							<span>{{ image.kind === 'image' ? `Alt text for image ${index + 1}` : `Description for attachment ${index + 1}` }}</span>
+							<span>{{ t(image.kind === 'image' ? 'composer.altImage' : 'composer.descAttachment', { n: index + 1 }) }}</span>
 							<input
 								v-model="image.alt"
 								type="text"
 								maxlength="1000"
-								placeholder="Describe the attachment for people who cannot see it."
+								:placeholder="t('composer.altPlaceholder')"
 							/>
 						</label>
 					</figure>
@@ -1264,8 +1274,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:disabled="!canUploadMedia || images.length + existing.length >= MAX_FILES || submitting"
-						:aria-label="canUploadMedia ? 'Add images, video or audio' : 'Media uploads are unavailable'"
-						:title="canUploadMedia ? 'Add media' : 'Media uploads are not configured on this instance'"
+						:aria-label="t(canUploadMedia ? 'composer.addMediaAria' : 'composer.mediaUnavailableAria')"
+						:title="t(canUploadMedia ? 'composer.addMedia' : 'composer.addMediaUnavailable')"
 						@click="fileInput?.click()"
 					>
 						<AppIcon name="image" :size="20" />
@@ -1277,8 +1287,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showWarning }"
-						aria-label="Add content warning"
-						title="Content warning"
+						:aria-label="t('composer.addCw')"
+						:title="t('composer.cwLabel')"
 						@click="showWarning = !showWarning"
 					>
 						<AppIcon name="info" :size="20" />
@@ -1287,8 +1297,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showPreview }"
-						aria-label="Preview post"
-						title="Preview"
+						:aria-label="t('composer.previewPost')"
+						:title="t('composer.preview')"
 						@click="showPreview = !showPreview"
 					>
 						<AppIcon name="eye" :size="20" />
@@ -1298,8 +1308,8 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': showPoll }"
-						aria-label="Add poll"
-						title="poll"
+						:aria-label="t('composer.addPoll')"
+						:title="t('composer.pollTitle')"
 						@click="togglePoll"
 					>
 						<AppIcon name="hash" :size="20" />
@@ -1309,38 +1319,38 @@ async function submit(): Promise<void> {
 						type="button"
 						class="a-icon-btn"
 						:class="{ 'a-icon-btn--active': scheduleOpen }"
-						aria-label="Schedule post"
-						title="Schedule post"
+						:aria-label="t('composer.scheduleAria')"
+						:title="t('composer.scheduleTitle')"
 						@click="toggleSchedule"
 					>
 						<AppIcon name="calendar" :size="20" />
 					</button>
 					<label v-if="isDirect" class="a-composer__visibility">
 						<AppIcon name="lock" :size="16" />
-						<span>Direct message</span>
+						<span>{{ t('composer.directMessage') }}</span>
 					</label>
 					<label v-else class="a-composer__visibility">
 						<AppIcon name="globe" :size="16" />
-						<select v-model="visibility" aria-label="Visibility">
-							<option value="public">Public</option>
-							<option value="unlisted">Unlisted</option>
-							<option value="followers">Followers only</option>
+						<select v-model="visibility" :aria-label="t('composer.visibilityAria')">
+							<option value="public">{{ t('visibility.public') }}</option>
+							<option value="unlisted">{{ t('visibility.unlisted') }}</option>
+							<option value="followers">{{ t('visibility.followers') }}</option>
 						</select>
 					</label>
 					<label v-if="languageOptions.length > 0 && !isDirect" class="a-composer__visibility">
-						<span>Language</span>
-						<select v-model="postLanguage" aria-label="Language">
-							<option value="">Auto</option>
+						<span>{{ t('composer.language') }}</span>
+						<select v-model="postLanguage" :aria-label="t('composer.language')">
+							<option value="">{{ t('composer.auto') }}</option>
 							<option v-for="language in languageOptions" :key="language" :value="language">{{ language }}</option>
 						</select>
 					</label>
 					<label v-if="showBlueskyCrossPost" class="a-composer__visibility a-composer__cross-post">
 						<input v-model="crossPostBluesky" type="checkbox" :disabled="submitting" />
-						<span>Also publish to Bluesky</span>
+						<span>{{ t('composer.alsoBsky') }}</span>
 					</label>
 			<label v-if="showBlueskyCrossPost && blueskyAccounts.length > 1" class="a-composer__visibility">
-				<span>Bluesky account</span>
-				<select v-model="selectedBlueskyDid" :disabled="submitting" aria-label="Bluesky account">
+				<span>{{ t('composer.bskyAccount') }}</span>
+				<select v-model="selectedBlueskyDid" :disabled="submitting" :aria-label="t('composer.bskyAccount')">
 					<option v-for="account in blueskyAccounts" :key="account.did" :value="account.did">{{ account.handle }}</option>
 				</select>
 			</label>
@@ -1358,7 +1368,7 @@ async function submit(): Promise<void> {
 						@click="saveAsDraft"
 					>
 						<AppIcon name="pen" :size="15" />
-						{{ savingDraft ? 'Saving…' : 'draft' }}
+						{{ savingDraft ? t('common.saving') : t('composer.draftButton') }}
 					</button>
 					<button type="submit" class="a-btn a-btn--primary" :disabled="!canSubmit">
 						<AppIcon v-if="submitting" name="refresh" :size="16" class="a-spin" />
