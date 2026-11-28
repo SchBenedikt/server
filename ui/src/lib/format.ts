@@ -228,13 +228,13 @@ export function extractTags(content: string): string[] {
 export function visibilityLabel(visibility: string | null | undefined): string {
 	switch (visibility) {
 		case 'unlisted':
-			return 'Unlisted';
+			return t('visibility.unlisted');
 		case 'followers':
-			return 'Followers only';
+			return t('visibility.followers');
 		case 'direct':
-			return 'Direct message';
+			return t('visibility.direct');
 		default:
-			return 'Public';
+			return t('visibility.public');
 	}
 }
 

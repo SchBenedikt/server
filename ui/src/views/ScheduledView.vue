@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { absoluteTime, relativeTime, visibilityLabel } from '../lib/format';
+import { t } from '../lib/i18n';
 import { appState, openComposer, showToast } from '../lib/state';
 import type { ScheduledPost, ScheduledPostUpdate } from '../lib/types';
 
@@ -31,11 +32,11 @@ const editingPollExpiresIn = ref('86400');
 const savingId = ref('');
 const POLL_MAX_OPTIONS = 4;
 const POLL_EXPIRY_OPTIONS = [
-	{ value: '300', label: '5 minutes' },
-	{ value: '3600', label: '1 hour' },
-	{ value: '86400', label: '1 day' },
-	{ value: '259200', label: '3 days' },
-	{ value: '604800', label: '7 days' },
+	{ value: '300', labelKey: 'poll.duration.300' },
+	{ value: '3600', labelKey: 'poll.duration.3600' },
+	{ value: '86400', labelKey: 'poll.duration.86400' },
+	{ value: '259200', labelKey: 'poll.duration.259200' },
+	{ value: '604800', labelKey: 'poll.duration.604800' },
 ];
 
 onMounted(() => {
@@ -58,7 +59,7 @@ async function load(): Promise<void> {
 	try {
 		posts.value = await getApi().scheduledPosts();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Scheduled posts could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('scheduled.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -116,7 +117,7 @@ async function saveEdit(post: ScheduledPost): Promise<void> {
 	if (editingAt.value !== '') {
 		const date = new Date(editingAt.value);
 		if (Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 60_000) {
-			showToast('The new time must be at least one minute in the future.', 'error');
+			showToast(t('scheduled.timeFuture'), 'error');
 			return;
 		}
 
@@ -135,7 +136,7 @@ async function saveEdit(post: ScheduledPost): Promise<void> {
 	if (editingPollEnabled.value) {
 		const options = editingPollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
 		if (options.length < 2) {
-			showToast('A poll needs at least two options.', 'error');
+			showToast(t('scheduled.pollOptions'), 'error');
 			return;
 		}
 
@@ -162,9 +163,9 @@ async function saveEdit(post: ScheduledPost): Promise<void> {
 		posts.value = posts.value.map((entry) => entry.id === updated.id ? updated : entry);
 		editingId.value = '';
 		editingAt.value = '';
-		showToast('Scheduled post updated.', 'success');
+		showToast(t('scheduled.updated'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The scheduled post could not be updated.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('scheduled.updateFailed'), 'error');
 	} finally {
 		savingId.value = '';
 	}
@@ -192,9 +193,9 @@ async function cancel(post: ScheduledPost): Promise<void> {
 			entry.id === post.id ? { ...entry, state: 'cancelled' as const } : entry
 		));
 		confirmCancel.value = '';
-		showToast('Scheduled post discarded.', 'success');
+		showToast(t('scheduled.discarded'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The post could not be discarded.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('scheduled.discardFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -203,13 +204,13 @@ async function cancel(post: ScheduledPost): Promise<void> {
 function stateLabel(state: ScheduledPost['state']): string {
 	switch (state) {
 		case 'published':
-			return 'Published';
+			return t('scheduled.state.published');
 		case 'failed':
-			return 'Failed';
+			return t('scheduled.state.failed');
 		case 'cancelled':
-			return 'Dismissed';
+			return t('scheduled.state.cancelled');
 		default:
-			return 'Scheduled';
+			return t('scheduled.state.scheduled');
 	}
 }
 
@@ -229,22 +230,22 @@ function stateClass(state: ScheduledPost['state']): string {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Scheduled posts" subtitle="Posts that will be published at a later time.">
+		<PageHeader :title="t('nav.scheduled')" :subtitle="t('scheduled.subtitle')">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" :aria-label="t('scheduled.reload')" :title="t('scheduled.reload')" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="openComposer">
-					<AppIcon name="calendar" :size="15" /> Schedule
+					<AppIcon name="calendar" :size="15" /> {{ t('scheduled.schedule') }}
 				</button>
 			</template>
 		</PageHeader>
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="calendar" :size="26" /></span>
-			<h2>Schedule posts</h2>
-			<p>Sign in to prepare posts and publish them later.</p>
-			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+			<h2>{{ t('scheduled.loginTitle') }}</h2>
+			<p>{{ t('scheduled.loginText') }}</p>
+			<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<div v-else-if="loading && posts.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -253,17 +254,17 @@ function stateClass(state: ScheduledPost['state']): string {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Scheduled posts unavailable</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			<div><strong>{{ t('scheduled.unavailable') }}</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</div>
 
 		<EmptyState
 			v-else-if="posts.length === 0"
 			icon="calendar"
-			title="No scheduled posts"
-			text="In the composer you can choose a time instead of publishing right away."
+			:title="t('scheduled.emptyTitle')"
+			:text="t('scheduled.emptyText')"
 		>
-			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openComposer">Schedule post</button>
+			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openComposer">{{ t('scheduled.schedulePost') }}</button>
 		</EmptyState>
 
 		<ul v-else class="a-management-list">
@@ -279,8 +280,8 @@ function stateClass(state: ScheduledPost['state']): string {
 							v-if="post.state === 'scheduled'"
 							type="button"
 							class="a-icon-btn"
-							aria-label="Edit post"
-							title="Edit post"
+							:aria-label="t('scheduled.edit')"
+							:title="t('scheduled.edit')"
 							@click="startEdit(post)"
 						>
 							<AppIcon name="clock" :size="16" />
@@ -290,8 +291,8 @@ function stateClass(state: ScheduledPost['state']): string {
 							type="button"
 							class="a-icon-btn"
 							:class="{ 'a-icon-btn--danger': confirmCancel === post.id }"
-							aria-label="Discard post"
-							:title="confirmCancel === post.id ? 'Really discard?' : 'Discard'"
+							:aria-label="t('scheduled.discard')"
+							:title="confirmCancel === post.id ? t('scheduled.confirmDiscard') : t('scheduled.discard')"
 							:disabled="busy === post.id"
 							@click="cancel(post)"
 						>
@@ -300,15 +301,15 @@ function stateClass(state: ScheduledPost['state']): string {
 					</div>
 				</div>
 
-				<p v-if="post.content_warning" class="a-management-cw">Content warning: {{ post.content_warning }}</p>
+				<p v-if="post.content_warning" class="a-management-cw">{{ t('scheduled.contentWarning', { text: post.content_warning }) }}</p>
 				<p class="a-management-content">{{ post.content }}</p>
 
 				<p class="a-management-meta">
 					<AppIcon name="globe" :size="13" />
 					{{ visibilityLabel(post.visibility) }}
-					<span v-if="post.attachment_ids.length > 0">· {{ post.attachment_ids.length }} attachment/Attachments</span>
-					<span v-if="post.in_reply_to_id">· Reply</span>
-					<span v-if="post.poll">· Poll</span>
+					<span v-if="post.attachment_ids.length > 0">· {{ post.attachment_ids.length }} {{ post.attachment_ids.length === 1 ? t('scheduled.attachment') : t('scheduled.attachments') }}</span>
+					<span v-if="post.in_reply_to_id">· {{ t('scheduled.reply') }}</span>
+					<span v-if="post.poll">· {{ t('scheduled.poll') }}</span>
 				</p>
 
 				<p v-if="post.state === 'failed' && post.failure_reason" class="a-form-error" role="alert">
@@ -316,24 +317,24 @@ function stateClass(state: ScheduledPost['state']): string {
 				</p>
 
 				<form v-if="editingId === post.id" class="a-management-inline-form" @submit.prevent="saveEdit(post)">
-					<label class="a-profile-edit__label" for="a-scheduled-time">Publish at</label>
+					<label class="a-profile-edit__label" for="a-scheduled-time">{{ t('scheduled.publishAt') }}</label>
 					<input id="a-scheduled-time" v-model="editingAt" type="datetime-local">
-					<label class="a-profile-edit__label" for="a-scheduled-content">Content</label>
+					<label class="a-profile-edit__label" for="a-scheduled-content">{{ t('scheduled.content') }}</label>
 					<textarea id="a-scheduled-content" v-model="editingContent" rows="3" />
-					<label class="a-profile-edit__label" for="a-scheduled-warning">Content warning <span class="a-muted">(optional)</span></label>
+					<label class="a-profile-edit__label" for="a-scheduled-warning">{{ t('scheduled.contentWarningLabel') }} <span class="a-muted">{{ t('common.optional') }}</span></label>
 					<input id="a-scheduled-warning" v-model="editingWarning" type="text" maxlength="200">
 					<div class="a-scheduled-edit__poll">
 						<label class="a-composer__check">
 							<input v-model="editingPollEnabled" type="checkbox" />
-							<span>{{ post.poll != null ? 'Keep the poll' : 'Add a poll' }}</span>
+							<span>{{ post.poll != null ? t('scheduled.keepPoll') : t('scheduled.addPoll') }}</span>
 						</label>
 						<template v-if="editingPollEnabled">
 							<div v-for="(option, index) in editingPollOptions" :key="index" class="a-scheduled-edit__poll-option">
-								<input v-model="editingPollOptions[index]" type="text" :placeholder="`Option ${index + 1}`" maxlength="100">
+								<input v-model="editingPollOptions[index]" type="text" :placeholder="t('scheduled.optionPlaceholder', { n: index + 1 })" maxlength="100">
 								<button
 									type="button"
 									class="a-icon-btn"
-									aria-label="Remove option"
+									:aria-label="t('scheduled.removeOption')"
 									:disabled="editingPollOptions.length <= 2"
 									@click="removePollOption(index)"
 								>
@@ -341,32 +342,32 @@ function stateClass(state: ScheduledPost['state']): string {
 								</button>
 							</div>
 							<button v-if="editingPollOptions.length < POLL_MAX_OPTIONS" type="button" class="a-btn a-btn--ghost a-btn--small" @click="addPollOption">
-								<AppIcon name="plus" :size="14" /> Add option
+								<AppIcon name="plus" :size="14" /> {{ t('scheduled.addOption') }}
 							</button>
 							<div class="a-composer__poll-settings">
 								<label v-if="post.poll?.expires_at == null" class="a-composer__field">
-									<span>Duration</span>
+									<span>{{ t('scheduled.duration') }}</span>
 									<select v-model="editingPollExpiresIn">
-										<option v-for="option in POLL_EXPIRY_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+										<option v-for="option in POLL_EXPIRY_OPTIONS" :key="option.value" :value="option.value">{{ t(option.labelKey) }}</option>
 									</select>
 								</label>
 								<label class="a-composer__check">
 									<input v-model="editingPollMultiple" type="checkbox" />
-									<span>Multiple choice</span>
+									<span>{{ t('poll.multiple') }}</span>
 								</label>
 								<label class="a-composer__check">
 									<input v-model="editingPollHideTotals" type="checkbox" />
-									<span>Results only after the poll closes</span>
+									<span>{{ t('poll.hideTotals') }}</span>
 								</label>
 							</div>
 						</template>
 					</div>
 					<div class="a-profile-edit__actions">
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="savingId === post.id" @click="cancelEdit">
-							Cancel
+							{{ t('common.cancel') }}
 						</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="savingId === post.id">
-							{{ savingId === post.id ? 'Saving…' : 'Save' }}
+							{{ savingId === post.id ? t('common.saving') : t('common.save') }}
 						</button>
 					</div>
 				</form>
