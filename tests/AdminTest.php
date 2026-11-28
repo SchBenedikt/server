@@ -831,6 +831,50 @@ final class AdminTest extends TestCase
         ));
     }
 
+    public function testFeedHealthCardReportsCacheFreshnessAndBacklog(): void
+    {
+        ['server' => $server] = $this->admin();
+        $db = $server->runtime->database;
+
+        $feedCard = static function () use ($server): ?array {
+            foreach ($server->runtime->admin->overview()['health'] as $check) {
+                if ($check['id'] === 'feed') {
+                    return $check;
+                }
+            }
+
+            return null;
+        };
+
+        $card = $feedCard();
+        self::assertNotNull($card);
+        self::assertSame('ok', $card['status']);
+        self::assertStringContainsString('No federated posts cached yet', (string) $card['detail']);
+        self::assertStringContainsString('queue empty', (string) $card['detail']);
+
+        // A fresh pending job is catch-up in progress, not a problem.
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts, reserved_at, dead_at,'
+            . ' subject_type, subject_id, last_error)'
+            . " VALUES ('feed-fresh', 'deliver', '{}', :now, 0, NULL, NULL, NULL, NULL, NULL)",
+            ['now' => \AlohaSocial\Core\Support\Time::format(new \DateTimeImmutable())],
+        );
+        self::assertSame('ok', $feedCard()['status']);
+
+        // A job that has waited for hours means catch-up is stuck.
+        $db->execute(
+            'UPDATE social_job SET available_at = :old WHERE id = :id',
+            [
+                'old' => \AlohaSocial\Core\Support\Time::format(new \DateTimeImmutable('-2 hours')),
+                'id' => 'feed-fresh',
+            ],
+        );
+        $stuck = $feedCard();
+        self::assertSame('warn', $stuck['status']);
+        self::assertStringContainsString('1 job(s) pending', (string) $stuck['detail']);
+        self::assertStringContainsString('oldest', (string) $stuck['detail']);
+    }
+
     public function testUserListExposesPendingAndVerifiedEmailState(): void
     {
         ['server' => $server, 'cookies' => $cookies] = $this->admin();
