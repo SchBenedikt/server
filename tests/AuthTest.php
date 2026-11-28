@@ -139,4 +139,22 @@ final class AuthTest extends TestCase
         self::assertSame(429, $login['response']->status);
         self::assertStringContainsString('failed attempts', $login['response']->body);
     }
+
+    public function testApiAndAppResponsesForbidSharedCaching(): void
+    {
+        $session = $this->server->signIn();
+
+        foreach ([
+            '/api/v1/host/status',
+            '/api/v1/host/preferences',
+            '/api/v1/timelines/home',
+            '/app',
+        ] as $path) {
+            $response = $this->server->send('GET', $path, ['cookies' => $session['cookies']]);
+            self::assertSame(200, $response->status, $path . ': ' . $response->body);
+            self::assertStringContainsString('no-store', (string) $response->header('Cache-Control'), $path);
+            self::assertSame('no-store', $response->header('CDN-Cache-Control'), $path);
+            self::assertSame('no-store', $response->header('Cloudflare-CDN-Cache-Control'), $path);
+        }
+    }
 }
