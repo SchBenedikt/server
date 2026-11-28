@@ -6,7 +6,7 @@
 import { onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
 import ConfirmDialog from '../../components/ConfirmDialog.vue';
-import { ApiError } from '../../lib/api';
+import { ApiError, loadErrorMessage } from '../../lib/api';
 import { getAdminApi, type AdminInvitation } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
@@ -35,7 +35,7 @@ async function load(): Promise<void> {
 	try {
 		invitations.value = await getAdminApi().invitations();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('ainv.loadFailed');
+		error.value = loadErrorMessage(caught, t('ainv.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -74,10 +74,10 @@ async function create(): Promise<void> {
 		await load();
 	} catch (caught) {
 		if (caught instanceof ApiError) {
-			createError.value = caught.message;
+			createError.value = loadErrorMessage(caught, caught.message);
 			createFields.value = caught.fields;
 		} else {
-			createError.value = caught instanceof Error ? caught.message : t('ainv.createFailed');
+			createError.value = loadErrorMessage(caught, t('ainv.createFailed'));
 		}
 	} finally {
 		creating.value = false;
@@ -112,7 +112,7 @@ async function confirmRevoke(): Promise<void> {
 		showToast(t('ainv.revoked', { code: target.code_prefix }), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('ainv.revokeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('ainv.revokeFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

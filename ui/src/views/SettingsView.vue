@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type AtprotoSessionEntry, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type AtprotoSessionEntry, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus, loadErrorMessage } from '../lib/api';
 import { absoluteTime, relativeTime } from '../lib/format';
 import { applyDensity } from '../lib/density';
 import { setLocale, t } from '../lib/i18n';
@@ -179,10 +179,10 @@ async function load(): Promise<void> {
 			notificationPolicyError.value = '';
 		} catch (caught) {
 			notificationPolicy.value = null;
-			notificationPolicyError.value = caught instanceof Error ? caught.message : t('settings.senderPolicyFailed');
+			notificationPolicyError.value = loadErrorMessage(caught, t('settings.senderPolicyFailed'));
 		}
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('settings.loadFailed');
+		error.value = loadErrorMessage(caught, t('settings.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -199,7 +199,7 @@ async function setNotificationAction(category: NotificationSenderCategory, event
 		notificationPolicy.value = await getApi().updateNotificationPolicy({ actions: { [category]: value } });
 		showToast(t('settings.senderPolicySaved'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.senderPolicySaveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.senderPolicySaveFailed')), 'error');
 	} finally {
 		notificationPolicyBusy.value = false;
 	}
@@ -216,7 +216,7 @@ async function saveNewAccountDays(): Promise<void> {
 		showToast(t('settings.newAccountDaysSaved'), 'success');
 	} catch (caught) {
 		newAccountDays.value = notificationPolicy.value.new_account_days;
-		showToast(caught instanceof Error ? caught.message : t('settings.newAccountDaysFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.newAccountDaysFailed')), 'error');
 	} finally {
 		notificationPolicyBusy.value = false;
 	}
@@ -233,7 +233,7 @@ async function createIdentity(): Promise<void> {
 		atproto.value = await getApi().atprotoIdentity();
 		showToast(t('settings.identityCreated'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.identityCreateFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.identityCreateFailed')), 'error');
 	} finally {
 		atprotoBusy.value = false;
 	}
@@ -249,7 +249,7 @@ async function rotateIdentityKeys(): Promise<void> {
 		await getApi().rotateAtprotoKeys();
 		showToast(t('settings.keysRotated'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.keysRotateFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.keysRotateFailed')), 'error');
 	} finally {
 		atprotoBusy.value = false;
 	}
@@ -270,7 +270,7 @@ async function revokeAtprotoSession(id: string): Promise<void> {
 			showToast(t('settings.appAlreadyGone'), 'error');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.appRevokeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.appRevokeFailed')), 'error');
 	} finally {
 		atprotoSessionBusy.value = '';
 	}
@@ -286,7 +286,7 @@ async function connectBluesky(): Promise<void> {
 		const url = await getApi().startBlueskyOAuth(blueskyHandle.value);
 		window.location.assign(url);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.bskyConnectFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.bskyConnectFailed')), 'error');
 	} finally {
 		blueskyBusy.value = false;
 	}
@@ -303,7 +303,7 @@ async function disconnectBluesky(): Promise<void> {
 		bluesky.value = { connected: false };
 		showToast(t('settings.bskyDisconnected'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.bskyDisconnectFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.bskyDisconnectFailed')), 'error');
 	} finally {
 		blueskyBusy.value = false;
 	}
@@ -339,7 +339,7 @@ async function save(): Promise<void> {
 		applyDensity(preferences.value.ui_density);
 		showToast(t('settings.saved'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.saveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.saveFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -414,7 +414,7 @@ async function exportAccount(): Promise<void> {
 		URL.revokeObjectURL(url);
 		showToast(t('settings.exportDownloaded'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.exportFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.exportFailed')), 'error');
 	} finally {
 		exporting.value = false;
 	}
@@ -438,7 +438,7 @@ async function pickImportFile(event: Event): Promise<void> {
 		importDocument.value = document;
 		importPreview.value = await getApi().importPreview(document);
 	} catch (caught) {
-		importError.value = caught instanceof Error ? caught.message : t('settings.importFileFailed');
+		importError.value = loadErrorMessage(caught, t('settings.importFileFailed'));
 	} finally {
 		importBusy.value = false;
 	}
@@ -461,7 +461,7 @@ async function applyImport(): Promise<void> {
 			showToast(t('settings.importApplied', { count: applied.length }), 'success');
 		}
 	} catch (caught) {
-		importError.value = caught instanceof Error ? caught.message : t('settings.importApplyFailed');
+		importError.value = loadErrorMessage(caught, t('settings.importApplyFailed'));
 	} finally {
 		importBusy.value = false;
 	}
@@ -489,7 +489,7 @@ async function deleteAccount(): Promise<void> {
 		window.location.assign('/login');
 	} catch (caught) {
 		confirmDeletion.value = false;
-		showToast(caught instanceof Error ? caught.message : t('settings.emailDeleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.emailDeleteFailed')), 'error');
 	} finally {
 		deleting.value = false;
 	}
@@ -511,7 +511,7 @@ async function startAccountMove(): Promise<void> {
 		showToast(t('settings.moveAnnouncedToast'), 'success');
 	} catch (caught) {
 		confirmMove.value = false;
-		showToast(caught instanceof Error ? caught.message : t('settings.moveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.moveFailed')), 'error');
 	} finally {
 		moveBusy.value = false;
 	}
@@ -555,7 +555,7 @@ async function revokeSession(session: HostSession): Promise<void> {
 		sessions.value = sessions.value.filter((entry) => entry.id !== session.id);
 		showToast(t('settings.sessionSignedOut'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.sessionRevokeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.sessionRevokeFailed')), 'error');
 	} finally {
 		sessionsBusy.value = false;
 	}
@@ -571,7 +571,7 @@ async function beginMfa(): Promise<void> {
 		mfaRecoveryCodes.value = [];
 		mfaCode.value = '';
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.mfaStartFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.mfaStartFailed')), 'error');
 	} finally {
 		mfaBusy.value = false;
 	}
@@ -590,7 +590,7 @@ async function confirmMfa(): Promise<void> {
 		mfaCode.value = '';
 		showToast(t('settings.mfaEnabledToast'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.mfaCodeWrong'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.mfaCodeWrong')), 'error');
 	} finally {
 		mfaBusy.value = false;
 	}
@@ -609,7 +609,7 @@ async function disableMfa(): Promise<void> {
 		mfaCode.value = '';
 		showToast(t('settings.mfaDisabledToast'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('settings.mfaDisableFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.mfaDisableFailed')), 'error');
 	} finally {
 		mfaBusy.value = false;
 	}
@@ -630,7 +630,7 @@ async function submitEmailChange(): Promise<void> {
 		confirmCancelEmail.value = false;
 		showToast(t('settings.emailChangeSent', { email: result.pending_email }), 'success');
 	} catch (caught) {
-		emailError.value = caught instanceof Error ? caught.message : t('settings.emailChangeFailed');
+		emailError.value = loadErrorMessage(caught, t('settings.emailChangeFailed'));
 	} finally {
 		emailBusy.value = false;
 	}
@@ -654,7 +654,7 @@ async function cancelPendingEmail(): Promise<void> {
 		confirmCancelEmail.value = false;
 		showToast(t('settings.pendingCancelled'), 'success');
 	} catch (caught) {
-		emailError.value = caught instanceof Error ? caught.message : t('settings.cancelFailed');
+		emailError.value = loadErrorMessage(caught, t('settings.cancelFailed'));
 	} finally {
 		emailBusy.value = false;
 	}
@@ -691,7 +691,7 @@ async function togglePush(): Promise<void> {
 		}
 	} catch (caught) {
 		pushState.value = await resolvePushState();
-		showToast(caught instanceof Error ? caught.message : t('settings.pushFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.pushFailed')), 'error');
 	} finally {
 		pushBusy.value = false;
 	}
@@ -714,7 +714,7 @@ async function revokeOtherSessions(): Promise<void> {
 		showToast(t('settings.othersSignedOut'), 'success');
 	} catch (caught) {
 		confirmRevokeOthers.value = false;
-		showToast(caught instanceof Error ? caught.message : t('settings.othersRevokeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('settings.othersRevokeFailed')), 'error');
 	} finally {
 		sessionsBusy.value = false;
 	}

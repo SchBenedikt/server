@@ -5,7 +5,7 @@
  */
 import { ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { showToast } from '../lib/state';
 import { t } from '../lib/i18n';
 import type { Collection } from '../lib/types';
@@ -37,7 +37,7 @@ watch(() => props.open, async (open) => {
 	try {
 		collections.value = await getApi().collections();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('coll.loadFailed');
+		error.value = loadErrorMessage(caught, t('coll.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -55,7 +55,7 @@ async function add(collection: Collection): Promise<void> {
 		emit('added', collection.id);
 		emit('close');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('coll.addFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('coll.addFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -74,7 +74,7 @@ async function create(): Promise<void> {
 		creating.value = false;
 		await add(collection);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('coll.createFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('coll.createFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}

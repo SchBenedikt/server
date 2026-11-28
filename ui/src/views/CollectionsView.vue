@@ -7,7 +7,7 @@ import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { navigate } from '../lib/router';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
@@ -35,7 +35,7 @@ async function load(): Promise<void> {
 	try {
 		collections.value = await getApi().collections();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('collections.loadFailed');
+		error.value = loadErrorMessage(caught, t('collections.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -57,7 +57,7 @@ async function create(): Promise<void> {
 		showToast(t('collections.created'), 'success');
 		navigate(`/c/${encodeURIComponent(collection.id)}`);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('collections.createFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('collections.createFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -74,7 +74,7 @@ async function remove(collection: Collection): Promise<void> {
 		collections.value = collections.value.filter((entry) => entry.id !== collection.id);
 		showToast(t('collections.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('collections.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('collections.deleteFailed')), 'error');
 	} finally {
 		deleting.value = '';
 	}

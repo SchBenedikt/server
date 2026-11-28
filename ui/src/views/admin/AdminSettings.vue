@@ -8,6 +8,7 @@ import AppIcon from '../../components/AppIcon.vue';
 import { bytesLabel, getAdminApi, type AdminInstance, type AdminSettingsData, type PreflightReport } from '../../lib/admin';
 import { absoluteTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
+import { loadErrorMessage } from '../../lib/api';
 
 const data = ref<AdminInstance | null>(null);
 const loading = ref(false);
@@ -53,7 +54,7 @@ async function runPreflight(): Promise<void> {
 	try {
 		preflight.value = await getAdminApi().preflight();
 	} catch (caught) {
-		preflightError.value = caught instanceof Error ? caught.message : t('aset.preflightFailed');
+		preflightError.value = loadErrorMessage(caught, t('aset.preflightFailed'));
 	} finally {
 		preflightLoading.value = false;
 	}
@@ -126,7 +127,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().instance();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('aset.loadFailed');
+		error.value = loadErrorMessage(caught, t('aset.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -152,7 +153,7 @@ async function loadSettings(): Promise<void> {
 			publish_domain_blocks: loaded.moderation.publish_domain_blocks,
 		};
 	} catch (caught) {
-		saveError.value = caught instanceof Error ? caught.message : t('aset.settingsLoadFailed');
+		saveError.value = loadErrorMessage(caught, t('aset.settingsLoadFailed'));
 	}
 }
 
@@ -168,7 +169,7 @@ async function saveSettings(): Promise<void> {
 		settings.value = await getAdminApi().updateSettings({ ...form.value });
 		saved.value = t('aset.saved');
 	} catch (caught) {
-		saveError.value = caught instanceof Error ? caught.message : t('aset.saveFailed');
+		saveError.value = loadErrorMessage(caught, t('aset.saveFailed'));
 	} finally {
 		saving.value = false;
 	}

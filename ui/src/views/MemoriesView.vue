@@ -8,7 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { navigate } from '../lib/router';
 import { locale, t } from '../lib/i18n';
 import { appState } from '../lib/state';
@@ -43,7 +43,7 @@ async function load(): Promise<void> {
 		const ids = data.value.years.flatMap((year) => year.posts.map((post) => post.id));
 		posts.value = ids.length === 0 ? [] : Object.values(await getApi().posts(ids));
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('memories.loadFailed');
+		error.value = loadErrorMessage(caught, t('memories.loadFailed'));
 	} finally {
 		loading.value = false;
 	}

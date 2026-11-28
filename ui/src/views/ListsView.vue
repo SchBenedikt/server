@@ -7,7 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { AccountList } from '../lib/types';
@@ -45,7 +45,7 @@ async function load(): Promise<void> {
 	try {
 		lists.value = await getApi().lists();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('lists.loadFailed');
+		error.value = loadErrorMessage(caught, t('lists.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -101,7 +101,7 @@ async function save(): Promise<void> {
 			showToast(t('lists.renamed'), 'success');
 		}
 	} catch (caught) {
-		dialogError.value = caught instanceof Error ? caught.message : t('lists.saveFailed');
+		dialogError.value = loadErrorMessage(caught, t('lists.saveFailed'));
 	} finally {
 		saving.value = false;
 	}
@@ -129,7 +129,7 @@ async function remove(list: AccountList): Promise<void> {
 		confirmDelete.value = '';
 		showToast(t('lists.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('lists.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('lists.deleteFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

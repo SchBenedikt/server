@@ -7,7 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { absoluteTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
@@ -63,7 +63,7 @@ async function load(): Promise<void> {
 	try {
 		rules.value = await getApi().filters();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('filters.loadFailed');
+		error.value = loadErrorMessage(caught, t('filters.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -175,7 +175,7 @@ async function save(): Promise<void> {
 		dialogOpen.value = false;
 		editing.value = null;
 	} catch (caught) {
-		dialogError.value = caught instanceof Error ? caught.message : t('filters.saveFailed');
+		dialogError.value = loadErrorMessage(caught, t('filters.saveFailed'));
 	} finally {
 		saving.value = false;
 	}
@@ -203,7 +203,7 @@ async function remove(rule: FilterRule): Promise<void> {
 		confirmDelete.value = '';
 		showToast(t('filters.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('filters.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('filters.deleteFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

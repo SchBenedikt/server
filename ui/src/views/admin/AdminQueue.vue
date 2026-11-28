@@ -10,6 +10,7 @@ import { getAdminApi, type AdminJob, type JobList } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
 import { showToast } from '../../lib/state';
 import { t } from '../../lib/i18n';
+import { loadErrorMessage } from '../../lib/api';
 
 type FilterState = 'all' | 'pending' | 'running' | 'dead';
 
@@ -56,7 +57,7 @@ async function load(quiet = false): Promise<void> {
 	try {
 		data.value = await getAdminApi().jobs(state.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('aq.loadFailed');
+		error.value = loadErrorMessage(caught, t('aq.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -97,7 +98,7 @@ async function retry(job: AdminJob): Promise<void> {
 		showToast(t('aq.jobRetried'), 'success');
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aq.retryFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aq.retryFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -114,7 +115,7 @@ async function remove(job: AdminJob): Promise<void> {
 		showToast(t('aq.jobDeleted'), 'success');
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aq.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aq.deleteFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -131,7 +132,7 @@ async function runQueue(): Promise<void> {
 		showToast(handled === 0 ? t('aq.noDue') : t('aq.processed', { count: handled }), 'success');
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aq.runFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aq.runFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -159,7 +160,7 @@ async function confirmAction(): Promise<void> {
 		confirmOpen.value = false;
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aq.actionFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aq.actionFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

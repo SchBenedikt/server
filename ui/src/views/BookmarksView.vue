@@ -9,7 +9,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { onPostDeleted } from '../lib/events';
 import { t } from '../lib/i18n';
 import { appState } from '../lib/state';
@@ -48,7 +48,7 @@ async function load(reset: boolean): Promise<void> {
 		cursor.value = page.length > 0 ? page[page.length - 1].id : null;
 		hasMore.value = page.length === 20;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('bookmarks.loadFailed');
+		error.value = loadErrorMessage(caught, t('bookmarks.loadFailed'));
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;

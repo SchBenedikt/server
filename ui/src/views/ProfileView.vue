@@ -13,7 +13,7 @@ import PostCard from '../components/PostCard.vue';
 import ReportDialog from '../components/ReportDialog.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { hostDisplayName, refreshAccount, setAccount, setHostDisplayName } from '../lib/account';
-import { getApi, hydrateTimelineBoosts } from '../lib/api';
+import { getApi, hydrateTimelineBoosts, loadErrorMessage } from '../lib/api';
 import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { accountName, absoluteTime, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
@@ -213,7 +213,7 @@ async function toggleMute(): Promise<void> {
 			showToast(t('profile.muted', { handle: target.handle }), 'success');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('profile.muteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('profile.muteFailed')), 'error');
 	} finally {
 		moderationBusy.value = '';
 	}
@@ -250,7 +250,7 @@ async function toggleBlock(): Promise<void> {
 			showToast(t('profile.blocked', { handle: target.handle }), 'success');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('profile.blockFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('profile.blockFailed')), 'error');
 	} finally {
 		moderationBusy.value = '';
 	}
@@ -359,7 +359,7 @@ async function loadProfile(): Promise<void> {
 		}
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : t('profile.loadFailed');
+			error.value = loadErrorMessage(caught, t('profile.loadFailed'));
 		}
 	} finally {
 		if (current === generation) {
@@ -480,7 +480,7 @@ async function loadRemote(reset: boolean): Promise<void> {
 		hasMore.value = data.cursor !== null && data.posts.length > 0;
 		loadedOnce.value = true;
 	} catch (caught) {
-		const message = caught instanceof Error ? caught.message : t('profile.remoteLoadFailed');
+		const message = loadErrorMessage(caught, t('profile.remoteLoadFailed'));
 		if (current === generation) {
 			if (reset) {
 				error.value = message;
@@ -573,7 +573,7 @@ async function loadPosts(reset: boolean): Promise<void> {
 		)));
 		loadedOnce.value = true;
 	} catch (caught) {
-		postsError.value = caught instanceof Error ? caught.message : t('profile.postsFailed');
+		postsError.value = loadErrorMessage(caught, t('profile.postsFailed'));
 	} finally {
 		postsLoading.value = false;
 	}
@@ -718,7 +718,7 @@ async function followRemote(): Promise<void> {
 		showToast(t('profile.followSent', { handle: profile.handle }), 'success');
 	} catch (caught) {
 		remoteFollowState.value = 'idle';
-		showToast(caught instanceof Error ? caught.message : t('profile.followFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('profile.followFailed')), 'error');
 	}
 }
 
@@ -732,7 +732,7 @@ async function unfollowRemote(): Promise<void> {
 			showToast(t('profile.unfollowBsky', { handle: account.value.handle }), 'success');
 		} catch (caught) {
 			remoteFollowState.value = 'idle';
-			showToast(caught instanceof Error ? caught.message : t('profile.unfollowFailed'), 'error');
+			showToast(loadErrorMessage(caught, t('profile.unfollowFailed')), 'error');
 		}
 		return;
 	}
@@ -749,7 +749,7 @@ async function unfollowRemote(): Promise<void> {
 		showToast(t('profile.unfollowed', { handle: account.value?.handle ?? t('common.account') }), 'success');
 	} catch (caught) {
 		remoteFollowState.value = 'idle';
-		showToast(caught instanceof Error ? caught.message : t('profile.unfollowRequestFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('profile.unfollowRequestFailed')), 'error');
 	}
 }
 
@@ -824,7 +824,7 @@ async function saveProfile(): Promise<void> {
 		editing.value = false;
 		showToast(t('profile.updated'), 'success');
 	} catch (caught) {
-		editError.value = caught instanceof Error ? caught.message : t('profile.saveFailed');
+		editError.value = loadErrorMessage(caught, t('profile.saveFailed'));
 	} finally {
 		editSaving.value = false;
 	}

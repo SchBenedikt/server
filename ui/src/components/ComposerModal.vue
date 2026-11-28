@@ -9,7 +9,7 @@ import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import RichText from './RichText.vue';
 import { accountName, handleLabel, isRemoteId, postReplyTargetId, postRouteId, truncate } from '../lib/format';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { hostDisplayName, resolveAccount } from '../lib/account';
 import { announcePostCreated, announcePostUpdated } from '../lib/events';
 import { t } from '../lib/i18n';
@@ -767,7 +767,7 @@ async function saveAsDraft(): Promise<void> {
 		showToast(t('composer.draftSaved', { drafts: t('composer.draftsName') }), 'success');
 		closeComposer();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('composer.draftFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('composer.draftFailed')), 'error');
 	} finally {
 		savingDraft.value = false;
 	}

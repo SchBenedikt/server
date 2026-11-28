@@ -8,7 +8,7 @@ import AccountRow from '../components/AccountRow.vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { handleLabel, relativeTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
@@ -76,7 +76,7 @@ async function load(): Promise<void> {
 		entries.value = await getApi().blocks();
 		void resolveProfiles();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('blocks.loadFailed');
+		error.value = loadErrorMessage(caught, t('blocks.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -109,7 +109,7 @@ async function unblock(entry: BlockEntry): Promise<void> {
 		entries.value = entries.value.filter((item) => item.id !== entry.id);
 		showToast(t('blocks.removed'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('blocks.removeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('blocks.removeFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

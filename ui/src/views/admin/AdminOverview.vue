@@ -9,6 +9,7 @@ import { bytesLabel, getAdminApi, type AdminOverview, type ChecklistItem } from 
 import { absoluteTime, formatCount, relativeTime } from '../../lib/format';
 import { showToast } from '../../lib/state';
 import { t } from '../../lib/i18n';
+import { loadErrorMessage } from '../../lib/api';
 
 const overview = ref<AdminOverview | null>(null);
 const loading = ref(false);
@@ -47,7 +48,7 @@ async function load(quiet = false): Promise<void> {
 	try {
 		overview.value = await getAdminApi().overview();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('aov.loadFailed');
+		error.value = loadErrorMessage(caught, t('aov.loadFailed'));
 	} finally {
 		loading.value = false;
 	}

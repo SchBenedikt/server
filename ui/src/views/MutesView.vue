@@ -8,7 +8,7 @@ import AccountRow from '../components/AccountRow.vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { Account } from '../lib/types';
@@ -39,7 +39,7 @@ async function load(): Promise<void> {
 	try {
 		accounts.value = await getApi().mutes();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('mutes.loadFailed');
+		error.value = loadErrorMessage(caught, t('mutes.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -56,7 +56,7 @@ async function unmute(account: Account): Promise<void> {
 		accounts.value = accounts.value.filter((entry) => entry.id !== account.id);
 		showToast(t('mutes.removed'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('mutes.removeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('mutes.removeFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

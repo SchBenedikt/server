@@ -88,7 +88,7 @@ async function search(): Promise<void> {
 		} else if (!(caught instanceof ApiError)) {
 			remoteError.value = t('search.errNetwork');
 		} else {
-			remoteError.value = caught.message;
+			remoteError.value = loadErrorMessage(caught, caught.message);
 		}
 	} finally {
 		searching.value = false;

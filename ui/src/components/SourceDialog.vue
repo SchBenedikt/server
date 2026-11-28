@@ -5,7 +5,7 @@
  */
 import { ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { t } from '../lib/i18n';
 import type { PostDelivery, PostSource } from '../lib/types';
 
@@ -39,7 +39,7 @@ watch(() => props.open, async (open) => {
 		source.value = sourceResult;
 		delivery.value = deliveryResult;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('srcdlg.loadFailed');
+		error.value = loadErrorMessage(caught, t('srcdlg.loadFailed'));
 	} finally {
 		loading.value = false;
 	}

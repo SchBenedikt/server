@@ -7,7 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { absoluteTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
@@ -32,7 +32,7 @@ async function load(): Promise<void> {
 		requests.value = data.requests;
 		locked.value = data.locked;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('requests.loadFailed');
+		error.value = loadErrorMessage(caught, t('requests.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -49,7 +49,7 @@ async function accept(request: FollowRequest): Promise<void> {
 		requests.value = requests.value.filter((entry) => entry.id !== request.id);
 		showToast(t('requests.accepted', { handle: request.actor_handle }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('requests.acceptFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('requests.acceptFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -66,7 +66,7 @@ async function reject(request: FollowRequest): Promise<void> {
 		requests.value = requests.value.filter((entry) => entry.id !== request.id);
 		showToast(t('requests.declined'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('requests.declineFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('requests.declineFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
