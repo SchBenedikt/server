@@ -132,7 +132,7 @@ final class DatabaseBackup
         }
         @chmod($metadataPath, 0o600);
 
-        $this->prune($directory, $keep);
+        $this->prune($directory, $keep, $path);
 
         return [
             'path' => $path,
@@ -213,22 +213,9 @@ final class DatabaseBackup
         return is_string($hash) ? $hash : null;
     }
 
-    /**
-     * Fingerprint of the instance secret key for restore matching. The key
-     * itself is random 32 bytes, so its SHA-256 cannot be brute-forced and
-     * lets a restored instance prove it holds the same identity material.
-     */
     private function keyFingerprint(): ?string
     {
-        $encoded = $this->config->secretKey;
-        if ($encoded === null && is_file($this->config->secretKeyFile)) {
-            $encoded = file_get_contents($this->config->secretKeyFile);
-        }
-        if (!is_string($encoded)) {
-            return null;
-        }
-
-        return hash('sha256', trim($encoded));
+        return SecretKeyFile::fingerprint($this->config);
     }
 
     /**
@@ -389,7 +376,7 @@ final class DatabaseBackup
         }
     }
 
-    private function prune(string $directory, int $keep): void
+    private function prune(string $directory, int $keep, string $current): void
     {
         if ($keep < 1) {
             return;
@@ -408,11 +395,19 @@ final class DatabaseBackup
             }
         }
 
-        usort($backups, static fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
+        // filemtime has one-second granularity, so backups created back to
+        // back tie; never let retention delete the snapshot that was just
+        // written, and break remaining ties by name for determinism.
+        usort($backups, static fn (string $a, string $b): int => [$b === $current ? 1 : 0, filemtime($b), basename($b)] <=> [$a === $current ? 1 : 0, filemtime($a), basename($a)]);
 
         foreach (array_slice($backups, $keep) as $file) {
+            if ($file === $current) {
+                continue;
+            }
+            $base = substr($file, 0, (int) strrpos($file, '.'));
             @unlink($file);
-            @unlink(substr($file, 0, (int) strrpos($file, '.')) . '.json');
+            @unlink($base . '.json');
+            @unlink($base . '.manifest.json');
         }
     }
 }

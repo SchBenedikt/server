@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace AlohaSocial\Server\Support;
 
 use AlohaSocial\Core\Security\OpenSslSecretBox;
+use AlohaSocial\Server\Config\HostConfig;
 use RuntimeException;
 
 use function chmod;
@@ -70,6 +71,25 @@ final class SecretKeyFile
             flock($lock, LOCK_UN);
             fclose($lock);
         }
+    }
+
+    /**
+     * SHA-256 fingerprint of the configured secret key material. The key is
+     * random 32 bytes, so its hash cannot be brute-forced; a backup or
+     * manifest carrying the fingerprint lets a restore prove it holds the
+     * same identity material without exposing the key itself.
+     */
+    public static function fingerprint(HostConfig $config): ?string
+    {
+        $encoded = $config->secretKey;
+        if ($encoded === null && is_file($config->secretKeyFile)) {
+            $encoded = file_get_contents($config->secretKeyFile);
+        }
+        if (!is_string($encoded) || trim($encoded) === '') {
+            return null;
+        }
+
+        return hash('sha256', trim($encoded));
     }
 
     private static function create(string $path, string $directory): void
