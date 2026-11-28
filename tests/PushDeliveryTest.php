@@ -31,6 +31,7 @@ use function openssl_pkey_export;
 use function openssl_pkey_get_details;
 use function openssl_pkey_new;
 use function random_bytes;
+use function str_pad;
 
 use const JSON_THROW_ON_ERROR;
 use const OPENSSL_KEYTYPE_EC;
@@ -174,7 +175,9 @@ final class PushDeliveryTest extends TestCase
         self::assertNotFalse($key);
         $details = openssl_pkey_get_details($key);
         self::assertIsArray($details);
-        $point = "\x04" . $details['ec']['x'] . $details['ec']['y'];
+        $point = "\x04"
+            . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
+            . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
         $pem = '';
         self::assertTrue(openssl_pkey_export($key, $pem));
 

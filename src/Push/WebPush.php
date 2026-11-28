@@ -108,7 +108,11 @@ final class WebPush
         if (!is_array($details) || !isset($details['ec']['x'], $details['ec']['y'])) {
             throw new \RuntimeException('The ephemeral push public key could not be derived.');
         }
-        $asPublic = "\x04" . $details['ec']['x'] . $details['ec']['y'];
+        // Coordinates arrive as minimal-length integers; pad to the fixed
+        // field size so the point and the HKDF info stay well-formed.
+        $asPublic = "\x04"
+            . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
+            . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
 
         $uaKey = openssl_pkey_get_public(self::publicKeyPem($uaPublic));
         if ($uaKey === false) {
