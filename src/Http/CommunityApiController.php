@@ -31,7 +31,9 @@ use AlohaSocial\Server\Federation\Atproto\AtprotoPublicationDeliveryStatus;
 use AlohaSocial\Server\Federation\ActivityPubDeliveryStatus;
 use Throwable;
 
+use function array_filter;
 use function array_key_exists;
+use function array_values;
 use function is_array;
 use function is_string;
 use function json_decode;
@@ -1028,6 +1030,37 @@ final class CommunityApiController
                         'Content-Disposition' => 'attachment; filename="' . $filename . '"',
                     ],
                 );
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/import/preview') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to preview an import.');
+                }
+
+                return Response::json([
+                    'preview' => $this->runtime->imports->preview($this->jsonBody($request)),
+                ]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/import/apply') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to import data.');
+                }
+
+                $account = $this->runtime->accounts->find($userId);
+                if ($account === null) {
+                    return $this->error(404, 'not_found', 'This account no longer exists.');
+                }
+
+                $body = $this->jsonBody($request);
+                $document = is_array($body['export'] ?? null) ? $body['export'] : $body;
+                $sections = is_array($body['sections'] ?? null)
+                    ? array_values(array_filter($body['sections'], 'is_string'))
+                    : null;
+
+                return Response::json([
+                    'import' => $this->runtime->imports->apply($account, $document, $sections),
+                ]);
             }
 
             if ($method === 'DELETE' && $path === '/api/v1/account/data') {

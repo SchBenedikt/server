@@ -165,7 +165,7 @@ final class Exports
                 ['account_id' => $accountId],
             ),
             'scheduled_posts' => $this->rows(
-                'SELECT content, content_warning, visibility, attachment_ids, recipient_ids, in_reply_to_id,'
+                'SELECT content, content_warning, visibility, language, attachment_ids, recipient_ids, in_reply_to_id,'
                 . ' scheduled_at, created_at, state, published_at, failure_reason'
                 . ' FROM social_scheduled_post WHERE author_id = :account_id ORDER BY scheduled_at ASC',
                 ['account_id' => $accountId],

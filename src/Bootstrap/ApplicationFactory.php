@@ -77,6 +77,7 @@ use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\Exports;
+use AlohaSocial\Server\Community\Imports;
 use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FederatedTimeline;
 use AlohaSocial\Server\Community\FollowRequests;
@@ -231,6 +232,7 @@ final class ApplicationFactory
                 $externalAtprotoPublisher,
             );
         $preferences = new Preferences($database, $clock);
+        $featuredTags = new FeaturedTags($database, $clock);
         $socialGraph = new SocialGraph($database, $this->config->instanceUrl);
         $remoteActorProfiles = new RemoteActorProfiles($database, $remoteDirectory, $clock);
 
@@ -402,7 +404,7 @@ final class ApplicationFactory
                 $logger,
             ),
             announcements: new Announcements($database, $clock),
-            featuredTags: new FeaturedTags($database, $clock),
+            featuredTags: $featuredTags,
             trends: new Trends($database, $clock),
             memories: new Memories($database, $clock),
             stories: new Stories($database, $clock, $socialGraph),
@@ -441,6 +443,7 @@ final class ApplicationFactory
             liveUpdates: new LiveUpdates($database, $clock, $socialGraph),
             preferences: $preferences,
             exports: new Exports($database, $clock, $preferences, $this->config),
+            imports: new Imports($database, $clock, $preferences, $featuredTags),
             followRequests: new FollowRequests(
                 $database,
                 $clock,
