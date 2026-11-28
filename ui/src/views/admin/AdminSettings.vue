@@ -28,6 +28,7 @@ const form = ref({
 	atproto_pds_handle_domain: '',
 	atproto_plc_url: 'https://plc.directory',
 	atproto_jetstream: '',
+	publish_domain_blocks: false,
 });
 
 const preflight = ref<PreflightReport | null>(null);
@@ -172,6 +173,7 @@ async function loadSettings(): Promise<void> {
 			atproto_pds_handle_domain: loaded.atproto.handle_domain,
 			atproto_plc_url: loaded.atproto.plc_url,
 			atproto_jetstream: loaded.jetstream,
+			publish_domain_blocks: loaded.moderation.publish_domain_blocks,
 		};
 	} catch (caught) {
 		saveError.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
@@ -290,6 +292,10 @@ onMounted(() => {
 				<label class="a-admin-form__check">
 					<input v-model="form.atproto_pds" type="checkbox" />
 					<span>Enable the native PDS</span>
+				</label>
+				<label class="a-admin-form__check">
+					<input v-model="form.publish_domain_blocks" type="checkbox" />
+					<span>Publish domain blocks to Mastodon clients</span>
 				</label>
 			</div>
 

@@ -69,6 +69,13 @@ final class MastodonInstanceController
         if ($path === $prefix . '/instance/custom_emojis') {
             return Response::json([]);
         }
+        if ($path === $prefix . '/instance/domain_blocks') {
+            if (!$this->runtime->config->publishDomainBlocks) {
+                return Response::json(['error' => 'domain_blocks are not published by this instance'], 404);
+            }
+
+            return Response::json($this->runtime->admin->domainBlocks());
+        }
         if ($path === $prefix . '/instance/announcements') {
             return Response::json(array_map(
                 $this->announcement(...),
