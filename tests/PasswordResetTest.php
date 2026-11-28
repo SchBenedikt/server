@@ -11,11 +11,13 @@ namespace AlohaSocial\Server\Tests;
 
 use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Security\OpenSslSecretBox;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Db\PdoFactory;
+use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Tests\Support\BarrierConnection;
 use AlohaSocial\Server\Tests\Support\FailingConnection;
 use AlohaSocial\Server\Tests\Support\NullMailer;
@@ -154,39 +156,62 @@ final class PasswordResetTest extends TestCase
         $csrf = $server->csrfFrom($form->body);
         self::assertNotNull($csrf);
 
-        foreach ([1, 2] as $attempt) {
-            $response = $server->form('/forgot-password', [
-                '_csrf' => $csrf,
-                'identifier' => 'alice',
-            ], $cookies);
-            self::assertSame(200, $response->status);
-        }
+        $first = $server->form('/forgot-password', [
+            '_csrf' => $csrf,
+            'identifier' => 'alice',
+        ], $cookies);
+        self::assertSame(200, $first->status);
 
-        $mails = $this->mails($server);
-        self::assertCount(2, $mails);
+        // Deliver the first mail before the second request supersedes it.
+        $firstToken = $this->mailedToken($server);
+        self::assertNotNull($firstToken);
 
-        $tokens = [];
-        foreach ($mails as $mail) {
-            self::assertSame(1, preg_match('/token=([A-Za-z0-9_-]+)/', (string) file_get_contents($mail), $match));
-            $tokens[] = $match[1];
-        }
+        $second = $server->form('/forgot-password', [
+            '_csrf' => $csrf,
+            'identifier' => 'alice',
+        ], $cookies);
+        self::assertSame(200, $second->status);
 
-        self::assertNotSame($tokens[0], $tokens[1]);
+        $secondToken = $this->mailedToken($server, [$firstToken]);
+        self::assertNotNull($secondToken);
+        self::assertNotSame($firstToken, $secondToken);
 
         // Only the newest link works; the older row was invalidated.
         $older = $server->send('GET', '/reset-password', [
-            'query' => ['token' => $tokens[0]],
+            'query' => ['token' => $firstToken],
             'cookies' => $cookies,
         ]);
         $newer = $server->send('GET', '/reset-password', [
-            'query' => ['token' => $tokens[1]],
+            'query' => ['token' => $secondToken],
             'cookies' => $cookies,
         ]);
 
-        // Mail files of the same second have no guaranteed order, so assert
-        // that exactly one of the two links survived the second request.
-        self::assertSame(1, count(array_filter([$older->status, $newer->status], static fn (int $status): bool => $status === 200)));
-        self::assertSame(1, count(array_filter([$older->status, $newer->status], static fn (int $status): bool => $status === 400)));
+        self::assertSame(400, $older->status);
+        self::assertSame(200, $newer->status);
+    }
+
+    public function testSupersededResetMailIsNeverDelivered(): void
+    {
+        $server = new TestServer();
+        $server->createAccount();
+
+        self::assertTrue($server->runtime->passwordReset->request('alice'));
+        self::assertTrue($server->runtime->passwordReset->request('alice'));
+
+        // Both requests committed their token rows; the first mail was
+        // cancelled before the worker could deliver it.
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM password_reset',
+        ));
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mail_outbox WHERE status = 'pending'",
+        ));
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mail_outbox WHERE status = 'cancelled'",
+        ));
+
+        $mails = $this->mails($server);
+        self::assertCount(1, $mails);
     }
 
     public function testConcurrentSubmissionsConsumeTheTokenExactlyOnce(): void
@@ -432,7 +457,12 @@ final class PasswordResetTest extends TestCase
             $database,
             new AccountRepository($database, $clock),
             new PasswordHasher(),
-            new NullMailer(),
+            new MailOutbox(
+                $database,
+                new NullMailer(),
+                OpenSslSecretBox::fromBase64Key(OpenSslSecretBox::generateKey()),
+                $clock,
+            ),
             $clock,
             $server->config->instanceUrl,
         );
@@ -475,18 +505,37 @@ final class PasswordResetTest extends TestCase
     private function requestToken(TestServer $server, array $exclude = []): string
     {
         self::assertTrue($server->runtime->passwordReset->request('alice'));
-        $mails = $this->mails($server);
-        self::assertNotEmpty($mails);
-
-        foreach ($mails as $mail) {
-            $message = (string) file_get_contents($mail);
-            self::assertSame(1, preg_match('/token=([A-Za-z0-9_-]+)/', $message, $match));
-            if (!in_array($match[1], $exclude, true)) {
-                return $match[1];
-            }
+        $token = $this->mailedToken($server, $exclude);
+        if ($token !== null) {
+            return $token;
         }
 
         self::fail('No new reset token was mailed.');
+    }
+
+    /**
+     * Deliver queued mail and return the token from the newest message that
+     * is not in $exclude, or null when every mailed token was excluded.
+     *
+     * @param list<string> $exclude
+     */
+    private function mailedToken(TestServer $server, array $exclude = []): ?string
+    {
+        $mails = $this->mails($server);
+        $found = [];
+        foreach ($mails as $mail) {
+            $message = (string) file_get_contents($mail);
+            self::assertSame(1, preg_match('/token=([A-Za-z0-9_-]+)/', $message, $match));
+            $found[] = $match[1];
+        }
+
+        foreach (array_reverse($found) as $token) {
+            if (!in_array($token, $exclude, true)) {
+                return $token;
+            }
+        }
+
+        return null;
     }
 
     private function tokenUsedAt(TestServer $server, string $token): ?string
@@ -504,6 +553,8 @@ final class PasswordResetTest extends TestCase
      */
     private function mails(TestServer $server): array
     {
+        // Requests only queue mail; the worker tick delivers it.
+        $server->runtime->mailOutbox->dispatch(25);
         $files = glob($server->config->mailLogDirectory . '/*.eml');
 
         return is_array($files) ? array_values($files) : [];

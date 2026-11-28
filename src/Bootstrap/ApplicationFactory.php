@@ -96,6 +96,7 @@ use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\LogMailer;
+use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
@@ -283,6 +284,7 @@ final class ApplicationFactory
             : new LogMailer($this->config->mailLogDirectory, $this->config->mailFrom);
 
         $passwordHasher = new PasswordHasher();
+        $mailOutbox = new MailOutbox($database, $mailer, $this->secretBox(), $clock);
         $sessions = new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock);
         $interactions = new PostInteractions(
             $app->posts,
@@ -315,11 +317,12 @@ final class ApplicationFactory
                 $database,
                 $accounts,
                 $passwordHasher,
-                $mailer,
+                $mailOutbox,
                 $clock,
                 $this->config->instanceUrl,
             ),
             mailer: $mailer,
+            mailOutbox: $mailOutbox,
             view: new View($this->root . '/resources/views'),
             clock: $clock,
             interactions: $interactions,

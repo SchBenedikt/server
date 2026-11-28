@@ -12,11 +12,13 @@ namespace AlohaSocial\Server\Tests;
 use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Db\PdoConnection;
+use AlohaSocial\Core\Security\OpenSslSecretBox;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\PasswordResetService;
+use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Migrations\Version202611280014CredentialVersioning;
 use AlohaSocial\Server\Tests\Support\BarrierConnection;
 use AlohaSocial\Server\Tests\Support\FailingConnection;
@@ -312,7 +314,12 @@ final class PostgresPasswordResetTest extends TestCase
             $database,
             new AccountRepository($database, $this->clock),
             new PasswordHasher(),
-            new NullMailer(),
+            new MailOutbox(
+                $database,
+                new NullMailer(),
+                OpenSslSecretBox::fromBase64Key(OpenSslSecretBox::generateKey()),
+                $this->clock,
+            ),
             $this->clock,
             'https://social.example.test',
         );

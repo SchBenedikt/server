@@ -70,6 +70,11 @@ final readonly class AccountErasureCleanup
             $user = ['account_id' => $accountId];
 
             $delete('sessions', 'DELETE FROM session WHERE account_id = :account_id', $user);
+            $delete(
+                'queued_mail',
+                'DELETE FROM mail_outbox WHERE account_id = :account_id',
+                $user,
+            );
             $delete('atproto_sessions', 'DELETE FROM atproto_session WHERE account_id = :account_id', $user);
             $delete(
                 'linked_bluesky_credentials',

@@ -76,6 +76,24 @@ function refreshRemoteActorProfiles(Runtime $runtime, int $limit = 8): void
     }
 }
 
+/**
+ * Deliver queued transactional mail (password resets today).
+ *
+ * A failing transport leaves rows pending with bounded backoff; the next
+ * tick retries. Cancelled rows are swept so the table stays small.
+ */
+function dispatchMailOutbox(Runtime $runtime): void
+{
+    try {
+        $result = $runtime->mailOutbox->dispatch(10);
+        if ($result['failed'] > 0) {
+            fwrite(STDERR, 'Mail outbox marked ' . $result['failed'] . " message(s) failed.\n");
+        }
+    } catch (Throwable $exception) {
+        fwrite(STDERR, 'Mail outbox dispatch failed: ' . $exception->getMessage() . "\n");
+    }
+}
+
 /** Complete host cleanup after Core's durable account erasure reaches `erased`. */
 function finalizeAccountErasures(Runtime $runtime): void
 {
@@ -108,6 +126,7 @@ try {
 if ($once) {
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
+    dispatchMailOutbox($runtime);
     syncAtproto($runtime);
     refreshRemoteEngagement($runtime, 25);
     refreshRemoteActorProfiles($runtime, 25);
@@ -157,6 +176,7 @@ while (!$stop) {
     // worker is not a busy loop.
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
+    dispatchMailOutbox($runtime);
     syncAtproto($runtime);
 
     // Origin requests are rate-limited per peer, so a small batch once a
