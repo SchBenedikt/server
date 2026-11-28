@@ -553,6 +553,10 @@ Series provided:
   so high-cardinality paths do not explode the series count.
 - `aloha_queue_jobs_pending`, `aloha_queue_jobs_running`,
   `aloha_queue_jobs_dead` — `social_job` backlog; `dead` should be zero.
+- `aloha_queue_jobs_pending_by_type{type}` and
+  `aloha_queue_jobs_dead_by_type{type}` — the same backlog split by job
+  handler (`activitypub.*`, `atproto.*`, mail, …), so a failure names the
+  pipeline that is stuck instead of a bare count.
 - `aloha_queue_oldest_pending_age_seconds` — age of the oldest job already
   due but not yet reserved. Growth means the worker is stalled or
   backlogged even while `pending` looks small.
@@ -575,7 +579,8 @@ Series provided:
 - `aloha_metrics_collection_errors` — non-zero when a scrape-time gauge
   could not be read (database hiccup); the HTTP metrics still render.
 
-Suggested alerts: `aloha_queue_jobs_dead > 0` for longer than one worker
+Suggested alerts: `aloha_queue_jobs_dead > 0` or any
+`aloha_queue_jobs_dead_by_type > 0` for longer than one worker
 tick, `aloha_queue_oldest_pending_age_seconds > 300` for 10 minutes,
 `aloha_worker_heartbeat_age_seconds > 90` for 5 minutes,
 `aloha_storage_free_bytes / aloha_storage_total_bytes < 0.1` for 15

@@ -230,6 +230,29 @@ final class FrontController
                 'SELECT COUNT(*) FROM remote_engagement_request',
             );
 
+            // Job outcomes by coarse class: dead-lettered jobs name the
+            // failing pipeline (federation delivery, AT Protocol publish,
+            // mail) and pending-by-type shows which backlog is growing.
+            // Type names are a bounded set of job handlers, never payload
+            // data, so the label cardinality stays small.
+            foreach ($db->fetchAll(
+                'SELECT type, COUNT(*) AS n FROM social_job WHERE dead_at IS NOT NULL GROUP BY type',
+            ) as $row) {
+                $type = Metrics::sanitizeLabelValue(
+                    is_string($row['type'] ?? null) ? $row['type'] : 'unknown',
+                );
+                $seriesGauges['aloha_queue_jobs_dead_by_type']['type=' . $type] = (float) $row['n'];
+            }
+            foreach ($db->fetchAll(
+                'SELECT type, COUNT(*) AS n FROM social_job'
+                . ' WHERE dead_at IS NULL AND reserved_at IS NULL GROUP BY type',
+            ) as $row) {
+                $type = Metrics::sanitizeLabelValue(
+                    is_string($row['type'] ?? null) ? $row['type'] : 'unknown',
+                );
+                $seriesGauges['aloha_queue_jobs_pending_by_type']['type=' . $type] = (float) $row['n'];
+            }
+
             // Per-source inbound sync health (#170): how stale each AT
             // Protocol source's checkpoint is, whether the last attempt
             // failed, and whether the core marked cached content stale.
