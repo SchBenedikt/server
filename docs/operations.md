@@ -51,12 +51,17 @@ the account lifecycle before creating public identities.
 ### Password reset by email
 
 The login page links to `/forgot-password`. A request stores only a SHA-256
-hash of a single-use token, sends a link that expires after one hour, and a
-completed reset revokes every session. The token is claimed atomically inside
-the reset transaction, each account has at most one live link, and a link is
-bound to the credential generation it was issued for. A password changed by an
-administrator or the CLI therefore invalidates older emailed links instead of
-being overwritten by them.
+hash of a single-use token and queues the mail in `mail_outbox` inside the
+same transaction; the worker delivers it with bounded retries, so an SMTP
+outage delays the link instead of losing it or failing the request. Links
+expire after one hour, a completed reset revokes every session, and the
+dispatcher cancels queued mail whose token was used, rotated or expired, so
+an obsolete link is never delivered. Terminal outbox rows are pruned after
+seven days. The token is claimed atomically inside the reset transaction,
+each account has at most one live link, and a link is bound to the credential
+generation it was issued for. A password changed by an administrator or the
+CLI therefore invalidates older emailed links instead of being overwritten
+by them.
 
 Development (`ALOHASOCIAL_MAIL_TRANSPORT=log`):
 
@@ -65,9 +70,14 @@ ls var/mail/
 # open the newest .eml and use the reset link
 ```
 
-Production should use SMTP. If delivery fails, the endpoint answers `503`; fix
-the SMTP configuration instead of lowering the transport to `log` on a public
-instance.
+The `log` transport writes complete messages — including live reset tokens —
+to `var/mail/` as plaintext `.eml` files. Use it only on development
+machines; on any reachable instance configure SMTP.
+
+Production should use SMTP. If the worker cannot deliver, messages stay
+pending with backoff and `last_error` records the failure class; check
+`mail_outbox` and the worker journal instead of lowering the transport to
+`log` on a public instance.
 
 To reset a password without email:
 
