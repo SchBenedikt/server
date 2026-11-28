@@ -17,6 +17,7 @@ import { getApi, hydrateTimelineBoosts } from '../lib/api';
 import { onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { accountName, absoluteTime, formatCount, handleLabel, isRemoteId, truncate } from '../lib/format';
 import { route } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, openComposer, showToast } from '../lib/state';
 import type { Account, AtprotoFollowEntry, FeaturedTag, RemoteFollowingEntry, RemoteProfileData, TimelineItem } from '../lib/types';
 
@@ -92,17 +93,17 @@ const connectionError = ref('');
 const connectionNetwork = ref<'activitypub' | 'bluesky'>('activitypub');
 const connectionLocal = ref(false);
 const connectionGeneration = ref(0);
-const connectionTitle = computed(() => connectionType.value === 'followers' ? 'Followers' : 'Following');
+const connectionTitle = computed(() => t(connectionType.value === 'followers' ? 'profile.followersTitle' : 'profile.followingTitle'));
 const connectionEmptyText = computed(() => {
 	if (connectionLocal.value) {
-		return connectionType.value === 'followers'
-			? 'Nobody follows this profile yet.'
-			: 'This profile does not follow anyone yet.';
+		return t(connectionType.value === 'followers'
+			? 'profile.emptyFollowersLocal'
+			: 'profile.emptyFollowingLocal');
 	}
 
-	return connectionType.value === 'followers'
-		? 'This profile has no publicly visible followers.'
-		: 'This profile does not publicly follow anyone.';
+	return t(connectionType.value === 'followers'
+		? 'profile.emptyFollowersRemote'
+		: 'profile.emptyFollowingRemote');
 });
 const joinedLabel = computed(() => {
 	const value = account.value?.published_at ?? '';
@@ -205,14 +206,14 @@ async function toggleMute(): Promise<void> {
 		if (isMuted.value) {
 			await getApi().unmuteAccount(target.id);
 			setRelationshipFlag('muting', false);
-			showToast(`@${target.handle} is no longer muted.`, 'success');
+			showToast(t('profile.muteRemoved', { handle: target.handle }), 'success');
 		} else {
 			await getApi().muteAccount(target.id);
 			setRelationshipFlag('muting', true);
-			showToast(`@${target.handle} is now muted.`, 'success');
+			showToast(t('profile.muted', { handle: target.handle }), 'success');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The mute could not be changed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('profile.muteFailed'), 'error');
 	} finally {
 		moderationBusy.value = '';
 	}
@@ -236,20 +237,20 @@ async function toggleBlock(): Promise<void> {
 				sameActor(candidate.actor, target.id) || sameActor(candidate.actor, target.url)
 			));
 			if (entry === undefined) {
-				throw new Error('The block was not found.');
+				throw new Error(t('profile.blockNotFound'));
 			}
 
 			await getApi().unblockActor(entry.id);
 			setRelationshipFlag('blocking', false);
-			showToast(`Block on @${target.handle} removed.`, 'success');
+			showToast(t('profile.blockRemoved', { handle: target.handle }), 'success');
 		} else {
 			const actor = target.id.startsWith('http') ? target.id : target.url;
 			await getApi().blockActor(actor);
 			setRelationshipFlag('blocking', true);
-			showToast(`@${target.handle} is now blocked.`, 'success');
+			showToast(t('profile.blocked', { handle: target.handle }), 'success');
 		}
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The block could not be changed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('profile.blockFailed'), 'error');
 	} finally {
 		moderationBusy.value = '';
 	}
@@ -271,28 +272,24 @@ const canRemoteFollow = computed(() => (
 ));
 const remoteFollowLabel = computed(() => {
 	if (remoteKind.value === 'bluesky' && atprotoFollow.value !== null) {
-		return atprotoFollow.value.state === 'pending' ? 'Retry follow' : 'Following';
+		return t(atprotoFollow.value.state === 'pending' ? 'profile.followRetry' : 'profile.following');
 	}
 	const relationship = remoteRelationship.value;
 	if (relationship !== null) {
-		return relationship.state === 'accepted' ? 'Following' : 'Requested';
+		return t(relationship.state === 'accepted' ? 'profile.following' : 'profile.requested');
 	}
 
-	return remoteFollowState.value === 'sending' ? 'Sending…' : 'Follow';
+	return t(remoteFollowState.value === 'sending' ? 'profile.sending' : 'profile.follow');
 });
 const emptyText = computed(() => {
 	if (tab.value === 'media') {
-		return isRemoteProfile.value
-			? 'This profile has no images or videos in the most recently loaded posts.'
-			: 'This person has no images or videos in the most recently loaded posts.';
+		return t(isRemoteProfile.value ? 'profile.emptyMediaRemote' : 'profile.emptyMediaLocal');
 	}
 	if (isSelf.value) {
-		return 'Write the first post — it will appear here.';
+		return t('profile.emptySelf');
 	}
 
-	return isRemoteProfile.value
-		? 'This profile has not posted in the recently loaded public posts yet.'
-		: 'This person has not posted in the recently loaded public posts yet.';
+	return t(isRemoteProfile.value ? 'profile.emptyRemote' : 'profile.emptyLocal');
 });
 const externalProfileUrl = computed(() => {
 	const url = account.value?.url ?? '';
@@ -312,7 +309,7 @@ const networkLabel = computed(() => {
 		return 'Bluesky';
 	}
 
-	return remoteHost.value !== '' ? remoteHost.value : 'Federated Network';
+	return remoteHost.value !== '' ? remoteHost.value : t('profile.networkFederated');
 });
 const networkIcon = computed(() => remoteKind.value === 'bluesky' ? 'sparkles' : 'globe');
 
@@ -362,7 +359,7 @@ async function loadProfile(): Promise<void> {
 		}
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'The profile could not be loaded.';
+			error.value = caught instanceof Error ? caught.message : t('profile.loadFailed');
 		}
 	} finally {
 		if (current === generation) {
@@ -483,7 +480,7 @@ async function loadRemote(reset: boolean): Promise<void> {
 		hasMore.value = data.cursor !== null && data.posts.length > 0;
 		loadedOnce.value = true;
 	} catch (caught) {
-		const message = caught instanceof Error ? caught.message : 'The remote profile could not be loaded.';
+		const message = caught instanceof Error ? caught.message : t('profile.remoteLoadFailed');
 		if (current === generation) {
 			if (reset) {
 				error.value = message;
@@ -576,7 +573,7 @@ async function loadPosts(reset: boolean): Promise<void> {
 		)));
 		loadedOnce.value = true;
 	} catch (caught) {
-		postsError.value = caught instanceof Error ? caught.message : 'Posts could not be loaded.';
+		postsError.value = caught instanceof Error ? caught.message : t('profile.postsFailed');
 	} finally {
 		postsLoading.value = false;
 	}
@@ -646,7 +643,7 @@ async function loadConnections(reset: boolean, expected = connectionGeneration.v
 		if (expected === connectionGeneration.value) {
 			connectionError.value = caught instanceof Error
 				? caught.message
-				: 'Connections could not be loaded.';
+				: t('profile.connectionsFailed');
 		}
 	} finally {
 		if (expected === connectionGeneration.value) {
@@ -709,7 +706,7 @@ async function followRemote(): Promise<void> {
 		if (remoteKind.value === 'bluesky' && profile.did) {
 			atprotoFollow.value = await getApi().followAtproto(profile.did);
 			remoteFollowState.value = 'sent';
-			showToast(`You now follow ${profile.handle} on Bluesky.`, 'success');
+			showToast(t('profile.followBsky', { handle: profile.handle }), 'success');
 			return;
 		}
 		const entry = await getApi().followRemote(profile.id, profile.inbox as string);
@@ -718,10 +715,10 @@ async function followRemote(): Promise<void> {
 			entry,
 		];
 		remoteFollowState.value = 'sent';
-		showToast(`Follow request sent to ${profile.handle}.`, 'success');
+		showToast(t('profile.followSent', { handle: profile.handle }), 'success');
 	} catch (caught) {
 		remoteFollowState.value = 'idle';
-		showToast(caught instanceof Error ? caught.message : 'The follow request failed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('profile.followFailed'), 'error');
 	}
 }
 
@@ -732,10 +729,10 @@ async function unfollowRemote(): Promise<void> {
 			await getApi().unfollowAtproto(account.value.did);
 			atprotoFollow.value = null;
 			remoteFollowState.value = 'idle';
-			showToast(`You no longer follow ${account.value.handle} on Bluesky.`, 'success');
+			showToast(t('profile.unfollowBsky', { handle: account.value.handle }), 'success');
 		} catch (caught) {
 			remoteFollowState.value = 'idle';
-			showToast(caught instanceof Error ? caught.message : 'The unfollow failed.', 'error');
+			showToast(caught instanceof Error ? caught.message : t('profile.unfollowFailed'), 'error');
 		}
 		return;
 	}
@@ -749,19 +746,19 @@ async function unfollowRemote(): Promise<void> {
 		await getApi().unfollowRemote(relationship.id);
 		remoteFollowingList.value = remoteFollowingList.value.filter((item) => item.id !== relationship.id);
 		remoteFollowState.value = 'idle';
-		showToast(`You no longer follow ${account.value?.handle ?? 'this account'}.`, 'success');
+		showToast(t('profile.unfollowed', { handle: account.value?.handle ?? t('common.account') }), 'success');
 	} catch (caught) {
 		remoteFollowState.value = 'idle';
-		showToast(caught instanceof Error ? caught.message : 'The unfollow request failed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('profile.unfollowRequestFailed'), 'error');
 	}
 }
 
 async function share(): Promise<void> {
 	try {
 		await navigator.clipboard.writeText(profileUrl.value);
-		showToast('Profile link copied.', 'success');
+		showToast(t('profile.linkCopied'), 'success');
 	} catch {
-		window.prompt('Profile link', profileUrl.value);
+		window.prompt(t('profile.linkPrompt'), profileUrl.value);
 	}
 }
 
@@ -797,11 +794,11 @@ function closeEdit(): void {
 async function saveProfile(): Promise<void> {
 	const name = editName.value.trim();
 	if (name === '') {
-		editError.value = 'Please enter a display name.';
+		editError.value = t('profile.nameRequired');
 		return;
 	}
 	if (Array.from(name).length > 80) {
-		editError.value = 'The display name may be at most 80 characters long.';
+		editError.value = t('profile.nameTooLong');
 		return;
 	}
 
@@ -825,9 +822,9 @@ async function saveProfile(): Promise<void> {
 		}
 		void refreshAccount(handle.value);
 		editing.value = false;
-		showToast('Profile updated.', 'success');
+		showToast(t('profile.updated'), 'success');
 	} catch (caught) {
-		editError.value = caught instanceof Error ? caught.message : 'The profile could not be saved.';
+		editError.value = caught instanceof Error ? caught.message : t('profile.saveFailed');
 	} finally {
 		editSaving.value = false;
 	}
@@ -878,13 +875,13 @@ onUnmounted(() => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Profile"
+			:title="t('profile.title')"
 			:subtitle="handleText"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Share profile link" title="Share profile" @click="share">
+				<button type="button" class="a-icon-btn" :aria-label="t('profile.shareAria')" :title="t('profile.shareTitle')" @click="share">
 					<AppIcon name="share" :size="19" />
 				</button>
 			</template>
@@ -895,11 +892,11 @@ onUnmounted(() => {
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
 			<div>
-				<strong>{{ isRemoteProfile ? 'Remote profile unavailable' : 'Profile not found' }}</strong>
+				<strong>{{ t(isRemoteProfile ? 'profile.remoteUnavailable' : 'profile.notFound') }}</strong>
 				<p>{{ error }}</p>
 			</div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadProfile">Try again</button>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/explore">Back to Explore</a>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadProfile">{{ t('common.tryAgain') }}</button>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/explore">{{ t('profile.backExplore') }}</a>
 		</div>
 
 		<template v-else-if="account">
@@ -920,10 +917,10 @@ onUnmounted(() => {
 						<div class="a-profile__actions">
 							<template v-if="isSelf">
 								<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="openEdit">
-									<AppIcon name="settings" :size="15" /> Edit profile
+									<AppIcon name="settings" :size="15" /> {{ t('profile.edit') }}
 								</button>
 								<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-									<AppIcon name="pen" :size="15" /> Write post
+									<AppIcon name="pen" :size="15" /> {{ t('drafts.writePost') }}
 								</button>
 							</template>
 
@@ -950,7 +947,7 @@ onUnmounted(() => {
 									rel="noopener noreferrer"
 								>
 									<AppIcon name="external" :size="15" />
-									{{ remoteKind === 'bluesky' ? 'Open on Bluesky' : 'Open original' }}
+									{{ t(remoteKind === 'bluesky' ? 'profile.openBsky' : 'card.openOriginal') }}
 								</a>
 							</template>
 
@@ -961,8 +958,8 @@ onUnmounted(() => {
 								type="button"
 								class="a-icon-btn"
 								:class="{ 'a-icon-btn--danger': isMuted }"
-								:aria-label="isMuted ? 'Unmute account' : 'Mute account'"
-								:title="isMuted ? 'Unmute account' : 'Mute'"
+								:aria-label="t(isMuted ? 'profile.unmute' : 'profile.mute')"
+								:title="t(isMuted ? 'profile.unmuteTitle' : 'profile.muteTitle')"
 								:disabled="moderationBusy !== ''"
 								@click="toggleMute"
 							>
@@ -973,8 +970,8 @@ onUnmounted(() => {
 								type="button"
 								class="a-icon-btn"
 								:class="{ 'a-icon-btn--danger': isBlocked }"
-								:aria-label="isBlocked ? 'Unblock account' : 'Block account'"
-								:title="isBlocked ? 'Unblock account' : 'Block'"
+								:aria-label="t(isBlocked ? 'profile.unblock' : 'profile.block')"
+								:title="t(isBlocked ? 'profile.unblockTitle' : 'profile.blockTitle')"
 								:disabled="moderationBusy !== ''"
 								@click="toggleBlock"
 							>
@@ -984,8 +981,8 @@ onUnmounted(() => {
 								v-if="canReport"
 								type="button"
 								class="a-icon-btn"
-								aria-label="Report profile"
-								title="Report profile"
+								:aria-label="t('profile.report')"
+								:title="t('profile.report')"
 								@click="openReport"
 							>
 								<AppIcon name="flag" :size="17" />
@@ -1003,7 +1000,7 @@ onUnmounted(() => {
 							<span v-else-if="remoteKind === 'bluesky'">· AT Protocol</span>
 						</p>
 						<p v-else-if="relationship?.followed_by" class="a-profile__follows-you">
-							<AppIcon name="users" :size="14" /> Follows you
+							<AppIcon name="users" :size="14" /> {{ t('profile.followsYou') }}
 						</p>
 					</div>
 
@@ -1023,10 +1020,10 @@ onUnmounted(() => {
 					<p class="a-profile__note">
 						<AppIcon name="globe" :size="15" />
 						<template v-if="isRemoteProfile">
-							Profile on {{ networkLabel }}
+							{{ t('profile.onNetwork', { network: networkLabel }) }}
 						</template>
 						<template v-else>
-							Public profile on {{ appState.instance?.name ?? 'Aloha Social' }}
+							{{ t('profile.onInstance', { instance: appState.instance?.name ?? 'Aloha Social' }) }}
 						</template>
 					</p>
 
@@ -1035,44 +1032,44 @@ onUnmounted(() => {
 							class="a-profile__stat--button"
 							role="button"
 							tabindex="0"
-							:aria-label="`Show followed profiles of ${displayName}`"
+							:aria-label="t('profile.showFollowing', { name: displayName })"
 							@click="openConnections('following')"
 							@keydown.enter.prevent="openConnections('following')"
 							@keydown.space.prevent="openConnections('following')"
 						>
 							<dt>{{ formatCount(account.following_count) }}</dt>
-							<dd>following</dd>
+							<dd>{{ t('profile.statFollowing') }}</dd>
 						</div>
 						<div
 							class="a-profile__stat--button"
 							role="button"
 							tabindex="0"
-							:aria-label="`Show followers of ${displayName}`"
+							:aria-label="t('profile.showFollowers', { name: displayName })"
 							@click="openConnections('followers')"
 							@keydown.enter.prevent="openConnections('followers')"
 							@keydown.space.prevent="openConnections('followers')"
 						>
 							<dt>{{ formatCount(account.followers_count) }}</dt>
-							<dd>followers</dd>
+							<dd>{{ t('profile.statFollowers') }}</dd>
 						</div>
 						<div v-if="isRemoteProfile && account.posts_count !== null && account.posts_count !== undefined">
 							<dt>{{ formatCount(account.posts_count) }}</dt>
-							<dd>Posts</dd>
+							<dd>{{ t('profile.statPosts') }}</dd>
 						</div>
 						<div v-else>
 							<dt>{{ posts.length }}{{ hasMore ? '+' : '' }}</dt>
-							<dd>Posts loaded</dd>
+							<dd>{{ t('profile.statPostsLoaded') }}</dd>
 						</div>
 					</dl>
 
 					<p v-if="isRemoteProfile && joinedLabel !== ''" class="a-profile__joined">
 						<AppIcon name="calendar" :size="14" />
-						Joined am {{ joinedLabel }}
+						{{ t('profile.joined', { time: joinedLabel }) }}
 					</p>
 				</div>
 			</section>
 
-			<div class="a-tabs a-profile__tabs" role="tablist" aria-label="Profile view">
+			<div class="a-tabs a-profile__tabs" role="tablist" :aria-label="t('profile.tabsAria')">
 				<button
 					type="button"
 					class="a-tabs__item"
@@ -1081,7 +1078,7 @@ onUnmounted(() => {
 					:aria-selected="tab === 'posts'"
 					@click="tab = 'posts'"
 				>
-					Posts
+					{{ t('profile.tabPosts') }}
 				</button>
 				<button
 					type="button"
@@ -1091,7 +1088,7 @@ onUnmounted(() => {
 					:aria-selected="tab === 'media'"
 					@click="tab = 'media'"
 				>
-					Media
+					{{ t('profile.tabMedia') }}
 				</button>
 			</div>
 
@@ -1099,18 +1096,18 @@ onUnmounted(() => {
 
 			<div v-else-if="postsError !== '' && posts.length === 0" class="a-error-panel">
 				<AppIcon name="info" :size="22" />
-				<div><strong>Posts unavailable</strong><p>{{ postsError }}</p></div>
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadPosts(true)">Try again</button>
+				<div><strong>{{ t('profile.postsUnavailable') }}</strong><p>{{ postsError }}</p></div>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadPosts(true)">{{ t('common.tryAgain') }}</button>
 			</div>
 
 			<EmptyState
 				v-else-if="loadedOnce && displayPosts.length === 0"
 				:icon="tab === 'media' ? 'image' : 'pen'"
-				:title="tab === 'media' ? 'No images yet' : 'No public posts yet'"
+				:title="t(tab === 'media' ? 'profile.noImages' : 'profile.noPublicPosts')"
 				:text="emptyText"
 			>
 				<button v-if="isSelf" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-					Write post
+					{{ t('drafts.writePost') }}
 				</button>
 			</EmptyState>
 
@@ -1131,7 +1128,7 @@ onUnmounted(() => {
 				:disabled="postsLoading"
 				@click="loadPosts(false)"
 			>
-				{{ postsLoading ? 'Loading…' : 'Load more posts' }}
+				{{ postsLoading ? t('common.loading') : t('profile.loadMorePosts') }}
 			</button>
 
 			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error" role="alert">{{ postsError }}</p>
@@ -1163,15 +1160,15 @@ onUnmounted(() => {
 			>
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Your profile</p>
-						<h2 id="a-profile-edit-title">Edit profile</h2>
+						<p class="a-profile-edit__eyebrow">{{ t('profile.editEyebrow') }}</p>
+						<h2 id="a-profile-edit-title">{{ t('profile.editTitle') }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close editor" @click="closeEdit">
+					<button type="button" class="a-icon-btn" :aria-label="t('profile.closeEditor')" @click="closeEdit">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
-				<label class="a-profile-edit__label" for="a-profile-display-name">display name</label>
+				<label class="a-profile-edit__label" for="a-profile-display-name">{{ t('profile.displayNameLabel') }}</label>
 				<input
 					id="a-profile-display-name"
 					v-model="editName"
@@ -1180,25 +1177,25 @@ onUnmounted(() => {
 					autocomplete="name"
 					required
 				/>
-				<p class="a-profile-edit__hint">This is how you appear in posts and notifications. Your handle @{{ handleText }} stays unchanged.</p>
+				<p class="a-profile-edit__hint">{{ t('profile.nameHint', { handle: handleText }) }}</p>
 
-				<label class="a-profile-edit__label" for="a-profile-featured-tags">Profile hashtags</label>
+				<label class="a-profile-edit__label" for="a-profile-featured-tags">{{ t('profile.tagsLabel') }}</label>
 				<input
 					id="a-profile-featured-tags"
 					v-model="editTags"
 					type="text"
 					maxlength="600"
-					placeholder="e.g. fediverse, photography, linux"
+					:placeholder="t('profile.tagsPlaceholder')"
 				/>
-				<p class="a-profile-edit__hint">Up to 10 hashtags, separated by commas. They appear as quick links on your profile.</p>
+				<p class="a-profile-edit__hint">{{ t('profile.tagsHint') }}</p>
 
 				<p v-if="editError" class="a-form-error" role="alert">{{ editError }}</p>
 
 				<footer class="a-profile-edit__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="editSaving" @click="closeEdit">Cancel</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="editSaving" @click="closeEdit">{{ t('common.cancel') }}</button>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="editSaving">
 						<AppIcon v-if="editSaving" name="refresh" :size="15" class="a-spin" />
-						{{ editSaving ? 'Saving…' : 'Save' }}
+						{{ editSaving ? t('common.saving') : t('common.save') }}
 					</button>
 				</footer>
 			</form>
@@ -1224,17 +1221,15 @@ onUnmounted(() => {
 						<p class="a-profile-edit__eyebrow">{{ account?.handle ?? handleText }}</p>
 						<h2 id="a-connections-title">{{ connectionTitle }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close list" @click="closeConnections">
+					<button type="button" class="a-icon-btn" :aria-label="t('profile.closeList')" @click="closeConnections">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
 				<p class="a-connections__meta">
 					<AppIcon :name="connectionNetwork === 'bluesky' && !connectionLocal ? 'sparkles' : 'globe'" :size="14" />
-					{{ connectionLocal
-						? 'This instance'
-						: connectionNetwork === 'bluesky' ? 'Bluesky · AT Protocol' : 'fediverse · ActivityPub' }}
-					<span>· {{ connectionProfiles.length }} loaded</span>
+					{{ t(connectionLocal ? 'profile.connLocal' : connectionNetwork === 'bluesky' ? 'profile.connBsky' : 'profile.connFed') }}
+					<span>· {{ t('profile.connLoaded', { count: connectionProfiles.length }) }}</span>
 				</p>
 
 				<p v-if="connectionError !== ''" class="a-form-error" role="alert">{{ connectionError }}</p>
@@ -1255,10 +1250,10 @@ onUnmounted(() => {
 								</span>
 								<span v-if="profile.bio" class="a-connections__bio">{{ truncate(profile.bio, 170) }}</span>
 								<span class="a-connections__stats">
-									<span>{{ formatCount(profile.followers_count) }} followers</span>
-									<span>{{ formatCount(profile.following_count) }} following</span>
+									<span>{{ t('profile.connFollowers', { count: formatCount(profile.followers_count) }) }}</span>
+									<span>{{ t('profile.connFollowing', { count: formatCount(profile.following_count) }) }}</span>
 									<span v-if="profile.posts_count !== null && profile.posts_count !== undefined">
-										{{ formatCount(profile.posts_count) }} Posts
+										{{ t('profile.connPosts', { count: formatCount(profile.posts_count) }) }}
 									</span>
 								</span>
 							</span>
@@ -1270,7 +1265,7 @@ onUnmounted(() => {
 				<EmptyState
 					v-else-if="!connectionLoading && connectionError === ''"
 					icon="users"
-					title="No profiles"
+					:title="t('profile.noProfiles')"
 					:text="connectionEmptyText"
 				/>
 
@@ -1283,7 +1278,7 @@ onUnmounted(() => {
 						@click="loadConnections(false)"
 					>
 						<AppIcon v-if="connectionLoading" name="refresh" :size="15" class="a-spin" />
-						{{ connectionLoading ? 'Loading…' : 'Load more' }}
+						{{ connectionLoading ? t('common.loading') : t('common.loadMore') }}
 					</button>
 					<span v-else-if="connectionProfiles.length > 0" class="a-connections__end">
 						End of the publicly visible list
