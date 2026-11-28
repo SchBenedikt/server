@@ -36,6 +36,10 @@ final class DatabaseBackupTest extends TestCase
         self::assertIsArray($metadata);
         self::assertSame('alohasocial.database-backup', $metadata['format']);
         self::assertSame(2, $metadata['accounts']);
+        self::assertIsString($metadata['sha256']);
+        self::assertSame(hash_file('sha256', $backup['path']), $metadata['sha256']);
+        self::assertIsString($metadata['core_version']);
+        self::assertIsString($metadata['key_fingerprint']);
 
         $copy = new PDO('sqlite:' . $backup['path'], null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         self::assertSame(2, (int) $copy->query('SELECT COUNT(*) FROM account')->fetchColumn());
@@ -57,6 +61,60 @@ final class DatabaseBackupTest extends TestCase
         self::assertIsArray($files);
         self::assertCount(2, $files);
         self::assertCount(2, glob($directory . '/alohasocial-*.json') ?: []);
+    }
+
+    public function testVerifyAcceptsAnIntactBackupAndRejectsCorruption(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+
+        $service = new DatabaseBackup($server->runtime->database, $server->config);
+        $backup = $service->create($server->config->varDirectory . '/backups');
+
+        $result = $service->verify($backup['path']);
+        self::assertTrue($result['ok'], implode('; ', $result['problems']));
+        self::assertSame('sqlite', $result['metadata']['driver']);
+
+        $corrupt = $backup['path'] . '.copy';
+        copy($backup['path'], $corrupt);
+        copy($backup['metadata_path'], $corrupt . 'x');
+        rename($corrupt . 'x', substr($corrupt, 0, (int) strrpos($corrupt, '.')) . '.json');
+        file_put_contents($corrupt, 'x', FILE_APPEND);
+
+        $failed = $service->verify($corrupt);
+        self::assertFalse($failed['ok']);
+        self::assertNotEmpty($failed['problems']);
+
+        @unlink($corrupt);
+        @unlink(substr($corrupt, 0, (int) strrpos($corrupt, '.')) . '.json');
+    }
+
+    public function testVerifyReportsABackupThatPredatesIntegrityTracking(): void
+    {
+        $server = new TestServer();
+        $service = new DatabaseBackup($server->runtime->database, $server->config);
+        $backup = $service->create($server->config->varDirectory . '/backups');
+
+        $metadataPath = $backup['metadata_path'];
+        $metadata = json_decode((string) file_get_contents($metadataPath), true);
+        unset($metadata['sha256']);
+        file_put_contents($metadataPath, json_encode($metadata));
+
+        $result = $service->verify($backup['path']);
+        self::assertFalse($result['ok']);
+    }
+
+    public function testVerifyFailsWhenTheMetadataIsMissing(): void
+    {
+        $server = new TestServer();
+        $service = new DatabaseBackup($server->runtime->database, $server->config);
+        $backup = $service->create($server->config->varDirectory . '/backups');
+
+        unlink($backup['metadata_path']);
+
+        $result = $service->verify($backup['path']);
+        self::assertFalse($result['ok']);
+        self::assertStringContainsString('metadata', implode(' ', $result['problems']));
     }
 
     public function testAccountCountIsNullBeforeTheSchemaExists(): void

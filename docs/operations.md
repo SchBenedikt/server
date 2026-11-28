@@ -212,12 +212,17 @@ The update command creates and verifies a database backup automatically:
 php bin/backup.php                 # var/backups/, 10 newest kept
 php bin/backup.php --keep=30
 php bin/backup.php --json          # machine-readable path and account count
+php bin/backup.php --verify=FILE   # re-check an existing backup's checksum
 ```
 
 SQLite backups use `VACUUM INTO`, so they are consistent while WAL is active.
 PostgreSQL backups use `pg_dump` in custom format; install the matching client
 on the host. Each backup has a `.json` sidecar with the driver, account count
-and schema version. The backup directory lives inside `var/`, so move it to a
+and schema version, plus a SHA-256 checksum, the creating core version and a
+fingerprint of the instance secret key. `--verify=FILE` recomputes the checksum
+of an existing backup (a pre-checksum backup is reported as unverifiable, not
+trusted) — run it when copying backups off-host or before a restore rehearsal.
+The backup directory lives inside `var/`, so move it to a
 second disk or copy it off-host as part of your normal backup job.
 
 The key and the database belong together: the instance signing key in the
