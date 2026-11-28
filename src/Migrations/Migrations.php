@@ -92,6 +92,7 @@ final class Migrations
             new Version202611280035AccountInvitations(),
             new Version202611280036DismissedAnnouncements(),
             new Version202611280037CoreSchemaFingerprintRefresh(),
+            new Version202611280038RecommendationOptOut(),
         ];
     }
 }

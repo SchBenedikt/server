@@ -301,6 +301,7 @@ async function save(): Promise<void> {
 			mirror_likes_to_atproto: current.mirror_likes_to_atproto,
 			mirror_boosts_to_atproto: current.mirror_boosts_to_atproto,
 			mirror_atproto_account_did: current.mirror_atproto_account_did,
+			recommendations_opt_out: current.recommendations_opt_out,
 		});
 		showToast('Settings saved.', 'success');
 	} catch (caught) {
@@ -762,6 +763,18 @@ watch(signedIn, (value) => {
 						type="checkbox"
 						:checked="preferences.show_boosts"
 						@change="toggleFlag('show_boosts')"
+					>
+				</label>
+
+				<label class="a-settings__row">
+					<span>
+						<strong>Personalized recommendations</strong>
+						<small>Turn off to stop the For You feed and delete stored recommendation signals.</small>
+					</span>
+					<input
+						type="checkbox"
+						:checked="!preferences.recommendations_opt_out"
+						@change="toggleFlag('recommendations_opt_out')"
 					>
 				</label>
 			</section>

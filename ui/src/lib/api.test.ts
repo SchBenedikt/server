@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HostBridge, UiResponse } from '@alohasocial/ui';
 import { createApi, normalizeMastodonStatus } from './api';
+import { markOnline, offline } from './connectivity';
 
 describe('normalizeMastodonStatus', () => {
 	it('decodes a doubly escaped remote status before turning it into text', () => {
@@ -197,5 +198,41 @@ describe('scheduled posts', () => {
 			expires_in: 86400,
 			expires_at: null,
 		});
+	});
+});
+
+describe('network failures', () => {
+	it('reports a dropped connection as a friendly error and flags offline', async () => {
+		const { bridge } = (() => {
+			const script: (UiResponse | Error)[] = [new Error('network down')];
+			let calls = 0;
+			const b = {
+				apiBase: '/api/v1',
+				currentUser: async () => null,
+				request: async (): Promise<UiResponse> => {
+					calls += 1;
+					const next = script[Math.min(calls - 1, script.length - 1)];
+					if (next instanceof Error) {
+						throw next;
+					}
+					return next;
+				},
+				loginUrl: (returnTo: string) => `/login?next=${encodeURIComponent(returnTo)}`,
+				logout: async () => {},
+				navigate: () => {},
+				capabilities: () => ({ media: false, atproto: false }),
+			} as unknown as HostBridge;
+			return { bridge: b };
+		})();
+		const api = createApi(bridge, async () => {
+			throw new Error('unused');
+		});
+
+		await expect(api.likePost('post-1')).rejects.toMatchObject({
+			status: 0,
+			code: 'network_error',
+		});
+		expect(offline.value).toBe(true);
+		markOnline();
 	});
 });

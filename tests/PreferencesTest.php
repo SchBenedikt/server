@@ -513,4 +513,55 @@ final class PreferencesTest extends TestCase
         )['preferences'];
         self::assertSame('public', $bobPreferences['default_visibility']);
     }
+
+    public function testRecommendationOptOutClearsStoredSignalsAndEmptiesTheFeed(): void
+    {
+        $db = $this->server->runtime->database;
+        $db->execute(
+            'INSERT INTO recommendation_snapshot (id_hash, account_id, feed_kind, payload, created_at, expires_at)'
+            . " VALUES ('snap-1', 'alice', 'for-you', '[]', '2026-11-28T10:00:00Z', '2026-11-29T10:00:00Z')",
+        );
+        $db->execute(
+            'INSERT INTO recommendation_feedback (account_id, post_id, kind, created_at)'
+            . " VALUES ('alice', 'post-1', 'more', '2026-11-28T10:00:00Z')",
+        );
+        $db->execute(
+            'INSERT INTO recommendation_impression (account_id, post_id, author_id, seen_at, dwell_ms)'
+            . " VALUES ('alice', 'post-1', 'acct-bob', '2026-11-28T10:00:00Z', 5000)",
+        );
+
+        $updated = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'recommendations_opt_out' => true,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $updated->status, $updated->body);
+        self::assertTrue($this->decoded($updated)['preferences']['recommendations_opt_out']);
+
+        foreach (['recommendation_snapshot', 'recommendation_feedback', 'recommendation_impression'] as $table) {
+            self::assertSame(
+                0,
+                (int) $db->fetchValue('SELECT COUNT(*) FROM ' . $table . ' WHERE account_id = :account', ['account' => 'alice']),
+                $table . ' must be cleared on opt-out',
+            );
+        }
+
+        $feed = $this->server->send('GET', '/api/v1/host/for-you', ['cookies' => $this->aliceCookies]);
+        self::assertSame(200, $feed->status, $feed->body);
+        $body = $this->decoded($feed);
+        self::assertSame([], $body['posts'] ?? null);
+
+        $impressions = $this->server->json('POST', '/api/v1/host/for-you/impressions', [
+            'items' => [['post_id' => 'post-9', 'dwell_ms' => 1000]],
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(202, $impressions->status, $impressions->body);
+        self::assertSame(0, $this->decoded($impressions)['recorded']);
+        self::assertSame(
+            0,
+            (int) $db->fetchValue('SELECT COUNT(*) FROM recommendation_impression WHERE account_id = :account', ['account' => 'alice']),
+        );
+
+        $reenabled = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'recommendations_opt_out' => false,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertFalse($this->decoded($reenabled)['preferences']['recommendations_opt_out']);
+    }
 }
