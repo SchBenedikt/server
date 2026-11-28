@@ -24,17 +24,21 @@ Accept: text/event-stream
 | `user:notification` | `read` or `read:notifications` | Notifications visible to the account. |
 | `direct` | `read` or `read:statuses` | Local direct-status events addressed to the account. Remote direct messages are not supported. |
 | `list` | `read` or `read:lists` | Visible public and followers-only status events from members of the caller's private list. |
+| `hashtag` | `read` or `read:statuses` | Public status events for posts carrying the `tag` query parameter's normalized hashtag. |
 
 Open a list stream with `?stream=list&list=<list-id>`. The list must belong to
 the authenticated account. Membership and followers-only access are checked
 when reading and again before a status frame is written; direct statuses are
 never included.
 
+Open a hashtag stream with `?stream=hashtag&tag=<name>` (`#` optional, matched
+case-insensitively against the stored normalized tags). Only public statuses
+match; unlisted and followers-only posts never appear, and `status.deleted`
+events are delivered while the post's hashtag rows still exist.
+
 The host emits `update`, `delete` and `notification` SSE events. Events that do
 not remain visible to the subscriber, have an unsupported projection, or fail
-serialization advance the cursor without exposing their payload. Hashtag
-streams are not implemented.
-
+serialization advance the cursor without exposing their payload. 
 ## Reconnect and lifecycle
 
 The event broker stores events and per-account recipient rows in the server
@@ -55,6 +59,6 @@ stream checks token revocation, account disable and account deletion while it
 runs. Reverse proxies must disable response buffering for this path; the
 response includes `X-Accel-Buffering: no`.
 
-This is SSE only. WebSocket transport, remote direct messages, hashtag streams
-and integration against third-party Mastodon clients remain outside the current
+This is SSE only. WebSocket transport, remote direct messages and
+integration against third-party Mastodon clients remain outside the current
 compatibility claim. See the Core [streaming ADR](https://github.com/SchBenedikt/core/blob/main/docs/adr/0012-mastodon-streaming.md).

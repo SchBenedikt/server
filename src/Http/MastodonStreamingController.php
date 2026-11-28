@@ -11,6 +11,7 @@ namespace AlohaSocial\Server\Http;
 
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Domain\Federation\FollowState;
+use AlohaSocial\Core\Domain\Post\Hashtags;
 use AlohaSocial\Core\Domain\Federation\PdoFollowerRepository;
 use AlohaSocial\Core\Domain\Federation\PdoMuteRepository;
 use AlohaSocial\Core\Http\Request;
@@ -28,7 +29,7 @@ use Throwable;
 /** Authenticated, bounded SSE transport for the supported Mastodon channels. */
 final class MastodonStreamingController
 {
-    private const STREAMS = ['home', 'public', 'public:local', 'user', 'user:notification', 'direct', 'list'];
+    private const STREAMS = ['home', 'public', 'public:local', 'user', 'user:notification', 'direct', 'list', 'hashtag'];
 
     private readonly MastodonOAuthRepository $oauth;
 
@@ -93,6 +94,15 @@ final class MastodonStreamingController
             }
         }
 
+        $hashtags = [];
+        if ($stream === 'hashtag') {
+            $tag = Hashtags::normalize((string) $request->queryParam('tag', ''));
+            if ($tag === null) {
+                return $this->error(422, 'invalid_hashtag', 'The hashtag stream requires a valid tag parameter.');
+            }
+            $hashtags[] = $tag;
+        }
+
         $broker = $this->runtime->app->eventBroker;
         if (!$broker instanceof EventBroker) {
             return $this->error(503, 'stream_unavailable', 'The durable event broker is not configured.');
@@ -108,7 +118,7 @@ final class MastodonStreamingController
                 && (in_array('read', $request->scopes, true) || in_array('read:notifications', $request->scopes, true))) {
                 $channels[] = 'user:notification';
             }
-            $subscription = new StreamSubscription($userId, $channels, listId: $listId);
+            $subscription = new StreamSubscription($userId, $channels, hashtags: $hashtags, listId: $listId);
             $initial = $broker->read($subscription, $cursor === '' ? null : $cursor, 100);
         } catch (\InvalidArgumentException) {
             return $this->error(410, 'cursor_expired', 'The stream cursor is no longer available; resync over REST.');
@@ -270,6 +280,9 @@ final class MastodonStreamingController
         }
         if ($stream === 'direct') {
             return $event->audience->value === 'direct' && in_array($userId, $event->recipientIds, true);
+        }
+        if ($stream === 'hashtag') {
+            return $event->audience->value === 'public';
         }
         if ($stream === 'list') {
             if ($listId === null || !in_array($event->audience->value, ['public', 'followers'], true)) {
