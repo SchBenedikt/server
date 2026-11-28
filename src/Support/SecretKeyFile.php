@@ -82,9 +82,29 @@ final class SecretKeyFile
     public static function fingerprint(HostConfig $config): ?string
     {
         $encoded = $config->secretKey;
-        if ($encoded === null && is_file($config->secretKeyFile)) {
-            $encoded = file_get_contents($config->secretKeyFile);
+        if ($encoded === null) {
+            return self::fingerprintFile($config->secretKeyFile);
         }
+
+        return self::fingerprintEncoded($encoded);
+    }
+
+    /**
+     * Fingerprint of a key stored at an arbitrary path, e.g. a staged export.
+     */
+    public static function fingerprintFile(string $path): ?string
+    {
+        if (!is_file($path)) {
+            return null;
+        }
+
+        $encoded = file_get_contents($path);
+
+        return self::fingerprintEncoded(is_string($encoded) ? $encoded : null);
+    }
+
+    private static function fingerprintEncoded(?string $encoded): ?string
+    {
         if (!is_string($encoded) || trim($encoded) === '') {
             return null;
         }
