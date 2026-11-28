@@ -375,6 +375,54 @@ final class AdminTest extends TestCase
         self::assertContains('mail.test', array_column($audit['entries'], 'action'));
     }
 
+    public function testWorkerTaskHeartbeatsExposeStalePipelines(): void
+    {
+        $server = new TestServer();
+
+        $server->runtime->admin->taskSuccess('mail');
+        $server->runtime->admin->taskFailure('push', 'endpoint gone');
+        $server->runtime->admin->taskSuccess('push');
+
+        $tasks = $server->runtime->admin->workerTasks();
+        $byName = [];
+        foreach ($tasks as $task) {
+            $byName[$task['task']] = $task;
+        }
+
+        self::assertFalse($byName['mail']['stale']);
+        self::assertLessThanOrEqual(5, (int) $byName['mail']['last_ok_seconds_ago']);
+        self::assertFalse($byName['push']['stale']);
+        self::assertSame('endpoint gone', $byName['push']['error']);
+        self::assertNotNull($byName['push']['last_failure_seconds_ago']);
+
+        // A task that has not succeeded recently is reported as stale.
+        $server->runtime->database->execute(
+            "UPDATE runtime_state SET value = :value WHERE name = 'worker_task.mail'",
+            ['value' => json_encode(['ok' => time() - 3600, 'fail' => time() - 3500, 'error' => 'boom'])],
+        );
+
+        $tasks = $server->runtime->admin->workerTasks();
+        $mail = null;
+        foreach ($tasks as $task) {
+            if ($task['task'] === 'mail') {
+                $mail = $task;
+            }
+        }
+        self::assertNotNull($mail);
+        self::assertTrue($mail['stale']);
+        self::assertSame('boom', $mail['error']);
+
+        $health = null;
+        foreach ($server->runtime->admin->overview()['health'] as $card) {
+            if ($card['id'] === 'background-tasks') {
+                $health = $card;
+            }
+        }
+        self::assertNotNull($health);
+        self::assertSame('warn', $health['status']);
+        self::assertStringContainsString('mail', (string) $health['detail']);
+    }
+
     public function testWorkerHeartbeatMarksTheWorkerOnline(): void
     {
         $server = new TestServer();

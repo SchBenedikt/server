@@ -30,7 +30,9 @@ function syncAtproto(Runtime $runtime): void
         try {
             $runtime->app->atprotoSync->sync(100);
             $runtime->atprotoBackoff?->recordSuccess();
+            $runtime->admin->taskSuccess('atproto-sync');
         } catch (Throwable $exception) {
+            $runtime->admin->taskFailure('atproto-sync', $exception->getMessage());
             $delay = $runtime->atprotoBackoff?->recordFailure() ?? 0;
             fwrite(
                 STDERR,
@@ -40,10 +42,14 @@ function syncAtproto(Runtime $runtime): void
         }
     }
 
-    try {
-        $runtime->atprotoReconciler?->run();
-    } catch (Throwable $exception) {
-        fwrite(STDERR, 'AT Protocol reconciliation failed: ' . $exception->getMessage() . "\n");
+    if ($runtime->atprotoReconciler !== null) {
+        try {
+            $runtime->atprotoReconciler->run();
+            $runtime->admin->taskSuccess('atproto-reconcile');
+        } catch (Throwable $exception) {
+            $runtime->admin->taskFailure('atproto-reconcile', $exception->getMessage());
+            fwrite(STDERR, 'AT Protocol reconciliation failed: ' . $exception->getMessage() . "\n");
+        }
     }
 }
 
@@ -57,7 +63,9 @@ function refreshRemoteEngagement(Runtime $runtime, int $limit = 10): void
 {
     try {
         $runtime->remoteEngagementRefresher->refresh($limit);
+        $runtime->admin->taskSuccess('engagement');
     } catch (Throwable $exception) {
+        $runtime->admin->taskFailure('engagement', $exception->getMessage());
         fwrite(STDERR, 'Remote engagement refresh failed: ' . $exception->getMessage() . "\n");
     }
 }
@@ -72,7 +80,9 @@ function refreshRemoteActorProfiles(Runtime $runtime, int $limit = 8): void
 {
     try {
         $runtime->remoteActorProfiles->refreshStale($limit);
+        $runtime->admin->taskSuccess('actor-profiles');
     } catch (Throwable $exception) {
+        $runtime->admin->taskFailure('actor-profiles', $exception->getMessage());
         fwrite(STDERR, 'Remote actor profile refresh failed: ' . $exception->getMessage() . "\n");
     }
 }
@@ -91,10 +101,12 @@ function dispatchMailOutbox(Runtime $runtime): void
         $runtime->emailChange->prune();
         $runtime->mailOutbox->prune();
         $result = $runtime->mailOutbox->dispatch(10);
+        $runtime->admin->taskSuccess('mail');
         if ($result['failed'] > 0) {
             fwrite(STDERR, 'Mail outbox marked ' . $result['failed'] . " message(s) failed.\n");
         }
     } catch (Throwable $exception) {
+        $runtime->admin->taskFailure('mail', $exception->getMessage());
         fwrite(STDERR, 'Mail outbox dispatch failed: ' . $exception->getMessage() . "\n");
     }
 }
@@ -128,11 +140,33 @@ function dispatchPush(Runtime $runtime): void
                 $delivered += $outcome['sent'] + $outcome['gone'];
             }
         }
+        $runtime->admin->taskSuccess('push');
         if ($failed > 0) {
             fwrite(STDERR, 'Push delivery deferred ' . $failed . " notification(s) for retry.\n");
         }
     } catch (Throwable $exception) {
+        $runtime->admin->taskFailure('push', $exception->getMessage());
         fwrite(STDERR, 'Push delivery failed: ' . $exception->getMessage() . "\n");
+    }
+}
+
+/**
+ * Drain one bounded batch from the core job queue. A crashing handler must
+ * not kill the worker loop: the job stays claimed and the core retry/dead
+ * letter path owns it from here.
+ */
+function drainQueue(Runtime $runtime, int $limit): int
+{
+    try {
+        $handled = $runtime->app->worker->runOnce($limit);
+        $runtime->admin->taskSuccess('queue');
+
+        return $handled;
+    } catch (Throwable $exception) {
+        $runtime->admin->taskFailure('queue', $exception->getMessage());
+        fwrite(STDERR, 'Queue batch failed: ' . $exception->getMessage() . "\n");
+
+        return 0;
     }
 }
 
@@ -141,6 +175,7 @@ function finalizeAccountErasures(Runtime $runtime): void
 {
     try {
         $result = $runtime->accountErasureCleanup->finalizeCompleted();
+        $runtime->admin->taskSuccess('erasure');
         if ($result['failed'] > 0) {
             fwrite(
                 STDERR,
@@ -149,6 +184,7 @@ function finalizeAccountErasures(Runtime $runtime): void
             );
         }
     } catch (Throwable $exception) {
+        $runtime->admin->taskFailure('erasure', $exception->getMessage());
         fwrite(STDERR, 'Account erasure cleanup scan failed: ' . $exception->getMessage() . "\n");
     }
 }
@@ -182,7 +218,7 @@ if ($once) {
     syncAtproto($runtime);
     refreshRemoteEngagement($runtime, 25);
     refreshRemoteActorProfiles($runtime, 25);
-    $handled = $runtime->app->worker->runOnce(10);
+    $handled = drainQueue($runtime, 10);
     fwrite(STDOUT, 'handled=' . $handled . "\n");
     exit(0);
 }
@@ -251,7 +287,7 @@ while (!$stop) {
         $lastActorProfileRefresh = time();
     }
 
-    $handled = $runtime->app->worker->runOnce(10);
+    $handled = drainQueue($runtime, 10);
     if ($handled === 0) {
         usleep(500_000);
     }
