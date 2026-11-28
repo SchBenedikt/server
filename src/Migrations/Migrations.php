@@ -93,6 +93,7 @@ final class Migrations
             new Version202611280036DismissedAnnouncements(),
             new Version202611280037CoreSchemaFingerprintRefresh(),
             new Version202611280038RecommendationOptOut(),
+            new Version202611280039RemoteObjectTombstones(),
         ];
     }
 }
