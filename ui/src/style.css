@@ -5544,6 +5544,27 @@ dialog.a-modal::backdrop {
 	text-align: left;
 }
 
+.a-onboarding__step--done {
+	color: var(--a-faint);
+}
+
+.a-onboarding__step--done .a-onboarding__icon {
+	background: var(--a-mint-soft, var(--a-surface));
+	color: var(--a-mint, var(--a-primary));
+}
+
+.a-onboarding__done {
+	margin-left: auto;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: var(--a-mint-soft, var(--a-surface));
+	color: var(--a-mint, var(--a-primary));
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+
 .a-onboarding__actions {
 	display: flex;
 	justify-content: flex-end;
