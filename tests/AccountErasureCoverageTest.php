@@ -51,6 +51,7 @@ final class AccountErasureCoverageTest extends TestCase
         'mfa_pending',
         'mfa_recovery_code',
         'password_reset',
+        'push_delivery',
         'push_subscription',
         'recommendation_feedback',
         'recommendation_impression',
