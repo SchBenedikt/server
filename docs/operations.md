@@ -587,6 +587,16 @@ Series provided:
   `failed` grows only when SMTP is unreachable past the retry budget.
 - `aloha_worker_heartbeat_age_seconds` — seconds since the worker's last
   heartbeat. Alert when above ~90 seconds (the UI's "online" threshold).
+- `aloha_worker_task_last_ok_age_seconds{task}`,
+  `aloha_worker_task_last_failure_age_seconds{task}` and
+  `aloha_worker_task_failing{task}` — per-pipeline worker health for the
+  tasks `bin/worker.php` reports (`atproto-sync`, `atproto-reconcile`,
+  `engagement`, `actor-profiles`, `mail`, `push`, `queue`, `erasure`). A
+  task absent from the series has never reported — disabled pipelines
+  (e.g. AT Protocol sync without a relay) stay silent instead of alerting.
+  `failing=1` means the last recorded outcome was a failure; alert on
+  `failing == 1` for 10 minutes or `last_ok_age` above the task's cadence
+  (600s marks a task stale in the admin card).
 - `aloha_push_delivery_pending`, `aloha_engagement_refresh_pending` —
   queued Web Push deliveries and remote engagement refreshes waiting for
   the worker.
@@ -606,7 +616,8 @@ tick, `aloha_queue_oldest_pending_age_seconds > 300` for 10 minutes,
 `aloha_storage_free_bytes / aloha_storage_total_bytes < 0.1` for 15
 minutes,
 `aloha_atproto_sync_stale == 1` or `aloha_atproto_sync_error == 1` for
-10 minutes (per source), `aloha_push_delivery_pending` growing for an
+10 minutes (per source), `aloha_worker_task_failing == 1` for 10 minutes
+(per task), `aloha_push_delivery_pending` growing for an
 hour, `aloha_http_request_duration_seconds` p99 above a few seconds
 sustained.
 

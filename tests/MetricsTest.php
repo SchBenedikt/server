@@ -148,6 +148,39 @@ final class MetricsTest extends TestCase
         );
     }
 
+    public function testMetricsEndpointExposesPerTaskWorkerHealth(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('root', admin: true);
+        $session = $server->signIn('root');
+
+        $db = $server->runtime->database;
+        $now = time();
+        // mail recovered after a failure; queue is currently failing.
+        $db->execute(
+            "INSERT INTO runtime_state (name, value, updated_at) VALUES"
+            . " ('worker_task.mail', :mail, '2026-11-28T00:00:00Z'),"
+            . " ('worker_task.queue', :queue, '2026-11-28T00:00:00Z')",
+            [
+                'mail' => json_encode(['ok' => $now - 30, 'fail' => $now - 120]),
+                'queue' => json_encode(['ok' => $now - 300, 'fail' => $now - 10, 'error' => 'boom']),
+            ],
+        );
+
+        $response = $server->send('GET', '/metrics', ['cookies' => $session['cookies']]);
+        self::assertSame(200, $response->status);
+        self::assertMatchesRegularExpression(
+            '/aloha_worker_task_last_ok_age_seconds\{task="mail"\} (2[5-9]|3[0-9]|4[0-9])/',
+            $response->body,
+        );
+        self::assertMatchesRegularExpression(
+            '/aloha_worker_task_last_failure_age_seconds\{task="queue"\} ([0-9]|1[0-9])/',
+            $response->body,
+        );
+        self::assertStringContainsString('aloha_worker_task_failing{task="mail"} 0', $response->body);
+        self::assertStringContainsString('aloha_worker_task_failing{task="queue"} 1', $response->body);
+    }
+
     public function testMetricsEndpointRequiresTheBearerToken(): void
     {
         $server = new TestServer(['metrics_token' => 'scrape-secret-123']);
