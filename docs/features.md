@@ -370,6 +370,7 @@ POST   /api/v1/host/admin/queue/run
 GET    /api/v1/host/admin/federation|communications|instance|audit
 GET    /api/v1/host/admin/domain-blocks
 POST   /api/v1/host/admin/domain-blocks/import
+POST   /api/v1/host/admin/mail/test
 POST   /api/v1/host/reports
 ```
 
@@ -381,7 +382,14 @@ revokes native AT Protocol and Mastodon OAuth credentials; re-enabling an
 account does not restore previously revoked tokens. The moderation tables
 (`moderation_report`, `admin_audit`) and the worker
 heartbeat (`runtime_state`) are created by host migration `202611150001`.
-Warnings and failures from the worker and federation layer are mirrored into
+Transactional mail (password reset, email verification, email changes)
+travels through the durable `mail_outbox`: messages are sealed, queued with
+the state that requires them, retried with bounded backoff and cancelled
+when their token expires or is superseded. `POST /admin/mail/test` sends a
+diagnostic message to the calling admin's own address and reports the
+transport's sanitized failure class; the communications view and `/metrics`
+expose pending/failed outbox counts. Warnings and failures from the worker
+and federation layer are mirrored into
 `runtime_error` by the runtime logger; the admin **Errors** tab shows them next
 to dead delivery jobs. The table is created by migration `202611170002`.
 

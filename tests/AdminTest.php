@@ -231,6 +231,24 @@ final class AdminTest extends TestCase
         self::assertContains('moderation.import', array_column($audit['entries'], 'action'));
     }
 
+    public function testAdminCanSendATestMailToTheirOwnAddress(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        $response = $server->json('POST', '/api/v1/host/admin/mail/test', [], $cookies, $csrf);
+        self::assertSame(200, $response->status, $response->body);
+        $result = $this->decoded($response);
+        self::assertTrue($result['sent']);
+        self::assertSame('log', $result['transport']);
+
+        $mails = glob($server->config->mailLogDirectory . '/*.eml') ?: [];
+        self::assertNotSame([], $mails);
+        self::assertStringContainsString('alice@example.test', (string) file_get_contents($mails[0]));
+
+        $audit = $this->decoded($server->send('GET', '/api/v1/host/admin/audit', ['cookies' => $cookies]));
+        self::assertContains('mail.test', array_column($audit['entries'], 'action'));
+    }
+
     public function testWorkerHeartbeatMarksTheWorkerOnline(): void
     {
         $server = new TestServer();
