@@ -18,6 +18,7 @@ bin/create-account.php    account creation (installer step, CLI)
 bin/set-password.php      password reset by CLI, revokes the account's sessions
 bin/routes.php            served route manifest
 bin/federation-smoke.php  two real instances exchanging a signed Follow + Create
+bin/user-journey-smoke.php one instance running the essential user journeys
 ui/                       host Vue app and HostBridge for @alohasocial/ui
 public/ui/                committed bundle served at /app
 
@@ -183,6 +184,12 @@ exists, so the production SSRF guard stays active and the delivery path is the
 real one; set `ALOHASOCIAL_SMOKE_HOST` to choose an address explicitly. On a
 host without a public address it falls back to loopback and marks the delivery
 step as blocked. `--keep` keeps the temporary directories for inspection.
+
+`php bin/user-journey-smoke.php` covers the single-instance journeys the
+federation smoke does not: sign-in, profile edit, local search and follow,
+media upload, post, home timeline, like/reply/boost, notifications, edit,
+public timeline and search, preferences, delete and sign-out. It uses
+loopback only — no federation — so it runs anywhere `php -S` does.
 
 The PostgreSQL path is exercised separately: migrations twice, account
 creation, login, post write/read, media upload/serve and WebFinger against a
