@@ -467,8 +467,8 @@ onMounted(() => {
 
 						<label class="a-profile-edit__label" for="a-admin-role">{{ t('ausers.roleLabel') }}</label>
 						<select id="a-admin-role" v-model="draft.role" class="a-admin-select">
-							<option value="user">Member</option>
-							<option value="moderator">Moderator</option>
+							<option value="user">{{ t('ausers.roleMember') }}</option>
+							<option value="moderator">{{ t('ausers.roleModerator') }}</option>
 							<option value="admin">{{ t('ausers.roleAdministrator') }}</option>
 						</select>
 					</div>

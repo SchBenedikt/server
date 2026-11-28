@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { ref } from 'vue';
-import { adminSectionDefinition, isAdminSection } from './admin';
+import { adminSectionLabel, isAdminSection } from './admin';
 import type { AdminSection } from './admin';
+import { t } from './i18n';
 
 export type Route =
 	| { name: 'home' }
@@ -219,68 +220,50 @@ export function isActiveRoute(current: Route, name: Route['name']): boolean {
 }
 
 export function routeTitle(current: Route): string {
+	const key = ROUTE_TITLE_KEYS[current.name];
+	if (key !== undefined) {
+		return t(key);
+	}
+
 	switch (current.name) {
-		case 'home':
-			return 'Home';
-		case 'explore':
-			return 'Explore';
-		case 'notifications':
-			return 'Notifications';
-		case 'about':
-			return 'About this instance';
-		case 'page':
-			return 'Instance page';
 		case 'profile':
 			return `@${current.handle}`;
-		case 'post':
-			return 'Post';
 		case 'tag':
 			return `#${current.tag}`;
-		case 'bookmarks':
-			return 'Bookmarks';
-		case 'search':
-			return 'Search';
-		case 'kokua':
-			return 'Kokua';
-		case 'lists':
-			return 'Lists';
-		case 'list':
-			return 'List';
-		case 'muted':
-			return 'Muted';
-		case 'blocked':
-			return 'Blocked';
-		case 'filters':
-			return 'Filters';
-		case 'scheduled':
-			return 'Scheduled posts';
-		case 'messages':
-			return 'Messages';
-		case 'conversation':
-			return 'Conversation';
-		case 'memories':
-			return 'Memories';
-		case 'collections':
-			return 'Collections';
-		case 'collection':
-			return 'Collection';
-		case 'starter-packs':
-			return 'Starter packs';
-		case 'starter-pack':
-			return 'Starter pack';
-		case 'drafts':
-			return 'Drafts';
-		case 'archived':
-			return 'Archive';
-		case 'settings':
-			return 'Settings';
-		case 'follow-requests':
-			return 'Follow requests';
 		case 'admin':
 			return current.section === 'overview'
-				? 'Administration'
-				: `Administration · ${adminSectionDefinition(current.section).label}`;
+				? t('nav.administration')
+				: `${t('nav.administration')} · ${adminSectionLabel(current.section)}`;
 		default:
-			return 'Not found';
+			return t('route.notFound');
 	}
 }
+
+const ROUTE_TITLE_KEYS: Partial<Record<Route['name'], string>> = {
+	home: 'nav.home',
+	explore: 'nav.explore',
+	notifications: 'nav.notifications',
+	about: 'nav.about',
+	page: 'route.page',
+	post: 'route.post',
+	bookmarks: 'nav.bookmarks',
+	search: 'nav.search',
+	kokua: 'nav.kokua',
+	lists: 'nav.lists',
+	list: 'route.list',
+	muted: 'nav.muted',
+	blocked: 'nav.blocked',
+	filters: 'nav.filters',
+	scheduled: 'nav.scheduled',
+	messages: 'nav.messages',
+	conversation: 'route.conversation',
+	memories: 'nav.memories',
+	collections: 'nav.collections',
+	collection: 'route.collection',
+	'starter-packs': 'nav.starterPacks',
+	'starter-pack': 'route.starterPack',
+	drafts: 'nav.drafts',
+	archived: 'nav.archive',
+	settings: 'nav.settings',
+	'follow-requests': 'nav.followRequests',
+};

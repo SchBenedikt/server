@@ -2038,6 +2038,19 @@ const en: Messages = {
 	'aset.check.worker': 'Worker is responsive',
 	'common.online': 'Online',
 	'common.noSignal': 'No signal',
+	'chrome.skipToContent': 'Skip to content',
+	'chrome.opening': 'Opening Aloha…',
+	'chrome.offline': 'You appear to be offline — changes may not be saved until the connection returns.',
+	'chrome.search': 'Search Aloha',
+	'chrome.primaryNav': 'Primary navigation',
+	'chrome.create': 'Create',
+	'route.page': 'Instance page',
+	'route.post': 'Post',
+	'route.list': 'List',
+	'route.conversation': 'Conversation',
+	'route.collection': 'Collection',
+	'route.starterPack': 'Starter pack',
+	'route.notFound': 'Not found',
 };
 
 const de: Messages = {
@@ -4058,6 +4071,19 @@ const de: Messages = {
 	'aset.check.worker': 'Worker reagiert',
 	'common.online': 'Online',
 	'common.noSignal': 'Kein Signal',
+	'chrome.skipToContent': 'Zum Inhalt springen',
+	'chrome.opening': 'Aloha wird geöffnet…',
+	'chrome.offline': 'Du scheinst offline zu sein — Änderungen werden möglicherweise erst gespeichert, wenn die Verbindung wiederhergestellt ist.',
+	'chrome.search': 'Aloha durchsuchen',
+	'chrome.primaryNav': 'Hauptnavigation',
+	'chrome.create': 'Erstellen',
+	'route.page': 'Instanz-Seite',
+	'route.post': 'Beitrag',
+	'route.list': 'Liste',
+	'route.conversation': 'Unterhaltung',
+	'route.collection': 'Sammlung',
+	'route.starterPack': 'Starter-Pack',
+	'route.notFound': 'Nicht gefunden',
 };
 
 const catalogs: Record<string, Messages> = { en, de };
