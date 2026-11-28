@@ -12,6 +12,8 @@ namespace AlohaSocial\Server\Migrations;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Core\Platform\Clock\Clock;
+use AlohaSocial\Core\Platform\Db\SchemaUpgrade;
+use AlohaSocial\Server\Support\CoreVersion;
 use ReflectionClass;
 use Throwable;
 
@@ -64,6 +66,7 @@ final class MigrationRunner
 
         $applied = $this->applied();
         $done = [];
+        $provenance = CoreVersion::details();
 
         foreach ($this->migrations as $migration) {
             $version = $migration->version();
@@ -80,9 +83,35 @@ final class MigrationRunner
                 continue;
             }
 
-            $run = function () use ($migration, $version, $checksum): void {
+            $run = function () use ($migration, $version, $checksum, $provenance): void {
                 $this->prepare($migration);
                 $migration->up($this->connection);
+
+                // The provenance columns arrive with migration 202611280023;
+                // rows applied before it keep NULL rather than a guessed
+                // build, so the INSERT shape follows the live schema.
+                $withProvenance = SchemaUpgrade::columnExists(
+                    $this->connection,
+                    self::TABLE,
+                    'core_version',
+                );
+                if ($withProvenance) {
+                    $this->connection->execute(
+                        'INSERT INTO ' . self::TABLE
+                        . ' (version, applied_at, checksum, core_version, core_reference)'
+                        . ' VALUES (:version, :applied_at, :checksum, :core_version, :core_reference)',
+                        [
+                            'version' => $version,
+                            'applied_at' => Time::format($this->clock->now()),
+                            'checksum' => $checksum,
+                            'core_version' => $provenance['version'],
+                            'core_reference' => $provenance['reference'],
+                        ],
+                    );
+
+                    return;
+                }
+
                 $this->connection->execute(
                     'INSERT INTO ' . self::TABLE . ' (version, applied_at, checksum) VALUES (:version, :applied_at, :checksum)',
                     [

@@ -13,6 +13,7 @@ use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Support\DatabaseBackup;
+use AlohaSocial\Server\Support\UpgradePreflight;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -114,6 +115,18 @@ try {
         }
         fwrite(STDOUT, 'Accounts before: ' . ($before ?? 'not installed') . "\n");
         exit(0);
+    }
+
+    $preflight = UpgradePreflight::check($config, $before);
+    foreach ($preflight['warnings'] as $warning) {
+        fwrite(STDERR, 'Warning: ' . $warning . "\n");
+    }
+    if ($preflight['problems'] !== []) {
+        fwrite(STDERR, "Migration stopped: preflight checks failed.\n");
+        foreach ($preflight['problems'] as $problem) {
+            fwrite(STDERR, '  - ' . $problem . "\n");
+        }
+        exit(1);
     }
 
     $backup = null;
