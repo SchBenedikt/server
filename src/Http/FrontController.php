@@ -948,6 +948,55 @@ final class FrontController
             return Response::json(['pending_email' => strtolower(trim($email))]);
         }
 
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/sessions') {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $current = $session->session->idHash;
+            $sessions = [];
+            foreach ($this->runtime->sessions->listForAccount((string) $session->userId()) as $row) {
+                $sessions[] = [
+                    'id' => $row['id_hash'],
+                    'created_at' => $row['created_at'],
+                    'expires_at' => $row['expires_at'],
+                    'user_agent' => $row['user_agent'],
+                    'ip' => $row['ip_hash'] === null ? null : substr((string) $row['ip_hash'], 0, 12),
+                    'current' => $row['id_hash'] === $current,
+                ];
+            }
+
+            return Response::json(['sessions' => $sessions]);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/api/v1/host/sessions/revoke-others') {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $revoked = $this->runtime->sessions->revokeOtherSessions(
+                (string) $session->userId(),
+                $session->session->idHash,
+            );
+
+            return Response::json(['revoked' => $revoked]);
+        }
+
+        if ($request->method === 'DELETE'
+            && preg_match('#^/api/v1/host/sessions/([0-9a-f]{64})$#', $request->path, $matches) === 1
+        ) {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $revoked = $this->runtime->sessions->revokeSession((string) $session->userId(), $matches[1]);
+            if (!$revoked) {
+                return $this->apiError(404, 'session_not_found', 'No such session.');
+            }
+
+            return Response::json(['revoked' => true]);
+        }
+
         if (preg_match('#^/api/v1/posts/([^/]+)/boost$#', $request->path, $matches) === 1
             && in_array($request->method, ['POST', 'DELETE'], true)
         ) {
