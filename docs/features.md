@@ -416,9 +416,17 @@ failed endpoint backs off exponentially (60s doubling, capped at 1h) and is
 dropped after five attempts so a broken endpoint cannot pin the queue.
 Accounts with no subscriptions simply drain to nothing.
 
-Still open: the browser service worker that calls `pushManager.subscribe()`
-and renders the notification, and per-type notification preferences —
-today every visible notification produces a push for subscribed accounts.
+The browser half lives in `public/sw.js` (root scope, push events only —
+it caches nothing) plus a Settings → "Browser notifications" toggle that
+requests permission, registers the worker and subscribes with the VAPID
+key; the subscription JSON goes straight to the subscribe endpoint.
+`ui/src/lib/push.ts` also re-registers a browser-held subscription the
+server has forgotten, so state stays honest after dead-endpoint cleanup.
+
+Still open: per-type notification preferences — today every visible
+notification produces a push for subscribed devices — and verification
+against a real push service (browsers refuse loopback endpoints, so this
+needs a deployed instance or a browser with a mock push service).
 
 ## Account export and deletion
 
