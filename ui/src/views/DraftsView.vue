@@ -9,6 +9,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { relativeTime, truncate, visibilityLabel } from '../lib/format';
+import { t } from '../lib/i18n';
 import { appState, openComposer, openDraft, showToast } from '../lib/state';
 import type { Draft } from '../lib/types';
 
@@ -29,7 +30,7 @@ async function load(): Promise<void> {
 	try {
 		drafts.value = await getApi().drafts();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Drafts could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('drafts.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -37,18 +38,18 @@ async function load(): Promise<void> {
 
 function contextLabel(draft: Draft): string {
 	if (draft.in_reply_to_id !== null) {
-		return 'Reply';
+		return t('post.reply');
 	}
 	if (draft.quoted_post_id !== null) {
-		return 'Quote';
+		return t('drafts.quote');
 	}
 
-	return 'Your post';
+	return t('drafts.yourPost');
 }
 
 function preview(draft: Draft): string {
 	const text = truncate(draft.content, 140);
-	return text !== '' ? text : 'Draft without text';
+	return text !== '' ? text : t('drafts.emptyPreview');
 }
 
 function resume(draft: Draft): void {
@@ -56,7 +57,7 @@ function resume(draft: Draft): void {
 }
 
 async function remove(draft: Draft): Promise<void> {
-	if (deleting.value !== '' || !window.confirm('Really delete this draft?')) {
+	if (deleting.value !== '' || !window.confirm(t('drafts.confirmDelete'))) {
 		return;
 	}
 
@@ -64,9 +65,9 @@ async function remove(draft: Draft): Promise<void> {
 	try {
 		await getApi().deleteDraft(draft.id);
 		drafts.value = drafts.value.filter((entry) => entry.id !== draft.id);
-		showToast('Draft deleted.', 'success');
+		showToast(t('drafts.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The draft could not be deleted.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('drafts.deleteFailed'), 'error');
 	} finally {
 		deleting.value = '';
 	}
@@ -94,17 +95,17 @@ watch(signedIn, (value) => {
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Drafts"
-			subtitle="Saved to your account so they reappear on every device."
+			:title="t('nav.drafts')"
+			:subtitle="t('drafts.subtitle')"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Reload drafts" title="Refresh" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" :aria-label="t('drafts.reload')" :title="t('common.refresh')" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-					<AppIcon name="pen" :size="15" /> New post
+					<AppIcon name="pen" :size="15" /> {{ t('common.newPost') }}
 				</button>
 			</template>
 		</PageHeader>
@@ -112,16 +113,16 @@ watch(signedIn, (value) => {
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Sign-in required</strong>
-				<p>Drafts belong to your account and are visible only to you.</p>
+				<strong>{{ t('common.signInRequired') }}</strong>
+				<p>{{ t('drafts.signInText') }}</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<p v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="alert" :size="20" />
 			<span>{{ error }}</span>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</p>
 
 		<div v-else-if="loading && drafts.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -131,10 +132,10 @@ watch(signedIn, (value) => {
 		<EmptyState
 			v-else-if="drafts.length === 0"
 			icon="pen"
-			title="No drafts"
-			text="Drafts you save in the composer wait here for you to continue."
+			:title="t('drafts.emptyTitle')"
+			:text="t('drafts.emptyText')"
 		>
-			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">Write post</button>
+			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">{{ t('drafts.writePost') }}</button>
 		</EmptyState>
 
 		<ul v-else class="a-draft-list">
@@ -150,20 +151,20 @@ watch(signedIn, (value) => {
 					</span>
 					<strong>{{ preview(draft) }}</strong>
 					<span class="a-draft-card__detail">
-						<template v-if="draft.content_warning">Content warning · </template>
+						<template v-if="draft.content_warning">{{ t('scheduled.contentWarningLabel') }} · </template>
 						<template v-if="draft.attachment_ids.length > 0">
-							{{ draft.attachment_ids.length }} {{ draft.attachment_ids.length === 1 ? 'attachment' : 'Attachments' }}
+							{{ draft.attachment_ids.length }} {{ draft.attachment_ids.length === 1 ? t('drafts.attachment') : t('drafts.attachments') }}
 						</template>
 						<template v-if="draft.poll !== null">
-							· poll with {{ draft.poll.options.length }} replies
+							· {{ t('drafts.poll', { count: draft.poll.options.length }) }}
 						</template>
 					</span>
 				</button>
 				<button
 					type="button"
 					class="a-icon-btn a-icon-btn--danger"
-					aria-label="Delete draft"
-					title="Delete"
+					:aria-label="t('drafts.deleteAria')"
+					:title="t('collections.deleteTitle')"
 					:disabled="deleting === draft.id"
 					@click="remove(draft)"
 				>
