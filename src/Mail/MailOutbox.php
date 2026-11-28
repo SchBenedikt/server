@@ -133,7 +133,7 @@ final class MailOutbox
         );
 
         $rows = $this->db->fetchAll(
-            "SELECT id, payload, attempts, max_attempts FROM mail_outbox"
+            "SELECT id, kind, dedup_key, payload, attempts, max_attempts FROM mail_outbox"
             . " WHERE status = 'pending' AND next_attempt_at <= :now"
             . ' ORDER BY created_at LIMIT :limit',
             ['now' => $nowValue, 'limit' => $limit],
@@ -141,6 +141,18 @@ final class MailOutbox
 
         foreach ($rows as $row) {
             $id = (string) $row['id'];
+
+            // A queued reset link whose token was used, rotated or expired
+            // while the transport was down must never be delivered.
+            if (!$this->stillApplicable($row)) {
+                $this->db->execute(
+                    "UPDATE mail_outbox SET status = 'cancelled' WHERE id = :id AND status = 'pending'",
+                    ['id' => $id],
+                );
+                $result['cancelled']++;
+                continue;
+            }
+
             try {
                 $message = json_decode(
                     $this->box->open((string) $row['payload']),
@@ -174,6 +186,42 @@ final class MailOutbox
         }
 
         return $result;
+    }
+
+    /**
+     * Whether the message still describes live state. Only kinds with a
+     * checkable reference implement this; everything else is always
+     * applicable.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function stillApplicable(array $row): bool
+    {
+        if (($row['kind'] ?? '') !== self::KIND_PASSWORD_RESET) {
+            return true;
+        }
+
+        // The dedup key is the token hash; the link is only useful while the
+        // token row is unused and unexpired.
+        return (int) $this->db->fetchValue(
+            'SELECT COUNT(*) FROM password_reset'
+            . ' WHERE token_hash = :hash AND used_at IS NULL AND expires_at > :now',
+            ['hash' => (string) $row['dedup_key'], 'now' => Time::format($this->clock->now())],
+        ) > 0;
+    }
+
+    /**
+     * Remove terminal rows older than the retention window so the table
+     * does not grow forever. Pending and in-flight rows are untouched.
+     */
+    public function prune(int $retentionDays = 7): int
+    {
+        $cutoff = Time::format($this->clock->now()->modify('-' . $retentionDays . ' days'));
+
+        return $this->db->execute(
+            "DELETE FROM mail_outbox WHERE status != 'pending' AND created_at < :cutoff",
+            ['cutoff' => $cutoff],
+        );
     }
 
     /**

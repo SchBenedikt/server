@@ -140,6 +140,18 @@ final class PasswordResetService
         return true;
     }
 
+    /**
+     * Delete token rows that can no longer be used. Queued mail for an
+     * expired token is cancelled by the outbox dispatcher instead.
+     */
+    public function prune(): int
+    {
+        return $this->db->execute(
+            'DELETE FROM password_reset WHERE expires_at < :now',
+            ['now' => Time::format($this->clock->now())],
+        );
+    }
+
     public function isValid(string $token): bool
     {
         $row = $this->find($token);
