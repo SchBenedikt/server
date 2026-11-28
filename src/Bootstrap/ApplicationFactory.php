@@ -401,6 +401,7 @@ final class ApplicationFactory
                 $instancePages,
                 $mailer,
                 $invitations,
+                $mailOutbox,
             ),
             instancePages: $instancePages,
             pushSubscriptions: $pushSubscriptions,

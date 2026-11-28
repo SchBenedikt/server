@@ -142,6 +142,7 @@ export interface AdminUser {
 	display_name: string | null;
 	created_at: string;
 	disabled_at: string | null;
+	disabled_reason: 'verification' | 'approval' | 'admin' | string | null;
 	posts: number;
 	followers: number;
 	following: number;

@@ -113,13 +113,19 @@ final class RegistrationService
                 $invited = true;
             }
 
+            // Pending registrations record why they cannot sign in yet:
+            // mailbox proof first, administrator approval second.
+            $reason = $verify
+                ? 'verification'
+                : (($this->approvalRequired() && !$invited) ? 'approval' : null);
+
             $account = $this->accounts->create(
                 $handle,
                 $email,
                 $this->hasher->hash($password),
                 Account::ROLE_USER,
                 $displayName,
-                $verify || ($this->approvalRequired() && !$invited),
+                $reason,
             );
 
             if ($verify) {

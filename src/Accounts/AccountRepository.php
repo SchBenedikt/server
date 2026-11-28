@@ -67,14 +67,14 @@ final class AccountRepository
         string $passwordHash,
         string $role = Account::ROLE_USER,
         ?string $displayName = null,
-        bool $disabled = false,
+        ?string $disabledReason = null,
     ): Account {
         $handle = strtolower(trim($handle));
         $email = strtolower(trim($email));
 
         $this->db->execute(
-            'INSERT INTO account (id, handle, email, password_hash, role, display_name, created_at, disabled_at, credential_version)'
-            . ' VALUES (:id, :handle, :email, :password_hash, :role, :display_name, :created_at, :disabled_at, 1)',
+            'INSERT INTO account (id, handle, email, password_hash, role, display_name, created_at, disabled_at, disabled_reason, credential_version)'
+            . ' VALUES (:id, :handle, :email, :password_hash, :role, :display_name, :created_at, :disabled_at, :disabled_reason, 1)',
             [
                 'id' => $handle,
                 'handle' => $handle,
@@ -83,7 +83,8 @@ final class AccountRepository
                 'role' => $role,
                 'display_name' => $displayName,
                 'created_at' => Time::format($this->clock->now()),
-                'disabled_at' => $disabled ? Time::format($this->clock->now()) : null,
+                'disabled_at' => $disabledReason === null ? null : Time::format($this->clock->now()),
+                'disabled_reason' => $disabledReason,
             ],
         );
 
@@ -135,19 +136,31 @@ final class AccountRepository
         );
     }
 
-    public function disable(string $id): void
+    public function disable(string $id, string $reason = 'admin'): void
     {
         $this->db->execute(
-            'UPDATE account SET disabled_at = :now WHERE id = :id',
-            ['now' => Time::format($this->clock->now()), 'id' => $id],
+            'UPDATE account SET disabled_at = :now, disabled_reason = :reason WHERE id = :id',
+            ['now' => Time::format($this->clock->now()), 'reason' => $reason, 'id' => $id],
         );
     }
 
     public function enable(string $id): void
     {
         $this->db->execute(
-            'UPDATE account SET disabled_at = NULL WHERE id = :id',
+            'UPDATE account SET disabled_at = NULL, disabled_reason = NULL WHERE id = :id',
             ['id' => $id],
+        );
+    }
+
+    /**
+     * Moves a still-pending registration to the next lifecycle stage, e.g.
+     * from `verification` to `approval` once the mailbox is proven.
+     */
+    public function setDisabledReason(string $id, string $reason): void
+    {
+        $this->db->execute(
+            'UPDATE account SET disabled_reason = :reason WHERE id = :id AND disabled_at IS NOT NULL',
+            ['reason' => $reason, 'id' => $id],
         );
     }
 
@@ -294,6 +307,7 @@ final class AccountRepository
             disabledAt: $row['disabled_at'] === null ? null : (string) $row['disabled_at'],
             credentialVersion: (int) ($row['credential_version'] ?? 1),
             emailVerifiedAt: ($row['email_verified_at'] ?? null) === null ? null : (string) $row['email_verified_at'],
+            disabledReason: ($row['disabled_reason'] ?? null) === null ? null : (string) $row['disabled_reason'],
         );
     }
 }

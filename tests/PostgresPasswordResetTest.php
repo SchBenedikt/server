@@ -20,6 +20,7 @@ use AlohaSocial\Server\Auth\PasswordResetException;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Migrations\Version202611280014CredentialVersioning;
+use AlohaSocial\Server\Migrations\Version202611280043AccountDisabledReason;
 use AlohaSocial\Server\Tests\Support\BarrierConnection;
 use AlohaSocial\Server\Tests\Support\FailingConnection;
 use AlohaSocial\Server\Tests\Support\NullMailer;
@@ -75,6 +76,7 @@ final class PostgresPasswordResetTest extends TestCase
 
         $this->createPreMigrationSchema();
         (new Version202611280014CredentialVersioning())->up($this->database());
+        (new Version202611280043AccountDisabledReason())->up($this->database());
     }
 
     protected function tearDown(): void

@@ -33,9 +33,44 @@ final class RegistrationTest extends TestCase
         $account = $server->runtime->registration->register('newbie', 'new@example.test', 'correct-horse');
 
         self::assertTrue($account->isDisabled());
+        self::assertSame('approval', $account->disabledReason);
+        self::assertTrue($account->isAwaitingRegistration());
         self::assertSame('newbie', $account->handle);
         self::assertNotNull($server->runtime->database->fetchValue(
             "SELECT disabled_at FROM account WHERE id = 'newbie'",
+        ));
+    }
+
+    public function testApprovalNotifiesTheMemberWhenAnAdminEnablesTheAccount(): void
+    {
+        $server = new TestServer([
+            'registrations' => true,
+            'registration_approval' => true,
+        ]);
+        $server->runtime->registration->register('newbie', 'new@example.test', 'correct-horse');
+
+        $server->runtime->admin->enableUser('admin', 'newbie');
+
+        $account = $server->runtime->accounts->find('newbie');
+        self::assertNotNull($account);
+        self::assertFalse($account->isDisabled());
+        self::assertNull($account->disabledReason);
+
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mail_outbox WHERE kind = 'account_approved' AND account_id = 'newbie'",
+        ));
+    }
+
+    public function testSuspendedAccountsDoNotSendAnApprovalNotice(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test');
+
+        $server->runtime->admin->disableUser('admin', 'alice');
+        $server->runtime->admin->enableUser('admin', 'alice');
+
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mail_outbox WHERE kind = 'account_approved'",
         ));
     }
 

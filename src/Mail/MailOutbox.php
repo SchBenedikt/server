@@ -52,6 +52,13 @@ final class MailOutbox
      */
     public const KIND_EMAIL_CHANGE_NOTICE = 'email_change_notice';
 
+    /**
+     * Notice that a pending registration was approved. Carries no token, so
+     * it has no applicability check; the dedup key pins one mail per
+     * approval event.
+     */
+    public const KIND_ACCOUNT_APPROVED = 'account_approved';
+
     private const DEFAULT_MAX_ATTEMPTS = 8;
 
     private const BASE_RETRY_SECONDS = 60;

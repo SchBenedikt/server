@@ -88,6 +88,7 @@ final class EmailVerificationTest extends TestCase
             'correct-horse',
         );
         self::assertTrue($account->isDisabled());
+        self::assertSame('verification', $account->disabledReason);
 
         $server->runtime->mailOutbox->dispatch(10);
         $mails = glob($server->config->mailLogDirectory . '/*.eml');
@@ -99,6 +100,7 @@ final class EmailVerificationTest extends TestCase
         self::assertNotNull($verified);
         self::assertNotNull($verified->emailVerifiedAt);
         self::assertTrue($verified->isDisabled(), 'Approval must still gate sign-in after verification.');
+        self::assertSame('approval', $verified->disabledReason);
     }
 
     public function testResendIsGenericAndIssuesFreshLink(): void

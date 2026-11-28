@@ -177,6 +177,28 @@ async function enable(user: AdminUser): Promise<void> {
 	}
 }
 
+function statusLabel(user: AdminUser): string {
+	if (user.disabled_at === null) {
+		return t('ausers.statusActive');
+	}
+	if (user.disabled_reason === 'approval') {
+		return t('ausers.statusAwaitingApproval');
+	}
+	if (user.disabled_reason === 'verification') {
+		return t('ausers.statusAwaitingVerification');
+	}
+	return t('ausers.statusDeactivated');
+}
+
+function statusBadgeClass(user: AdminUser): string {
+	if (user.disabled_at === null) {
+		return 'a-admin-badge--ok';
+	}
+	return user.disabled_reason === 'approval' || user.disabled_reason === 'verification'
+		? 'a-admin-badge--amber'
+		: 'a-admin-badge--danger';
+}
+
 function askDisable(user: AdminUser): void {
 	confirmKind.value = 'disable';
 	confirmTarget.value = user;
@@ -329,8 +351,8 @@ onMounted(() => {
 								</span>
 							</td>
 							<td>
-								<span class="a-admin-badge" :class="user.disabled_at !== null ? 'a-admin-badge--danger' : 'a-admin-badge--ok'">
-									{{ t(user.disabled_at !== null ? 'ausers.statusDeactivated' : 'ausers.statusActive') }}
+								<span class="a-admin-badge" :class="statusBadgeClass(user)">
+									{{ statusLabel(user) }}
 								</span>
 								<span
 									v-if="user.pending_email !== null"
