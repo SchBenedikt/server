@@ -55,6 +55,7 @@ the core route contract:
 | `GET /api/v1/host/sessions` | List the account's live sessions (id hash, device, network hint, current flag). |
 | `DELETE /api/v1/host/sessions/{id}` · `POST /api/v1/host/sessions/revoke-others` | Revoke one session or every session except the current one. |
 | `GET /api/v1/host/mfa` · `POST /api/v1/host/mfa/totp/begin` · `POST /api/v1/host/mfa/totp/confirm` · `POST /api/v1/host/mfa/totp/disable` | TOTP two-factor status, enrollment, confirmation (returns one-time recovery codes) and code-guarded disable. |
+| `POST` / `GET` / `DELETE /api/v1/host/email-change` | Request a verified email change (password required), read the current/pending address, or cancel a pending change. |
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
 
 The post menu on your own posts opens the composer in edit mode. Saving sends
@@ -80,6 +81,16 @@ rate-limited per address, each challenge dies after five wrong codes, and a
 fresh password step supersedes outstanding challenges. The admin overview
 reports a health warning while any active admin account lacks two-factor
 sign-in.
+
+Settings → Email address moves the account's recovery address through a
+verified change: the request requires the account password, reserves the new
+address in `account.pending_email`, and mails a single-use 24-hour
+confirmation link to it plus an alert to the old address — both through the
+durable outbox. The address only switches when the link is consumed; until
+then password recovery keeps targeting the verified address, outstanding
+reset links are deleted on switch, and a member can cancel the pending
+change from Settings. Password resets and account suspension cancel pending
+changes so a stale candidate can never complete later.
 
 Home offers **For you**, **Trending**, **Following**, **Local** and
 **Federated**. Local is the public timeline of this instance; Federated is
