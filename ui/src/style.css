@@ -6191,6 +6191,47 @@ dialog.a-modal::backdrop {
 	font-size: 12.5px;
 }
 
+.a-source-delivery {
+	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid var(--a-border);
+}
+
+.a-source-delivery__title {
+	margin: 0 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.a-source-delivery__counts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 14px;
+	margin: 0 0 10px;
+	padding: 0;
+	list-style: none;
+	font-size: 12.5px;
+	color: var(--a-muted);
+}
+
+.a-source-delivery__table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12.5px;
+}
+
+.a-source-delivery__table th,
+.a-source-delivery__table td {
+	padding: 5px 8px;
+	border-bottom: 1px solid var(--a-border);
+	text-align: left;
+}
+
+.a-source-delivery__table th {
+	color: var(--a-muted);
+	font-weight: 500;
+}
+
 .a-announcement-list {
 	display: grid;
 	gap: 8px;

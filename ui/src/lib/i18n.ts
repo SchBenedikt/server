@@ -100,6 +100,18 @@ const en: Messages = {
 	'sidebar.maxReached': 'The main navigation holds at most {max} entries.',
 	'sidebar.saved': 'Sidebar layout saved.',
 	'sidebar.resetDone': 'Sidebar reset to the default.',
+	'delivery.title': 'Delivery',
+	'delivery.none': 'No remote deliveries recorded yet.',
+	'delivery.delivered': 'delivered',
+	'delivery.sending': 'sending',
+	'delivery.waiting': 'waiting',
+	'delivery.failing': 'failing',
+	'delivery.abandoned': 'abandoned',
+	'delivery.instances': 'Instances',
+	'delivery.host': 'Instance',
+	'delivery.state': 'State',
+	'delivery.tries': 'Tries',
+	'delivery.last': 'Last update',
 };
 
 const de: Messages = {
@@ -182,6 +194,18 @@ const de: Messages = {
 	'sidebar.maxReached': 'Die Hauptnavigation fasst höchstens {max} Einträge.',
 	'sidebar.saved': 'Seitenleisten-Layout gespeichert.',
 	'sidebar.resetDone': 'Seitenleiste auf den Standard zurückgesetzt.',
+	'delivery.title': 'Zustellung',
+	'delivery.none': 'Noch keine Remote-Zustellungen erfasst.',
+	'delivery.delivered': 'zugestellt',
+	'delivery.sending': 'wird gesendet',
+	'delivery.waiting': 'wartet',
+	'delivery.failing': 'schlägt fehl',
+	'delivery.abandoned': 'aufgegeben',
+	'delivery.instances': 'Instanzen',
+	'delivery.host': 'Instanz',
+	'delivery.state': 'Status',
+	'delivery.tries': 'Versuche',
+	'delivery.last': 'Letzte Aktualisierung',
 };
 
 const catalogs: Record<string, Messages> = { en, de };

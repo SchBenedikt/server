@@ -635,6 +635,25 @@ export interface PostSource {
 	spoiler_text: string | null;
 }
 
+export type PostDeliveryState = 'waiting' | 'sending' | 'failing' | 'delivered' | 'abandoned';
+
+export interface PostDeliveryInstance {
+	host: string;
+	state: PostDeliveryState | string;
+	tries: number;
+	last: string;
+}
+
+export interface PostDelivery {
+	delivered: number;
+	sending: number;
+	waiting: number;
+	failing: number;
+	abandoned: number;
+	total: number;
+	instances: PostDeliveryInstance[];
+}
+
 
 export interface DraftPoll {
 	options: string[];

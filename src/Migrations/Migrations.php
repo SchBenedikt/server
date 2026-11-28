@@ -96,6 +96,7 @@ final class Migrations
             new Version202611280039RemoteObjectTombstones(),
             new Version202611280040ActivityLogDigest(),
             new Version202611280041UiLocale(),
+            new Version202611280042PostDeliveries(),
         ];
     }
 }
