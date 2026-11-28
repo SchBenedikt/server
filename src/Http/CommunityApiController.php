@@ -23,6 +23,7 @@ use AlohaSocial\Core\Service\Atproto\AtprotoPublishDisabledException;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Accounts\Account;
+use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Community\CommunityException;
 use AlohaSocial\Server\Community\Exports;
 use AlohaSocial\Server\Federation\BlueskyException;
@@ -998,6 +999,7 @@ final class CommunityApiController
                 return Response::json([
                     'deletion' => $report->toArray(),
                     'host_data_deleted' => $hostDataDeleted,
+                    'host_data_retained' => AccountErasureCleanup::RETAINED_CATEGORIES,
                     'account_disabled' => true,
                     'remote_deletion' => 'ActivityPub and Bluesky data at remote servers may persist.',
                 ], $report->inProgress() ? 202 : 200, ['Cache-Control' => 'private, no-store']);
