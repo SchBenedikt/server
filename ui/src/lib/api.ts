@@ -155,6 +155,16 @@ export interface HostSession {
 	current: boolean;
 }
 
+export interface MfaStatus {
+	enabled: boolean;
+	pending: boolean;
+}
+
+export interface MfaEnrollment {
+	secret: string;
+	otpauth_uri: string;
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
@@ -251,6 +261,10 @@ export interface Api {
 	sessions(): Promise<HostSession[]>;
 	revokeSession(id: string): Promise<void>;
 	revokeOtherSessions(): Promise<number>;
+	mfaStatus(): Promise<MfaStatus>;
+	mfaBegin(): Promise<MfaEnrollment>;
+	mfaConfirm(code: string): Promise<{ recovery_codes: string[] }>;
+	mfaDisable(code: string): Promise<void>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
 		context?: string;
@@ -3141,6 +3155,33 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 		async revokeOtherSessions(): Promise<number> {
 			const data = await request<{ revoked?: unknown }>('POST', '/api/v1/host/sessions/revoke-others', undefined, {});
 			return typeof data?.revoked === 'number' ? data.revoked : 0;
+		},
+
+		async mfaStatus(): Promise<MfaStatus> {
+			const data = await request<{ mfa?: unknown }>('GET', '/api/v1/host/mfa');
+			const mfa = isRecord(data?.mfa) ? data.mfa : {};
+			return { enabled: mfa.enabled === true, pending: mfa.pending === true };
+		},
+
+		async mfaBegin(): Promise<MfaEnrollment> {
+			const data = await request<{ secret?: unknown; otpauth_uri?: unknown }>('POST', '/api/v1/host/mfa/totp/begin', undefined, {});
+			if (typeof data?.secret !== 'string' || typeof data.otpauth_uri !== 'string') {
+				throw new ApiError(502, 'invalid_response', 'The enrollment could not be started.');
+			}
+			return { secret: data.secret, otpauth_uri: data.otpauth_uri };
+		},
+
+		async mfaConfirm(code: string): Promise<{ recovery_codes: string[] }> {
+			const data = await request<{ recovery_codes?: unknown }>('POST', '/api/v1/host/mfa/totp/confirm', undefined, { code });
+			return {
+				recovery_codes: Array.isArray(data?.recovery_codes)
+					? data.recovery_codes.filter((entry): entry is string => typeof entry === 'string')
+					: [],
+			};
+		},
+
+		async mfaDisable(code: string): Promise<void> {
+			await request<unknown>('POST', '/api/v1/host/mfa/totp/disable', undefined, { code });
 		},
 
 		async atprotoIdentity(): Promise<AtprotoIdentityData> {

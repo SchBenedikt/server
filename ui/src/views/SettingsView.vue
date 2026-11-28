@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type HostSession } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type HostSession, type MfaEnrollment, type MfaStatus } from '../lib/api';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
 	AccountPreferences,
@@ -67,6 +67,11 @@ const confirmMove = ref(false);
 const sessions = ref<HostSession[]>([]);
 const sessionsBusy = ref(false);
 const confirmRevokeOthers = ref(false);
+const mfa = ref<MfaStatus>({ enabled: false, pending: false });
+const mfaEnrollment = ref<MfaEnrollment | null>(null);
+const mfaRecoveryCodes = ref<string[]>([]);
+const mfaCode = ref('');
+const mfaBusy = ref(false);
 
 const visibilityOptions = [
 	{ value: 'public', label: 'Public', hint: 'Everyone can see the post.' },
@@ -132,6 +137,11 @@ async function load(): Promise<void> {
 			sessions.value = await getApi().sessions();
 		} catch {
 			sessions.value = [];
+		}
+		try {
+			mfa.value = await getApi().mfaStatus();
+		} catch {
+			mfa.value = { enabled: false, pending: false };
 		}
 		try {
 			notificationPolicy.value = await getApi().notificationPolicy();
@@ -424,6 +434,60 @@ async function revokeSession(session: HostSession): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'The session could not be revoked.', 'error');
 	} finally {
 		sessionsBusy.value = false;
+	}
+}
+
+async function beginMfa(): Promise<void> {
+	if (mfaBusy.value) {
+		return;
+	}
+	mfaBusy.value = true;
+	try {
+		mfaEnrollment.value = await getApi().mfaBegin();
+		mfaRecoveryCodes.value = [];
+		mfaCode.value = '';
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'Two-factor setup could not be started.', 'error');
+	} finally {
+		mfaBusy.value = false;
+	}
+}
+
+async function confirmMfa(): Promise<void> {
+	if (mfaBusy.value || mfaCode.value.trim() === '') {
+		return;
+	}
+	mfaBusy.value = true;
+	try {
+		const result = await getApi().mfaConfirm(mfaCode.value.trim());
+		mfa.value = { enabled: true, pending: false };
+		mfaEnrollment.value = null;
+		mfaRecoveryCodes.value = result.recovery_codes;
+		mfaCode.value = '';
+		showToast('Two-factor sign-in is enabled.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'That code is incorrect.', 'error');
+	} finally {
+		mfaBusy.value = false;
+	}
+}
+
+async function disableMfa(): Promise<void> {
+	if (mfaBusy.value || mfaCode.value.trim() === '') {
+		return;
+	}
+	mfaBusy.value = true;
+	try {
+		await getApi().mfaDisable(mfaCode.value.trim());
+		mfa.value = { enabled: false, pending: false };
+		mfaEnrollment.value = null;
+		mfaRecoveryCodes.value = [];
+		mfaCode.value = '';
+		showToast('Two-factor sign-in is disabled.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'A current code is required to disable.', 'error');
+	} finally {
+		mfaBusy.value = false;
 	}
 }
 
@@ -814,6 +878,64 @@ watch(signedIn, (value) => {
 						{{ moveBusy ? 'Announcing…' : confirmMove ? 'Confirm account move' : 'Move account' }}
 					</button>
 				</form>
+			</section>
+
+			<section class="a-settings__section">
+				<h2>Two-factor sign-in</h2>
+				<p class="a-settings__hint">
+					Require a code from an authenticator app in addition to your password when signing in.
+				</p>
+
+				<div v-if="mfaRecoveryCodes.length > 0" class="a-settings__sender-policy">
+					<h3>Recovery codes</h3>
+					<p class="a-settings__hint">
+						Each code works once if you lose your authenticator. Store them somewhere safe — they are not shown again.
+					</p>
+					<ul>
+						<li v-for="code in mfaRecoveryCodes" :key="code"><code>{{ code }}</code></li>
+					</ul>
+				</div>
+
+				<template v-else-if="mfa.enabled">
+					<p class="a-settings__hint"><strong>Enabled.</strong> Sign-in asks for an authenticator code after your password.</p>
+					<label class="a-settings__row">
+						<span>
+							<strong>Disable two-factor sign-in</strong>
+							<small>Enter a current code from your authenticator to confirm.</small>
+						</span>
+						<span class="a-settings__inline-field">
+							<input v-model="mfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" :disabled="mfaBusy">
+							<button type="button" class="a-btn a-btn--danger a-btn--small" :disabled="mfaBusy || mfaCode.trim() === ''" @click="disableMfa">Disable</button>
+						</span>
+					</label>
+				</template>
+
+				<template v-else-if="mfaEnrollment !== null">
+					<div class="a-settings__sender-policy">
+						<h3>Set up your authenticator</h3>
+						<p class="a-settings__hint">Add this account to an authenticator app (Aegis, Ente Auth, 1Password, …), then enter the code it shows.</p>
+						<p><code class="a-settings__secret">{{ mfaEnrollment.secret }}</code></p>
+						<p class="a-settings__hint">Setup link: <code>{{ mfaEnrollment.otpauth_uri }}</code></p>
+						<label class="a-settings__row">
+							<span>
+								<strong>Verification code</strong>
+								<small>The six-digit code from the app.</small>
+							</span>
+							<span class="a-settings__inline-field">
+								<input v-model="mfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" :disabled="mfaBusy">
+								<button type="button" class="a-btn a-btn--primary a-btn--small" :disabled="mfaBusy || mfaCode.trim() === ''" @click="confirmMfa">Verify &amp; enable</button>
+							</span>
+						</label>
+					</div>
+				</template>
+
+				<template v-else>
+					<p v-if="mfa.pending" class="a-settings__hint">An earlier setup was not finished — starting again replaces it.</p>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="mfaBusy" @click="beginMfa">
+						<AppIcon :name="mfaBusy ? 'refresh' : 'lock'" :size="15" :class="{ 'a-spin': mfaBusy }" />
+						{{ mfaBusy ? 'Starting…' : mfa.pending ? 'Resume setup' : 'Enable two-factor sign-in' }}
+					</button>
+				</template>
 			</section>
 
 			<section class="a-settings__section">

@@ -52,6 +52,9 @@ the core route contract:
 | `POST` / `DELETE /api/v1/host/kokua/{id}/help` | Offer a hand with an optional note, or withdraw the offer. |
 | `GET /api/v1/host/quoted?ids=…` | Resolve the quoted note behind a quote post, local or remote. |
 | `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
+| `GET /api/v1/host/sessions` | List the account's live sessions (id hash, device, network hint, current flag). |
+| `DELETE /api/v1/host/sessions/{id}` · `POST /api/v1/host/sessions/revoke-others` | Revoke one session or every session except the current one. |
+| `GET /api/v1/host/mfa` · `POST /api/v1/host/mfa/totp/begin` · `POST /api/v1/host/mfa/totp/confirm` · `POST /api/v1/host/mfa/totp/disable` | TOTP two-factor status, enrollment, confirmation (returns one-time recovery codes) and code-guarded disable. |
 | `POST` / `DELETE /api/v1/posts/{id}/like` | Idempotent like/unlike for the signed-in account. |
 
 The post menu on your own posts opens the composer in edit mode. Saving sends
@@ -64,6 +67,19 @@ All writes require the session cookie and `X-CSRF-Token`. Reads only reveal
 posts the viewer may already see; private posts still go through the core's
 visibility rules. The implementation lives in `src/Interactions/` and
 `FrontController`.
+
+Accounts can enroll a TOTP authenticator (Settings → Two-factor sign-in).
+The base32 secret is sealed with the instance key; confirmation issues eight
+single-use recovery codes stored only as hashes. While enabled, `/login`
+answers the password step with a five-minute pending challenge instead of a
+session; `/login/mfa` accepts the current code (one step of clock drift
+either side) or a recovery code, capped at five attempts per challenge.
+Disabling requires a live code, and re-enrollment is refused while a factor
+is enabled so a stolen session cannot strip the protection. Submissions are
+rate-limited per address, each challenge dies after five wrong codes, and a
+fresh password step supersedes outstanding challenges. The admin overview
+reports a health warning while any active admin account lacks two-factor
+sign-in.
 
 Home offers **For you**, **Trending**, **Following**, **Local** and
 **Federated**. Local is the public timeline of this instance; Federated is

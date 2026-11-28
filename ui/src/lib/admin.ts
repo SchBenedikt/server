@@ -84,6 +84,7 @@ export interface AdminStats {
 		active: number;
 		disabled: number;
 		admins: number;
+		admins_without_mfa: number;
 		new_7d: number;
 	};
 	posts: {
