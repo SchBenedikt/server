@@ -13,7 +13,7 @@ import MediaGrid from './MediaGrid.vue';
 import ReportDialog from './ReportDialog.vue';
 import RichText from './RichText.vue';
 import { accountName, handleLabel, isLocalPostId, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
-import { hostDisplayName, resolveAccount } from '../lib/account';
+import { hostDisplayName } from '../lib/account';
 import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
 import { ensureInteractions, interactionFor, rememberInteraction } from '../lib/interactions';
@@ -37,24 +37,6 @@ const emit = defineEmits<{ bookmark: [bookmarked: boolean]; pinned: [pinned: boo
 const hostBridge = useHostBridge();
 
 const authorId = computed(() => props.post.object_author_id ?? props.post.author_id);
-const author = computed(() => {
-	const cached = appState.session.profile;
-	return cached?.id === authorId.value ? cached : null;
-});
-const localAuthor = ref<Awaited<ReturnType<typeof resolveAccount>>>(null);
-
-watch(authorId, async (id) => {
-	localAuthor.value = await resolveAccount(id);
-}, { immediate: true });
-
-const resolvedAuthor = computed(() => {
-	if (author.value !== null && author.value !== undefined) {
-		return author.value;
-	}
-
-	return localAuthor.value;
-});
-
 const displayName = computed(() => {
 	const remoteName = props.post.author_display_name?.trim() ?? '';
 	if (remoteName !== '') {
@@ -71,7 +53,7 @@ const displayName = computed(() => {
 		return session.user.displayName || session.profile?.display_name || handleLabel(authorId.value);
 	}
 
-	return hostDisplayName(authorId.value) || accountName(resolvedAuthor.value, authorId.value);
+	return hostDisplayName(authorId.value) || accountName(null, authorId.value);
 });
 const handle = computed(() => {
 	const remoteHandle = props.post.author_handle?.trim() ?? '';

@@ -5,6 +5,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { ApiError, getApi, hydrateTimelineBoosts } from './api';
 import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from './events';
+import { primeAuthorNames } from './account';
 import type { FeedInterest, TimelineItem } from './types';
 
 export type FeedKind = 'home' | 'for-you' | 'trending' | 'public' | 'federated' | 'tag' | 'followed';
@@ -181,6 +182,7 @@ export function useTimeline(source: () => TimelineSource) {
 		try {
 			const page = await fetchPage(before);
 			const batch = await hydrateTimelineBoosts(page.posts);
+			primeAuthorNames(batch.flatMap((post) => [post.author_id, post.object_author_id ?? '']));
 			if (currentGeneration !== generation) {
 				return;
 			}

@@ -51,6 +51,7 @@ the core route contract:
 | `GET` / `PATCH` / `DELETE /api/v1/host/kokua/{id}` | Read, complete/reopen or remove one Kokua (author only for mutations). |
 | `POST` / `DELETE /api/v1/host/kokua/{id}/help` | Offer a hand with an optional note, or withdraw the offer. |
 | `GET /api/v1/host/quoted?ids=…` | Resolve the quoted note behind a quote post, local or remote. |
+| `GET /api/v1/host/profiles?ids=…` | Batched display names for up to 200 local account ids; the feed primes author names with one request per page instead of a per-card lookup. Without `ids` it returns the capped directory map. |
 | `PATCH /api/v1/host/profile` | Update the display name of the signed-in account. |
 | `GET /api/v1/host/sessions` | List the account's live sessions (id hash, device, network hint, current flag). |
 | `DELETE /api/v1/host/sessions/{id}` · `POST /api/v1/host/sessions/revoke-others` | Revoke one session or every session except the current one. |

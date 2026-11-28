@@ -10,7 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { displayNameFor, hasDistinctDisplayName, resolveAccount } from '../lib/account';
+import { displayNameFor, hasDistinctDisplayName, primeAuthorNames } from '../lib/account';
 import { getApi } from '../lib/api';
 import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { handleLabel, isRemoteId, postRouteId, truncate } from '../lib/format';
@@ -181,6 +181,7 @@ async function load(): Promise<void> {
 			return;
 		}
 		post.value = loaded;
+		primeAuthorNames([loaded.author_id, loaded.object_author_id ?? '']);
 
 		if (loaded.in_reply_to_id) {
 			if (isRemoteId(loaded.in_reply_to_id)) {
@@ -193,7 +194,7 @@ async function load(): Promise<void> {
 			} else {
 				try {
 					parent.value = await getApi().post(loaded.in_reply_to_id);
-					void resolveAccount(parent.value.author_id);
+					primeAuthorNames([parent.value.author_id, parent.value.object_author_id ?? '']);
 				} catch {
 					parent.value = null;
 				}
@@ -223,6 +224,12 @@ async function loadRemote(current: number): Promise<void> {
 		post.value = data.post;
 		parent.value = data.parent;
 		replies.value = data.replies;
+		primeAuthorNames([
+			data.post.author_id,
+			data.post.object_author_id ?? '',
+			...(data.parent !== null ? [data.parent.author_id, data.parent.object_author_id ?? ''] : []),
+			...data.replies.flatMap((entry) => [entry.author_id, entry.object_author_id ?? '']),
+		]);
 		remoteNetwork.value = data.network;
 		remoteProfile.value = data.profile;
 		// A local reply to this remote post is not part of the origin's public
@@ -304,6 +311,7 @@ async function loadReplies(current: number, merge = false): Promise<void> {
 		replies.value = [...existing, ...found].sort((left, right) => (
 			new Date(left.published_at).getTime() - new Date(right.published_at).getTime()
 		));
+		primeAuthorNames(replies.value.flatMap((entry) => [entry.author_id, entry.object_author_id ?? '']));
 	} catch {
 		// The post itself stays readable even when the reply scan fails.
 	} finally {
