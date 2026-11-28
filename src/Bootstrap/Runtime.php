@@ -44,10 +44,11 @@ use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
-use AlohaSocial\Server\Push\PushService;
 use AlohaSocial\Server\Community\StarterPacks;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
+use AlohaSocial\Server\Push\PushSender;
+use AlohaSocial\Server\Push\PushService;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
 use AlohaSocial\Server\Federation\Atproto\AtprotoReconciler;
@@ -111,6 +112,7 @@ final readonly class Runtime
         public AdminService $admin,
         public InstancePages $instancePages,
         public PushService $pushSubscriptions,
+        public PushSender $pushSender,
         public Announcements $announcements,
         public FeaturedTags $featuredTags,
         public Trends $trends,

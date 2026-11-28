@@ -395,8 +395,30 @@ does not keep delivering to the previous sign-in. Account erasure deletes
 the account's subscriptions; the VAPID identity is instance data and
 survives.
 
-Delivery itself — VAPID JWT, payload encryption and the worker send loop —
-is not wired yet; subscriptions accumulate until it lands.
+Delivery runs end to end. The core's `NotificationEventSink` port feeds a
+host adapter (`NotificationPushSink`) that enqueues one row per visible
+notification into `push_delivery` (migration `202611280032`) — the payload
+is deliberately generic ("You have a new notification.", deep-linking to
+the bell) so a push never leaks post text, actor names or the
+notification type to a lock screen or push service.
+
+`PushSender` performs the actual RFC 8291/8292 send: aes128gcm payload
+encryption against the subscription's `p256dh`/`auth` keys, an ES256 VAPID
+JWT (`aud` = endpoint origin, `sub` = `mailto:` contact or instance URL),
+and a POST carrying `Authorization: vapid t=…, k=…`. The endpoint is
+re-validated through `FederationTargetGuard` at send time — DNS can change
+after subscribe — and the HTTP client pins the resolved public addresses.
+A 404/410 means the browser dropped the subscription, so the endpoint row
+is removed instead of retried.
+
+The worker drains `push_delivery` each tick (batch of 10): a send with any
+failed endpoint backs off exponentially (60s doubling, capped at 1h) and is
+dropped after five attempts so a broken endpoint cannot pin the queue.
+Accounts with no subscriptions simply drain to nothing.
+
+Still open: the browser service worker that calls `pushManager.subscribe()`
+and renders the notification, and per-type notification preferences —
+today every visible notification produces a push for subscribed accounts.
 
 ## Account export and deletion
 

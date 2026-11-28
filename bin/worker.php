@@ -99,6 +99,43 @@ function dispatchMailOutbox(Runtime $runtime): void
     }
 }
 
+/**
+ * Deliver queued Web Push notifications.
+ *
+ * The notification sink only enqueues; this step performs the bounded batch
+ * of HTTPS posts so a slow push service never holds a request or the queue
+ * worker. Failed rows back off in the table; gone endpoints are removed by
+ * the sender itself.
+ */
+function dispatchPush(Runtime $runtime): void
+{
+    try {
+        $delivered = 0;
+        $failed = 0;
+        foreach ($runtime->pushSubscriptions->dueDeliveries(10) as $delivery) {
+            $outcome = $runtime->pushSender->deliverForAccount(
+                (string) $delivery['account_id'],
+                (string) $delivery['payload'],
+            );
+            if ($outcome['failed'] > 0) {
+                ++$failed;
+                $runtime->pushSubscriptions->retryDelivery(
+                    (string) $delivery['id'],
+                    (int) $delivery['attempts'],
+                );
+            } else {
+                $runtime->pushSubscriptions->completeDelivery((string) $delivery['id']);
+                $delivered += $outcome['sent'] + $outcome['gone'];
+            }
+        }
+        if ($failed > 0) {
+            fwrite(STDERR, 'Push delivery deferred ' . $failed . " notification(s) for retry.\n");
+        }
+    } catch (Throwable $exception) {
+        fwrite(STDERR, 'Push delivery failed: ' . $exception->getMessage() . "\n");
+    }
+}
+
 /** Complete host cleanup after Core's durable account erasure reaches `erased`. */
 function finalizeAccountErasures(Runtime $runtime): void
 {
@@ -141,6 +178,7 @@ if ($once) {
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
     dispatchMailOutbox($runtime);
+    dispatchPush($runtime);
     syncAtproto($runtime);
     refreshRemoteEngagement($runtime, 25);
     refreshRemoteActorProfiles($runtime, 25);
@@ -198,6 +236,7 @@ while (!$stop) {
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
     dispatchMailOutbox($runtime);
+    dispatchPush($runtime);
     syncAtproto($runtime);
 
     // Origin requests are rate-limited per peer, so a small batch once a
