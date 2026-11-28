@@ -103,8 +103,10 @@ export async function resolveAccount(id: string): Promise<Account | null> {
 				return null;
 			}
 
-			const name = hostDisplayName(id);
-			rememberAccount(id, name === '' ? account : { ...account, display_name: name });
+			// The per-account response is authoritative and newer than the
+			// bootstrap name map, which may predate a profile edit.
+			hostNames[id] = account.display_name;
+			rememberAccount(id, account);
 			return directory.accounts[id] ?? null;
 		} catch (error) {
 			if (epoch === directoryEpoch) {
@@ -181,7 +183,16 @@ export function isLoadingAccount(id: string): boolean {
 }
 
 export function displayNameFor(id: string): string {
-	return hostDisplayName(id) || accountName(accountFor(id), id);
+	// A resolved profile carries the freshest authoritative name; the host
+	// bootstrap map is only a fallback for accounts not fetched yet, and it
+	// is capped, so it must never win over per-account data.
+	const account = accountFor(id);
+	const name = account?.display_name?.trim() ?? '';
+	if (name !== '' && name !== account?.id) {
+		return name;
+	}
+
+	return hostDisplayName(id) || accountName(account, id);
 }
 
 /** True when a profile has a real display name beyond its handle. */

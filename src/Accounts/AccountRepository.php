@@ -201,6 +201,41 @@ final class AccountRepository
     }
 
     /**
+     * Display names for an explicit set of account ids.
+     *
+     * The bounded counterpart of {@see displayNames()} for clients that know
+     * exactly which profiles they render; the caller caps the id count.
+     *
+     * @param list<string> $ids
+     *
+     * @return array<string, string>
+     */
+    public function displayNamesFor(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter($ids, static fn (string $id): bool => $id !== '')));
+        if ($ids === []) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $rows = $this->db->fetchAll(
+            'SELECT id, display_name FROM account WHERE disabled_at IS NULL AND display_name IS NOT NULL'
+            . ' AND id IN (' . $placeholders . ')',
+            $ids,
+        );
+
+        $names = [];
+        foreach ($rows as $row) {
+            $name = trim((string) ($row['display_name'] ?? ''));
+            if ($name !== '') {
+                $names[(string) $row['id']] = $name;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
      * @param list<string>|null $allowedIds
      *
      * @return list<string>

@@ -179,7 +179,7 @@ export interface Api {
 	atprotoFollowStatus(did: string): Promise<{ follow: AtprotoFollowEntry | null; available: boolean }>;
 	followAtproto(did: string): Promise<AtprotoFollowEntry>;
 	unfollowAtproto(did: string): Promise<void>;
-	hostProfiles(): Promise<Record<string, string>>;
+	hostProfiles(ids?: string[]): Promise<Record<string, string>>;
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
 	notifications(limit?: number, before?: string | null): Promise<NotificationPageData>;
@@ -1301,8 +1301,9 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return normalizeMastodonStatuses(data);
 		},
 
-		async hostProfiles(): Promise<Record<string, string>> {
-			const data = await request<{ profiles?: unknown }>('GET', '/api/v1/host/profiles');
+		async hostProfiles(ids?: string[]): Promise<Record<string, string>> {
+			const query = ids !== undefined && ids.length > 0 ? `?ids=${encodeURIComponent(ids.join(','))}` : '';
+			const data = await request<{ profiles?: unknown }>('GET', `/api/v1/host/profiles${query}`);
 			const profiles: Record<string, string> = {};
 			if (isRecord(data?.profiles)) {
 				for (const [id, name] of Object.entries(data.profiles)) {

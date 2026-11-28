@@ -7,6 +7,8 @@ import { configureApi, ApiError, type Api } from './api';
 import {
 	accountFor,
 	directory,
+	displayNameFor,
+	loadHostDisplayNames,
 	refreshAccount,
 	resetAccountDirectory,
 	resolveAccount,
@@ -123,6 +125,20 @@ describe('resolveAccount', () => {
 
 		expect(await pendingResult).toBeNull();
 		expect(accountFor('alice')).toBeNull();
+	});
+
+	it('prefers the freshly fetched display name over the bootstrap map', async () => {
+		configureApi({
+			account: async (id: string) => account(id),
+			hostProfiles: async () => ({ alice: 'Stale Bootstrap Name' }),
+		} as unknown as Api);
+
+		await loadHostDisplayNames();
+		expect(displayNameFor('alice')).toBe('Stale Bootstrap Name');
+
+		await resolveAccount('alice');
+		expect(accountFor('alice')?.display_name).toBe('Name alice');
+		expect(displayNameFor('alice')).toBe('Name alice');
 	});
 
 	it('refreshAccount bypasses a recent failure entry', async () => {

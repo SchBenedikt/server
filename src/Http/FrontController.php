@@ -296,6 +296,24 @@ final class FrontController
         }
 
         if ($request->method === 'GET' && $request->path === '/api/v1/host/profiles') {
+            $idsParam = $request->queryParam('ids');
+            if (is_string($idsParam) && $idsParam !== '') {
+                $ids = [];
+                foreach (explode(',', $idsParam) as $candidate) {
+                    $candidate = trim($candidate);
+                    if ($candidate !== '' && preg_match('/^[A-Za-z0-9._@-]{1,200}$/', $candidate) === 1) {
+                        $ids[] = $candidate;
+                    }
+                    if (count($ids) >= 200) {
+                        break;
+                    }
+                }
+
+                return Response::json([
+                    'profiles' => $this->runtime->accounts->displayNamesFor($ids),
+                ]);
+            }
+
             return Response::json([
                 'profiles' => $this->runtime->accounts->displayNames(),
             ]);
