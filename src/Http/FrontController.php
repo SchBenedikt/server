@@ -182,6 +182,7 @@ final class FrontController
         }
 
         $gauges = [];
+        $seriesGauges = [];
         $collectionErrors = 0;
         $db = $this->runtime->database;
 
@@ -201,6 +202,34 @@ final class FrontController
             $gauges['aloha_mail_outbox_failed'] = (float) $db->fetchValue(
                 "SELECT COUNT(*) FROM mail_outbox WHERE status = 'failed'",
             );
+            $gauges['aloha_push_delivery_pending'] = (float) $db->fetchValue(
+                'SELECT COUNT(*) FROM push_delivery',
+            );
+            $gauges['aloha_engagement_refresh_pending'] = (float) $db->fetchValue(
+                'SELECT COUNT(*) FROM remote_engagement_request',
+            );
+
+            // Per-source inbound sync health (#170): how stale each AT
+            // Protocol source's checkpoint is, whether the last attempt
+            // failed, and whether the core marked cached content stale.
+            $now = time();
+            foreach ($db->fetchAll(
+                'SELECT source, last_attempt_at, last_error, stale'
+                . ' FROM social_atproto_sync_checkpoint',
+            ) as $row) {
+                $source = Metrics::sanitizeLabelValue(
+                    is_string($row['source'] ?? null) ? $row['source'] : 'unknown',
+                );
+                $attempt = is_string($row['last_attempt_at'] ?? null)
+                    ? strtotime($row['last_attempt_at'])
+                    : false;
+                $seriesGauges['aloha_atproto_sync_last_attempt_age_seconds']['source=' . $source]
+                    = $attempt === false ? -1.0 : max(0.0, (float) ($now - $attempt));
+                $seriesGauges['aloha_atproto_sync_stale']['source=' . $source]
+                    = ($row['stale'] ?? 0) ? 1.0 : 0.0;
+                $seriesGauges['aloha_atproto_sync_error']['source=' . $source]
+                    = trim((string) ($row['last_error'] ?? '')) !== '' ? 1.0 : 0.0;
+            }
 
             $beat = $db->fetchValue("SELECT value FROM runtime_state WHERE name = 'worker'");
             if (is_numeric($beat)) {
@@ -214,7 +243,7 @@ final class FrontController
         return new Response(
             200,
             ['Content-Type' => 'text/plain; version=0.0.4; charset=utf-8'],
-            $this->runtime->metrics->render($gauges),
+            $this->runtime->metrics->render($gauges, $seriesGauges),
         );
     }
 

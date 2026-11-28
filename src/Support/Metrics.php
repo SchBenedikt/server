@@ -155,9 +155,11 @@ final class Metrics
      * Prometheus text exposition for all recorded series plus the supplied
      * scrape-time gauges.
      *
-     * @param array<string, float> $gauges name => value (already labelled by caller if needed)
+     * @param array<string, float> $gauges name => value
+     * @param array<string, array<string, float>> $seriesGauges name => seriesKey => value,
+     *        for scrape-time gauges that need labels (e.g. 'source=jetstream')
      */
-    public function render(array $gauges = []): string
+    public function render(array $gauges = [], array $seriesGauges = []): string
     {
         $out = '';
         ksort($this->counters);
@@ -185,6 +187,10 @@ final class Metrics
         ksort($gauges);
         foreach ($gauges as $name => $value) {
             $out .= $name . ' ' . $this->number($value) . "\n";
+        }
+        ksort($seriesGauges);
+        foreach ($seriesGauges as $name => $series) {
+            $out .= $this->renderSeries($name, $series, 'gauge') . "\n";
         }
 
         return $out;
