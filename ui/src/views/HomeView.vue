@@ -223,9 +223,16 @@ function refresh(): void {
 				/>
 				<EmptyState v-else :icon="currentTab === 'followed' ? 'hash' : 'sparkles'" :title="emptyTitle" :text="emptyText">
 					<a v-if="currentTab === 'followed'" class="a-btn a-btn--primary a-btn--small" href="#/explore">Discover hashtags</a>
-					<button v-else-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-						Write your first post
-					</button>
+					<template v-else-if="signedIn">
+						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
+							Write your first post
+						</button>
+						<a
+							v-if="currentTab === 'home' || currentTab === 'for-you'"
+							class="a-btn a-btn--ghost a-btn--small"
+							href="#/explore"
+						>Discover people</a>
+					</template>
 					<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Join the instance</a>
 				</EmptyState>
 			</template>
