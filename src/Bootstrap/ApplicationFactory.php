@@ -99,6 +99,8 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Push\NotificationPushSink;
+use AlohaSocial\Server\Push\PushSender;
 use AlohaSocial\Server\Push\PushService;
 use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Interactions\PostInteractions;
@@ -250,6 +252,7 @@ final class ApplicationFactory
         );
         $mastodonEventBroker = new PdoEventBroker($database, $clock);
         $remotePostImporter = new RemotePostImporter($database, $remoteDirectory, $clock);
+        $pushSubscriptions = new PushService($database, $clock, $this->secretBox());
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -279,6 +282,10 @@ final class ApplicationFactory
             pdsDirectory: $pdsDirectory,
             atprotoEventSource: $atprotoJetstream,
             eventBroker: $mastodonEventBroker,
+            notificationEventSink: new NotificationPushSink(
+                $pushSubscriptions,
+                $this->config->instanceName,
+            ),
         );
 
         $mailer = $this->config->mailTransport === 'smtp'
@@ -383,7 +390,16 @@ final class ApplicationFactory
                 $instancePages,
             ),
             instancePages: $instancePages,
-            pushSubscriptions: new PushService($database, $clock, $this->secretBox()),
+            pushSubscriptions: $pushSubscriptions,
+            pushSender: new PushSender(
+                $pushSubscriptions,
+                $httpClient instanceof BoundedHttpClient ? $httpClient : new CurlHttpClient(),
+                $targetGuard,
+                $this->config->instanceUrl,
+                (string) $this->config->contactEmail,
+                $clock,
+                $logger,
+            ),
             announcements: new Announcements($database, $clock),
             featuredTags: new FeaturedTags($database, $clock),
             trends: new Trends($database, $clock),
