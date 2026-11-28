@@ -75,6 +75,8 @@ final class FrontController
 
     private readonly ClientApiCors $clientApiCors;
 
+    private readonly MastodonInstanceController $mastodonInstance;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
@@ -87,6 +89,7 @@ final class FrontController
         $this->mastodonOAuth = new MastodonOAuthController($runtime);
         $this->mastodonStreaming = new MastodonStreamingController($runtime);
         $this->clientApiCors = new ClientApiCors($runtime->config->mastodonPrefix);
+        $this->mastodonInstance = new MastodonInstanceController($runtime);
     }
 
     /**
@@ -225,6 +228,26 @@ final class FrontController
         // exactly as a same-origin request would be.
         if ($request->method === 'OPTIONS' && $this->clientApiCors->isScoped($request->path)) {
             return $this->clientApiCors->preflight();
+        }
+
+        // Clients probe /api/v2/instance at the instance root while the
+        // compatibility surface lives under the configured prefix; rewrite
+        // before routing so the core instance route answers.
+        if ($request->method === 'GET' && $request->path === '/api/v2/instance') {
+            $request = new Request(
+                method: 'GET',
+                path: rtrim($this->runtime->config->mastodonPrefix, '/') . '/instance',
+                query: $request->query,
+                headers: $request->headers,
+                body: $request->body,
+                attributes: $request->attributes,
+                remoteAddress: $request->remoteAddress,
+            );
+        }
+
+        $instanceSubroute = $this->mastodonInstance->handle($request);
+        if ($instanceSubroute !== null) {
+            return $instanceSubroute;
         }
 
         $cookieName = $this->runtime->config->sessionCookieName;

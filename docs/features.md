@@ -153,12 +153,21 @@ The standalone supports SSE; WebSocket and third-party-client compatibility
 are not implied.
 
 Browser-based Mastodon clients (Elk, Phanpy, Pinafore and the like) call the
-compatibility surface, `POST /api/v1/apps` and `/oauth/token` +
-`/oauth/revoke` cross-origin. Those routes answer with
+compatibility surface, `POST /api/v1/apps`, `/api/v2/instance` and
+`/oauth/token` + `/oauth/revoke` cross-origin. Those routes answer with
 `Access-Control-Allow-Origin: *` — never a reflected origin and never
 `Allow-Credentials` — and `OPTIONS` preflights on them return 204 without
 authentication. The session-authenticated first-party API stays same-origin
 only.
+
+`GET /api/v2/instance` aliases the v1 instance document for clients that
+probe the v2 path. The compatibility prefix also serves the public instance
+sub-resources Mastodon clients read alongside it:
+`{prefix}/instance/peers` (domains this instance exchanges content with),
+`{prefix}/instance/rules` and `{prefix}/instance/custom_emojis` (empty —
+the product has no rules text or custom emoji), and
+`{prefix}/instance/announcements` (+ `/{id}`) projecting the admin
+announcement board into the Mastodon announcement shape.
 
 | Screen | Route | What it uses |
 | --- | --- | --- |
