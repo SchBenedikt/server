@@ -1090,6 +1090,7 @@ function normalizePreferences(value: unknown): AccountPreferences {
 		mirror_atproto_account_did: typeof value.mirror_atproto_account_did === 'string'
 			? value.mirror_atproto_account_did
 			: null,
+		onboarding_dismissed: value.onboarding_dismissed === true,
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }

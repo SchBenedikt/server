@@ -137,6 +137,59 @@ final class PreferencesTest extends TestCase
         self::assertSame(403, $csrf->status);
     }
 
+    public function testOnboardingDismissalPersistsPerAccount(): void
+    {
+        $initial = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertFalse($initial['onboarding_dismissed']);
+        self::assertNull($initial['onboarding_dismissed_at']);
+
+        $dismissed = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'onboarding_dismissed' => true,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $dismissed->status);
+        $saved = $this->decoded($dismissed)['preferences'];
+        self::assertTrue($saved['onboarding_dismissed']);
+        self::assertNotNull($saved['onboarding_dismissed_at']);
+
+        $reloaded = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertTrue($reloaded['onboarding_dismissed']);
+        self::assertSame($saved['onboarding_dismissed_at'], $reloaded['onboarding_dismissed_at']);
+
+        // Re-dismissing must keep the original timestamp.
+        $again = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'onboarding_dismissed' => true,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $again->status);
+        self::assertSame(
+            $saved['onboarding_dismissed_at'],
+            $this->decoded($again)['preferences']['onboarding_dismissed_at'],
+        );
+
+        // The flag is per account: bob's preferences stay untouched.
+        $bob = $this->server->signIn('bob');
+        $bobPreferences = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $bob['cookies']]),
+        )['preferences'];
+        self::assertFalse($bobPreferences['onboarding_dismissed']);
+
+        $restored = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'onboarding_dismissed' => false,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $restored->status);
+        $restoredPreferences = $this->decoded($restored)['preferences'];
+        self::assertFalse($restoredPreferences['onboarding_dismissed']);
+        self::assertNull($restoredPreferences['onboarding_dismissed_at']);
+
+        $invalid = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'onboarding_dismissed' => 'yes',
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(422, $invalid->status);
+    }
+
     public function testExportContainsOnlyTheViewersOwnData(): void
     {
         foreach (['alice', 'bob'] as $handle) {
