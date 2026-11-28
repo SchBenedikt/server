@@ -478,8 +478,12 @@ final class AdminService
         }
 
         $rows = $this->db->fetchAll(
-            'SELECT r.*, a.display_name AS reporter_name, a.handle AS reporter_handle, a.disabled_at AS reporter_disabled_at'
-            . ' FROM moderation_report r LEFT JOIN account a ON a.id = r.reporter_id'
+            'SELECT r.*, a.display_name AS reporter_name, a.handle AS reporter_handle,'
+            . ' a.disabled_at AS reporter_disabled_at,'
+            . ' admin.display_name AS assignee_name, admin.handle AS assignee_handle'
+            . ' FROM moderation_report r'
+            . ' LEFT JOIN account a ON a.id = r.reporter_id'
+            . ' LEFT JOIN account admin ON admin.id = r.assigned_to'
             . $where . ' ORDER BY r.created_at DESC LIMIT ' . $limit,
             $parameters,
         );
@@ -605,6 +609,93 @@ final class AdminService
         $this->record($adminId, 'report.' . $state, (string) $row['target_type'], (string) $row['target_id'], [
             'report_id' => $id,
             'note' => $note,
+        ]);
+
+        return $this->report($id);
+    }
+
+    /**
+     * Assigns an open report to an administrator (or clears the assignment
+     * with null) so the review queue has a named owner. Only open reports can
+     * change hands; a resolved case is history.
+     *
+     * @return array<string, mixed>
+     */
+    public function assignReport(string $adminId, string $id, ?string $assigneeId): array
+    {
+        $assigneeId = $assigneeId === null ? null : trim($assigneeId);
+        if ($assigneeId === '') {
+            $assigneeId = null;
+        }
+
+        if ($assigneeId !== null) {
+            $assignee = $this->accounts->find($assigneeId);
+            if ($assignee === null || !$assignee->isAdmin() || $assignee->isDisabled()) {
+                throw AdminException::invalid(
+                    'Unknown assignee.',
+                    ['assigned_to' => 'Choose an active administrator account.'],
+                );
+            }
+        }
+
+        $row = $this->db->fetchOne('SELECT * FROM moderation_report WHERE id = :id', ['id' => $id]);
+        if ($row === null) {
+            throw AdminException::notFound('This report does not exist.');
+        }
+        if ((string) $row['state'] !== 'open') {
+            throw AdminException::conflict('Only an open report can be assigned.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            'UPDATE moderation_report SET assigned_to = :assignee, assigned_at = :assigned_at,'
+            . ' updated_at = :updated WHERE id = :id',
+            [
+                'assignee' => $assigneeId,
+                'assigned_at' => $assigneeId === null ? null : $now,
+                'updated' => $now,
+                'id' => $id,
+            ],
+        );
+
+        $this->record(
+            $adminId,
+            $assigneeId === null ? 'report.unassign' : 'report.assign',
+            (string) $row['target_type'],
+            (string) $row['target_id'],
+            ['report_id' => $id, 'assigned_to' => $assigneeId],
+        );
+
+        return $this->report($id);
+    }
+
+    /**
+     * Reopens a resolved or dismissed report. The resolution fields are
+     * cleared — the audit trail keeps who resolved it and why — and the
+     * report returns to the open queue, keeping its assignee.
+     *
+     * @return array<string, mixed>
+     */
+    public function reopenReport(string $adminId, string $id): array
+    {
+        $row = $this->db->fetchOne('SELECT * FROM moderation_report WHERE id = :id', ['id' => $id]);
+        if ($row === null) {
+            throw AdminException::notFound('This report does not exist.');
+        }
+        if ((string) $row['state'] === 'open') {
+            throw AdminException::conflict('This report is already open.');
+        }
+
+        $now = Time::format($this->clock->now());
+        $this->db->execute(
+            "UPDATE moderation_report SET state = 'open', resolution_note = NULL, resolved_at = NULL,"
+            . ' resolved_by = NULL, updated_at = :updated WHERE id = :id',
+            ['updated' => $now, 'id' => $id],
+        );
+
+        $this->record($adminId, 'report.reopen', (string) $row['target_type'], (string) $row['target_id'], [
+            'report_id' => $id,
+            'previous_state' => (string) $row['state'],
         ]);
 
         return $this->report($id);
@@ -1293,6 +1384,10 @@ final class AdminService
             'updated_at' => (string) $row['updated_at'],
             'resolved_at' => $row['resolved_at'] === null ? null : (string) $row['resolved_at'],
             'resolved_by' => $row['resolved_by'] === null ? null : (string) $row['resolved_by'],
+            'assigned_to' => $row['assigned_to'] === null ? null : (string) $row['assigned_to'],
+            'assigned_at' => $row['assigned_at'] === null ? null : (string) $row['assigned_at'],
+            'assignee_name' => $row['assignee_name'] === null ? null : (string) $row['assignee_name'],
+            'assignee_handle' => $row['assignee_handle'] === null ? null : (string) $row['assignee_handle'],
         ];
     }
 
@@ -1302,8 +1397,12 @@ final class AdminService
     private function report(string $id): array
     {
         $row = $this->db->fetchOne(
-            'SELECT r.*, a.display_name AS reporter_name, a.handle AS reporter_handle, a.disabled_at AS reporter_disabled_at'
-            . ' FROM moderation_report r LEFT JOIN account a ON a.id = r.reporter_id WHERE r.id = :id',
+            'SELECT r.*, a.display_name AS reporter_name, a.handle AS reporter_handle,'
+            . ' a.disabled_at AS reporter_disabled_at,'
+            . ' admin.display_name AS assignee_name, admin.handle AS assignee_handle'
+            . ' FROM moderation_report r'
+            . ' LEFT JOIN account a ON a.id = r.reporter_id'
+            . ' LEFT JOIN account admin ON admin.id = r.assigned_to WHERE r.id = :id',
             ['id' => $id],
         );
         if ($row === null) {

@@ -278,7 +278,7 @@ the core deliberately has no administration API.
 | --- | --- |
 | Overview | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
 | Accounts | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
-| Meldungen | Open, resolved and dismissed reports with target preview, reporter, category and internal note; delete the reported post or disable the reported local account. |
+| Meldungen | Open, resolved and dismissed reports with target preview, reporter, category, assignee and internal note; assign a report to an administrator, reopen a closed case, delete the reported post or disable the reported local account. |
 | Federation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
 | Warteschlange | Pending, running and dead jobs with payload inspection, single retry/delete, retry-all, purge of old dead jobs and an immediate worker run. |
 | Instance | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
@@ -290,8 +290,11 @@ its header. A report stores the reporter, target, category (`spam`, `abuse`,
 snapshot. Remote posts and profiles may be reported by canonical URL, `at://`
 or `did:` even before they are cached; the moderation view marks them as
 `remote` and links to the origin. Duplicate open reports from the same reporter
-for the same target answer `409`. Resolving or dismissing a report, deleting a
-post and disabling an account are written to the audit log.
+for the same target answer `409`. An open report can be assigned to an
+active administrator (or taken over and unassigned); resolved and dismissed
+reports can be reopened, which clears the resolution fields while the audit
+log keeps the history. Resolving or dismissing a report, assigning it,
+deleting a post and disabling an account are written to the audit log.
 
 `GET /api/v1/host/admin/preflight` runs a read-only readiness check. Local
 checks cover the instance URL, database, pending migrations, worker heartbeat,

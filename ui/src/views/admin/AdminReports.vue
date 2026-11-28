@@ -14,7 +14,7 @@ import {
 	type ReportList,
 } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
-import { showToast } from '../../lib/state';
+import { appState, showToast } from '../../lib/state';
 
 type FilterState = 'open' | 'resolved' | 'dismissed' | 'all';
 
@@ -34,6 +34,40 @@ const resolveError = ref('');
 const confirmOpen = ref(false);
 const confirmKind = ref<'post' | 'account'>('post');
 const confirmTarget = ref<AdminReport | null>(null);
+
+const myId = computed(() => appState.session.user?.id ?? '');
+
+async function assign(report: AdminReport): Promise<void> {
+	if (busy.value !== '') {
+		return;
+	}
+	busy.value = 'assign';
+	try {
+		await getAdminApi().assignReport(report.id, report.assigned_to === myId.value ? null : myId.value);
+		showToast('Report assignment updated.', 'success');
+		await load();
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The report could not be assigned.', 'error');
+	} finally {
+		busy.value = '';
+	}
+}
+
+async function reopen(report: AdminReport): Promise<void> {
+	if (busy.value !== '') {
+		return;
+	}
+	busy.value = 'reopen';
+	try {
+		await getAdminApi().reopenReport(report.id);
+		showToast('Report reopened.', 'success');
+		await load();
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The report could not be reopened.', 'error');
+	} finally {
+		busy.value = '';
+	}
+}
 
 const filters: { id: FilterState; label: string }[] = [
 	{ id: 'open', label: 'Open' },
@@ -249,6 +283,9 @@ onMounted(() => {
 					</span>
 					<span class="a-admin-report__meta">
 						By @{{ report.reporter_handle }} · {{ relativeTime(report.created_at) }}
+						<template v-if="report.assigned_to !== null">
+							· Assigned to @{{ report.assignee_handle ?? report.assigned_to }}
+						</template>
 					</span>
 				</header>
 
@@ -291,6 +328,15 @@ onMounted(() => {
 
 				<footer class="a-admin-report__actions">
 					<template v-if="report.state === 'open'">
+						<button
+							type="button"
+							class="a-btn a-btn--ghost a-btn--small"
+							:disabled="busy !== ''"
+							@click="assign(report)"
+						>
+							<AppIcon name="user" :size="15" />
+							{{ report.assigned_to === myId ? 'Unassign me' : report.assigned_to === null ? 'Assign to me' : 'Take over' }}
+						</button>
 						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openResolve(report, 'resolved')">
 							<AppIcon name="check" :size="15" /> Resolve
 						</button>
@@ -298,6 +344,15 @@ onMounted(() => {
 							<AppIcon name="x" :size="15" /> Dismiss
 						</button>
 					</template>
+					<button
+						v-else
+						type="button"
+						class="a-btn a-btn--ghost a-btn--small"
+						:disabled="busy !== ''"
+						@click="reopen(report)"
+					>
+						<AppIcon name="refresh" :size="15" /> Reopen
+					</button>
 					<button
 						v-if="report.target_type === 'post' && report.target.exists"
 						type="button"

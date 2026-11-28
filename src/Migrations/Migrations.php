@@ -83,6 +83,7 @@ final class Migrations
             new Version202611280026AtprotoRemoteAudience(),
             new Version202611280027RemoteEngagementRequest(),
             new Version202611280028OnboardingDismissal(),
+            new Version202611280029ReportAssignment(),
         ];
     }
 }
