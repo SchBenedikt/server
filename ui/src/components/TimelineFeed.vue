@@ -8,6 +8,7 @@ import AppIcon from './AppIcon.vue';
 import EmptyState from './EmptyState.vue';
 import PostCard from './PostCard.vue';
 import TimelineSkeleton from './TimelineSkeleton.vue';
+import { t } from '../lib/i18n';
 import { useFeedImpressions } from '../lib/feed-signals';
 import { useTimeline, type FeedKind } from '../lib/timelines';
 
@@ -71,7 +72,7 @@ defineExpose({
 <template>
 	<section ref="section" class="a-feed" :class="{ 'a-feed--cards': cards }" aria-live="polite">
 		<div v-if="kind === 'for-you' && timeline.interests.value.length > 0" class="a-feed__interests">
-			<span class="a-feed__interests-label">Learning from your reading and reactions:</span>
+			<span class="a-feed__interests-label">{{ t('feed.interests') }}</span>
 			<span v-for="interest in timeline.interests.value" :key="interest.key" class="a-feed__interest">
 				#{{ interest.key }}
 			</span>
@@ -84,7 +85,7 @@ defineExpose({
 			@click="timeline.showNewPosts"
 		>
 			<AppIcon name="arrowUp" :size="14" />
-			{{ timeline.pendingNew.value.length }} new post{{ timeline.pendingNew.value.length === 1 ? '' : 's' }}
+			{{ t(timeline.pendingNew.value.length === 1 ? 'feed.newPostOne' : 'feed.newPosts', { count: timeline.pendingNew.value.length }) }}
 		</button>
 
 		<TimelineSkeleton v-if="timeline.loading.value && timeline.posts.value.length === 0" />
@@ -92,11 +93,11 @@ defineExpose({
 		<div v-else-if="timeline.error.value !== '' && timeline.posts.value.length === 0" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
 			<div>
-				<strong>The feed is currently unavailable.</strong>
+				<strong>{{ t('feed.unavailable') }}</strong>
 				<p>{{ timeline.error.value }}</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="timeline.refresh">
-				Try again
+				{{ t('common.tryAgain') }}
 			</button>
 		</div>
 
@@ -115,8 +116,8 @@ defineExpose({
 			<EmptyState
 				v-if="timeline.hasMore.value"
 				icon="filter"
-				title="More posts are available"
-				text="Some entries are hidden by your settings. Continue to older posts."
+				:title="t('feed.moreTitle')"
+				:text="t('feed.moreText')"
 			/>
 			<EmptyState v-else :icon="emptyIcon" :title="emptyTitle" :text="emptyText" />
 		</slot>
@@ -124,7 +125,7 @@ defineExpose({
 		<p v-if="timeline.error.value !== '' && timeline.posts.value.length > 0" class="a-feed__inline-error" role="alert">
 			{{ timeline.error.value }}
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="timeline.loadMore">
-				Try loading more again
+				{{ t('feed.loadMoreRetry') }}
 			</button>
 		</p>
 
@@ -143,14 +144,14 @@ defineExpose({
 			@click="timeline.loadMore"
 		>
 			<AppIcon v-if="timeline.loadingMore.value" name="refresh" :size="16" class="a-spin" />
-			{{ timeline.loadingMore.value ? 'Loading…' : timeline.posts.value.length === 0 ? 'Continue' : 'More posts' }}
+			{{ timeline.loadingMore.value ? t('common.loading') : t(timeline.posts.value.length === 0 ? 'feed.continue' : 'feed.more') }}
 		</button>
 
 		<p
 			v-else-if="timeline.loaded.value && timeline.posts.value.length > 0 && !timeline.hasMore.value"
 			class="a-feed__end"
 		>
-			You're all caught up.
+			{{ t('feed.caughtUp') }}
 		</p>
 	</section>
 </template>

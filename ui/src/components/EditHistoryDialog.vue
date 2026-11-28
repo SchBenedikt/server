@@ -48,7 +48,7 @@ function close(): void {
 			<article class="a-management-dialog a-revision-dialog" role="dialog" aria-modal="true" aria-labelledby="a-revision-title">
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Post</p>
+						<p class="a-profile-edit__eyebrow">{{ t('post.title') }}</p>
 						<h2 id="a-revision-title">{{ t('rev.title') }}</h2>
 					</div>
 					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" @click="close">

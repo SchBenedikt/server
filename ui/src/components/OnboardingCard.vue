@@ -6,6 +6,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { getApi } from '../lib/api';
+import { t } from '../lib/i18n';
 import { appState, openComposer, showToast } from '../lib/state';
 import type { StarterPack } from '../lib/types';
 
@@ -15,10 +16,10 @@ const myPacks = ref<StarterPack[]>([]);
 const stats = ref<{ following: number; posts: number; bio: string; avatar: string | null } | null>(null);
 
 const baseSteps = [
-	{ key: 'profile', icon: 'user', label: 'Complete your profile', href: '#/settings' },
-	{ key: 'discover', icon: 'compass', label: 'Discover people worth following', href: '#/explore' },
-	{ key: 'pack', icon: 'users', label: 'Try a starter pack', href: '#/starter-packs' },
-	{ key: 'post', icon: 'pen', label: 'Write your first post', href: null },
+	{ key: 'profile', icon: 'user', labelKey: 'onboard.step.profile', href: '#/settings' },
+	{ key: 'discover', icon: 'compass', labelKey: 'onboard.step.discover', href: '#/explore' },
+	{ key: 'pack', icon: 'users', labelKey: 'onboard.step.pack', href: '#/starter-packs' },
+	{ key: 'post', icon: 'pen', labelKey: 'onboard.step.post', href: null },
 ] as const;
 
 const steps = computed(() => {
@@ -77,23 +78,22 @@ async function dismiss(): Promise<void> {
 		await getApi().updatePreferences({ onboarding_dismissed: true });
 		emit('dismissed');
 	} catch {
-		showToast('The dismissal could not be saved. Please try again.', 'error');
+		showToast(t('onboard.dismissFailed'), 'error');
 		dismissing.value = false;
 	}
 }
 </script>
 
 <template>
-	<section class="a-onboarding" aria-label="Getting started">
+	<section class="a-onboarding" :aria-label="t('onboard.aria')">
 		<div class="a-onboarding__copy">
 			<p class="a-onboarding__eyebrow">
 				<AppIcon name="sparkles" :size="15" />
-				Welcome aboard
+				{{ t('onboard.eyebrow') }}
 			</p>
-			<h2>Four quick steps to your first feed</h2>
+			<h2>{{ t('onboard.heading') }}</h2>
 			<p class="a-onboarding__lead">
-				{{ doneCount }} of {{ steps.length }} done — everything here is optional,
-				dismiss this card any time and it stays dismissed on every device.
+				{{ t('onboard.lead', { done: doneCount, total: steps.length }) }}
 			</p>
 		</div>
 		<ol class="a-onboarding__steps">
@@ -105,19 +105,19 @@ async function dismiss(): Promise<void> {
 					v-if="step.href !== null"
 					:href="step.href"
 					class="a-onboarding__step"
-				>{{ step.label }}</a>
+				>{{ t(step.labelKey) }}</a>
 				<button
 					v-else
 					type="button"
 					class="a-onboarding__step a-onboarding__step--button"
 					@click="activate(step)"
-				>{{ step.label }}</button>
-				<span v-if="step.done" class="a-onboarding__done">Done</span>
+				>{{ t(step.labelKey) }}</button>
+				<span v-if="step.done" class="a-onboarding__done">{{ t('onboard.done') }}</span>
 			</li>
 		</ol>
 		<div class="a-onboarding__actions">
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="dismissing" @click="dismiss">
-				{{ dismissing ? 'Saving…' : 'Dismiss' }}
+				{{ dismissing ? t('common.saving') : t('onboard.dismiss') }}
 			</button>
 		</div>
 	</section>

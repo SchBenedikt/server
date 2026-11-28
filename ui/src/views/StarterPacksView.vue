@@ -9,6 +9,7 @@ import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
+import { t } from '../lib/i18n';
 import { navigate, route } from '../lib/router';
 import { appState, showToast } from '../lib/state';
 import type { StarterPack, StarterPackMember } from '../lib/types';
@@ -63,7 +64,7 @@ async function load(): Promise<void> {
 		mine.value = data.mine;
 		discover.value = data.discover;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The starter packs could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('pack.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -81,7 +82,7 @@ async function loadSelected(): Promise<void> {
 		selected.value = await getApi().starterPack(selectedId.value);
 	} catch (caught) {
 		selected.value = null;
-		error.value = caught instanceof Error ? caught.message : 'This starter pack could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('pack.loadOneFailed');
 	} finally {
 		loadingPack.value = false;
 	}
@@ -99,10 +100,10 @@ async function create(): Promise<void> {
 		title.value = '';
 		description.value = '';
 		creating.value = false;
-		showToast('Starter pack created.', 'success');
+		showToast(t('pack.created'), 'success');
 		navigate(`/starter-packs/${encodeURIComponent(pack.id)}`);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The starter pack could not be created.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('pack.createFailed'), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -110,7 +111,7 @@ async function create(): Promise<void> {
 
 async function removePack(): Promise<void> {
 	const pack = selected.value;
-	if (pack === null || deleting.value || !window.confirm(`Delete the starter pack “${pack.title}”?`)) {
+	if (pack === null || deleting.value || !window.confirm(t('pack.deleteConfirm', { title: pack.title }))) {
 		return;
 	}
 
@@ -120,10 +121,10 @@ async function removePack(): Promise<void> {
 		mine.value = mine.value.filter((entry) => entry.id !== pack.id);
 		discover.value = discover.value.filter((entry) => entry.id !== pack.id);
 		selected.value = null;
-		showToast('Starter pack deleted.', 'success');
+		showToast(t('pack.deleted'), 'success');
 		navigate('/starter-packs');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The starter pack could not be deleted.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('pack.deleteFailed'), 'error');
 	} finally {
 		deleting.value = false;
 	}
@@ -140,9 +141,9 @@ async function addMember(): Promise<void> {
 		const updated = await getApi().addStarterPackMember(pack.id, memberQuery.value.trim());
 		mergePack(updated);
 		memberQuery.value = '';
-		showToast('Account added.', 'success');
+		showToast(t('pack.added'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The account could not be added.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('pack.addFailed'), 'error');
 	} finally {
 		adding.value = false;
 	}
@@ -157,9 +158,9 @@ async function removeMember(member: StarterPackMember): Promise<void> {
 	removing.value = member.id;
 	try {
 		mergePack(await getApi().removeStarterPackMember(pack.id, member.id));
-		showToast('Account removed.', 'success');
+		showToast(t('pack.removed'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The account could not be removed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('pack.removeFailed'), 'error');
 	} finally {
 		removing.value = '';
 	}
@@ -175,7 +176,7 @@ async function followOne(member: StarterPackMember): Promise<void> {
 		return;
 	}
 	if (member.inbox_url === null || member.inbox_url === '') {
-		throw new Error(`The inbox for ${member.handle} is unknown. Open the profile to follow them.`);
+		throw new Error(t('pack.inboxUnknown', { handle: member.handle }));
 	}
 	await getApi().followRemote(member.member_id, member.inbox_url);
 }
@@ -188,9 +189,9 @@ async function follow(member: StarterPackMember): Promise<void> {
 	try {
 		await followOne(member);
 		followed.value = { ...followed.value, [member.id]: true };
-		showToast(`You now follow ${memberName(member)}.`, 'success');
+		showToast(t('pack.followedYou', { name: memberName(member) }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The follow action failed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('pack.followFailed'), 'error');
 	}
 }
 
@@ -219,9 +220,12 @@ async function followAll(): Promise<void> {
 	followed.value = next;
 	followAllRunning.value = false;
 	showToast(
-		failed === 0
-			? `Followed ${succeeded} ${succeeded === 1 ? 'account' : 'accounts'}.`
-			: `Followed ${succeeded} ${succeeded === 1 ? 'account' : 'accounts'}; ${failed} could not be followed.`,
+		t(
+			failed === 0
+				? (succeeded === 1 ? 'pack.followedAllOne' : 'pack.followedAll')
+				: (succeeded === 1 ? 'pack.followedAllPartialOne' : 'pack.followedAllPartial'),
+			{ count: succeeded, failed },
+		),
 		failed === 0 ? 'success' : 'error',
 	);
 }
@@ -245,7 +249,7 @@ function memberHref(member: StarterPackMember): string {
 function networkLabel(member: StarterPackMember): string {
 	switch (member.network) {
 		case 'local':
-			return 'This instance';
+			return t('pack.thisInstance');
 		case 'bluesky':
 			return 'Bluesky';
 		default:
@@ -263,15 +267,15 @@ onMounted(load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			title="Starter packs"
-			subtitle="Curated sets of people to follow in one step — from this instance, the fediverse and Bluesky."
+			:title="t('pack.title')"
+			:subtitle="t('pack.subtitle')"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
 				<button v-if="signedIn" type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = !creating">
 					<AppIcon name="plus" :size="15" />
-					New starter pack
+					{{ t('pack.new') }}
 				</button>
 			</template>
 		</PageHeader>
@@ -279,26 +283,26 @@ onMounted(load);
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Sign-in required</strong>
-				<p>Starter packs belong to an account.</p>
+				<strong>{{ t('common.signInRequired') }}</strong>
+				<p>{{ t('pack.signInText') }}</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<template v-else>
 			<form v-if="creating" class="a-panel a-collection-form" @submit.prevent="create">
 				<label>
-					<span>Name</span>
-					<input v-model="title" maxlength="80" required placeholder="For example: Design people" />
+					<span>{{ t('pack.nameLabel') }}</span>
+					<input v-model="title" maxlength="80" required :placeholder="t('pack.namePlaceholder')" />
 				</label>
 				<label>
-					<span>Description</span>
-					<textarea v-model="description" maxlength="500" rows="2" placeholder="Who belongs in this pack and why?" />
+					<span>{{ t('pack.descLabel') }}</span>
+					<textarea v-model="description" maxlength="500" rows="2" :placeholder="t('pack.descPlaceholder')" />
 				</label>
 				<div class="a-collection-form__actions">
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = false">Cancel</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = false">{{ t('common.cancel') }}</button>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || title.trim() === ''">
-						{{ saving ? 'Saving…' : 'Create starter pack' }}
+						{{ saving ? t('common.saving') : t('pack.create') }}
 					</button>
 				</div>
 			</form>
@@ -310,11 +314,11 @@ onMounted(load);
 					<div>
 						<span class="a-collection-card__badge">
 							<AppIcon name="users" :size="13" />
-							{{ selected.member_count }} {{ selected.member_count === 1 ? 'account' : 'accounts' }}
+							{{ t(selected.member_count === 1 ? 'pack.accountOne' : 'pack.accounts', { count: selected.member_count }) }}
 						</span>
 						<h2>{{ selected.title }}</h2>
 						<p v-if="selected.description !== ''">{{ selected.description }}</p>
-						<small class="a-muted">by @{{ selected.owner_handle }}</small>
+						<small class="a-muted">{{ t('pack.by', { handle: selected.owner_handle }) }}</small>
 					</div>
 					<div class="a-starter-pack__actions">
 						<button
@@ -324,14 +328,14 @@ onMounted(load);
 							@click="followAll"
 						>
 							<AppIcon name="users" :size="15" />
-							{{ followAllRunning ? 'Following…' : 'Follow all' }}
+							{{ followAllRunning ? t('pack.following') : t('pack.followAll') }}
 						</button>
 						<button
 							v-if="isOwner"
 							type="button"
 							class="a-icon-btn a-icon-btn--danger"
-							aria-label="Delete starter pack"
-							title="Delete"
+							:aria-label="t('pack.deleteAria')"
+							:title="t('pack.deleteTitle')"
 							:disabled="deleting"
 							@click="removePack"
 						>
@@ -344,10 +348,10 @@ onMounted(load);
 					<input
 						v-model="memberQuery"
 						maxlength="255"
-						placeholder="@name@server, @name.bsky.social or a local handle"
+						:placeholder="t('pack.memberPlaceholder')"
 					/>
 					<button type="submit" class="a-btn a-btn--ghost a-btn--small" :disabled="adding || memberQuery.trim() === ''">
-						{{ adding ? 'Adding…' : 'Add account' }}
+						{{ adding ? t('pack.adding') : t('pack.addAccount') }}
 					</button>
 				</form>
 
@@ -360,7 +364,7 @@ onMounted(load);
 						</a>
 						<span v-if="followed[member.id] === true" class="a-follow a-follow--following a-follow--compact">
 							<AppIcon name="check" :size="14" />
-							<span>Following</span>
+							<span>{{ t('pack.followingState') }}</span>
 						</span>
 						<button
 							v-else
@@ -370,14 +374,14 @@ onMounted(load);
 							@click="follow(member)"
 						>
 							<AppIcon name="plus" :size="14" />
-							<span>Follow</span>
+							<span>{{ t('pack.follow') }}</span>
 						</button>
 						<button
 							v-if="isOwner"
 							type="button"
 							class="a-icon-btn a-icon-btn--danger"
-							aria-label="Remove account"
-							title="Remove"
+							:aria-label="t('pack.removeAria')"
+							:title="t('pack.removeTitle')"
 							:disabled="removing === member.id"
 							@click="removeMember(member)"
 						>
@@ -386,43 +390,43 @@ onMounted(load);
 					</li>
 				</ul>
 				<p v-else class="a-muted">
-					{{ isOwner ? 'Add the first account above.' : 'This starter pack has no accounts yet.' }}
+					{{ t(isOwner ? 'pack.addFirst' : 'pack.emptyMembers') }}
 				</p>
 			</section>
 
-			<p v-else-if="loadingPack" class="a-muted">Loading starter pack…</p>
+			<p v-else-if="loadingPack" class="a-muted">{{ t('pack.loading') }}</p>
 
 			<template v-else-if="selectedId === ''">
 				<div class="a-section-heading">
-					<h2>Your starter packs</h2>
+					<h2>{{ t('pack.mineTitle') }}</h2>
 				</div>
-				<p v-if="loading && mine.length === 0" class="a-muted">Loading starter packs…</p>
+				<p v-if="loading && mine.length === 0" class="a-muted">{{ t('pack.loadingList') }}</p>
 				<EmptyState
 					v-else-if="mine.length === 0"
 					icon="users"
-					title="No starter packs yet"
-					text="Bundle a few accounts into a pack and share it, so someone new can follow them all at once."
+					:title="t('pack.emptyTitle')"
+					:text="t('pack.emptyText')"
 				>
-					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = true">Create your first starter pack</button>
+					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="creating = true">{{ t('pack.createFirst') }}</button>
 				</EmptyState>
 				<ul v-else class="a-collection-grid">
 					<li v-for="pack in mine" :key="pack.id" class="a-collection-card">
 						<a :href="`#/starter-packs/${encodeURIComponent(pack.id)}`" class="a-collection-card__link" @click.prevent="open(pack)">
 							<span class="a-collection-card__badge">
 								<AppIcon name="users" :size="13" />
-								{{ pack.member_count }} {{ pack.member_count === 1 ? 'account' : 'accounts' }}
+								{{ t(pack.member_count === 1 ? 'pack.accountOne' : 'pack.accounts', { count: pack.member_count }) }}
 							</span>
 							<strong>{{ pack.title }}</strong>
 							<p v-if="pack.description !== ''">{{ pack.description }}</p>
-							<small>by @{{ pack.owner_handle }}</small>
+							<small>{{ t('pack.by', { handle: pack.owner_handle }) }}</small>
 						</a>
 					</li>
 				</ul>
 
 				<div class="a-section-heading">
-					<h2>Discover</h2>
+					<h2>{{ t('pack.discoverTitle') }}</h2>
 				</div>
-				<p v-if="discover.length === 0" class="a-muted">No public starter packs from other members yet.</p>
+				<p v-if="discover.length === 0" class="a-muted">{{ t('pack.discoverEmpty') }}</p>
 				<ul v-else class="a-collection-grid">
 					<li v-for="pack in discover" :key="pack.id" class="a-collection-card">
 						<a :href="`#/starter-packs/${encodeURIComponent(pack.id)}`" class="a-collection-card__link" @click.prevent="open(pack)">
