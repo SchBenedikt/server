@@ -246,6 +246,54 @@ final class CommunityApiController
                 return Response::json(['pages' => $this->runtime->instancePages->published()]);
             }
 
+            if ($method === 'GET' && $path === '/api/v1/host/push/vapid-key') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to use push notifications.');
+                }
+
+                return Response::json(['key' => $this->runtime->pushSubscriptions->vapidPublicKey()]);
+            }
+
+            if ($method === 'GET' && $path === '/api/v1/host/push/subscriptions') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to manage push subscriptions.');
+                }
+
+                return Response::json(['subscriptions' => $this->runtime->pushSubscriptions->subscriptionsFor($userId)]);
+            }
+
+            if ($method === 'POST' && $path === '/api/v1/host/push/subscriptions') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to use push notifications.');
+                }
+
+                $body = $this->jsonBody($request);
+                $keys = is_array($body['keys'] ?? null) ? $body['keys'] : [];
+
+                return Response::json([
+                    'subscription' => $this->runtime->pushSubscriptions->subscribe(
+                        $userId,
+                        $body['endpoint'] ?? null,
+                        $keys['p256dh'] ?? null,
+                        $keys['auth'] ?? null,
+                    ),
+                ], 201);
+            }
+
+            if ($method === 'DELETE' && $path === '/api/v1/host/push/subscriptions') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to manage push subscriptions.');
+                }
+
+                $body = $this->jsonBody($request);
+                $removed = $this->runtime->pushSubscriptions->unsubscribe(
+                    $userId,
+                    $body['endpoint'] ?? null,
+                );
+
+                return Response::json(['removed' => $removed]);
+            }
+
             if ($method === 'GET' && preg_match('#^/api/v1/host/pages/([^/]+)$#', $path, $matches) === 1) {
                 $page = $this->runtime->instancePages->find(rawurldecode($matches[1]));
                 if ($page === null) {
