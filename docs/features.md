@@ -533,9 +533,11 @@ deletion record, audit and moderation records, and remote copies.
 `POST /api/v1/host/import/preview` is the dry-run half of the move-in
 workflow: it accepts an `aloha-account-export` document and reports, without
 writing anything, which sections a future import could take verbatim
-(`local`: preferences, followed hashtags, keyword filters, featured tags)
-and which are `deferred` because their rows reference source-instance
-accounts, posts or attachments that need canonical identity mapping.
+(`local`: preferences, followed hashtags, keyword filters, featured tags,
+mutes, blocks and follows — actor ids are canonical ActivityPub URLs, so
+graph rows need no identity mapping) and which are `deferred` because
+their rows reference source-instance accounts, posts or attachments that
+need canonical identity mapping.
 Unrecognized sections are reported as `unknown`, and `core_archive` /
 `linked_bluesky_account` are listed under `not_transferred` — core-owned
 data and external identity never move.
@@ -543,7 +545,11 @@ data and external identity never move.
 `POST /api/v1/host/import/apply` writes the `local` sections — preferences
 (whitelisted keys only; mirror and onboarding state never transfer),
 followed hashtags, keyword filters (through the core `FilterService`,
-deduplicated by name) and featured tags (merged, never replaced) — while
+deduplicated by name), featured tags (merged, never replaced), mutes
+(expired entries skipped, live ones keep only their remaining duration),
+blocks (through the core `BlockService`, so the federated Block is queued)
+and follows (re-requested through `FollowingService` with the exported
+inbox URL — the peer still has to accept, nothing is claimed) — while
 deferred and unknown sections are reported and skipped. An optional
 `sections` list restricts the apply; re-running is idempotent.
 
