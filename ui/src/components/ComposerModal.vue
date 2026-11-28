@@ -7,6 +7,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { useHostBridge } from '@alohasocial/ui';
 import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
+import RichText from './RichText.vue';
 import { accountName, handleLabel, isRemoteId, postReplyTargetId, postRouteId, truncate } from '../lib/format';
 import { getApi } from '../lib/api';
 import { hostDisplayName, resolveAccount } from '../lib/account';
@@ -69,6 +70,7 @@ const error = ref('');
 const scheduledAt = ref('');
 const scheduleOpen = ref(false);
 const showPoll = ref(false);
+const showPreview = ref(false);
 const pollOptions = ref<string[]>(['', '']);
 const pollMultiple = ref(false);
 const pollHideTotals = ref(false);
@@ -1020,6 +1022,43 @@ async function submit(): Promise<void> {
 					</ul>
 				</div>
 
+				<div v-if="showPreview" class="a-composer__preview" aria-live="polite">
+					<p class="a-composer__preview-head">Preview</p>
+					<p v-if="contentWarning.trim() !== ''" class="a-composer__preview-cw">
+						<AppIcon name="info" :size="13" />
+						Content warning: <strong>{{ contentWarning }}</strong>
+					</p>
+					<div v-if="content.trim() !== ''" class="a-composer__preview-body">
+						<RichText :text="content" />
+					</div>
+					<p v-else class="a-composer__preview-empty">Nothing written yet.</p>
+					<ul v-if="showPoll" class="a-composer__preview-poll">
+						<li v-for="(option, index) in pollOptions.filter((entry) => entry.trim() !== '')" :key="index">
+							{{ option }}
+						</li>
+					</ul>
+					<div v-if="existing.length + images.length > 0" class="a-composer__preview-media">
+						<template v-for="attachment in existing" :key="attachment.id">
+							<img
+								v-if="attachment.media_type === 'image'"
+								:src="attachment.thumbnail_url ?? attachment.url"
+								:alt="attachment.alt_text ?? ''"
+							/>
+							<span v-else class="a-composer__preview-media-note">
+								<AppIcon :name="attachment.mime_type.startsWith('audio/') ? 'music' : 'image'" :size="15" />
+								{{ attachment.media_type }}
+							</span>
+						</template>
+						<template v-for="image in images" :key="image.key">
+							<img v-if="image.kind === 'image'" :src="image.preview" :alt="image.alt" />
+							<span v-else class="a-composer__preview-media-note">
+								<AppIcon :name="image.kind === 'audio' ? 'music' : 'image'" :size="15" />
+								{{ image.kind }}
+							</span>
+						</template>
+					</div>
+				</div>
+
 				<div v-if="showWarning" class="a-composer__cw">
 					<label for="a-composer-cw">Content warning</label>
 					<input
@@ -1235,6 +1274,16 @@ async function submit(): Promise<void> {
 						@click="showWarning = !showWarning"
 					>
 						<AppIcon name="info" :size="20" />
+					</button>
+					<button
+						type="button"
+						class="a-icon-btn"
+						:class="{ 'a-icon-btn--active': showPreview }"
+						aria-label="Preview post"
+						title="Preview"
+						@click="showPreview = !showPreview"
+					>
+						<AppIcon name="eye" :size="20" />
 					</button>
 					<button
 						v-if="!isEdit && !isQuote && !isDirect && !isRemoteReply"
