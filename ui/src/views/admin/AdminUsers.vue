@@ -9,6 +9,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.vue';
 import { ApiError } from '../../lib/api';
 import { getAdminApi, type AdminUser, type AdminUserPage, type CreateUserPayload } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
+import { t } from '../../lib/i18n';
 import { appState, showToast } from '../../lib/state';
 
 const page = ref<AdminUserPage | null>(null);
@@ -50,16 +51,16 @@ const confirmCopy = computed(() => {
 
 	if (confirmKind.value === 'revoke') {
 		return {
-			title: 'End sessions',
-			message: `All active sessions for @${target.handle} become invalid. The account must sign in again.`,
-			label: 'End sessions',
+			title: t('ausers.confirmRevokeTitle'),
+			message: t('ausers.confirmRevokeMessage', { handle: target.handle }),
+			label: t('ausers.endSessions'),
 		};
 	}
 
 	return {
-		title: 'account deactivate',
-		message: `@${target.handle} will no longer be able to sign in. Posts and followers are kept. You can re-enable the account at any time.`,
-		label: 'account deactivate',
+		title: t('ausers.confirmDisableTitle'),
+		message: t('ausers.confirmDisableMessage', { handle: target.handle }),
+		label: t('ausers.deactivate'),
 	};
 });
 
@@ -69,7 +70,7 @@ async function load(): Promise<void> {
 	try {
 		page.value = await getAdminApi().users(query.value.trim(), currentPage.value, 20);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Accounts could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('ausers.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -122,7 +123,7 @@ async function createUser(): Promise<void> {
 			display_name: draft.value.display_name?.trim() === '' ? undefined : draft.value.display_name?.trim(),
 		});
 		createOpen.value = false;
-		showToast(`Account @${created.handle} created.`, 'success');
+		showToast(t('ausers.created', { handle: created.handle }), 'success');
 		currentPage.value = 1;
 		await load();
 	} catch (caught) {
@@ -130,7 +131,7 @@ async function createUser(): Promise<void> {
 			createError.value = caught.message;
 			createFields.value = caught.fields;
 		} else {
-			createError.value = caught instanceof Error ? caught.message : 'The account could not be created.';
+			createError.value = caught instanceof Error ? caught.message : t('ausers.createFailed');
 		}
 	} finally {
 		createSaving.value = false;
@@ -146,10 +147,14 @@ async function changeRole(user: AdminUser, role: string): Promise<void> {
 	try {
 		const saved = await getAdminApi().updateUser(user.id, { role: role as 'admin' | 'moderator' | 'user' });
 		replace(saved);
-		const label = saved.role === 'admin' ? 'an administrator' : saved.role === 'moderator' ? 'a moderator' : 'a member';
-		showToast(`@${user.handle} is now ${label}.`, 'success');
+		const label = t(saved.role === 'admin'
+			? 'ausers.roleAdminWord'
+			: saved.role === 'moderator'
+				? 'ausers.roleModeratorWord'
+				: 'ausers.roleMemberWord');
+		showToast(t('ausers.roleChanged', { handle: user.handle, role: label }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The role could not be changed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('ausers.roleFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -164,9 +169,9 @@ async function enable(user: AdminUser): Promise<void> {
 	try {
 		const saved = await getAdminApi().setUserDisabled(user.id, false);
 		replace(saved);
-		showToast(`@${user.handle} is active again.`, 'success');
+		showToast(t('ausers.activated', { handle: user.handle }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The account could not be activated.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('ausers.activateFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -195,14 +200,14 @@ async function confirmAction(): Promise<void> {
 		if (confirmKind.value === 'disable') {
 			const saved = await getAdminApi().setUserDisabled(target.id, true);
 			replace(saved);
-			showToast(`@${target.handle} has been deactivated.`, 'success');
+			showToast(t('ausers.deactivated', { handle: target.handle }), 'success');
 		} else {
 			const revoked = await getAdminApi().revokeSessions(target.id);
-			showToast(`${revoked} session${revoked === 1 ? '' : 's'} ended.`, 'success');
+			showToast(t('ausers.sessionsEnded', { count: revoked }), 'success');
 		}
 		confirmOpen.value = false;
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The action could not be completed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('ausers.actionFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -227,7 +232,7 @@ async function savePassword(): Promise<void> {
 		return;
 	}
 	if (passwordValue.value.length < 8) {
-		passwordError.value = 'The password needs at least 8 characters.';
+		passwordError.value = t('ausers.passwordTooShort');
 		return;
 	}
 
@@ -236,9 +241,9 @@ async function savePassword(): Promise<void> {
 	try {
 		const revoked = await getAdminApi().resetPassword(target.id, passwordValue.value);
 		passwordOpen.value = false;
-		showToast(`Password for @${target.handle} changed. ${revoked} session${revoked === 1 ? '' : 's'} ended.`, 'success');
+		showToast(t('ausers.passwordChanged', { handle: target.handle, count: revoked }), 'success');
 	} catch (caught) {
-		passwordError.value = caught instanceof Error ? caught.message : 'The password could not be changed.';
+		passwordError.value = caught instanceof Error ? caught.message : t('ausers.passwordFailed');
 	} finally {
 		passwordSaving.value = false;
 	}
@@ -261,31 +266,30 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Access</p>
-				<h2>Accounts and roles</h2>
+				<p class="a-admin-eyebrow">{{ t('ausers.eyebrow') }}</p>
+				<h2>{{ t('ausers.title') }}</h2>
 				<p class="a-admin-lead">
-					Create accounts, change display names, grant administrator rights or suspend
-					access. Password changes end all existing sessions.
+					{{ t('ausers.lead') }}
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openCreate">
 				<AppIcon name="plus" :size="15" />
-				Create account
+				{{ t('ausers.create') }}
 			</button>
 		</div>
 
 		<form class="a-admin-toolbar" @submit.prevent="search">
 			<label class="a-admin-search">
 				<AppIcon name="search" :size="17" />
-				<input v-model="query" type="search" placeholder="Handle, email or display name" autocomplete="off">
+				<input v-model="query" type="search" :placeholder="t('ausers.searchPlaceholder')" autocomplete="off">
 			</label>
-			<button type="submit" class="a-btn a-btn--ghost a-btn--small" :disabled="loading">Search</button>
+			<button type="submit" class="a-btn a-btn--ghost a-btn--small" :disabled="loading">{{ t('ausers.search') }}</button>
 			<button
 				v-if="query !== ''"
 				type="button"
 				class="a-btn a-btn--ghost a-btn--small"
 				@click="query = ''; search()"
-			>Reset</button>
+			>{{ t('ausers.reset') }}</button>
 		</form>
 
 		<p v-if="error !== ''" class="a-form-error" role="alert">{{ error }}</p>
@@ -299,13 +303,13 @@ onMounted(() => {
 				<table class="a-admin-table">
 					<thead>
 						<tr>
-							<th scope="col">account</th>
-							<th scope="col">role</th>
-							<th scope="col">Status</th>
-							<th scope="col">Posts</th>
-							<th scope="col">Relationships</th>
-							<th scope="col">Created</th>
-							<th scope="col"><span class="a-admin-sr">actions</span></th>
+							<th scope="col">{{ t('ausers.colAccount') }}</th>
+							<th scope="col">{{ t('ausers.colRole') }}</th>
+							<th scope="col">{{ t('ausers.colStatus') }}</th>
+							<th scope="col">{{ t('ausers.colPosts') }}</th>
+							<th scope="col">{{ t('ausers.colRelations') }}</th>
+							<th scope="col">{{ t('ausers.colCreated') }}</th>
+							<th scope="col"><span class="a-admin-sr">{{ t('ausers.colActions') }}</span></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -321,31 +325,31 @@ onMounted(() => {
 							</td>
 							<td>
 								<span class="a-admin-badge" :class="user.role === 'admin' ? 'a-admin-badge--primary' : ''">
-									{{ user.role === 'admin' ? 'Admin' : user.role === 'moderator' ? 'Moderator' : 'Member' }}
+									{{ t(user.role === 'admin' ? 'ausers.roleAdmin' : user.role === 'moderator' ? 'ausers.roleModerator' : 'ausers.roleMember') }}
 								</span>
 							</td>
 							<td>
 								<span class="a-admin-badge" :class="user.disabled_at !== null ? 'a-admin-badge--danger' : 'a-admin-badge--ok'">
-									{{ user.disabled_at !== null ? 'Deactivated' : 'Active' }}
+									{{ t(user.disabled_at !== null ? 'ausers.statusDeactivated' : 'ausers.statusActive') }}
 								</span>
 								<span
 									v-if="user.pending_email !== null"
 									class="a-admin-badge a-admin-badge--amber"
-									:title="`Pending change to ${user.pending_email}`"
+									:title="t('ausers.emailPendingTitle', { email: user.pending_email })"
 								>
-									Email pending
+									{{ t('ausers.emailPending') }}
 								</span>
 								<span
 									v-else-if="user.email_verified_at === null"
 									class="a-admin-badge a-admin-badge--muted"
-									title="Email address not verified"
+									:title="t('ausers.unverifiedTitle')"
 								>
-									Unverified
+									{{ t('ausers.unverified') }}
 								</span>
 							</td>
 							<td class="a-admin-num">
 								{{ user.posts }}
-								<small>{{ user.followers }} followers · {{ user.following }} following</small>
+								<small>{{ t('ausers.relStats', { followers: user.followers, following: user.following }) }}</small>
 							</td>
 							<td class="a-admin-nowrap" :title="absoluteTime(user.created_at)">
 								{{ relativeTime(user.created_at) }}
@@ -354,21 +358,21 @@ onMounted(() => {
 								<div class="a-admin-row-actions">
 									<select
 										class="a-admin-select a-admin-select--role"
-										:title="`Role for @${user.handle}`"
-										:aria-label="`Role for @${user.handle}`"
+										:title="t('ausers.roleFor', { handle: user.handle })"
+										:aria-label="t('ausers.roleFor', { handle: user.handle })"
 										:value="user.role"
 										:disabled="busy !== ''"
 										@change="changeRole(user, ($event.target as HTMLSelectElement).value)"
 									>
-										<option value="user">Member</option>
-										<option value="moderator">Moderator</option>
-										<option value="admin">Admin</option>
+										<option value="user">{{ t('ausers.roleMember') }}</option>
+										<option value="moderator">{{ t('ausers.roleModerator') }}</option>
+										<option value="admin">{{ t('ausers.roleAdmin') }}</option>
 									</select>
 									<button
 										type="button"
 										class="a-icon-btn"
-										title="Reset password"
-										aria-label="Reset password"
+										:title="t('ausers.resetPassword')"
+										:aria-label="t('ausers.resetPassword')"
 										:disabled="busy !== ''"
 										@click="openPassword(user)"
 									>
@@ -377,8 +381,8 @@ onMounted(() => {
 									<button
 										type="button"
 										class="a-icon-btn"
-										title="End sessions"
-										aria-label="End sessions"
+										:title="t('ausers.endSessions')"
+										:aria-label="t('ausers.endSessions')"
 										:disabled="busy !== ''"
 										@click="askRevoke(user)"
 									>
@@ -388,8 +392,8 @@ onMounted(() => {
 										v-if="user.disabled_at === null"
 										type="button"
 										class="a-icon-btn a-icon-btn--danger"
-										title="account deactivate"
-										aria-label="account deactivate"
+										:title="t('ausers.deactivate')"
+										:aria-label="t('ausers.deactivate')"
 										:disabled="busy !== '' || user.handle === me"
 										@click="askDisable(user)"
 									>
@@ -399,8 +403,8 @@ onMounted(() => {
 										v-else
 										type="button"
 										class="a-icon-btn"
-										title="account activate"
-										aria-label="account activate"
+										:title="t('ausers.activate')"
+										:aria-label="t('ausers.activate')"
 										:disabled="busy !== ''"
 										@click="enable(user)"
 									>
@@ -411,7 +415,7 @@ onMounted(() => {
 						</tr>
 						<tr v-if="page.users.length === 0">
 							<td colspan="7" class="a-admin-empty">
-								{{ query !== '' ? 'No account matches this search.' : 'No accounts created yet.' }}
+								{{ t(query !== '' ? 'ausers.emptySearch' : 'ausers.empty') }}
 							</td>
 						</tr>
 					</tbody>
@@ -419,13 +423,13 @@ onMounted(() => {
 			</div>
 
 			<div class="a-admin-pagination">
-				<span>{{ page.total }} accounts · page {{ page.page }} of {{ page.pages }}</span>
+				<span>{{ t('ausers.pagination', { total: page.total, page: page.page, pages: page.pages }) }}</span>
 				<div>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="page.page <= 1 || loading" @click="go(-1)">
-						<AppIcon name="arrowLeft" :size="15" /> Back
+						<AppIcon name="arrowLeft" :size="15" /> {{ t('ausers.back') }}
 					</button>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="page.page >= page.pages || loading" @click="go(1)">
-						Next <AppIcon name="arrowRight" :size="15" />
+						{{ t('ausers.next') }} <AppIcon name="arrowRight" :size="15" />
 					</button>
 				</div>
 			</div>
@@ -436,50 +440,49 @@ onMounted(() => {
 				<form class="a-management-dialog a-admin-user-dialog" role="dialog" aria-modal="true" aria-labelledby="a-admin-create-title" @submit.prevent="createUser">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">New account</p>
-							<h2 id="a-admin-create-title">Create account</h2>
+							<p class="a-profile-edit__eyebrow">{{ t('ausers.newAccount') }}</p>
+							<h2 id="a-admin-create-title">{{ t('ausers.create') }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="createSaving" @click="closeCreate">
+						<button type="button" class="a-icon-btn" :aria-label="t('ausers.closeDialog')" :disabled="createSaving" @click="closeCreate">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 
 					<div class="a-admin-form-grid">
-						<label class="a-profile-edit__label" for="a-admin-handle">Handle</label>
-						<input id="a-admin-handle" v-model="draft.handle" type="text" maxlength="30" autocomplete="off" placeholder="e.g. mara" required>
+						<label class="a-profile-edit__label" for="a-admin-handle">{{ t('ausers.handle') }}</label>
+						<input id="a-admin-handle" v-model="draft.handle" type="text" maxlength="30" autocomplete="off" :placeholder="t('ausers.handlePlaceholder')" required>
 						<p v-if="createFields.handle" class="a-form-error">{{ createFields.handle }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-email">E-Mail</label>
-						<input id="a-admin-email" v-model="draft.email" type="email" autocomplete="off" placeholder="mara@example.com" required>
+						<label class="a-profile-edit__label" for="a-admin-email">{{ t('ausers.email') }}</label>
+						<input id="a-admin-email" v-model="draft.email" type="email" autocomplete="off" :placeholder="'mara@example.com'" required>
 						<p v-if="createFields.email" class="a-form-error">{{ createFields.email }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-name">display name <span class="a-admin-muted">(optional)</span></label>
-						<input id="a-admin-name" v-model="draft.display_name" type="text" maxlength="80" autocomplete="off" placeholder="Mara Muster">
+						<label class="a-profile-edit__label" for="a-admin-name">{{ t('ausers.name') }} <span class="a-admin-muted">{{ t('ausers.optional') }}</span></label>
+						<input id="a-admin-name" v-model="draft.display_name" type="text" maxlength="80" autocomplete="off" :placeholder="t('ausers.namePlaceholder')">
 						<p v-if="createFields.display_name" class="a-form-error">{{ createFields.display_name }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-password">Initial password</label>
+						<label class="a-profile-edit__label" for="a-admin-password">{{ t('ausers.initialPassword') }}</label>
 						<input id="a-admin-password" v-model="draft.password" type="password" minlength="8" autocomplete="new-password" required>
 						<p v-if="createFields.password" class="a-form-error">{{ createFields.password }}</p>
 
-						<label class="a-profile-edit__label" for="a-admin-role">role</label>
+						<label class="a-profile-edit__label" for="a-admin-role">{{ t('ausers.roleLabel') }}</label>
 						<select id="a-admin-role" v-model="draft.role" class="a-admin-select">
 							<option value="user">Member</option>
 							<option value="moderator">Moderator</option>
-							<option value="admin">Administrator</option>
+							<option value="admin">{{ t('ausers.roleAdministrator') }}</option>
 						</select>
 					</div>
 
 					<p class="a-profile-edit__hint">
-						The account gets access immediately. Share the initial password through a secure
-						channel and ask the user to change it after first sign-in.
+						{{ t('ausers.createHint') }}
 					</p>
 					<p v-if="createError !== ''" class="a-form-error" role="alert">{{ createError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="createSaving" @click="closeCreate">Cancel</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="createSaving" @click="closeCreate">{{ t('common.cancel') }}</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="createSaving">
 							<AppIcon v-if="createSaving" name="refresh" :size="15" class="a-spin" />
-							{{ createSaving ? 'Creating…' : 'Create account' }}
+							{{ createSaving ? t('ausers.creating') : t('ausers.create') }}
 						</button>
 					</footer>
 				</form>
@@ -489,25 +492,24 @@ onMounted(() => {
 				<form class="a-management-dialog" role="dialog" aria-modal="true" aria-labelledby="a-admin-password-title" @submit.prevent="savePassword">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Access</p>
-							<h2 id="a-admin-password-title">Reset password</h2>
+							<p class="a-profile-edit__eyebrow">{{ t('ausers.eyebrow') }}</p>
+							<h2 id="a-admin-password-title">{{ t('ausers.resetTitle') }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="passwordSaving" @click="closePassword">
+						<button type="button" class="a-icon-btn" :aria-label="t('ausers.closeDialog')" :disabled="passwordSaving" @click="closePassword">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 					<p class="a-admin-muted">
-						New password for <strong>@{{ passwordTarget?.handle }}</strong>. All sessions
-						for this account will be ended afterwards.
+						{{ t('ausers.resetFor', { handle: passwordTarget?.handle ?? '' }) }}
 					</p>
-					<label class="a-profile-edit__label" for="a-admin-new-password">New password</label>
+					<label class="a-profile-edit__label" for="a-admin-new-password">{{ t('ausers.newPassword') }}</label>
 					<input id="a-admin-new-password" v-model="passwordValue" type="password" minlength="8" autocomplete="new-password" required>
-					<p class="a-profile-edit__hint">At least 8 characters.</p>
+					<p class="a-profile-edit__hint">{{ t('ausers.passwordHint') }}</p>
 					<p v-if="passwordError !== ''" class="a-form-error" role="alert">{{ passwordError }}</p>
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="passwordSaving" @click="closePassword">Cancel</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="passwordSaving" @click="closePassword">{{ t('common.cancel') }}</button>
 						<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="passwordSaving">
-							{{ passwordSaving ? 'Saving…' : 'Change password' }}
+							{{ passwordSaving ? t('common.saving') : t('ausers.changePassword') }}
 						</button>
 					</footer>
 				</form>
