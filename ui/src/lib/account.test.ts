@@ -8,6 +8,8 @@ import {
 	accountFor,
 	directory,
 	displayNameFor,
+	hostDisplayName,
+	primeAuthorNames,
 	refreshAccount,
 	resetAccountDirectory,
 	resolveAccount,
@@ -137,6 +139,46 @@ describe('resolveAccount', () => {
 		await refreshAccount('alice');
 		expect(accountFor('alice')?.display_name).toBe('Renamed Alice');
 		expect(displayNameFor('alice')).toBe('Renamed Alice');
+	});
+
+	it('batch-primes display names once per id set', async () => {
+		const requested: string[][] = [];
+		configureApi({
+			hostProfiles: async (ids: string[]) => {
+				requested.push(ids);
+				return { alice: 'Alice A', bob: 'Bob B' };
+			},
+		} as unknown as Api);
+
+		await primeAuthorNames(['alice', 'bob', 'alice', 'https://remote.example/@carol', 'did:plc:xyz', '']);
+		await primeAuthorNames(['alice', 'carol']);
+
+		expect(requested).toHaveLength(2);
+		expect(requested[0]).toEqual(['alice', 'bob']);
+		expect(requested[1]).toEqual(['carol']);
+		expect(hostDisplayName('bob')).toBe('Bob B');
+		expect(displayNameFor('alice')).toBe('Alice A');
+	});
+
+	it('retries primed names after a failed batch', async () => {
+		let calls = 0;
+		configureApi({
+			hostProfiles: async () => {
+				calls++;
+				if (calls === 1) {
+					throw new ApiError(500, 'error', 'boom');
+				}
+				return { alice: 'Alice A' };
+			},
+		} as unknown as Api);
+
+		await primeAuthorNames(['alice']);
+		expect(calls).toBe(1);
+		expect(hostDisplayName('alice')).toBe('');
+
+		await primeAuthorNames(['alice']);
+		expect(calls).toBe(2);
+		expect(hostDisplayName('alice')).toBe('Alice A');
 	});
 
 	it('refreshAccount bypasses a recent failure entry', async () => {

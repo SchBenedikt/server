@@ -49,6 +49,62 @@ export function hostDisplayName(id: string): string {
 	return hostNames[id] ?? '';
 }
 
+/**
+ * Ids already asked for through the bounded batch endpoint, so scrolling
+ * through pages does not refetch names that are known to be absent.
+ */
+const primedIds = new Set<string>();
+
+/** Matches the server-side id filter on `GET /api/v1/host/profiles`. */
+const PROFILE_ID = /^[A-Za-z0-9._@-]{1,200}$/;
+
+/**
+ * Batch-primes display names for the authors of a loaded page of posts.
+ * One request per page replaces a per-card account fetch; names arrive
+ * reactively through `hostNames`. Failures are retried on a later page.
+ */
+export function primeAuthorNames(ids: Iterable<string>): Promise<void> {
+	const wanted: string[] = [];
+	const seen = new Set<string>();
+	for (const id of ids) {
+		if (
+			id === ''
+			|| seen.has(id)
+			|| primedIds.has(id)
+			|| hostNames[id] !== undefined
+			|| !PROFILE_ID.test(id)
+		) {
+			continue;
+		}
+
+		seen.add(id);
+		wanted.push(id);
+		if (wanted.length >= 200) {
+			break;
+		}
+	}
+
+	if (wanted.length === 0) {
+		return Promise.resolve();
+	}
+
+	for (const id of wanted) {
+		primedIds.add(id);
+	}
+
+	return getApi().hostProfiles(wanted).then((profiles) => {
+		for (const [id, name] of Object.entries(profiles)) {
+			if (name !== '') {
+				hostNames[id] = name;
+			}
+		}
+	}).catch(() => {
+		for (const id of wanted) {
+			primedIds.delete(id);
+		}
+	});
+}
+
 export async function resolveAccount(id: string): Promise<Account | null> {
 	if (id === '' || isRemoteId(id)) {
 		return null;
@@ -151,6 +207,7 @@ export function resetAccountDirectory(): void {
 	for (const key of Object.keys(hostNames)) {
 		delete hostNames[key];
 	}
+	primedIds.clear();
 }
 
 export async function refreshAccount(id: string): Promise<Account | null> {
