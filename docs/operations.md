@@ -253,6 +253,13 @@ instance. Decryption writes the bundle contents (`backup/…`, `blobs/…`,
 touch the running instance. Remote (S3) media is not included in the bundle —
 copy the bucket separately.
 
+`bin/restore.php` is the matching rehearsal tool: it decrypts the export into
+a staging directory and runs a read-only preflight — manifest presence,
+database checksum, every recorded blob hash, the secret-key fingerprint and
+the instance origin — against this instance's configuration. A failed check
+(for example a foreign key or origin) means the export does not belong on
+this instance; nothing is written to the live database or blob store.
+
 The key and the database belong together: the instance signing key in the
 database is sealed with the secret key. Restoring one without the other leaves
 the instance unable to use its federation identity.
