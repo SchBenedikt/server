@@ -125,6 +125,10 @@ final class MetricsTest extends TestCase
             'INSERT INTO social_job (id, type, payload, available_at, attempts)'
             . " VALUES ('j2', 'test.job', '{}', '2999-01-01T00:00:00Z', 0)",
         );
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts, dead_at)'
+            . " VALUES ('j3', 'federation.deliver', '{}', '2020-01-01T00:00:00Z', 5, '2020-01-02T00:00:00Z')",
+        );
 
         $response = $server->send('GET', '/metrics', ['cookies' => $session['cookies']]);
         self::assertSame(200, $response->status);
@@ -134,6 +138,14 @@ final class MetricsTest extends TestCase
         );
         self::assertStringContainsString('aloha_storage_free_bytes', $response->body);
         self::assertStringContainsString('aloha_storage_total_bytes', $response->body);
+        self::assertMatchesRegularExpression(
+            '/aloha_queue_jobs_dead_by_type\{type="federation\.deliver"\} 1/',
+            $response->body,
+        );
+        self::assertMatchesRegularExpression(
+            '/aloha_queue_jobs_pending_by_type\{type="test\.job"\} 2/',
+            $response->body,
+        );
     }
 
     public function testMetricsEndpointRequiresTheBearerToken(): void
