@@ -148,6 +148,46 @@ export interface AccountMoveStatus {
 	updated_at: string;
 }
 
+export interface ImportSectionInfo {
+	name: string;
+	rows: number;
+	disposition: 'local' | 'deferred' | 'unknown';
+	reason: string | null;
+}
+
+export interface ImportPreview {
+	format: string;
+	version: number;
+	source: {
+		instance_url: string | null;
+		instance_name: string | null;
+		exported_at: string | null;
+		handle: string | null;
+	};
+	sections: ImportSectionInfo[];
+	not_transferred: { name: string; reason: string }[];
+	totals: { rows: number; local_rows: number; deferred_rows: number; unknown_rows: number };
+	apply: { available: boolean; note: string };
+}
+
+export interface ImportSectionResult {
+	name: string;
+	disposition: string;
+	status: 'applied' | 'skipped' | 'failed';
+	rows?: number;
+	skipped_rows?: number;
+	detail?: string;
+	reason?: string;
+}
+
+export interface ImportResult {
+	format: string;
+	version: number;
+	source: ImportPreview['source'];
+	results: ImportSectionResult[];
+	not_transferred: { name: string; reason: string }[];
+}
+
 export interface HostSession {
 	id: string;
 	created_at: string;
@@ -3186,6 +3226,35 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			}
 
 			return response.blob();
+		},
+
+		async importPreview(document: unknown): Promise<ImportPreview> {
+			const data = await request<{ preview?: ImportPreview }>(
+				'POST',
+				'/api/v1/host/import/preview',
+				undefined,
+				{ export: document },
+			);
+			if (data?.preview === undefined) {
+				throw new ApiError(0, 'import_failed', 'The import preview could not be read.');
+			}
+
+			return data.preview;
+		},
+
+		async importApply(document: unknown): Promise<ImportResult> {
+			const data = await request<{ import?: ImportResult }>(
+				'POST',
+				'/api/v1/host/import/apply',
+				undefined,
+				{ export: document },
+			);
+			const result = data?.import;
+			if (result === undefined) {
+				throw new ApiError(0, 'import_failed', 'The import result could not be read.');
+			}
+
+			return result;
 		},
 
 		async deleteAccount(): Promise<{ state: string }> {
