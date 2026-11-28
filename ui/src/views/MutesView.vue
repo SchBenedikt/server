@@ -9,6 +9,7 @@ import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { Account } from '../lib/types';
 
@@ -38,7 +39,7 @@ async function load(): Promise<void> {
 	try {
 		accounts.value = await getApi().mutes();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Mutes could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('mutes.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -53,9 +54,9 @@ async function unmute(account: Account): Promise<void> {
 	try {
 		await getApi().unmuteAccount(account.id);
 		accounts.value = accounts.value.filter((entry) => entry.id !== account.id);
-		showToast('Mute removed.', 'success');
+		showToast(t('mutes.removed'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The mute could not be removed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('mutes.removeFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -64,9 +65,9 @@ async function unmute(account: Account): Promise<void> {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Muted" subtitle="Accounts whose posts you no longer want to see.">
+		<PageHeader :title="t('nav.muted')" :subtitle="t('mutes.subtitle')">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" :aria-label="t('common.reload')" :title="t('common.reload')" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -74,9 +75,9 @@ async function unmute(account: Account): Promise<void> {
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="bellOff" :size="26" /></span>
-			<h2>mutes</h2>
-			<p>Sign in to see and manage the accounts you have muted.</p>
-			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+			<h2>{{ t('nav.muted') }}</h2>
+			<p>{{ t('mutes.loginText') }}</p>
+			<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<div v-else-if="loading && accounts.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -85,15 +86,15 @@ async function unmute(account: Account): Promise<void> {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Mutes unavailable</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			<div><strong>{{ t('mutes.unavailable') }}</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</div>
 
 		<EmptyState
 			v-else-if="accounts.length === 0"
 			icon="bellOff"
-			title="Nobody muted"
-			text="Mutes hide an account's posts without ending the follow relationship."
+			:title="t('mutes.emptyTitle')"
+			:text="t('mutes.emptyText')"
 		/>
 
 		<ul v-else class="a-management-people">
@@ -107,7 +108,7 @@ async function unmute(account: Account): Promise<void> {
 							@click="unmute(account)"
 						>
 							<AppIcon name="bellOff" :size="14" />
-							{{ busy === account.id ? 'Removing…' : 'Unmute account' }}
+							{{ busy === account.id ? t('common.removing') : t('mutes.unmute') }}
 						</button>
 					</template>
 				</AccountRow>
