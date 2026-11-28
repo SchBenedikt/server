@@ -417,6 +417,16 @@ export interface Announcement {
 	expired: boolean;
 }
 
+export interface InstancePageSummary {
+	slug: string;
+	title: string;
+	updated_at: string;
+}
+
+export interface InstancePage extends InstancePageSummary {
+	body: string;
+}
+
 export interface KokuaHelper {
 	account_id: string;
 	message: string;

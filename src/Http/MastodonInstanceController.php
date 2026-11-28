@@ -19,6 +19,7 @@ use function is_string;
 use function parse_url;
 use function preg_match;
 use function preg_quote;
+use function preg_split;
 use function rawurldecode;
 use function rtrim;
 use function sort;
@@ -63,7 +64,7 @@ final class MastodonInstanceController
             return Response::json($this->peers());
         }
         if ($path === $prefix . '/instance/rules') {
-            return Response::json([]);
+            return Response::json($this->rules());
         }
         if ($path === $prefix . '/instance/custom_emojis') {
             return Response::json([]);
@@ -84,6 +85,38 @@ final class MastodonInstanceController
         }
 
         return null;
+    }
+
+    /**
+     * Mastodon rule entries projected from the published `rules` instance
+     * page: each paragraph becomes one rule. Empty until an administrator
+     * publishes the page — the product never fabricates rules text.
+     *
+     * @return list<array{id: string, short_name: string, summary: string, text: string}>
+     */
+    private function rules(): array
+    {
+        $page = $this->runtime->instancePages->find('rules');
+        if ($page === null) {
+            return [];
+        }
+
+        $rules = [];
+        $index = 0;
+        foreach (preg_split('/\n{2,}/', $page['body']) ?: [] as $paragraph) {
+            $text = trim($paragraph);
+            if ($text === '') {
+                continue;
+            }
+            $rules[] = [
+                'id' => 'rules-' . (++$index),
+                'short_name' => $index === 1 ? $page['title'] : '',
+                'summary' => '',
+                'text' => $text,
+            ];
+        }
+
+        return $rules;
     }
 
     /**

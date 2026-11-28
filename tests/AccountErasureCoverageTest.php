@@ -65,6 +65,7 @@ final class AccountErasureCoverageTest extends TestCase
         'admin_audit' => 'operator audit trail',
         'installation_identity' => 'instance origin binding, not account data',
         'instance_key' => 'instance signing key',
+        'instance_page' => 'instance-owned public pages, not account data',
         'login_attempt' => 'bucketed throttle counters without an account reference',
         'mastodon_oauth_app' => 'registered OAuth clients are instance configuration',
         'moderation_report' => 'moderation accountability record',

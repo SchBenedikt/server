@@ -37,6 +37,7 @@ import StarterPacksView from './views/StarterPacksView.vue';
 import DraftsView from './views/DraftsView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import NotificationsView from './views/NotificationsView.vue';
+import PageView from './views/PageView.vue';
 import PostView from './views/PostView.vue';
 import ProfileView from './views/ProfileView.vue';
 import ScheduledView from './views/ScheduledView.vue';
@@ -98,6 +99,8 @@ const currentView = computed(() => {
 			return NotificationsView;
 		case 'about':
 			return AboutView;
+		case 'page':
+			return PageView;
 		case 'profile':
 			return ProfileView;
 		case 'post':
@@ -161,6 +164,8 @@ const viewKey = computed(() => {
 			return `post:${current.id}`;
 		case 'tag':
 			return `tag:${current.tag}`;
+		case 'page':
+			return `page:${current.slug}`;
 		case 'list':
 			return `list:${current.id}`;
 		case 'conversation':
