@@ -79,9 +79,11 @@ final class ImportsTest extends TestCase
         self::assertSame('local', $byName['filters']['disposition']);
         self::assertSame('local', $byName['featured_tags']['disposition']);
         self::assertSame('local', $byName['followed_hashtags']['disposition']);
+        self::assertSame('local', $byName['mutes']['disposition']);
+        self::assertSame('local', $byName['blocks']['disposition']);
+        self::assertSame('local', $byName['following']['disposition']);
 
         self::assertSame('deferred', $byName['posts']['disposition']);
-        self::assertSame('deferred', $byName['following']['disposition']);
         self::assertSame('deferred', $byName['followers']['disposition']);
         self::assertArrayNotHasKey('linked_bluesky_account', $byName);
         self::assertNotSame('', (string) $byName['posts']['reason']);
@@ -144,6 +146,33 @@ final class ImportsTest extends TestCase
                 ['tag' => 'travel', 'position' => 0],
                 ['tag' => 'php', 'position' => 1],
             ],
+            'mutes' => [
+                [
+                    'actor_id' => 'https://mastodon.example/users/spammer',
+                    'notifications' => true,
+                    'created_at' => '2026-11-20T10:00:00+00:00',
+                    'expires_at' => null,
+                ],
+                [
+                    'actor_id' => 'https://mastodon.example/users/expired',
+                    'notifications' => false,
+                    'created_at' => '2026-11-20T10:00:00+00:00',
+                    'expires_at' => '2020-01-01T00:00:00+00:00',
+                ],
+            ],
+            'blocks' => [
+                ['actor_id' => 'https://mastodon.example/users/abuser', 'blocked_at' => '2026-11-20T10:00:00+00:00'],
+                ['actor_id' => 'not-a-url', 'blocked_at' => '2026-11-20T10:00:00+00:00'],
+            ],
+            'following' => [
+                [
+                    'actor_id' => 'https://mastodon.example/users/friend',
+                    'inbox_url' => 'https://mastodon.example/users/friend/inbox',
+                    'followed_at' => '2026-11-20T10:00:00+00:00',
+                    'state' => 'accepted',
+                ],
+                ['actor_id' => 'https://mastodon.example/users/nobox', 'inbox_url' => '', 'state' => 'pending'],
+            ],
             'posts' => [['id' => 'post-1', 'content' => 'hello']],
         ];
     }
@@ -169,6 +198,9 @@ final class ImportsTest extends TestCase
         self::assertSame('applied', $results['followed_hashtags']['status']);
         self::assertSame('applied', $results['filters']['status']);
         self::assertSame('applied', $results['featured_tags']['status']);
+        self::assertSame('applied', $results['mutes']['status']);
+        self::assertSame('applied', $results['blocks']['status']);
+        self::assertSame('applied', $results['following']['status']);
         self::assertSame('skipped', $results['posts']['status']);
         self::assertStringContainsString('Move', (string) $results['posts']['reason']);
 
@@ -196,6 +228,21 @@ final class ImportsTest extends TestCase
 
         $tags = array_column($this->server->runtime->featuredTags->forAccount('alice'), 'tag');
         self::assertSame(['travel', 'php'], $tags);
+
+        // Graph sections: canonical actor ids, expired mutes and malformed
+        // rows skipped, follows re-requested through the core service.
+        $db = $this->server->runtime->database;
+        $mutes = $db->fetchAll('SELECT actor_id, notifications FROM social_mute WHERE user_id = :id', ['id' => 'alice']);
+        self::assertCount(1, $mutes);
+        self::assertSame('https://mastodon.example/users/spammer', $mutes[0]['actor_id']);
+
+        $blocks = $db->fetchAll('SELECT actor_id FROM social_block WHERE local_user_id = :id', ['id' => 'alice']);
+        self::assertSame(['https://mastodon.example/users/abuser'], array_column($blocks, 'actor_id'));
+
+        $follows = $db->fetchAll('SELECT actor_id, state FROM social_following WHERE local_user_id = :id', ['id' => 'alice']);
+        self::assertCount(1, $follows);
+        self::assertSame('https://mastodon.example/users/friend', $follows[0]['actor_id']);
+        self::assertSame('pending', $follows[0]['state']);
     }
 
     public function testApplyIsIdempotentAndSectionScoped(): void

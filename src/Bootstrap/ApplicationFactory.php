@@ -450,7 +450,7 @@ final class ApplicationFactory
             liveUpdates: new LiveUpdates($database, $clock, $socialGraph),
             preferences: $preferences,
             exports: new Exports($database, $clock, $preferences, $this->config),
-            imports: new Imports($database, $clock, $preferences, $featuredTags),
+            imports: new Imports($database, $clock, $preferences, $featuredTags, $app->blocks, $app->following),
             followRequests: new FollowRequests(
                 $database,
                 $clock,

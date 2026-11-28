@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Federation\PdoMuteRepository;
 use AlohaSocial\Core\Domain\Filter\FilterAction;
 use AlohaSocial\Core\Domain\Filter\FilterContext;
 use AlohaSocial\Core\Domain\Filter\FilterKeyword;
@@ -16,9 +17,14 @@ use AlohaSocial\Core\Domain\Filter\PdoFilterRuleRepository;
 use AlohaSocial\Core\Domain\Timeline\PdoFollowedHashtagRepository;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Service\BlockActor;
+use AlohaSocial\Core\Service\BlockService;
 use AlohaSocial\Core\Service\FilterService;
 use AlohaSocial\Core\Service\FollowedHashtagService;
+use AlohaSocial\Core\Service\FollowingService;
+use AlohaSocial\Core\Service\MuteService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 
 use function array_key_exists;
@@ -53,6 +59,9 @@ final class Imports
         'followed_hashtags',
         'filters',
         'featured_tags',
+        'mutes',
+        'blocks',
+        'following',
     ];
 
     /**
@@ -64,10 +73,7 @@ final class Imports
         'posts' => 'Post content needs the core archive/Move semantics, including media and revision history.',
         'favourites' => 'Rows reference source-instance post ids that do not exist on the target.',
         'bookmarks' => 'Rows reference source-instance post ids that do not exist on the target.',
-        'following' => 'Actor ids are source-instance identities; follows must be re-resolved canonically.',
         'followers' => 'Incoming follows are private graph data and cannot be claimed by an import.',
-        'mutes' => 'Actor ids are source-instance identities and need canonical mapping.',
-        'blocks' => 'Actor ids are source-instance identities and need canonical mapping.',
         'follow_requests' => 'Incoming requests are private graph data and cannot be claimed by an import.',
         'lists' => 'Lists reference source-instance accounts and posts.',
         'collections' => 'Collections reference source-instance posts.',
@@ -133,11 +139,15 @@ final class Imports
 
     private readonly FilterService $filters;
 
+    private readonly MuteService $mutes;
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
         private readonly Preferences $preferences,
         private readonly FeaturedTags $featuredTags,
+        private readonly BlockService $blockService,
+        private readonly FollowingService $followingService,
     ) {
         $this->hashtags = new FollowedHashtagService(
             new PdoFollowedHashtagRepository($db),
@@ -148,6 +158,7 @@ final class Imports
             $clock,
             new RandomIdGenerator(),
         );
+        $this->mutes = new MuteService(new PdoMuteRepository($db), $clock);
     }
 
     /**
@@ -332,6 +343,9 @@ final class Imports
             'followed_hashtags' => $this->applyHashtags($accountId, is_array($value) ? $value : []),
             'filters' => $this->applyFilters($accountId, is_array($value) ? $value : []),
             'featured_tags' => $this->applyFeaturedTags($accountId, is_array($value) ? $value : []),
+            'mutes' => $this->applyMutes($accountId, is_array($value) ? $value : []),
+            'blocks' => $this->applyBlocks($accountId, is_array($value) ? $value : []),
+            'following' => $this->applyFollows($accountId, is_array($value) ? $value : []),
             default => throw CommunityException::invalid('This section cannot be imported.', [
                 'section' => 'Only local sections are applicable.',
             ]),
@@ -553,5 +567,140 @@ final class Imports
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Actor ids in an export are canonical ActivityPub URLs, so a mute can be
+     * recreated verbatim. An expiry that already passed is skipped instead of
+     * importing a dead mute; a live one keeps only its remaining duration.
+     *
+     * @param array<array-key, mixed> $rows
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyMutes(string $accountId, array $rows): array
+    {
+        $now = $this->clock->now();
+        $added = 0;
+        $skipped = 0;
+        foreach ($rows as $row) {
+            $actorId = is_array($row) && is_string($row['actor_id'] ?? null) ? trim($row['actor_id']) : '';
+            if ($actorId === '') {
+                ++$skipped;
+
+                continue;
+            }
+
+            $duration = null;
+            $expiresAt = is_array($row) && is_string($row['expires_at'] ?? null) ? trim($row['expires_at']) : '';
+            if ($expiresAt !== '') {
+                try {
+                    $remaining = Time::parse($expiresAt)->getTimestamp() - $now->getTimestamp();
+                } catch (\Throwable) {
+                    ++$skipped;
+
+                    continue;
+                }
+                if ($remaining <= 0) {
+                    ++$skipped;
+
+                    continue;
+                }
+                $duration = $remaining;
+            }
+
+            try {
+                $this->mutes->mute(
+                    $accountId,
+                    $actorId,
+                    is_array($row) && (bool) ($row['notifications'] ?? false),
+                    $duration,
+                );
+                ++$added;
+            } catch (\Throwable) {
+                ++$skipped;
+            }
+        }
+
+        return [
+            'rows' => $added,
+            'skipped' => $skipped,
+            'detail' => sprintf('%d mute(s) restored, %d skipped.', $added, $skipped),
+        ];
+    }
+
+    /**
+     * Blocks carry only the canonical actor id; the core service queues the
+     * federated Block/Undo pair like a manual block would.
+     *
+     * @param array<array-key, mixed> $rows
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyBlocks(string $accountId, array $rows): array
+    {
+        $added = 0;
+        $skipped = 0;
+        foreach ($rows as $row) {
+            $actorId = is_array($row) && is_string($row['actor_id'] ?? null) ? trim($row['actor_id']) : '';
+            if ($actorId === '') {
+                ++$skipped;
+
+                continue;
+            }
+
+            try {
+                $result = $this->blockService->block(new BlockActor($accountId, $actorId));
+                if ($result->created) {
+                    ++$added;
+                }
+            } catch (\Throwable) {
+                ++$skipped;
+            }
+        }
+
+        return [
+            'rows' => $added,
+            'skipped' => $skipped,
+            'detail' => sprintf('%d block(s) restored, %d skipped.', $added, $skipped),
+        ];
+    }
+
+    /**
+     * Follows are re-requested, never claimed: the exported inbox URL is the
+     * actor's canonical inbox, and the remote side still has to accept. Rows
+     * whose state was already terminal on the source are requested the same
+     * way — the target learns the real state from the peer's answer.
+     *
+     * @param array<array-key, mixed> $rows
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyFollows(string $accountId, array $rows): array
+    {
+        $added = 0;
+        $skipped = 0;
+        foreach ($rows as $row) {
+            $actorId = is_array($row) && is_string($row['actor_id'] ?? null) ? trim($row['actor_id']) : '';
+            $inboxUrl = is_array($row) && is_string($row['inbox_url'] ?? null) ? trim($row['inbox_url']) : '';
+            if ($actorId === '' || $inboxUrl === '') {
+                ++$skipped;
+
+                continue;
+            }
+
+            try {
+                $this->followingService->follow($accountId, $actorId, $inboxUrl);
+                ++$added;
+            } catch (\Throwable) {
+                ++$skipped;
+            }
+        }
+
+        return [
+            'rows' => $added,
+            'skipped' => $skipped,
+            'detail' => sprintf('%d follow(s) requested, %d skipped.', $added, $skipped),
+        ];
     }
 }
