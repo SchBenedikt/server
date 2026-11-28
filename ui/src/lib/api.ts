@@ -53,6 +53,7 @@ import type {
 	StarterPack,
 	StarterPackMember,
 	PostRevisionData,
+	PostSource,
 	Draft,
 	ArchivedPost,
 	ForYouData,
@@ -351,6 +352,7 @@ export interface Api {
 	helpKokua(id: string, message: string): Promise<KokuaEntry>;
 	withdrawKokuaHelp(id: string): Promise<KokuaEntry>;
 	postRevisions(id: string): Promise<PostRevisionData>;
+	postSource(id: string): Promise<PostSource>;
 	deleteAccount(): Promise<{ state: string }>;
 	accountMove(): Promise<AccountMoveStatus | null>;
 	startAccountMove(targetActorId: string): Promise<AccountMoveStatus>;
@@ -3134,6 +3136,22 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					edited_at: typeof current.edited_at === 'string' ? current.edited_at : null,
 				},
 				revisions,
+			};
+		},
+
+		async postSource(id: string): Promise<PostSource> {
+			const data = await request<{ id?: unknown; text?: unknown; spoiler_text?: unknown }>(
+				'GET',
+				`/api/v1/posts/${encodeURIComponent(id)}/source`,
+			);
+			if (typeof data?.text !== 'string') {
+				throw new ApiError(502, 'invalid_response', 'The response does not contain the post source.');
+			}
+
+			return {
+				id: typeof data.id === 'string' ? data.id : id,
+				text: data.text,
+				spoiler_text: typeof data.spoiler_text === 'string' ? data.spoiler_text : null,
 			};
 		},
 

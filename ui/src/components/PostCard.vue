@@ -10,6 +10,7 @@ import AppIcon from './AppIcon.vue';
 import Avatar from './Avatar.vue';
 import EditHistoryDialog from './EditHistoryDialog.vue';
 import MediaGrid from './MediaGrid.vue';
+import SourceDialog from './SourceDialog.vue';
 import ReportDialog from './ReportDialog.vue';
 import RichText from './RichText.vue';
 import { accountName, handleLabel, isLocalPostId, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
@@ -306,6 +307,7 @@ watch(() => props.pinned, (value) => {
 }, { immediate: true });
 const reportOpen = ref(false);
 const historyOpen = ref(false);
+const sourceOpen = ref(false);
 const collectionOpen = ref(false);
 
 watch(() => props.post.bookmarked, (value) => {
@@ -1030,6 +1032,14 @@ onUnmounted(() => {
 						v-if="isMine && localId"
 						type="button"
 						role="menuitem"
+						@click.stop="sourceOpen = true; menuOpen = false"
+					>
+						<AppIcon name="code" :size="15" /> View source
+					</button>
+					<button
+						v-if="isMine && localId"
+						type="button"
+						role="menuitem"
 						:disabled="pinning"
 						@click.stop="togglePin"
 					>
@@ -1433,6 +1443,12 @@ onUnmounted(() => {
 		:open="historyOpen"
 		:post-id="localId ?? ''"
 		@close="historyOpen = false"
+	/>
+
+	<SourceDialog
+		:open="sourceOpen"
+		:post-id="localId ?? ''"
+		@close="sourceOpen = false"
 	/>
 
 	<AddToCollectionDialog

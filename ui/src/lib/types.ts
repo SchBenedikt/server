@@ -629,6 +629,12 @@ export interface PostRevisionData {
 	revisions: PostRevision[];
 }
 
+export interface PostSource {
+	id: string;
+	text: string;
+	spoiler_text: string | null;
+}
+
 
 export interface DraftPoll {
 	options: string[];
