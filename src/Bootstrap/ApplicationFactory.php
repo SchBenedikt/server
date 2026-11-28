@@ -98,6 +98,7 @@ use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Auth\SessionRepository;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Db\InstrumentedConnection;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
@@ -146,8 +147,10 @@ final class ApplicationFactory
         $clock = new SystemClock();
         $ids = new RandomIdGenerator();
 
-        // 2. Database
-        $database = PdoFactory::connect($this->config);
+        // 2. Database — every query is timed into the process Metrics so
+        // /metrics can report request-path database latency and errors.
+        $metrics = new Metrics();
+        $database = new InstrumentedConnection(PdoFactory::connect($this->config), $metrics);
         $this->assertSchemaCurrent($database);
 
         // 4. Instance keys, sealed at rest. The persistent identity binds the
@@ -460,7 +463,7 @@ final class ApplicationFactory
                 $app->followRequests,
             ),
             postRevisions: new PdoPostRevisionRepository($database),
-            metrics: new Metrics(),
+            metrics: $metrics,
             pinnedPosts: new PinnedPosts(
                 $database,
                 $app->pins ?? throw new RuntimeException('The core pin service is not available.'),
