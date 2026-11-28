@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { route } from '../lib/router';
 import { relativeTime } from '../lib/format';
+import { t } from '../lib/i18n';
 import type { InstancePage } from '../lib/types';
 
 const page = ref<InstancePage | null>(null);
@@ -44,25 +45,24 @@ watch(slug, load);
 <template>
 	<div class="a-page">
 		<PageHeader
-			:title="page?.title ?? 'Instance page'"
-			:subtitle="page ? `Updated ${relativeTime(page.updated_at)}` : 'A page published by the administration.'"
+			:title="page?.title ?? t('page.fallbackTitle')"
+			:subtitle="page ? t('page.updated', { time: relativeTime(page.updated_at) }) : t('page.fallbackSubtitle')"
 			back-href="#/about"
-			back-label="Back to about"
+			:back-label="t('page.backAbout')"
 		/>
 
-		<p v-if="loading" class="a-muted">Loading…</p>
+		<p v-if="loading" class="a-muted">{{ t('page.loading') }}</p>
 
 		<article v-else-if="page" class="a-page-doc">
 			<p v-for="(block, index) in paragraphs" :key="index" class="a-page-doc__block">{{ block }}</p>
 		</article>
 
 		<section v-else class="a-rail__card a-page-doc__missing">
-			<h3><AppIcon name="info" :size="18" /> Page not found</h3>
+			<h3><AppIcon name="info" :size="18" /> {{ t('page.notFoundTitle') }}</h3>
 			<p>
-				This page does not exist or has not been published yet.
-				The administration has not configured it — nothing is hidden on purpose.
+				{{ t('page.notFoundBody') }}
 			</p>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/about">Back to about this instance</a>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/about">{{ t('page.backAboutInstance') }}</a>
 		</section>
 	</div>
 </template>

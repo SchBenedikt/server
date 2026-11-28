@@ -5,17 +5,18 @@
  */
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
+import { t } from '../lib/i18n';
 </script>
 
 <template>
 	<div class="a-page">
 		<EmptyState
 			icon="compass"
-			title="Dead end"
-			text="This page does not exist or has moved. Head back home to get back on track."
+			:title="t('notfound.title')"
+			:text="t('notfound.text')"
 		>
 			<a class="a-btn a-btn--primary a-btn--small" href="#/">
-				<AppIcon name="home" :size="15" /> Back to home
+				<AppIcon name="home" :size="15" /> {{ t('common.backHome') }}
 			</a>
 		</EmptyState>
 	</div>

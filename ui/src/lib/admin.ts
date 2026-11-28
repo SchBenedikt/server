@@ -893,6 +893,22 @@ export const REPORT_CATEGORIES: { id: ReportCategory; label: string; hint: strin
 	{ id: 'other', label: 'Other', hint: 'Another reason you describe below.' },
 ];
 
+export function adminSectionLabel(section: AdminSection): string {
+	const key = `adminsec.${section}.label`;
+	const translated = t(key);
+	return translated === key
+		? (adminSectionDefinition(section).label ?? section)
+		: translated;
+}
+
+export function adminSectionHint(section: AdminSection): string {
+	const key = `adminsec.${section}.hint`;
+	const translated = t(key);
+	return translated === key
+		? (adminSectionDefinition(section).hint ?? '')
+		: translated;
+}
+
 export function reportCategoryLabel(category: string): string {
 	const key = `report.cat.${category}.label`;
 	const translated = t(key);

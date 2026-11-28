@@ -6,9 +6,10 @@
 import { computed } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { ADMIN_SECTIONS, adminSectionDefinition } from '../lib/admin';
+import { ADMIN_SECTIONS, adminSectionHint, adminSectionLabel } from '../lib/admin';
 import type { AdminSection } from '../lib/admin';
 import { route } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState } from '../lib/state';
 import AdminAnnouncements from './admin/AdminAnnouncements.vue';
 import AdminAudit from './admin/AdminAudit.vue';
@@ -38,7 +39,8 @@ const section = computed<AdminSection>(() => {
 const visibleSections = computed(() => (
 	isAdmin.value ? ADMIN_SECTIONS : ADMIN_SECTIONS.filter((entry) => MODERATOR_SECTIONS.has(entry.id))
 ));
-const current = computed(() => adminSectionDefinition(section.value));
+const currentLabel = computed(() => adminSectionLabel(section.value));
+const currentHint = computed(() => adminSectionHint(section.value));
 
 const sectionView = computed(() => {
 	switch (section.value) {
@@ -73,19 +75,19 @@ const sectionView = computed(() => {
 <template>
 	<div class="a-page a-admin">
 		<PageHeader
-			:title="section === 'overview' ? 'Administration' : current.label"
-			:subtitle="current.hint"
+			:title="section === 'overview' ? t('admin.title') : currentLabel"
+			:subtitle="currentHint"
 			back-href="#/"
-			back-label="Back to home"
+			:back-label="t('common.backHome')"
 		>
 			<template #actions>
 				<span v-if="isAdmin" class="a-admin-role">
 					<AppIcon name="shield" :size="15" />
-					Administrator
+					{{ t('admin.roleAdmin') }}
 				</span>
 				<span v-else-if="isModerator" class="a-admin-role">
 					<AppIcon name="shield" :size="15" />
-					Moderator
+					{{ t('admin.roleModerator') }}
 				</span>
 			</template>
 		</PageHeader>
@@ -93,23 +95,23 @@ const sectionView = computed(() => {
 		<div v-if="!signedIn" class="a-error-panel">
 			<AppIcon name="lock" :size="22" />
 			<div>
-				<strong>Sign-in required</strong>
-				<p>The administration is only available to signed-in accounts.</p>
+				<strong>{{ t('admin.signInRequired') }}</strong>
+				<p>{{ t('admin.signInBody') }}</p>
 			</div>
-			<a class="a-btn a-btn--primary a-btn--small" href="/login">Sign in</a>
+			<a class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('admin.signIn') }}</a>
 		</div>
 
 		<div v-else-if="!canModerate" class="a-error-panel">
 			<AppIcon name="shield" :size="22" />
 			<div>
-				<strong>No access</strong>
-				<p>This interface is reserved for the administration of this instance.</p>
+				<strong>{{ t('admin.noAccess') }}</strong>
+				<p>{{ t('admin.noAccessBody') }}</p>
 			</div>
-			<a class="a-btn a-btn--ghost a-btn--small" href="#/">Back to home</a>
+			<a class="a-btn a-btn--ghost a-btn--small" href="#/">{{ t('common.backHome') }}</a>
 		</div>
 
 		<template v-else>
-			<nav class="a-admin-tabs" aria-label="Admin areas">
+			<nav class="a-admin-tabs" :aria-label="t('admin.tabsAria')">
 				<a
 					v-for="entry in visibleSections"
 					:key="entry.id"
@@ -119,7 +121,7 @@ const sectionView = computed(() => {
 					:aria-current="entry.id === section ? 'page' : undefined"
 				>
 					<AppIcon :name="entry.icon" :size="17" />
-					<span>{{ entry.label }}</span>
+					<span>{{ adminSectionLabel(entry.id) }}</span>
 				</a>
 			</nav>
 
