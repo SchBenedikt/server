@@ -31,6 +31,7 @@ const filters: { id: FilterState; label: string }[] = [
 
 const jobs = computed(() => data.value?.jobs ?? []);
 const counts = computed(() => data.value?.counts ?? { pending: 0, running: 0, dead: 0, total: 0, oldest_pending: null });
+const errorClasses = computed(() => Object.entries(data.value?.error_classes ?? {}));
 
 const confirmCopy = computed(() => (
 	confirmKind.value === 'purge'
@@ -228,6 +229,14 @@ onBeforeUnmount(() => {
 					<p class="a-admin-stat__label">Failed</p>
 					<strong class="a-admin-stat__value">{{ counts.dead }}</strong>
 					<p class="a-admin-stat__meta">Permanent after all attempts</p>
+				</div>
+			</article>
+			<article v-if="errorClasses.length > 0" class="a-admin-stat">
+				<span class="a-admin-stat__icon"><AppIcon name="alert" :size="19" /></span>
+				<div>
+					<p class="a-admin-stat__label">Failure classes</p>
+					<strong class="a-admin-stat__value">{{ errorClasses.length }}</strong>
+					<p class="a-admin-stat__meta">{{ errorClasses.map(([name, count]) => `${name} ×${count}`).join(', ') }}</p>
 				</div>
 			</article>
 			<article class="a-admin-stat">

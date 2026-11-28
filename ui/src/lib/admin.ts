@@ -232,6 +232,7 @@ export interface JobList {
 	jobs: AdminJob[];
 	counts: QueueCounts;
 	state: string;
+	error_classes: Record<string, number>;
 }
 
 export interface PeerDomain {
