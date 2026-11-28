@@ -10,7 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { accountName, handleLabel, notificationPostHref, relativeTime, truncate } from '../lib/format';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { appState, setUnread, showToast } from '../lib/state';
 import type { NotificationItem, NotificationSenderRequest } from '../lib/types';
 
@@ -75,7 +75,7 @@ async function load(reset: boolean): Promise<void> {
 			// The Mastodon surface has no unread counter; the core one is optional.
 		}
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Notifications could not be loaded.';
+		error.value = loadErrorMessage(caught, 'Notifications could not be loaded.');
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -86,7 +86,7 @@ async function load(reset: boolean): Promise<void> {
 			senderRequests.value = await getApi().notificationRequests();
 			requestsError.value = '';
 		} catch (caught) {
-			requestsError.value = caught instanceof Error ? caught.message : 'Notification requests could not be loaded.';
+			requestsError.value = loadErrorMessage(caught, 'Notification requests could not be loaded.');
 		}
 	}
 }
@@ -109,7 +109,7 @@ async function reviewSender(id: string, decision: 'accept' | 'dismiss'): Promise
 		);
 		await load(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The sender request could not be updated.', 'error');
+		showToast(loadErrorMessage(caught, 'The sender request could not be updated.'), 'error';
 	} finally {
 		mutatingSender.value = '';
 	}
@@ -136,7 +136,7 @@ async function toggleConversationMute(postId: string): Promise<void> {
 		const isMuted = await getApi().toggleConversationMute(postId);
 		showToast(isMuted ? 'Conversation notifications muted.' : 'Conversation notifications resumed.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The conversation setting could not be updated.', 'error');
+		showToast(loadErrorMessage(caught, 'The conversation setting could not be updated.'), 'error';
 	} finally {
 		mutating.value = '';
 	}
@@ -153,7 +153,7 @@ async function dismiss(item: NotificationItem): Promise<void> {
 		items.value = items.value.filter((entry) => entry.id !== item.id);
 		appState.unread = Math.max(0, appState.unread - 1);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The notification could not be removed.', 'error');
+		showToast(loadErrorMessage(caught, 'The notification could not be removed.'), 'error';
 	} finally {
 		mutating.value = '';
 	}
@@ -177,7 +177,7 @@ async function clearAll(): Promise<void> {
 		confirmClear.value = false;
 		showToast(`${cleared} ${cleared === 1 ? 'notification' : 'Notifications'} marked as read.`, 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'Notifications could not be cleared.', 'error');
+		showToast(loadErrorMessage(caught, 'Notifications could not be cleared.'), 'error';
 	} finally {
 		mutating.value = '';
 	}

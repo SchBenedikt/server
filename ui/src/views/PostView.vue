@@ -11,7 +11,7 @@ import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { displayNameFor, hasDistinctDisplayName, primeAuthorNames } from '../lib/account';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from '../lib/events';
 import { handleLabel, isRemoteId, postRouteId, truncate } from '../lib/format';
 import { navigate, route } from '../lib/router';
@@ -125,7 +125,7 @@ async function loadEngagement(tab: 'likes' | 'reposts', reset: boolean): Promise
 		engagementCursor.value = { ...engagementCursor.value, [tab]: data.cursor };
 		engagementLoaded.value = { ...engagementLoaded.value, [tab]: true };
 	} catch (error) {
-		engagementError.value = error instanceof Error ? error.message : 'The list could not be loaded.';
+		engagementError.value = loadErrorMessage(error, 'The list could not be loaded.');
 	} finally {
 		engagementLoading.value = false;
 	}
@@ -204,7 +204,7 @@ async function load(): Promise<void> {
 		await loadReplies(current);
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'The post could not be loaded.';
+			error.value = loadErrorMessage(caught, 'The post could not be loaded.');
 		}
 	} finally {
 		if (current === generation) {
@@ -237,7 +237,7 @@ async function loadRemote(current: number): Promise<void> {
 		await loadReplies(current, true);
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'The remote post could not be loaded.';
+			error.value = loadErrorMessage(caught, 'The remote post could not be loaded.');
 		}
 	} finally {
 		if (current === generation) {

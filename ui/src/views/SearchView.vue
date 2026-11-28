@@ -11,7 +11,7 @@ import FollowButton from '../components/FollowButton.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { ApiError, getApi } from '../lib/api';
+import { ApiError, getApi, loadErrorMessage } from '../lib/api';
 import { appState, showToast } from '../lib/state';
 import type { Account, HashtagResult, SearchResults, TimelineItem } from '../lib/types';
 
@@ -54,7 +54,7 @@ async function search(): Promise<void> {
 			results.value = await getApi().search(value, 30);
 		} catch (caught) {
 			results.value = { accounts: [], statuses: [], hashtags: [] };
-			error.value = caught instanceof Error ? caught.message : 'The local search failed.';
+			error.value = loadErrorMessage(caught, 'The local search failed.');
 		}
 	} else {
 		results.value = { accounts: [], statuses: [], hashtags: [] };

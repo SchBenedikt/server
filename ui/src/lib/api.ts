@@ -103,6 +103,26 @@ export class ApiError extends Error {
 	}
 }
 
+/**
+ * User-facing copy for a failed load. Network failures get offline-specific
+ * wording instead of whatever the transport happened to throw, and server
+ * errors carry the request id so a bug report can be matched to logs.
+ */
+export function loadErrorMessage(caught: unknown, fallback: string): string {
+	if (caught instanceof ApiError) {
+		if (caught.kind === 'network') {
+			return 'No connection — check your network and try again.';
+		}
+		if (caught.requestId !== null && caught.requestId !== '') {
+			return `${caught.message} (ref ${caught.requestId})`;
+		}
+
+		return caught.message;
+	}
+
+	return caught instanceof Error && caught.message !== '' ? caught.message : fallback;
+}
+
 export type MediaUploader = (file: File, altText: string) => Promise<Attachment>;
 
 export interface AccountStatusesData {
