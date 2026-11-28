@@ -290,6 +290,16 @@ count drops it prints the restore command. `bin/migrate.php` remains the
 low-level migration runner for development and tests, but the update command
 is the supported operator path.
 
+Migrations are serialized across processes: PostgreSQL takes a session
+advisory lock, MySQL a named `GET_LOCK`, and SQLite runs the whole pending
+set inside one write transaction (which also makes the batch atomic). A
+second migrator started while another holds the lock fails fast with a
+"database is locked"/"another migration is running" error instead of
+interleaving DDL; simply retry once the first run finishes. The web app and
+worker never migrate on boot — they refuse to serve while `schema_migration`
+lags `Migrations::all()`, so an upgrade in progress is visible via
+`php bin/doctor.php` rather than half-applied state.
+
 ### Core release upgrade and rollback
 
 For a tagged Core release, select **Release** and the exact Core version in

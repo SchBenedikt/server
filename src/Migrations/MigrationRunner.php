@@ -30,6 +30,8 @@ final class MigrationRunner
     /** @var list<Migration> */
     private readonly array $migrations;
 
+    private readonly MigrationLock $lock;
+
     /**
      * @param list<Migration> $migrations
      */
@@ -39,12 +41,24 @@ final class MigrationRunner
         array $migrations,
     ) {
         $this->migrations = array_values($migrations);
+        $this->lock = new MigrationLock($connection);
     }
 
     /**
      * @return list<string> the versions applied by this run
      */
     public function migrate(): array
+    {
+        /** @var list<string> $done */
+        $done = $this->lock->run(function (Connection $connection): array {
+            return $this->runMigrations();
+        });
+
+        return $done;
+    }
+
+    /** @return list<string> the versions applied by this run */
+    private function runMigrations(): array
     {
         $this->ensureTable();
 
