@@ -119,6 +119,24 @@ final class RemoteReplyTest extends TestCase
         self::assertSame(404, $response->status, $response->body);
     }
 
+    public function testAtprotoReplyTargetIsRefusedWithAClearError(): void
+    {
+        $this->server->createAccount('alice');
+        $alice = $this->server->signIn('alice');
+
+        // AT Protocol records have no ActivityPub reply path: the request
+        // must reach the remote-reply validator instead of the core's
+        // local-parent lookup, and the refusal must name the problem.
+        $response = $this->server->json('POST', '/api/v1/posts', [
+            'content' => 'A reply',
+            'visibility' => 'public',
+            'in_reply_to_id' => 'at://did:plc:someone/app.bsky.feed.post/3kabc',
+        ], $alice['cookies'], $alice['csrf']);
+
+        self::assertSame(422, $response->status, $response->body);
+        self::assertStringContainsString('remote_reply_invalid', $response->body);
+    }
+
     private function seedRemotePost(): void
     {
         $this->server->runtime->database->execute(
