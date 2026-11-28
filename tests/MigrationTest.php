@@ -426,4 +426,58 @@ final class MigrationTest extends TestCase
         $this->expectException(MigrationException::class);
         $runner->migrate();
     }
+
+    public function testASecondMigratorFailsWhileAnotherHoldsTheWriteLock(): void
+    {
+        $server = new TestServer();
+        $other = PdoFactory::connect($server->config);
+        $migrations = Migrations::all();
+        $migrations[] = new ProbeMigration();
+
+        $failure = null;
+        // The outer transaction holds SQLite's single-writer lock; the
+        // migration run must refuse instead of interleaving DDL.
+        $other->transaction(function () use ($server, $migrations, $other, &$failure): void {
+            $other->execute('CREATE TABLE migration_lock_probe_holder (id INTEGER)');
+
+            try {
+                (new MigrationRunner($server->runtime->database, new SystemClock(), $migrations))->migrate();
+            } catch (\Throwable $exception) {
+                $failure = $exception;
+            }
+        });
+
+        self::assertNotNull($failure, 'The second migrator ran while the database was write-locked.');
+        self::assertStringContainsString('locked', strtolower($failure->getMessage()));
+        self::assertSame(
+            0,
+            (int) $server->runtime->database->fetchValue(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'migration_lock_probe'",
+            ),
+        );
+    }
+}
+
+/** Pending migration used to force a write while another connection holds the lock. */
+final class ProbeMigration implements \AlohaSocial\Server\Migrations\Migration
+{
+    public function version(): string
+    {
+        return '999999999999';
+    }
+
+    public function description(): string
+    {
+        return 'Test probe.';
+    }
+
+    public function up(\AlohaSocial\Core\Platform\Db\Connection $connection): void
+    {
+        $connection->execute('CREATE TABLE migration_lock_probe (id INTEGER)');
+    }
+
+    public function down(\AlohaSocial\Core\Platform\Db\Connection $connection): void
+    {
+        $connection->execute('DROP TABLE migration_lock_probe');
+    }
 }
