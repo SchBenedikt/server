@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import type { HostBridge, UiMethod } from '@alohasocial/ui';
+import { markOffline, markOnline } from './connectivity';
 import type {
 	Account,
 	AccountList,
@@ -1305,8 +1306,19 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 					continue;
 				}
 
-				throw error;
+				markOffline();
+				if (error instanceof ApiError) {
+					throw error;
+				}
+
+				throw new ApiError(
+					0,
+					'network_error',
+					'The request could not reach the server. Check your connection and try again.',
+				);
 			}
+
+			markOnline();
 
 			if (
 				safeRead

@@ -47,6 +47,7 @@ import TagView from './views/TagView.vue';
 import { setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
 import { configureAdminApi, createAdminApi } from './lib/admin';
+import { offline } from './lib/connectivity';
 import { useLiveUpdates } from './lib/live';
 import { initRouter, navigate, route, routeTitle } from './lib/router';
 import { appState, initTheme, openComposer, setInstance, setSearchSeed, setSession, setUnread, toggleTheme } from './lib/state';
@@ -267,6 +268,9 @@ watch(() => appState.instance?.name, (name) => {
 	</div>
 
 	<div v-else class="a-app">
+		<div v-if="offline" class="a-offline" role="status">
+			You appear to be offline — changes may not be saved until the connection returns.
+		</div>
 		<header class="a-topbar">
 			<a class="a-topbar__brand" href="#/" :title="appState.instance?.name ?? 'Aloha Social'">
 				<span class="a-topbar__mark" aria-hidden="true"><img :src="'/ui/brand/aloha-mark.svg'" alt="" /></span>

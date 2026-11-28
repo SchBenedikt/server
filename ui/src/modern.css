@@ -227,6 +227,16 @@ body.app-shell {
 	background: transparent;
 }
 
+.a-offline {
+	padding: 8px 16px;
+	background: color-mix(in srgb, var(--a-warning, #c98a00) 14%, var(--a-surface));
+	border-bottom: 1px solid var(--a-border);
+	color: var(--a-text);
+	font-size: 13px;
+	font-weight: 600;
+	text-align: center;
+}
+
 /* ------------------------------------------------------------------- shell */
 
 .a-shell {
