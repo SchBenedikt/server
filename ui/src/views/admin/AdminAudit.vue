@@ -7,6 +7,7 @@ import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
 import { getAdminApi, type AuditEntry } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
+import { t } from '../../lib/i18n';
 
 const entries = ref<AuditEntry[]>([]);
 const loading = ref(false);
@@ -55,26 +56,9 @@ function actionTone(action: string): string {
 }
 
 function actionLabel(action: string): string {
-	const labels: Record<string, string> = {
-		'user.create': 'Account created',
-		'user.role': 'Role changed',
-		'user.display_name': 'Display name changed',
-		'user.disable': 'account deactivated',
-		'user.enable': 'account activated',
-		'user.password': 'Password changed',
-		'user.sessions': 'Sessions ended',
-		'report.create': 'Report received',
-		'report.resolved': 'Report resolved',
-		'report.dismissed': 'Report dismissed',
-		'post.delete': 'Post deleted',
-		'job.retry': 'Job retried',
-		'job.delete': 'job deleted',
-		'job.retry_all': 'Dead jobs retried',
-		'job.purge': 'Old jobs deleted',
-		'queue.run': 'Worker run started',
-	};
-
-	return labels[action] ?? action;
+	const key = `audit.action.${action}`;
+	const translated = t(key);
+	return translated === key ? action : translated;
 }
 
 function detailsText(details: Record<string, unknown>): string {
@@ -98,7 +82,7 @@ async function load(): Promise<void> {
 	try {
 		entries.value = await getAdminApi().audit(limit.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The audit log could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('audit.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -117,30 +101,24 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Traceability</p>
-				<h2>Audit log</h2>
-				<p class="a-admin-lead">
-					Every privileged change is stored with actor, target, time and details.
-					The log is immutable and serves as an audit trail.
-				</p>
+				<p class="a-admin-eyebrow">{{ t('audit.eyebrow') }}</p>
+				<h2>{{ t('audit.title') }}</h2>
+				<p class="a-admin-lead">{{ t('audit.lead') }}</p>
 			</div>
 			<div class="a-admin-actions">
-				<select v-model.number="limit" class="a-admin-select a-admin-select--small" aria-label="Number of entries" @change="changeLimit">
-					<option :value="50">50 entries</option>
-					<option :value="100">100 entries</option>
-					<option :value="250">250 entries</option>
-					<option :value="500">500 entries</option>
+				<select v-model.number="limit" class="a-admin-select a-admin-select--small" :aria-label="t('audit.limitAria')" @change="changeLimit">
+					<option v-for="count in [50, 100, 250, 500]" :key="count" :value="count">{{ t('audit.entries', { count }) }}</option>
 				</select>
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-					Refresh
+					{{ t('common.refresh') }}
 				</button>
 			</div>
 		</div>
 
 		<label class="a-admin-search a-admin-search--wide">
 			<AppIcon name="search" :size="17" />
-			<input v-model="query" type="search" placeholder="Search action, account, target or detail" autocomplete="off">
+			<input v-model="query" type="search" :placeholder="t('audit.searchPlaceholder')" autocomplete="off">
 		</label>
 
 		<p v-if="error !== ''" class="a-form-error" role="alert">{{ error }}</p>
@@ -152,8 +130,8 @@ onMounted(() => {
 		<div v-else-if="filtered.length === 0" class="a-admin-empty-panel">
 			<AppIcon name="shield" :size="24" />
 			<div>
-				<strong>No matching entries</strong>
-				<p>{{ query !== '' ? 'Adjust your search.' : 'As soon as an administrative action is performed, it appears here.' }}</p>
+				<strong>{{ t('audit.emptyTitle') }}</strong>
+				<p>{{ t(query !== '' ? 'audit.emptySearch' : 'audit.emptyAll') }}</p>
 			</div>
 		</div>
 
@@ -175,7 +153,7 @@ onMounted(() => {
 							</div>
 							<p v-if="entry.target_type || entry.target_id" class="a-admin-audit__target">
 								<AppIcon name="external" :size="13" />
-								{{ entry.target_type ?? 'Target' }}
+								{{ entry.target_type ?? t('audit.target') }}
 								<code v-if="entry.target_id" class="a-admin-mono">{{ entry.target_id }}</code>
 							</p>
 							<p v-if="Object.keys(entry.details).length > 0" class="a-admin-audit__details">
