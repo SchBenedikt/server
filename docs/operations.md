@@ -548,12 +548,24 @@ Series provided:
   `failed` grows only when SMTP is unreachable past the retry budget.
 - `aloha_worker_heartbeat_age_seconds` — seconds since the worker's last
   heartbeat. Alert when above ~90 seconds (the UI's "online" threshold).
+- `aloha_push_delivery_pending`, `aloha_engagement_refresh_pending` —
+  queued Web Push deliveries and remote engagement refreshes waiting for
+  the worker.
+- `aloha_atproto_sync_last_attempt_age_seconds{source}`,
+  `aloha_atproto_sync_stale{source}`, `aloha_atproto_sync_error{source}` —
+  per-source inbound sync health (#170). `stale=1` means cached remote
+  content is being served past its freshness window; `error=1` means the
+  last poll attempt failed. `last_attempt_age` climbing while `stale=0`
+  means sync is merely idle.
 - `aloha_metrics_collection_errors` — non-zero when a scrape-time gauge
   could not be read (database hiccup); the HTTP metrics still render.
 
 Suggested alerts: `aloha_queue_jobs_dead > 0` for longer than one worker
 tick, `aloha_worker_heartbeat_age_seconds > 90` for 5 minutes,
-`aloha_http_request_duration_seconds` p99 above a few seconds sustained.
+`aloha_atproto_sync_stale == 1` or `aloha_atproto_sync_error == 1` for
+10 minutes (per source), `aloha_push_delivery_pending` growing for an
+hour, `aloha_http_request_duration_seconds` p99 above a few seconds
+sustained.
 
 ## Verifying federation end-to-end
 

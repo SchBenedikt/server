@@ -33,6 +33,19 @@ final class MetricsTest extends TestCase
         self::assertStringContainsString('aloha_scrape_gauge 1', $text);
     }
 
+    public function testRenderProducesLabelledScrapeGauges(): void
+    {
+        $metrics = new Metrics();
+
+        $text = $metrics->render([], [
+            'aloha_sync_stale' => ['source=jetstream' => 1.0, 'source=relay' => 0.0],
+        ]);
+
+        self::assertStringContainsString('# TYPE aloha_sync_stale gauge', $text);
+        self::assertStringContainsString('aloha_sync_stale{source="jetstream"} 1', $text);
+        self::assertStringContainsString('aloha_sync_stale{source="relay"} 0', $text);
+    }
+
     public function testLabelValuesAreSanitized(): void
     {
         self::assertSame('safe_value-1.2/x', Metrics::sanitizeLabelValue('safe_value-1.2/x'));
@@ -68,6 +81,32 @@ final class MetricsTest extends TestCase
         self::assertStringContainsString('aloha_http_requests_total', $response->body);
         self::assertStringContainsString('aloha_queue_jobs_pending', $response->body);
         self::assertStringContainsString('aloha_mail_outbox_pending', $response->body);
+    }
+
+    public function testMetricsEndpointExposesSyncHealthPerSource(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('root', admin: true);
+        $session = $server->signIn('root');
+
+        $db = $server->runtime->database;
+        $db->execute(
+            'INSERT INTO social_atproto_sync_checkpoint'
+            . ' (source, cursor, last_sequence, last_event_at, last_attempt_at, last_error, stale, reconcile_required)'
+            . " VALUES ('jetstream', NULL, NULL, NULL, '2026-11-28T00:00:00Z', 'timeout', 1, 0)",
+        );
+        $db->execute(
+            'INSERT INTO push_delivery (id, account_id, payload, attempts, next_attempt_at, created_at)'
+            . " VALUES ('d1', 'root', '{}', 0, '2026-11-28T00:00:00Z', '2026-11-28T00:00:00Z')",
+        );
+
+        $response = $server->send('GET', '/metrics', ['cookies' => $session['cookies']]);
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('aloha_atproto_sync_stale{source="jetstream"} 1', $response->body);
+        self::assertStringContainsString('aloha_atproto_sync_error{source="jetstream"} 1', $response->body);
+        self::assertStringContainsString('aloha_atproto_sync_last_attempt_age_seconds{source="jetstream"}', $response->body);
+        self::assertStringContainsString('aloha_push_delivery_pending 1', $response->body);
+        self::assertStringContainsString('aloha_engagement_refresh_pending 0', $response->body);
     }
 
     public function testMetricsEndpointRequiresTheBearerToken(): void
