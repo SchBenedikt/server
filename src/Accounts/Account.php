@@ -34,6 +34,7 @@ final readonly class Account
         public ?string $disabledAt,
         public int $credentialVersion = 1,
         public ?string $emailVerifiedAt = null,
+        public ?string $disabledReason = null,
     ) {
     }
 
@@ -54,6 +55,16 @@ final readonly class Account
     public function isDisabled(): bool
     {
         return $this->disabledAt !== null;
+    }
+
+    /**
+     * Why the account cannot sign in: `verification` or `approval` while
+     * registration is still pending, `admin` after a suspension, NULL for
+     * rows that predate the reason column.
+     */
+    public function isAwaitingRegistration(): bool
+    {
+        return $this->disabledReason === 'verification' || $this->disabledReason === 'approval';
     }
 
     public function name(): string

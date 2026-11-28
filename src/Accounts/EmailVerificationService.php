@@ -132,6 +132,10 @@ final class EmailVerificationService
 
             if ($activate) {
                 $this->accounts->enable($accountId);
+            } else {
+                // Mailbox proven but administrator approval still pending:
+                // the account moves from the verification stage to approval.
+                $this->accounts->setDisabledReason($accountId, 'approval');
             }
 
             return true;

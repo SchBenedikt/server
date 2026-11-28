@@ -33,6 +33,7 @@ use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Community\InstancePages;
 use AlohaSocial\Server\Mail\MailException;
+use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
@@ -133,6 +134,7 @@ final class AdminService
         private readonly ?InstancePages $instancePages = null,
         private readonly ?Mailer $mailer = null,
         private readonly ?Invitations $invitations = null,
+        private readonly ?MailOutbox $mailOutbox = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
         $this->mastodonOAuth = new MastodonOAuthRepository($db);
@@ -397,7 +399,7 @@ final class AdminService
         $total = $this->intValue('SELECT COUNT(*) FROM account' . $where, $parameters);
 
         $rows = $this->db->fetchAll(
-            'SELECT a.id, a.handle, a.email, a.pending_email, a.email_verified_at, a.role, a.display_name, a.created_at, a.disabled_at,'
+            'SELECT a.id, a.handle, a.email, a.pending_email, a.email_verified_at, a.role, a.display_name, a.created_at, a.disabled_at, a.disabled_reason,'
             . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = a.id AND p.deleted_at IS NULL) AS post_count,'
             . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = a.id) AS follower_count,'
             . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = a.id) AS following_count'
@@ -553,14 +555,32 @@ final class AdminService
      */
     public function enableUser(string $adminId, string $id): array
     {
-        $this->requireUser($id);
+        $target = $this->requireUser($id);
         $deletion = $this->app->accountData?->deletionStatus($id);
         if ($deletion !== null && $deletion->state !== AccountDeletion::ACTIVE) {
             throw AdminException::conflict('An account with an active or completed deletion cannot be reactivated.');
         }
 
         $this->accounts->enable($id);
-        $this->record($adminId, 'user.enable', 'account', $id, []);
+        $this->record($adminId, 'user.enable', 'account', $id, [
+            'previous_state' => $target->disabledReason,
+        ]);
+
+        // Approving a pending registration tells the member their account
+        // is live; the mail is deduplicated per disable event so a later
+        // suspension/approval cycle notifies again.
+        if ($target->isAwaitingRegistration() && $this->mailOutbox !== null) {
+            $this->mailOutbox->enqueue(
+                MailOutbox::KIND_ACCOUNT_APPROVED,
+                $id,
+                'approved:' . $id . ':' . (string) $target->disabledAt,
+                $target->email,
+                'Your account on ' . $this->config->instanceName . ' is approved',
+                "Hello " . $target->name() . ",\n\n"
+                . "an administrator approved the account @" . $target->handle . " on " . $this->config->instanceUrl . ".\n"
+                . "You can sign in now.\n",
+            );
+        }
 
         return $this->user($id);
     }
@@ -1873,7 +1893,7 @@ final class AdminService
     private function user(string $id): array
     {
         $row = $this->db->fetchOne(
-            'SELECT a.id, a.handle, a.email, a.pending_email, a.email_verified_at, a.role, a.display_name, a.created_at, a.disabled_at,'
+            'SELECT a.id, a.handle, a.email, a.pending_email, a.email_verified_at, a.role, a.display_name, a.created_at, a.disabled_at, a.disabled_reason,'
             . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = a.id AND p.deleted_at IS NULL) AS post_count,'
             . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = a.id) AS follower_count,'
             . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = a.id) AS following_count'
@@ -1904,6 +1924,7 @@ final class AdminService
             'display_name' => $row['display_name'] === null ? null : (string) $row['display_name'],
             'created_at' => (string) $row['created_at'],
             'disabled_at' => $row['disabled_at'] === null ? null : (string) $row['disabled_at'],
+            'disabled_reason' => ($row['disabled_reason'] ?? null) === null ? null : (string) $row['disabled_reason'],
             'posts' => (int) ($row['post_count'] ?? 0),
             'followers' => (int) ($row['follower_count'] ?? 0),
             'following' => (int) ($row['following_count'] ?? 0),
@@ -2512,7 +2533,7 @@ final class AdminService
     private function recentUsers(int $limit): array
     {
         $rows = $this->db->fetchAll(
-            'SELECT id, handle, email, pending_email, email_verified_at, role, display_name, created_at, disabled_at,'
+            'SELECT id, handle, email, pending_email, email_verified_at, role, display_name, created_at, disabled_at, disabled_reason,'
             . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = account.id AND p.deleted_at IS NULL) AS post_count,'
             . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = account.id) AS follower_count,'
             . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = account.id) AS following_count'
