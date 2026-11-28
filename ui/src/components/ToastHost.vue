@@ -5,6 +5,7 @@
  */
 import AppIcon from './AppIcon.vue';
 import { appState, dismissToast } from '../lib/state';
+import { t } from '../lib/i18n';
 
 function iconFor(tone: string): string {
 	if (tone === 'success') {
@@ -30,7 +31,7 @@ function iconFor(tone: string): string {
 			>
 				<AppIcon :name="iconFor(toast.tone)" :size="18" />
 				<span class="a-toast__text">{{ toast.message }}</span>
-				<button type="button" class="a-toast__close" aria-label="Dismiss notice" @click="dismissToast(toast.id)">
+				<button type="button" class="a-toast__close" :aria-label="t('common.dismiss')" @click="dismissToast(toast.id)">
 					<AppIcon name="x" :size="15" />
 				</button>
 			</div>

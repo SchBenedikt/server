@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import AppIcon from './AppIcon.vue';
+import { t } from '../lib/i18n';
 
 withDefaults(defineProps<{
 	open: boolean;
@@ -14,8 +15,6 @@ withDefaults(defineProps<{
 	tone?: 'primary' | 'danger';
 	busy?: boolean;
 }>(), {
-	confirmLabel: 'Confirm',
-	cancelLabel: 'Cancel',
 	tone: 'primary',
 	busy: false,
 });
@@ -35,17 +34,17 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
 			<div class="a-management-dialog a-admin-confirm" role="dialog" aria-modal="true" :aria-label="title">
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Confirmation</p>
+						<p class="a-profile-edit__eyebrow">{{ t('common.confirmation') }}</p>
 						<h2>{{ title }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="busy" @click="emit('cancel')">
+					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" :disabled="busy" @click="emit('cancel')">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 				<p class="a-admin-confirm__message">{{ message }}</p>
 				<footer class="a-profile-edit__actions">
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="busy" @click="emit('cancel')">
-						{{ cancelLabel }}
+						{{ cancelLabel ?? t('common.cancel') }}
 					</button>
 					<button
 						type="button"
@@ -55,7 +54,7 @@ const emit = defineEmits<{ confirm: []; cancel: [] }>();
 						@click="emit('confirm')"
 					>
 						<AppIcon v-if="busy" name="refresh" :size="15" class="a-spin" />
-						{{ busy ? 'Running…' : confirmLabel }}
+						{{ busy ? t('common.running') : (confirmLabel ?? t('common.confirm')) }}
 					</button>
 				</footer>
 			</div>

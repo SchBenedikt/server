@@ -188,18 +188,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<aside class="a-sidebar" aria-label="Main navigation">
+	<aside class="a-sidebar" :aria-label="t('common.mainNavigation')">
 		<a class="a-brand" href="#/" :title="instanceHost">
 			<span class="a-brand__mark" aria-hidden="true">
 				<img :src="'/ui/brand/aloha-mark.svg'" alt="" />
 			</span>
 			<span class="a-brand__copy">
 				<strong>{{ instanceName }}</strong>
-				<small>Open &amp; federated</small>
+				<small>{{ t('common.openAndFederated') }}</small>
 			</span>
 		</a>
 
-		<nav class="a-nav" aria-label="Main sections">
+		<nav class="a-nav" :aria-label="t('common.mainSections')">
 			<a
 				v-for="item in primaryItems"
 				:key="item.id"
@@ -220,9 +220,9 @@ onUnmounted(() => {
 			</a>
 		</nav>
 
-		<button type="button" class="a-btn a-btn--primary a-sidebar__compose" :aria-label="signedIn ? 'New post' : 'Sign in'" @click="compose">
+		<button type="button" class="a-btn a-btn--primary a-sidebar__compose" :aria-label="signedIn ? t('common.newPost') : t('nav.signIn')" @click="compose">
 			<AppIcon name="pen" :size="18" />
-			<span>{{ signedIn ? 'New post' : 'Sign in' }}</span>
+			<span>{{ signedIn ? t('common.newPost') : t('nav.signIn') }}</span>
 		</button>
 
 		<div class="a-sidebar__more">
@@ -232,11 +232,11 @@ onUnmounted(() => {
 				:class="{ 'a-nav__item--active': moreActive || moreOpen }"
 				:aria-expanded="moreOpen"
 				aria-haspopup="menu"
-				aria-label="More sections"
+				:aria-label="t('common.moreSections')"
 				@click.stop="moreOpen = !moreOpen"
 			>
 				<span class="a-nav__icon"><AppIcon name="list" :size="21" /></span>
-				<span>More</span>
+				<span>{{ t('common.more') }}</span>
 				<AppIcon name="chevronDown" :size="16" class="a-nav__more-chevron" :class="{ 'a-nav__more-chevron--open': moreOpen }" />
 			</button>
 
@@ -259,7 +259,7 @@ onUnmounted(() => {
 
 				<button type="button" class="a-sidebar__customize" @click="openCustomize">
 					<AppIcon name="sliders" :size="17" />
-					<span>Customize sidebar</span>
+					<span>{{ t('common.customizeSidebar') }}</span>
 				</button>
 			</div>
 		</div>
@@ -268,10 +268,10 @@ onUnmounted(() => {
 			v-if="!signedIn"
 			class="a-sidebar__guest"
 			href="/login"
-			aria-label="Sign in to take part"
+			:aria-label="t('common.signInToTakePart')"
 		>
 			<AppIcon name="globe" :size="17" />
-			<span>You are reading as a guest. Sign in to take part.</span>
+			<span>{{ t('common.guestTakePart') }}</span>
 		</a>
 
 		<div class="a-sidebar__spacer" />
@@ -282,7 +282,7 @@ onUnmounted(() => {
 				class="a-profile-menu__trigger"
 				:aria-expanded="menuOpen"
 				aria-haspopup="menu"
-				:aria-label="`Account menu for ${displayName}`"
+				:aria-label="t('common.accountMenuFor', { name: displayName })"
 				@click="menuOpen = !menuOpen"
 			>
 				<Avatar :id="handle" :name="displayName" :size="40" />
@@ -295,25 +295,25 @@ onUnmounted(() => {
 
 			<div v-if="menuOpen" class="a-profile-menu__popover" role="menu">
 				<a :href="`#/u/${encodeURIComponent(handle)}`" role="menuitem" @click="menuOpen = false">
-					<AppIcon name="user" :size="16" /> My profile
+					<AppIcon name="user" :size="16" /> {{ t('common.myProfile') }}
 				</a>
 				<a v-if="(appState.session.admin || appState.session.moderator)" href="#/admin" role="menuitem" @click="menuOpen = false">
-					<AppIcon name="shield" :size="16" /> administration
+					<AppIcon name="shield" :size="16" /> {{ t('nav.administration') }}
 				</a>
 				<button type="button" role="menuitem" @click="toggleTheme">
 					<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="16" />
-					{{ appState.theme === 'dark' ? 'Light theme' : 'Dark theme' }}
+					{{ appState.theme === 'dark' ? t('common.lightMode') : t('common.darkMode') }}
 				</button>
 				<button type="button" role="menuitem" class="a-profile-menu__danger" :disabled="loggingOut" @click="logout">
 					<AppIcon name="logout" :size="16" />
-					{{ loggingOut ? 'Signing out…' : 'Sign out' }}
+					{{ loggingOut ? t('common.signingOut') : t('common.signOut') }}
 				</button>
 			</div>
 		</div>
 
-		<button v-else type="button" class="a-theme-toggle" aria-label="Toggle color theme" @click="toggleTheme">
+		<button v-else type="button" class="a-theme-toggle" :aria-label="t('common.toggleTheme')" @click="toggleTheme">
 			<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="18" />
-			<span>{{ appState.theme === 'dark' ? 'Light theme' : 'Dark theme' }}</span>
+			<span>{{ appState.theme === 'dark' ? t('common.lightMode') : t('common.darkMode') }}</span>
 		</button>
 
 		<SidebarSettingsDialog :open="customizeOpen" @close="customizeOpen = false" />

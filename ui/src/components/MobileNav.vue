@@ -149,7 +149,7 @@ watch(route, () => {
 </script>
 
 <template>
-	<nav class="a-mobile-nav" aria-label="Mobile Navigation">
+	<nav class="a-mobile-nav" :aria-label="t('common.mobileNavigation')">
 		<a
 			v-for="item in primaryItems"
 			:key="item.name"
@@ -174,24 +174,24 @@ watch(route, () => {
 			:class="{ 'a-mobile-nav__item--active': moreActive }"
 			:aria-expanded="sheetOpen"
 			aria-controls="a-mobile-sheet"
-			aria-label="More sections"
+			:aria-label="t('common.moreSections')"
 			@click="sheetOpen = !sheetOpen"
 		>
 			<span class="a-mobile-nav__icon"><AppIcon name="list" :size="21" /></span>
-			<span>More</span>
+			<span>{{ t('common.more') }}</span>
 		</button>
 
-		<button v-if="signedIn" type="button" class="a-mobile-fab" aria-label="Write a new post" @click="compose">
+		<button v-if="signedIn" type="button" class="a-mobile-fab" :aria-label="t('common.newPost')" @click="compose">
 			<AppIcon name="pen" :size="21" />
 		</button>
 	</nav>
 
 	<Transition name="a-sheet">
 		<div v-if="sheetOpen" class="a-mobile-sheet-backdrop" @click.self="sheetOpen = false">
-			<div id="a-mobile-sheet" class="a-mobile-sheet" role="dialog" aria-modal="true" aria-label="More sections">
+			<div id="a-mobile-sheet" class="a-mobile-sheet" role="dialog" aria-modal="true" :aria-label="t('common.moreSections')">
 				<header class="a-mobile-sheet__head">
-					<strong>All sections</strong>
-					<button type="button" class="a-icon-btn" aria-label="Close" @click="sheetOpen = false">
+					<strong>{{ t('common.allSections') }}</strong>
+					<button type="button" class="a-icon-btn" :aria-label="t('common.close')" @click="sheetOpen = false">
 						<AppIcon name="x" :size="20" />
 					</button>
 				</header>
@@ -218,11 +218,11 @@ watch(route, () => {
 				<footer class="a-mobile-sheet__foot">
 					<button type="button" class="a-btn a-btn--ghost" @click="toggleTheme">
 						<AppIcon :name="appState.theme === 'dark' ? 'sun' : 'moon'" :size="17" />
-						{{ appState.theme === 'dark' ? 'Light mode' : 'Dark mode' }}
+						{{ appState.theme === 'dark' ? t('common.lightMode') : t('common.darkMode') }}
 					</button>
 					<button v-if="signedIn" type="button" class="a-btn a-btn--ghost" :disabled="loggingOut" @click="logout">
 						<AppIcon name="logout" :size="17" />
-						{{ loggingOut ? 'Signing out…' : 'Sign out' }}
+						{{ loggingOut ? t('common.signingOut') : t('common.signOut') }}
 					</button>
 				</footer>
 			</div>
