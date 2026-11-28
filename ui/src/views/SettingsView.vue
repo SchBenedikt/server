@@ -8,6 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type AtprotoSessionEntry, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus } from '../lib/api';
 import { absoluteTime, relativeTime } from '../lib/format';
+import { applyDensity } from '../lib/density';
 import { setLocale, t } from '../lib/i18n';
 import { disablePush, enablePush, pushSupport, subscribed as pushSubscribed } from '../lib/push';
 import { appState, setSession, showToast } from '../lib/state';
@@ -332,8 +333,10 @@ async function save(): Promise<void> {
 			mirror_atproto_account_did: current.mirror_atproto_account_did,
 			recommendations_opt_out: current.recommendations_opt_out,
 			ui_locale: current.ui_locale,
+			ui_density: current.ui_density,
 		});
 		setLocale(preferences.value.ui_locale);
+		applyDensity(preferences.value.ui_density);
 		showToast(t('settings.saved'), 'success');
 	} catch (caught) {
 		showToast(caught instanceof Error ? caught.message : t('settings.saveFailed'), 'error');
@@ -371,6 +374,14 @@ function setUiLocale(event: Event): void {
 	if (preferences.value !== null) {
 		const value = (event.target as HTMLSelectElement).value;
 		preferences.value.ui_locale = value === '' ? null : value;
+	}
+}
+
+function setUiDensity(event: Event): void {
+	if (preferences.value !== null) {
+		const value = (event.target as HTMLSelectElement).value;
+		preferences.value.ui_density = value === 'compact' ? 'compact' : value === 'comfortable' ? 'comfortable' : null;
+		applyDensity(preferences.value.ui_density);
 	}
 }
 
@@ -782,6 +793,20 @@ watch(signedIn, (value) => {
 						<option value="">{{ t('settings.language.browser') }}</option>
 						<option value="en">{{ t('settings.language.english') }}</option>
 						<option value="de">{{ t('settings.language.german') }}</option>
+					</select>
+				</label>
+			</section>
+
+			<section class="a-settings__section">
+				<h2>{{ t('settings.display.label') }}</h2>
+				<p class="a-settings__hint">{{ t('settings.display.hint') }}</p>
+				<label class="a-settings__row">
+					<span>
+						<strong>{{ t('settings.display.label') }}</strong>
+					</span>
+					<select :value="preferences.ui_density ?? 'comfortable'" @change="setUiDensity">
+						<option value="comfortable">{{ t('settings.display.comfortable') }}</option>
+						<option value="compact">{{ t('settings.display.compact') }}</option>
 					</select>
 				</label>
 			</section>

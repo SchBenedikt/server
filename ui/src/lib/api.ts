@@ -1252,6 +1252,7 @@ function normalizePreferences(value: unknown): AccountPreferences {
 			? value.dismissed_announcements.filter((id): id is string => typeof id === 'string')
 			: [],
 		ui_locale: typeof value.ui_locale === 'string' && value.ui_locale !== '' ? value.ui_locale : null,
+		ui_density: typeof value.ui_density === 'string' && value.ui_density !== '' ? value.ui_density : null,
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }

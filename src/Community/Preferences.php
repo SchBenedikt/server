@@ -48,6 +48,8 @@ final class Preferences
 
     public const DM_POLICIES = ['everyone', 'followers', 'nobody'];
 
+    public const DENSITIES = ['compact', 'comfortable'];
+
     public function __construct(
         private readonly Connection $db,
         private readonly Clock $clock,
@@ -74,6 +76,8 @@ final class Preferences
      *     onboarding_dismissed: bool,
      *     onboarding_dismissed_at: string|null,
      *     dismissed_announcements: list<string>,
+     *     ui_locale: string|null,
+     *     ui_density: string|null,
      *     updated_at: string|null
      * }
      */
@@ -118,6 +122,9 @@ final class Preferences
             'dismissed_announcements' => $this->decodeAnnouncementIds($row['dismissed_announcements'] ?? null),
             'ui_locale' => is_string($row['ui_locale'] ?? null) && $row['ui_locale'] !== ''
                 ? (string) $row['ui_locale']
+                : null,
+            'ui_density' => is_string($row['ui_density'] ?? null) && $row['ui_density'] !== ''
+                ? (string) $row['ui_density']
                 : null,
             'updated_at' => is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null,
         ];
@@ -196,6 +203,17 @@ final class Preferences
             $next['ui_locale'] = $locale === '' ? null : $locale;
         }
 
+        if (array_key_exists('ui_density', $payload)) {
+            $density = $payload['ui_density'];
+            if ($density !== null && (!is_string($density) || !in_array($density, self::DENSITIES, true))) {
+                throw CommunityException::invalid(
+                    'This setting is invalid.',
+                    ['ui_density' => 'Choose compact or comfortable.'],
+                );
+            }
+            $next['ui_density'] = $density;
+        }
+
         $dismissedIds = $current['dismissed_announcements'];
         if (array_key_exists('dismissed_announcements', $payload)) {
             $dismissedIds = $this->announcementIds($payload['dismissed_announcements']);
@@ -219,9 +237,9 @@ final class Preferences
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, recommendations_opt_out, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, ui_locale, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, recommendations_opt_out, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, ui_locale, ui_density, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :recommendations_opt_out, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :ui_locale, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :recommendations_opt_out, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :ui_locale, :ui_density, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -240,6 +258,7 @@ final class Preferences
             . ' onboarding_dismissed_at = excluded.onboarding_dismissed_at,'
             . ' dismissed_announcements = excluded.dismissed_announcements,'
             . ' ui_locale = excluded.ui_locale,'
+            . ' ui_density = excluded.ui_density,'
             . ' updated_at = excluded.updated_at',
             [
                 'account_id' => $accountId,
@@ -260,6 +279,7 @@ final class Preferences
                 'onboarding_dismissed_at' => $dismissedAt,
                 'dismissed_announcements' => $dismissedIds === [] ? null : json_encode($dismissedIds),
                 'ui_locale' => $next['ui_locale'],
+                'ui_density' => $next['ui_density'],
                 'updated_at' => $now,
             ],
         );
@@ -303,6 +323,7 @@ final class Preferences
             'onboarding_dismissed_at' => null,
             'dismissed_announcements' => [],
             'ui_locale' => null,
+            'ui_density' => null,
             'updated_at' => null,
         ];
     }

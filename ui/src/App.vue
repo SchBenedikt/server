@@ -48,6 +48,7 @@ import { setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
 import { configureAdminApi, createAdminApi } from './lib/admin';
 import { offline } from './lib/connectivity';
+import { applyDensity } from './lib/density';
 import { useLiveUpdates } from './lib/live';
 import { initRouter, navigate, route, routeTitle } from './lib/router';
 import { t } from './lib/i18n';
@@ -220,6 +221,11 @@ async function bootstrap(): Promise<void> {
 		}
 
 		setSession(user, profile, adminSession, moderatorSession);
+		try {
+			applyDensity((await getApi().preferences()).ui_density);
+		} catch {
+			// Density is cosmetic; a failed lookup keeps the default.
+		}
 		await refreshUnread();
 	} catch {
 		setSession(null);

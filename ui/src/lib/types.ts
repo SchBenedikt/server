@@ -716,6 +716,7 @@ export interface AccountPreferences {
 	recommendations_opt_out: boolean;
 	dismissed_announcements: string[];
 	ui_locale: string | null;
+	ui_density: string | null;
 	updated_at: string | null;
 }
 
