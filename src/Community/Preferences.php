@@ -116,6 +116,9 @@ final class Preferences
             'onboarding_dismissed_at' => is_string($row['onboarding_dismissed_at'] ?? null)
                 && $row['onboarding_dismissed_at'] !== '' ? (string) $row['onboarding_dismissed_at'] : null,
             'dismissed_announcements' => $this->decodeAnnouncementIds($row['dismissed_announcements'] ?? null),
+            'ui_locale' => is_string($row['ui_locale'] ?? null) && $row['ui_locale'] !== ''
+                ? (string) $row['ui_locale']
+                : null,
             'updated_at' => is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null,
         ];
     }
@@ -178,6 +181,21 @@ final class Preferences
             $next['mirror_atproto_account_did'] = $did;
         }
 
+        if (array_key_exists('ui_locale', $payload)) {
+            $locale = $payload['ui_locale'];
+            if ($locale !== null && $locale !== ''
+                && (!is_string($locale)
+                    || strlen($locale) > 35
+                    || preg_match('/^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/', $locale) !== 1)
+            ) {
+                throw CommunityException::invalid(
+                    'This setting is invalid.',
+                    ['ui_locale' => 'Choose a valid language tag or reset to the browser default.'],
+                );
+            }
+            $next['ui_locale'] = $locale === '' ? null : $locale;
+        }
+
         $dismissedIds = $current['dismissed_announcements'];
         if (array_key_exists('dismissed_announcements', $payload)) {
             $dismissedIds = $this->announcementIds($payload['dismissed_announcements']);
@@ -201,9 +219,9 @@ final class Preferences
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, recommendations_opt_out, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, recommendations_opt_out, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, ui_locale, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :recommendations_opt_out, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :recommendations_opt_out, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :ui_locale, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -221,6 +239,7 @@ final class Preferences
             . ' mirror_atproto_account_did = excluded.mirror_atproto_account_did,'
             . ' onboarding_dismissed_at = excluded.onboarding_dismissed_at,'
             . ' dismissed_announcements = excluded.dismissed_announcements,'
+            . ' ui_locale = excluded.ui_locale,'
             . ' updated_at = excluded.updated_at',
             [
                 'account_id' => $accountId,
@@ -240,6 +259,7 @@ final class Preferences
                 'mirror_atproto_account_did' => $next['mirror_atproto_account_did'],
                 'onboarding_dismissed_at' => $dismissedAt,
                 'dismissed_announcements' => $dismissedIds === [] ? null : json_encode($dismissedIds),
+                'ui_locale' => $next['ui_locale'],
                 'updated_at' => $now,
             ],
         );
@@ -282,6 +302,7 @@ final class Preferences
             'onboarding_dismissed' => false,
             'onboarding_dismissed_at' => null,
             'dismissed_announcements' => [],
+            'ui_locale' => null,
             'updated_at' => null,
         ];
     }

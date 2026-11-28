@@ -1249,6 +1249,7 @@ function normalizePreferences(value: unknown): AccountPreferences {
 		dismissed_announcements: Array.isArray(value.dismissed_announcements)
 			? value.dismissed_announcements.filter((id): id is string => typeof id === 'string')
 			: [],
+		ui_locale: typeof value.ui_locale === 'string' && value.ui_locale !== '' ? value.ui_locale : null,
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }

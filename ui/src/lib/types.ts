@@ -696,6 +696,7 @@ export interface AccountPreferences {
 	onboarding_dismissed: boolean;
 	recommendations_opt_out: boolean;
 	dismissed_announcements: string[];
+	ui_locale: string | null;
 	updated_at: string | null;
 }
 

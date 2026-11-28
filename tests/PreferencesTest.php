@@ -137,6 +137,39 @@ final class PreferencesTest extends TestCase
         self::assertSame(403, $csrf->status);
     }
 
+    public function testUiLocalePersistsAndValidates(): void
+    {
+        $initial = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertNull($initial['ui_locale']);
+
+        $updated = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'ui_locale' => 'de-AT',
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $updated->status);
+        self::assertSame('de-AT', $this->decoded($updated)['preferences']['ui_locale']);
+
+        $reloaded = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertSame('de-AT', $reloaded['ui_locale']);
+
+        // An empty string resets to the browser default.
+        $reset = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'ui_locale' => '',
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $reset->status);
+        self::assertNull($this->decoded($reset)['preferences']['ui_locale']);
+
+        foreach (['<script>', 'en_US!', str_repeat('a', 40), 42] as $bad) {
+            $invalid = $this->server->json('PATCH', '/api/v1/host/preferences', [
+                'ui_locale' => $bad,
+            ], $this->aliceCookies, $this->aliceCsrf);
+            self::assertSame(422, $invalid->status, 'ui_locale ' . var_export($bad, true));
+        }
+    }
+
     public function testOnboardingDismissalPersistsPerAccount(): void
     {
         $initial = $this->decoded(

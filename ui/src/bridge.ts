@@ -14,6 +14,7 @@ const isAdmin = mount?.dataset.isAdmin === '1';
 const isModerator = mount?.dataset.isModerator === '1';
 const atproto = mount?.dataset.atproto === '1';
 const media = mount?.dataset.media === '1';
+const locale = mount?.dataset.locale ?? '';
 
 function apiUrl(path: string, query?: Record<string, string>): string {
 	const url = new URL(path, window.location.origin);
@@ -136,3 +137,4 @@ export const currentHandle = handle;
 export const signedIn = handle !== '';
 export const adminSession = isAdmin;
 export const moderatorSession = isModerator;
+export const initialLocale = locale;

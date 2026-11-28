@@ -3,18 +3,32 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import type { Account, TimelineItem } from './types';
+import { locale, t } from './i18n';
 
-const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+interface LocaleFormatters {
+	relative: Intl.RelativeTimeFormat;
+	absolute: Intl.DateTimeFormat;
+	compact: Intl.NumberFormat;
+}
 
-const absoluteDate = new Intl.DateTimeFormat('en-US', {
-	dateStyle: 'medium',
-	timeStyle: 'short',
-});
+const formatterCache = new Map<string, LocaleFormatters>();
 
-const compactNumber = new Intl.NumberFormat('en-US', {
-	notation: 'compact',
-	maximumFractionDigits: 1,
-});
+function formatters(): LocaleFormatters {
+	const tag = locale.value;
+	const cached = formatterCache.get(tag);
+	if (cached !== undefined) {
+		return cached;
+	}
+
+	const created: LocaleFormatters = {
+		relative: new Intl.RelativeTimeFormat(tag, { numeric: 'auto' }),
+		absolute: new Intl.DateTimeFormat(tag, { dateStyle: 'medium', timeStyle: 'short' }),
+		compact: new Intl.NumberFormat(tag, { notation: 'compact', maximumFractionDigits: 1 }),
+	};
+	formatterCache.set(tag, created);
+
+	return created;
+}
 
 export function relativeTime(value: string): string {
 	const date = new Date(value);
@@ -22,24 +36,25 @@ export function relativeTime(value: string): string {
 		return value;
 	}
 
+	const current = formatters();
 	const diff = date.getTime() - Date.now();
 	const seconds = Math.round(diff / 1000);
 	const absolute = Math.abs(seconds);
 
 	if (absolute < 45) {
-		return 'just now';
+		return t('time.justNow');
 	}
 	if (absolute < 3600) {
-		return relative.format(Math.round(seconds / 60), 'minute');
+		return current.relative.format(Math.round(seconds / 60), 'minute');
 	}
 	if (absolute < 86_400) {
-		return relative.format(Math.round(seconds / 3600), 'hour');
+		return current.relative.format(Math.round(seconds / 3600), 'hour');
 	}
 	if (absolute < 604_800) {
-		return relative.format(Math.round(seconds / 86_400), 'day');
+		return current.relative.format(Math.round(seconds / 86_400), 'day');
 	}
 
-	return absoluteDate.format(date);
+	return current.absolute.format(date);
 }
 
 export function absoluteTime(value: string): string {
@@ -48,7 +63,7 @@ export function absoluteTime(value: string): string {
 		return value;
 	}
 
-	return absoluteDate.format(date);
+	return formatters().absolute.format(date);
 }
 
 export function formatCount(value: number | null | undefined): string {
@@ -56,7 +71,7 @@ export function formatCount(value: number | null | undefined): string {
 		return '–';
 	}
 
-	return compactNumber.format(Math.max(0, value));
+	return formatters().compact.format(Math.max(0, value));
 }
 
 export function isRemoteId(id: string): boolean {

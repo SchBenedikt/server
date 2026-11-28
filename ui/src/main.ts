@@ -11,6 +11,9 @@ import './modern.css';
 import './admin.css';
 import './design.css';
 import App from './App.vue';
-import { bridge } from './bridge';
+import { bridge, initialLocale } from './bridge';
+import { setLocale } from './lib/i18n';
+
+setLocale(initialLocale === '' ? null : initialLocale);
 
 createApp(App).use(createAlohaUi({ bridge })).mount('#aloha-social');

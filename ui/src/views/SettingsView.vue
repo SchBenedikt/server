@@ -8,6 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type AtprotoSessionEntry, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus } from '../lib/api';
 import { relativeTime } from '../lib/format';
+import { setLocale, t } from '../lib/i18n';
 import { disablePush, enablePush, pushSupport, subscribed as pushSubscribed } from '../lib/push';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
@@ -330,7 +331,9 @@ async function save(): Promise<void> {
 			mirror_boosts_to_atproto: current.mirror_boosts_to_atproto,
 			mirror_atproto_account_did: current.mirror_atproto_account_did,
 			recommendations_opt_out: current.recommendations_opt_out,
+			ui_locale: current.ui_locale,
 		});
+		setLocale(preferences.value.ui_locale);
 		showToast('Settings saved.', 'success');
 	} catch (caught) {
 		showToast(caught instanceof Error ? caught.message : 'Settings could not be saved.', 'error');
@@ -361,6 +364,13 @@ function setQuotePolicy(value: string): void {
 function setDmPolicy(value: string): void {
 	if (preferences.value !== null) {
 		preferences.value.dm_policy = value;
+	}
+}
+
+function setUiLocale(event: Event): void {
+	if (preferences.value !== null) {
+		const value = (event.target as HTMLSelectElement).value;
+		preferences.value.ui_locale = value === '' ? null : value;
 	}
 }
 
@@ -761,6 +771,21 @@ watch(signedIn, (value) => {
 		</div>
 
 		<div v-else-if="preferences !== null" class="a-settings">
+			<section class="a-settings__section">
+				<h2>{{ t('settings.language.label') }}</h2>
+				<p class="a-settings__hint">{{ t('settings.language.hint') }}</p>
+				<label class="a-settings__row">
+					<span>
+						<strong>{{ t('settings.language.label') }}</strong>
+					</span>
+					<select :value="preferences.ui_locale ?? ''" @change="setUiLocale">
+						<option value="">{{ t('settings.language.browser') }}</option>
+						<option value="en">{{ t('settings.language.english') }}</option>
+						<option value="de">{{ t('settings.language.german') }}</option>
+					</select>
+				</label>
+			</section>
+
 			<section class="a-settings__section">
 				<h2>New posts</h2>
 				<p class="a-settings__hint">What the composer starts with when you don't choose otherwise.</p>
