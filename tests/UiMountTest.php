@@ -27,6 +27,11 @@ final class UiMountTest extends TestCase
         self::assertStringContainsString('data-signed-in="0"', $response->body);
         self::assertStringContainsString('data-media="1"', $response->body);
         self::assertStringContainsString('class="app-shell"', $response->body);
+        self::assertStringContainsString(
+            'interactive-widget=resizes-content',
+            $response->body,
+            'The app shell must let the mobile keyboard shrink the layout viewport.',
+        );
         self::assertStringContainsString("script-src 'self'", (string) $response->header('Content-Security-Policy'));
     }
 
