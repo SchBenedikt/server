@@ -483,6 +483,38 @@ checkout with dev dependencies installed.
 The unread-notification badge is polled by the UI every 60 seconds. It is a
 convenience, not a monitoring signal.
 
+### Prometheus metrics
+
+`GET /metrics` serves the Prometheus text exposition format (`0.0.4`). The
+endpoint is **disabled when `ALOHASOCIAL_METRICS_TOKEN` is empty** — it
+answers 404 so scrapers cannot probe for it. Set the token and either send
+`Authorization: Bearer <token>` from the scraper or sign in as an admin;
+requests without a credential get 401.
+
+Expose it to the monitoring stack only, not to the public internet — the
+bearer token authenticates, but a public scrape URL still leaks endpoint
+existence to scanners. Restrict by network (firewall, reverse-proxy ACL on
+the `/metrics` location) or keep it on an internal listener.
+
+Series provided:
+
+- `aloha_http_requests_total{method,route,status}` and
+  `aloha_http_request_duration_seconds{method,route}` — per-route counters
+  and latency histograms. Route labels are templated (`/api/v1/posts/{id}`)
+  so high-cardinality paths do not explode the series count.
+- `aloha_queue_jobs_pending`, `aloha_queue_jobs_running`,
+  `aloha_queue_jobs_dead` — `social_job` backlog; `dead` should be zero.
+- `aloha_mail_outbox_pending`, `aloha_mail_outbox_failed` — queued mail;
+  `failed` grows only when SMTP is unreachable past the retry budget.
+- `aloha_worker_heartbeat_age_seconds` — seconds since the worker's last
+  heartbeat. Alert when above ~90 seconds (the UI's "online" threshold).
+- `aloha_metrics_collection_errors` — non-zero when a scrape-time gauge
+  could not be read (database hiccup); the HTTP metrics still render.
+
+Suggested alerts: `aloha_queue_jobs_dead > 0` for longer than one worker
+tick, `aloha_worker_heartbeat_age_seconds > 90` for 5 minutes,
+`aloha_http_request_duration_seconds` p99 above a few seconds sustained.
+
 ## Verifying federation end-to-end
 
 When a remote Like, reply, follow or boost fails, work through this

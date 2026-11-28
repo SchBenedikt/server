@@ -35,6 +35,7 @@ use AlohaSocial\Server\Federation\RemoteDirectoryException;
 use AlohaSocial\Server\Federation\RemoteReplyException;
 use AlohaSocial\Server\Mail\MailException;
 use AlohaSocial\Server\Setup\SetupException;
+use AlohaSocial\Server\Support\Metrics;
 use InvalidArgumentException;
 use Throwable;
 
@@ -97,9 +98,24 @@ final class FrontController
             ));
         }
 
-        return $this->withDynamicCachePolicy(
+        $started = microtime(true);
+        $response = $this->withDynamicCachePolicy(
             $this->dispatch($request, $cookies, $userAgent, $ip),
         );
+
+        $route = Metrics::routeTemplate($request->path);
+        $statusClass = intdiv($response->status, 100) . 'xx';
+        $this->runtime->metrics->increment('aloha_http_requests_total', [
+            'method' => $request->method,
+            'route' => $route,
+            'status' => $statusClass,
+        ]);
+        $this->runtime->metrics->observe('aloha_http_request_duration_seconds', microtime(true) - $started, [
+            'method' => $request->method,
+            'route' => $route,
+        ]);
+
+        return $response;
     }
 
     /**
@@ -122,6 +138,77 @@ final class FrontController
     }
 
     /**
+     * Prometheus-compatible scrape endpoint.
+     *
+     * Enabled for bearer-token scrapers when ALOHASOCIAL_METRICS_TOKEN is
+     * configured, and for admin sessions either way; without either it is a
+     * plain 404 so the surface stays hidden. Scrape-time gauges are a handful
+     * of COUNT queries — no remote calls, no per-request work.
+     */
+    private function metrics(Request $request, ?AuthenticatedSession $session): Response
+    {
+        $token = $this->runtime->config->metricsToken;
+        $hasToken = is_string($token) && $token !== '';
+
+        $authorized = false;
+        if ($hasToken) {
+            $header = $request->header('Authorization');
+            $authorized = is_string($header)
+                && str_starts_with($header, 'Bearer ')
+                && hash_equals($token, substr($header, 7));
+        }
+        $isAdmin = $session?->account?->isAdmin() === true;
+
+        if (!$authorized && !$isAdmin) {
+            if (!$hasToken) {
+                return Response::empty(404);
+            }
+
+            return Response::json(
+                ['error' => ['code' => 'unauthorized', 'message' => 'Metrics require the configured bearer token or an admin session.']],
+                401,
+                ['WWW-Authenticate' => 'Bearer'],
+            );
+        }
+
+        $gauges = [];
+        $collectionErrors = 0;
+        $db = $this->runtime->database;
+
+        try {
+            $gauges['aloha_queue_jobs_pending'] = (float) $db->fetchValue(
+                'SELECT COUNT(*) FROM social_job WHERE dead_at IS NULL AND reserved_at IS NULL',
+            );
+            $gauges['aloha_queue_jobs_running'] = (float) $db->fetchValue(
+                'SELECT COUNT(*) FROM social_job WHERE dead_at IS NULL AND reserved_at IS NOT NULL',
+            );
+            $gauges['aloha_queue_jobs_dead'] = (float) $db->fetchValue(
+                'SELECT COUNT(*) FROM social_job WHERE dead_at IS NOT NULL',
+            );
+            $gauges['aloha_mail_outbox_pending'] = (float) $db->fetchValue(
+                "SELECT COUNT(*) FROM mail_outbox WHERE status = 'pending'",
+            );
+            $gauges['aloha_mail_outbox_failed'] = (float) $db->fetchValue(
+                "SELECT COUNT(*) FROM mail_outbox WHERE status = 'failed'",
+            );
+
+            $beat = $db->fetchValue("SELECT value FROM runtime_state WHERE name = 'worker'");
+            if (is_numeric($beat)) {
+                $gauges['aloha_worker_heartbeat_age_seconds'] = max(0.0, (float) (time() - (int) $beat));
+            }
+        } catch (Throwable) {
+            $collectionErrors = 1;
+        }
+        $gauges['aloha_metrics_collection_errors'] = (float) $collectionErrors;
+
+        return new Response(
+            200,
+            ['Content-Type' => 'text/plain; version=0.0.4; charset=utf-8'],
+            $this->runtime->metrics->render($gauges),
+        );
+    }
+
+    /**
      * @param array<string, string> $cookies the request's cookies
      */
     private function dispatch(Request $request, array $cookies = [], ?string $userAgent = null, ?string $ip = null): Response
@@ -132,6 +219,10 @@ final class FrontController
 
         $session = $this->runtime->sessions->resolve($rawCookie);
         $sessionUserId = $session?->userId();
+
+        if ($request->method === 'GET' && $request->path === '/metrics') {
+            return $this->metrics($request, $session);
+        }
 
         $request = $this->mastodonOAuth->authenticate($request);
 

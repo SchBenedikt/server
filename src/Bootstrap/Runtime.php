@@ -62,6 +62,7 @@ use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Mail\MailOutbox;
 use AlohaSocial\Server\Setup\SetupService;
+use AlohaSocial\Server\Support\Metrics;
 
 /**
  * Everything one request or worker tick needs, already wired.
@@ -120,6 +121,7 @@ final readonly class Runtime
         public BlueskyAccounts $blueskyAccounts,
         public AtprotoOAuthService $atprotoOAuth,
         public PostRevisionRepository $postRevisions,
+        public Metrics $metrics,
         public ?NativePdsService $pds,
         public PdsRepository $pdsRepository,
         public ?AtprotoReconciler $atprotoReconciler = null,

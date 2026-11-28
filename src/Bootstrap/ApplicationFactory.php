@@ -104,6 +104,7 @@ use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Setup\SetupService;
+use AlohaSocial\Server\Support\Metrics;
 use AlohaSocial\Server\Support\RuntimeLogger;
 use AlohaSocial\Server\Support\SecretKeyFile;
 use RuntimeException;
@@ -413,6 +414,7 @@ final class ApplicationFactory
                 $app->followRequests,
             ),
             postRevisions: new PdoPostRevisionRepository($database),
+            metrics: new Metrics(),
             pinnedPosts: new PinnedPosts(
                 $database,
                 $app->pins ?? throw new RuntimeException('The core pin service is not available.'),
