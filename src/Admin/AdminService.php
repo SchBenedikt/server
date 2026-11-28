@@ -37,6 +37,7 @@ use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
+use AlohaSocial\Server\Support\BuildInfo;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Support\EnvFile;
 use AlohaSocial\Server\Support\LogRedactor;
@@ -1328,6 +1329,8 @@ final class AdminService
                 'application' => CoreVersion::current(),
                 'core' => CoreVersion::current(),
                 'core_reference' => $core['reference'],
+                'server_build' => BuildInfo::server(),
+                'ui_bundle' => BuildInfo::uiBundle(dirname(__DIR__, 2)),
                 'php' => PHP_VERSION,
                 'database' => $this->databaseDriver(),
                 'environment' => $this->config->debug ? 'development' : 'production',

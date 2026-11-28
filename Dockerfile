@@ -44,8 +44,12 @@ RUN apt-get update \
     && a2enmod expires headers rewrite proxy proxy_wstunnel \
     && rm -rf /var/lib/apt/lists/*
 
+# Injected by the image workflow (commit SHA); empty for local builds.
+ARG ALOHASOCIAL_BUILD_ID=
+
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public \
-    COMPOSER_ALLOW_SUPERUSER=1
+    COMPOSER_ALLOW_SUPERUSER=1 \
+    ALOHASOCIAL_BUILD_ID=${ALOHASOCIAL_BUILD_ID}
 
 WORKDIR /var/www/html
 

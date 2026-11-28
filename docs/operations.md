@@ -393,6 +393,12 @@ post-upgrade `SELECT version, core_version, core_reference FROM
 schema_migration ORDER BY version DESC LIMIT 5` shows exactly which build
 produced the current schema.
 
+The admin **Instance** page additionally reports `server_build` (the
+`ALOHASOCIAL_BUILD_ID` the image was built with — the published Docker
+image sets it to the commit SHA) and `ui_bundle` (a hash of the committed
+`public/ui/app.js`), so an operator can confirm which server and frontend
+build a running instance actually serves.
+
 ### Interrupted upgrades
 
 An interrupted `bin/update.php` run is recoverable in every supported state:
