@@ -20,7 +20,7 @@ $appShell = $appShell ?? false;
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <title><?= $escape($title) ?> · <?= $escape($instance) ?></title>
     <link rel="icon" href="/ui/brand/favicon.svg" type="image/svg+xml">
     <?php if (!$appShell): ?>

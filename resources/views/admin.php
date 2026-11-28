@@ -17,7 +17,7 @@ declare(strict_types=1);
 <html lang="en" data-csrf="<?= $escape($csrf) ?>">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
     <title>Administration · <?= $escape($instance) ?></title>
     <link rel="stylesheet" href="/admin/admin.css">
     <script src="/admin/admin.js" defer></script>
