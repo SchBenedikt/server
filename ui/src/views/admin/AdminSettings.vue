@@ -7,6 +7,7 @@ import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
 import { bytesLabel, getAdminApi, type AdminInstance, type AdminSettingsData, type PreflightReport } from '../../lib/admin';
 import { absoluteTime } from '../../lib/format';
+import { t } from '../../lib/i18n';
 
 const data = ref<AdminInstance | null>(null);
 const loading = ref(false);
@@ -52,7 +53,7 @@ async function runPreflight(): Promise<void> {
 	try {
 		preflight.value = await getAdminApi().preflight();
 	} catch (caught) {
-		preflightError.value = caught instanceof Error ? caught.message : 'The preflight could not be run.';
+		preflightError.value = caught instanceof Error ? caught.message : t('aset.preflightFailed');
 	} finally {
 		preflightLoading.value = false;
 	}
@@ -71,69 +72,44 @@ const features = computed(() => Object.entries(data.value?.features ?? {}));
 const limits = computed(() => Object.entries(data.value?.limits ?? {}));
 const paths = computed(() => Object.entries(data.value?.paths ?? {}));
 
-const FEATURE_LABELS: Record<string, string> = {
-	federation: 'ActivityPub federation',
-	remote_media: 'Load remote media',
-	mastodon_api: 'Mastodon-compatible API',
-	mastodon_prefix: 'API prefix',
-	mail_transport: 'Mail-Transport',
-	secure_cookies: 'Secure Cookies',
-	atproto: 'AT Protocol (Bluesky)',
-};
-
-const LIMIT_LABELS: Record<string, string> = {
-	session_lifetime_seconds: 'Session duration',
-	max_post_characters: 'Characters per post',
-	max_attachments: 'Attachments per post',
-	max_attachment_bytes: 'Size per attachment',
-};
-
-const PATH_LABELS: Record<string, string> = {
-	var: 'Runtime directory',
-	blobs: 'Media storage',
-	mail: 'Mail-Storage',
-	secret_key: 'Key file',
-};
+function labelFor(prefix: string, key: string): string {
+	const i18nKey = `${prefix}.${key}`;
+	const translated = t(i18nKey);
+	return translated === i18nKey ? key : translated;
+}
 
 function checkLabel(id: string): string {
-	switch (id) {
-		case 'database':
-			return 'Database reachable';
-		case 'blob_directory':
-			return data.value?.features.storage_driver === 's3' ? 'S3 bucket reachable' : 'Media storage writable';
-		case 'secret_key':
-			return 'Encryption key';
-		case 'worker':
-			return 'Worker is responsive';
-		default:
-			return id;
+	if (id === 'blob_directory' && data.value?.features.storage_driver === 's3') {
+		return t('aset.check.blob_directory_s3');
 	}
+
+	return labelFor('aset.check', id);
 }
 
 function valueLabel(key: string, value: string | number | boolean): string {
 	if (typeof value === 'boolean') {
-		return value ? 'Active' : 'Inactive';
+		return t(value ? 'aset.active' : 'aset.inactive');
 	}
 	if (key === 'max_attachment_bytes') {
 		return bytesLabel(Number(value));
 	}
 	if (key === 'session_lifetime_seconds') {
-		return `${Math.round(Number(value) / 86400)} days`;
+		return t('aset.days', { count: Math.round(Number(value) / 86400) });
 	}
 
 	return String(value);
 }
 
 function featureLabel(key: string): string {
-	return FEATURE_LABELS[key] ?? key;
+	return labelFor('aset.feature', key);
 }
 
 function limitLabel(key: string): string {
-	return LIMIT_LABELS[key] ?? key;
+	return labelFor('aset.limit', key);
 }
 
 function pathLabel(key: string): string {
-	return PATH_LABELS[key] ?? key;
+	return labelFor('aset.path', key);
 }
 
 function featureTone(value: string | number | boolean): string {
@@ -150,7 +126,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().instance();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Instance data could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('aset.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -176,7 +152,7 @@ async function loadSettings(): Promise<void> {
 			publish_domain_blocks: loaded.moderation.publish_domain_blocks,
 		};
 	} catch (caught) {
-		saveError.value = caught instanceof Error ? caught.message : 'Settings could not be loaded.';
+		saveError.value = caught instanceof Error ? caught.message : t('aset.settingsLoadFailed');
 	}
 }
 
@@ -190,9 +166,9 @@ async function saveSettings(): Promise<void> {
 	saveError.value = '';
 	try {
 		settings.value = await getAdminApi().updateSettings({ ...form.value });
-		saved.value = 'Saved. The worker applies ingestion changes on its next start.';
+		saved.value = t('aset.saved');
 	} catch (caught) {
-		saveError.value = caught instanceof Error ? caught.message : 'The settings could not be saved.';
+		saveError.value = caught instanceof Error ? caught.message : t('aset.saveFailed');
 	} finally {
 		saving.value = false;
 	}
@@ -208,16 +184,13 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Runtime</p>
-				<h2>Instance and limits</h2>
-				<p class="a-admin-lead">
-					Configuration is read at startup from environment variables and
-					<code>config/server.php</code>. This view checks what is actually active.
-				</p>
+				<p class="a-admin-eyebrow">{{ t('aset.eyebrow') }}</p>
+				<h2>{{ t('aset.title') }}</h2>
+				<p class="a-admin-lead">{{ t('aset.lead') }}</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Check again
+				{{ t('aset.checkAgain') }}
 			</button>
 		</div>
 
@@ -226,11 +199,11 @@ onMounted(() => {
 		<form class="a-admin-card a-admin-form" @submit.prevent="saveSettings">
 			<header class="a-admin-card__head">
 				<div>
-					<h3>Instance setup</h3>
-					<p>Saved to the configured env file; no manual editing required.</p>
+					<h3>{{ t('aset.setup') }}</h3>
+					<p>{{ t('aset.setupHint') }}</p>
 				</div>
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || settings === null">
-					{{ saving ? 'Saving…' : 'Save' }}
+					{{ saving ? t('common.saving') : t('common.save') }}
 				</button>
 			</header>
 
@@ -239,72 +212,72 @@ onMounted(() => {
 
 			<div class="a-admin-form__grid">
 				<label>
-					<span>Instance name</span>
+					<span>{{ t('aset.instanceName') }}</span>
 					<input v-model="form.instance_name" class="a-input" maxlength="80" />
 				</label>
 				<label>
-					<span>Contact email</span>
+					<span>{{ t('aset.contactEmail') }}</span>
 					<input v-model="form.contact_email" class="a-input" type="email" />
 				</label>
 				<label>
-					<span>Core channel</span>
+					<span>{{ t('aset.coreChannel') }}</span>
 					<select v-model="form.core_channel" class="a-input">
 						<option value="main">main</option>
 						<option value="release">release</option>
 					</select>
 				</label>
 				<label>
-					<span>Core version (release channel)</span>
+					<span>{{ t('aset.coreVersion') }}</span>
 					<input v-model="form.core_version" class="a-input" placeholder="0.8.0" />
 				</label>
 				<label>
-					<span>Jetstream relay</span>
+					<span>{{ t('aset.jetstream') }}</span>
 					<input v-model="form.atproto_jetstream" class="a-input" placeholder="wss://jetstream2.us-east.bsky.network" />
 				</label>
 				<label>
-					<span>PDS public URL</span>
+					<span>{{ t('aset.pdsUrl') }}</span>
 					<input v-model="form.atproto_pds_url" class="a-input" placeholder="https://social.example" />
 				</label>
 				<label>
-					<span>PDS handle domain</span>
+					<span>{{ t('aset.pdsDomain') }}</span>
 					<input v-model="form.atproto_pds_handle_domain" class="a-input" placeholder="social.example" />
 				</label>
 				<label>
-					<span>PLC directory</span>
+					<span>{{ t('aset.plc') }}</span>
 					<input v-model="form.atproto_plc_url" class="a-input" />
 				</label>
 			</div>
 
 			<label>
-				<span>Instance description</span>
+				<span>{{ t('aset.description') }}</span>
 				<textarea v-model="form.instance_description" class="a-input" rows="3" maxlength="500" />
 			</label>
 
 			<div class="a-admin-form__grid">
 				<label class="a-admin-form__check">
 					<input v-model="form.registrations" type="checkbox" />
-					<span>Allow open registration</span>
+					<span>{{ t('aset.openRegistration') }}</span>
 				</label>
 				<label class="a-admin-form__check">
 					<input v-model="form.registration_approval" type="checkbox" />
-					<span>New accounts need approval</span>
+					<span>{{ t('aset.approval') }}</span>
 				</label>
 				<label class="a-admin-form__check">
 					<input v-model="form.atproto_pds" type="checkbox" />
-					<span>Enable the native PDS</span>
+					<span>{{ t('aset.enablePds') }}</span>
 				</label>
 				<label class="a-admin-form__check">
 					<input v-model="form.publish_domain_blocks" type="checkbox" />
-					<span>Publish domain blocks to Mastodon clients</span>
+					<span>{{ t('aset.publishBlocks') }}</span>
 				</label>
 			</div>
 
 			<div class="a-admin-form__actions">
 				<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving">
-					Save configuration
+					{{ t('aset.saveConfig') }}
 				</button>
 				<small v-if="settings" class="a-admin-muted">
-					Env file: <code>{{ settings.core.env_file }}</code>
+					{{ t('aset.envFile') }} <code>{{ settings.core.env_file }}</code>
 				</small>
 			</div>
 		</form>
@@ -317,7 +290,7 @@ onMounted(() => {
 			<div v-if="data.warnings.length > 0" class="a-admin-warning-panel">
 				<AppIcon name="alert" :size="20" />
 				<div>
-					<strong>Configuration notes</strong>
+					<strong>{{ t('aset.warnings') }}</strong>
 					<ul>
 						<li v-for="warning in data.warnings" :key="warning">{{ warning }}</li>
 					</ul>
@@ -329,7 +302,7 @@ onMounted(() => {
 					<span class="a-admin-dot" :class="check.ok ? 'a-admin-dot--ok' : 'a-admin-dot--error'" aria-hidden="true" />
 					<div>
 						<strong>{{ check.label }}</strong>
-						<small>{{ check.ok ? 'Passed' : 'Check' }}</small>
+						<small>{{ t(check.ok ? 'aset.checkPassed' : 'aset.checkFailed') }}</small>
 					</div>
 				</article>
 			</div>
@@ -337,16 +310,12 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Federation readiness</h3>
-						<p>
-							Verifies this install locally and, on demand, fetches the public
-							origin, NodeInfo and WebFinger. External checks use bounded
-							requests and never expose secrets.
-						</p>
+						<h3>{{ t('aset.preflightTitle') }}</h3>
+						<p>{{ t('aset.preflightHint') }}</p>
 					</div>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="preflightLoading" @click="runPreflight">
 						<AppIcon name="refresh" :size="15" :class="{ 'a-spin': preflightLoading }" />
-						{{ preflight === null ? 'Run checks' : 'Run again' }}
+						{{ t(preflight === null ? 'aset.runChecks' : 'aset.runAgain') }}
 					</button>
 				</header>
 
@@ -354,7 +323,7 @@ onMounted(() => {
 
 				<template v-if="preflight">
 					<span class="a-admin-pill" :class="preflightCounts.fail > 0 ? 'a-admin-pill--error' : preflightCounts.warn > 0 ? 'a-admin-pill--warn' : 'a-admin-pill--ok'">
-						{{ preflightCounts.ok }} OK<span v-if="preflightCounts.warn > 0"> · {{ preflightCounts.warn }} Warning</span><span v-if="preflightCounts.fail > 0"> · {{ preflightCounts.fail }} Failed</span><span v-if="preflightCounts.skip > 0"> · {{ preflightCounts.skip }} Skipped</span>
+						{{ t('aset.statusOk') }} {{ preflightCounts.ok }}<span v-if="preflightCounts.warn > 0"> · {{ t('aset.statusWarn') }} {{ preflightCounts.warn }}</span><span v-if="preflightCounts.fail > 0"> · {{ t('aset.pillFail', { count: preflightCounts.fail }) }}</span><span v-if="preflightCounts.skip > 0"> · {{ t('aset.pillSkip', { count: preflightCounts.skip }) }}</span>
 					</span>
 					<ul class="a-admin-health">
 						<li v-for="check in preflight.checks" :key="check.id" class="a-admin-health__item">
@@ -362,45 +331,45 @@ onMounted(() => {
 							<div>
 								<strong>{{ check.summary }}</strong>
 								<small>
-									{{ check.group === 'external' ? 'External · ' : '' }}{{ check.detail ?? '' }}
+									{{ check.group === 'external' ? t('aset.external') : '' }}{{ check.detail ?? '' }}
 									<template v-if="check.remediation"> — {{ check.remediation }}</template>
 								</small>
 							</div>
-							<span class="a-admin-health__state">{{ check.status === 'ok' ? 'OK' : check.status === 'warn' ? 'Warning' : check.status === 'fail' ? 'Failed' : 'Skipped' }}</span>
+							<span class="a-admin-health__state">{{ t(check.status === 'ok' ? 'aset.statusOk' : check.status === 'warn' ? 'aset.statusWarn' : check.status === 'fail' ? 'aset.statusFail' : 'aset.statusSkip') }}</span>
 						</li>
 					</ul>
 				</template>
-				<p v-else class="a-admin-muted">Run the checks to verify database, worker, mail, storage and public federation reachability.</p>
+				<p v-else class="a-admin-muted">{{ t('aset.preflightEmpty') }}</p>
 			</section>
 
 			<div class="a-admin-columns">
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Identity</h3>
-							<p>How the instance presents itself to the outside world.</p>
+							<h3>{{ t('aset.identity') }}</h3>
+							<p>{{ t('aset.identityHint') }}</p>
 						</div>
 					</header>
 					<dl class="a-admin-facts">
 						<div>
-							<dt>Name</dt>
+							<dt>{{ t('aset.name') }}</dt>
 							<dd>{{ data.instance.name }}</dd>
 						</div>
 						<div>
-							<dt>Public URL</dt>
+							<dt>{{ t('aset.publicUrl') }}</dt>
 							<dd><a :href="data.instance.url" target="_blank" rel="noopener noreferrer">{{ data.instance.url }}</a></dd>
 						</div>
 						<div>
-							<dt>Actor-Domain</dt>
+							<dt>{{ t('aset.actorDomain') }}</dt>
 							<dd>{{ data.instance.actor_domain }}</dd>
 						</div>
 						<div>
-							<dt>Contact</dt>
-							<dd>{{ data.instance.contact !== '' ? data.instance.contact : 'Not provided' }}</dd>
+							<dt>{{ t('aset.contact') }}</dt>
+							<dd>{{ data.instance.contact !== '' ? data.instance.contact : t('aset.notProvided') }}</dd>
 						</div>
 						<div>
-							<dt>Description</dt>
-							<dd>{{ data.instance.description !== '' ? data.instance.description : 'Empty' }}</dd>
+							<dt>{{ t('aset.description') }}</dt>
+							<dd>{{ data.instance.description !== '' ? data.instance.description : t('aset.empty') }}</dd>
 						</div>
 					</dl>
 				</section>
@@ -408,35 +377,35 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Versions</h3>
-							<p>Application, runtime and database.</p>
+							<h3>{{ t('aset.versions') }}</h3>
+							<p>{{ t('aset.versionsHint') }}</p>
 						</div>
 					</header>
 					<dl class="a-admin-facts">
 						<div>
-							<dt>Application</dt>
+							<dt>{{ t('aset.application') }}</dt>
 							<dd>{{ data.versions.application }}</dd>
 						</div>
 						<div>
-							<dt>Core commit</dt>
-							<dd>{{ data.versions.core_reference ?? 'Unavailable' }}</dd>
+							<dt>{{ t('aset.coreCommit') }}</dt>
+							<dd>{{ data.versions.core_reference ?? t('aset.unavailable') }}</dd>
 						</div>
 						<div>
-							<dt>PHP</dt>
+							<dt>{{ t('aset.php') }}</dt>
 							<dd>{{ data.versions.php }}</dd>
 						</div>
 						<div>
-							<dt>Database</dt>
+							<dt>{{ t('aset.database') }}</dt>
 							<dd>{{ data.versions.database }}</dd>
 						</div>
 						<div>
-							<dt>Environment</dt>
+							<dt>{{ t('aset.environment') }}</dt>
 							<dd>{{ data.versions.environment }}</dd>
 						</div>
 						<div>
-							<dt>Worker</dt>
+							<dt>{{ t('aset.worker') }}</dt>
 							<dd>
-								{{ data.worker.online ? 'Online' : 'No signal' }}
+								{{ t(data.worker.online ? 'common.online' : 'common.noSignal') }}
 								<small v-if="data.worker.updated_at" class="a-admin-muted">
 									· {{ absoluteTime(data.worker.updated_at) }}
 								</small>
@@ -450,8 +419,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Features</h3>
-							<p>What this instance offers to the outside world.</p>
+							<h3>{{ t('aset.features') }}</h3>
+							<p>{{ t('aset.featuresHint') }}</p>
 						</div>
 					</header>
 					<ul class="a-admin-flag-list">
@@ -467,8 +436,8 @@ onMounted(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Limits</h3>
-							<p>The values that limit posts and sessions.</p>
+							<h3>{{ t('aset.limits') }}</h3>
+							<p>{{ t('aset.limitsHint') }}</p>
 						</div>
 					</header>
 					<ul class="a-admin-flag-list">
@@ -483,8 +452,8 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Paths</h3>
-						<p>Absolute paths used by the process. Changes require a restart.</p>
+						<h3>{{ t('aset.paths') }}</h3>
+						<p>{{ t('aset.pathsHint') }}</p>
 					</div>
 				</header>
 				<ul class="a-admin-flag-list">
@@ -498,28 +467,26 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Operations notes</h3>
-						<p>What is still missing for reliable operation.</p>
+						<h3>{{ t('aset.opsNotes') }}</h3>
+						<p>{{ t('aset.opsNotesHint') }}</p>
 					</div>
 				</header>
 				<ul class="a-admin-tips">
 					<li>
 						<AppIcon name="shield" :size="15" />
-						<code>ALOHASOCIAL_SECRET_KEY</code> keep outside the project directory
-						and never commit to a repository.
+						<code>ALOHASOCIAL_SECRET_KEY</code> {{ t('aset.tip1') }}
 					</li>
 					<li>
 						<AppIcon name="clock" :size="15" />
-						Run the worker permanently via systemd or a cron entry for <code>--once</code>
-						in production.
+						{{ t('aset.tip2') }}
 					</li>
 					<li>
 						<AppIcon name="mail" :size="15" />
-						Configure SMTP instead of the log transport for password resets.
+						{{ t('aset.tip3') }}
 					</li>
 					<li>
 						<AppIcon name="globe" :size="15" />
-						A public instance needs HTTPS; the check above flags HTTP as a warning.
+						{{ t('aset.tip4') }}
 					</li>
 				</ul>
 			</section>
