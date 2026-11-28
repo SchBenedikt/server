@@ -196,6 +196,24 @@ final class AdminApiController
             ]);
         }
 
+        if ($method === 'POST' && preg_match('#^' . self::PREFIX . '/reports/([^/]+)/assign$#', $path, $match) === 1) {
+            $body = $this->jsonBody($request);
+
+            return Response::json([
+                'report' => $this->runtime->admin->assignReport(
+                    $userId,
+                    rawurldecode($match[1]),
+                    $this->optionalText($body, 'assigned_to'),
+                ),
+            ]);
+        }
+
+        if ($method === 'POST' && preg_match('#^' . self::PREFIX . '/reports/([^/]+)/reopen$#', $path, $match) === 1) {
+            return Response::json([
+                'report' => $this->runtime->admin->reopenReport($userId, rawurldecode($match[1])),
+            ]);
+        }
+
         if ($method === 'DELETE' && preg_match('#^' . self::PREFIX . '/posts/([^/]+)$#', $path, $match) === 1) {
             $this->runtime->admin->deletePost($userId, rawurldecode($match[1]));
 
