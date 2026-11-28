@@ -324,7 +324,7 @@ deliberately has no administration API.
 
 | Section | What it does |
 | --- | --- |
-| Overview | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
+| Overview | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. While setup steps remain, a *Getting started* card lists them — worker, migrations, mail, admin two-factor, HTTPS, a published instance page and the federation preflight — each derived live and linked to the section that completes it. |
 | Accounts | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
 | Meldungen | Open, resolved and dismissed reports with target preview, reporter, category, assignee and internal note; assign a report to an administrator, reopen a closed case, delete the reported post or disable the reported local account. |
 | Moderation | Apply `silence_actor`, `suspend_actor` or `block_domain` actions with a private note and optional publishable comment; reverse any active action; inspect the full action history; list blocked domains; and import a blocklist (one domain per line, `# comment` suffix) through the mandatory dry-run verdict flow. |

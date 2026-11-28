@@ -168,6 +168,23 @@ final class AdminTest extends TestCase
         self::assertNotNull($schema);
         self::assertSame('ok', $schema['status']);
         self::assertStringContainsString('applied', $schema['detail']);
+
+        // The first-run checklist derives its status live from the same
+        // signals: a fresh test instance has no worker, mail or MFA yet.
+        $checklist = $body['checklist'];
+        self::assertIsArray($checklist);
+        self::assertNotEmpty($checklist);
+        $byId = [];
+        foreach ($checklist as $item) {
+            self::assertContains($item['status'], ['done', 'todo', 'warn']);
+            $byId[$item['id']] = $item;
+        }
+        self::assertSame('warn', $byId['worker']['status']);
+        self::assertSame('done', $byId['schema']['status']);
+        self::assertSame('todo', $byId['mail']['status']);
+        self::assertSame('todo', $byId['admin-mfa']['status']);
+        self::assertSame('todo', $byId['instance-page']['status']);
+        self::assertSame('#/admin/settings', $byId['mail']['href']);
     }
 
     public function testCommunicationErrorsAreListedForTheAdministration(): void

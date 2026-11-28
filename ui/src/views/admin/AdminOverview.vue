@@ -5,7 +5,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
-import { bytesLabel, getAdminApi, type AdminOverview } from '../../lib/admin';
+import { bytesLabel, getAdminApi, type AdminOverview, type ChecklistItem } from '../../lib/admin';
 import { absoluteTime, formatCount, relativeTime } from '../../lib/format';
 import { showToast } from '../../lib/state';
 
@@ -22,6 +22,10 @@ const healthCounts = computed(() => {
 
 	return counts;
 });
+
+const pendingChecklist = computed<ChecklistItem[]>(() => (
+	(overview.value?.checklist ?? []).filter((item) => item.status !== 'done')
+));
 
 const summaryTone = computed(() => {
 	if (healthCounts.value.error > 0) {
@@ -87,6 +91,29 @@ onBeforeUnmount(() => {
 		</div>
 
 		<template v-else-if="overview">
+			<section v-if="pendingChecklist.length > 0" class="a-admin-card a-admin-card--checklist">
+				<header class="a-admin-card__head">
+					<div>
+						<h3>Getting started</h3>
+						<p class="a-admin-card__hint">{{ pendingChecklist.length }} setup step(s) left — each links to where it is completed.</p>
+					</div>
+				</header>
+				<ul class="a-admin-checklist">
+					<li v-for="item in pendingChecklist" :key="item.id" class="a-admin-checklist__item">
+						<span
+							class="a-admin-checklist__mark"
+							:class="item.status === 'warn' ? 'a-admin-checklist__mark--warn' : 'a-admin-checklist__mark--todo'"
+							aria-hidden="true"
+						/>
+						<div class="a-admin-checklist__copy">
+							<strong>{{ item.label }}</strong>
+							<small>{{ item.hint }}</small>
+						</div>
+						<a class="a-btn a-btn--ghost a-btn--small" :href="item.href">Open</a>
+					</li>
+				</ul>
+			</section>
+
 			<div class="a-admin-stat-grid">
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="users" :size="19" /></span>
