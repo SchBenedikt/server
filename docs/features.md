@@ -213,7 +213,7 @@ announcement board into the Mastodon announcement shape.
 | Stummgeschaltet | `#/muted` | `GET /mutes`, mute/unmute per account. Profiles can mute and unmute directly. |
 | Blockiert | `#/blocked` | `GET /api/v1/blocks` and block/unblock per actor URL. Profiles can block and unblock directly. |
 | Filter | `#/filters` | Full filter rules through `/api/v1/filters` with action, contexts, keywords and optional expiry. |
-| Scheduled posts | `#/scheduled` | `/api/v1/scheduled-posts`; a schedule can be re-timed or cancelled, but not edited after queueing. |
+| Scheduled posts | `#/scheduled` | `/api/v1/scheduled-posts`; a pending schedule can be re-timed, have its content, warning or poll edited, or be cancelled. |
 | Notifications | `#/notifications` | `GET /api/mastodon/v1/notifications` with actor and status previews, plus the core dismiss/clear actions. |
 
 ### Starter packs

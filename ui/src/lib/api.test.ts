@@ -112,3 +112,90 @@ describe('request retry', () => {
 		expect(failing.calls()).toBe(1);
 	});
 });
+
+describe('scheduled posts', () => {
+	function scheduledBridge(captured: { body?: unknown }) {
+		const bridge = {
+			apiBase: '/api/v1',
+			currentUser: async () => null,
+			request: async (input: { method: string; path: string; body?: unknown }): Promise<UiResponse> => {
+				captured.body = input.body;
+				return {
+					status: 200,
+					headers: {},
+					body: JSON.stringify({
+						scheduled_post: {
+							id: 'sp-1',
+							author_id: 'acct-alice',
+							content: 'Hello poll',
+							content_warning: null,
+							visibility: 'public',
+							attachment_ids: [],
+							recipient_ids: [],
+							in_reply_to_id: null,
+							scheduled_at: '2026-12-01T10:00:00Z',
+							language: null,
+							poll: {
+								options: ['Yes', 'No'],
+								multiple: false,
+								hide_totals: true,
+								expires_in: 86400,
+								expires_at: null,
+							},
+							created_at: '2026-11-28T10:00:00Z',
+							state: 'scheduled',
+							published_at: null,
+							failure_reason: null,
+						},
+					}),
+				};
+			},
+			loginUrl: (returnTo: string) => `/login?next=${encodeURIComponent(returnTo)}`,
+			logout: async () => {},
+			navigate: () => {},
+			capabilities: () => ({ media: false, atproto: false }),
+		} as unknown as HostBridge;
+
+		return bridge;
+	}
+
+	it('sends the full edit patch and normalizes the poll', async () => {
+		const captured: { body?: unknown } = {};
+		const api = createApi(scheduledBridge(captured), async () => {
+			throw new Error('unused');
+		});
+
+		const updated = await api.updateScheduledPost('sp-1', {
+			content: 'Hello poll',
+			content_warning: 'nsfw',
+			scheduled_at: '2026-12-01T10:00:00Z',
+			poll: {
+				options: ['Yes', 'No'],
+				multiple: false,
+				hide_totals: true,
+				expires_in: 86400,
+				expires_at: null,
+			},
+		});
+
+		expect(captured.body).toEqual({
+			content: 'Hello poll',
+			content_warning: 'nsfw',
+			scheduled_at: '2026-12-01T10:00:00Z',
+			poll: {
+				options: ['Yes', 'No'],
+				multiple: false,
+				hide_totals: true,
+				expires_in: 86400,
+				expires_at: null,
+			},
+		});
+		expect(updated.poll).toEqual({
+			options: ['Yes', 'No'],
+			multiple: false,
+			hide_totals: true,
+			expires_in: 86400,
+			expires_at: null,
+		});
+	});
+});

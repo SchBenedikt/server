@@ -112,8 +112,8 @@ Accounts, sessions and CSRF are host-owned per
 - **Composer extras.** The composer can attach up to ten images, videos or
   audio files, publish a poll or schedule a post. Polls use
   `POST /api/mastodon/v1/statuses` with the `poll` object; scheduling uses
-  `POST /api/v1/scheduled-posts`. The two are mutually exclusive because a
-  scheduled post stores no poll.
+  `POST /api/v1/scheduled-posts`. Scheduled posts may carry a poll too; the
+  poll duration then counts from the scheduled publish time.
 - **CSP.** The `/app` response uses
   `script-src 'self'`, `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: https:` and `connect-src 'self'`, so the bundle and the

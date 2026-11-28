@@ -197,7 +197,6 @@ const canSubmit = computed(() => (
 	&& (isReply.value ? replyId.value !== null : true)
 	&& (isQuote.value ? quoteTargetId.value !== null : true)
 	&& (isDirect.value ? directTo.value !== null : true)
-	&& !(scheduledAt.value !== '' && showPoll.value)
 ));
 
 const currentHandle = computed(() => appState.session.user?.handle ?? '');
@@ -820,6 +819,7 @@ async function submit(): Promise<void> {
 				throw new Error('Please choose a valid time.');
 			}
 
+			const pollOptionsClean = pollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
 			const scheduled = await getApi().createScheduledPost({
 				content: content.value,
 				visibility: visibility.value,
@@ -828,6 +828,14 @@ async function submit(): Promise<void> {
 				in_reply_to_id: replyId.value,
 				attachment_ids: attachmentIds,
 				scheduled_at: scheduleDate.value.toISOString(),
+				poll: showPoll.value && pollOptionsClean.length >= 2
+					? {
+						options: pollOptionsClean,
+						expires_in: Number(pollExpiresIn.value),
+						multiple: pollMultiple.value,
+						hide_totals: pollHideTotals.value,
+					}
+					: null,
 			});
 
 			clearDraft();
@@ -1087,7 +1095,7 @@ async function submit(): Promise<void> {
 						The time must be in the future.
 					</p>
 					<p class="a-composer__hint">
-						Scheduled posts cannot contain a poll.
+						The poll duration counts from the scheduled publish time.
 					</p>
 				</div>
 

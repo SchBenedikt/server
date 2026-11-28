@@ -37,6 +37,8 @@ import type {
 	RemoteSearchType,
 	ScheduledPost,
 	ScheduledPostPayload,
+	ScheduledPostPoll,
+	ScheduledPostUpdate,
 	SearchResults,
 	TimelineItem,
 	UpdatePostPayload,
@@ -385,7 +387,7 @@ export interface Api {
 	deleteFilter(id: string): Promise<void>;
 	scheduledPosts(): Promise<ScheduledPost[]>;
 	createScheduledPost(payload: ScheduledPostPayload): Promise<ScheduledPost>;
-	updateScheduledPost(id: string, scheduledAt: string): Promise<ScheduledPost>;
+	updateScheduledPost(id: string, patch: ScheduledPostUpdate): Promise<ScheduledPost>;
 	deleteScheduledPost(id: string): Promise<void>;
 	poll(postId: string): Promise<Poll | null>;
 	votePoll(pollId: string, choices: number[]): Promise<Poll | null>;
@@ -964,6 +966,25 @@ function normalizeFilter(value: unknown): FilterRule | null {
 	};
 }
 
+function normalizeScheduledPoll(value: unknown): ScheduledPostPoll | null {
+	if (!isRecord(value) || !Array.isArray(value.options)) {
+		return null;
+	}
+
+	const options = value.options.filter((option): option is string => typeof option === 'string');
+	if (options.length === 0) {
+		return null;
+	}
+
+	return {
+		options,
+		multiple: value.multiple === true,
+		hide_totals: value.hide_totals === true,
+		expires_in: typeof value.expires_in === 'number' ? value.expires_in : null,
+		expires_at: typeof value.expires_at === 'string' ? value.expires_at : null,
+	};
+}
+
 function normalizeScheduledPost(value: unknown): ScheduledPost | null {
 	if (!isRecord(value) || typeof value.id !== 'string') {
 		return null;
@@ -991,6 +1012,7 @@ function normalizeScheduledPost(value: unknown): ScheduledPost | null {
 		in_reply_to_id: typeof value.in_reply_to_id === 'string' ? value.in_reply_to_id : null,
 		scheduled_at: typeof value.scheduled_at === 'string' ? value.scheduled_at : '',
 		language: typeof value.language === 'string' ? value.language : null,
+		poll: normalizeScheduledPoll(value.poll),
 		created_at: typeof value.created_at === 'string' ? value.created_at : '',
 		state,
 		published_at: typeof value.published_at === 'string' ? value.published_at : null,
@@ -2357,12 +2379,12 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			return scheduled;
 		},
 
-		async updateScheduledPost(id: string, scheduledAt: string): Promise<ScheduledPost> {
+		async updateScheduledPost(id: string, patch: ScheduledPostUpdate): Promise<ScheduledPost> {
 			const data = await request<{ scheduled_post?: unknown }>(
 				'PATCH',
 				`/api/v1/scheduled-posts/${encodeURIComponent(id)}`,
 				undefined,
-				{ scheduled_at: scheduledAt },
+				patch,
 			);
 			const scheduled = normalizeScheduledPost(data?.scheduled_post);
 			if (scheduled === null) {

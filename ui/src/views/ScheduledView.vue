@@ -10,7 +10,7 @@ import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { absoluteTime, relativeTime, visibilityLabel } from '../lib/format';
 import { appState, openComposer, showToast } from '../lib/state';
-import type { ScheduledPost } from '../lib/types';
+import type { ScheduledPost, ScheduledPostUpdate } from '../lib/types';
 
 const signedIn = computed(() => appState.session.user !== null);
 const posts = ref<ScheduledPost[]>([]);
@@ -21,7 +21,22 @@ const confirmCancel = ref('');
 
 const editingId = ref('');
 const editingAt = ref('');
+const editingContent = ref('');
+const editingWarning = ref('');
+const editingPollEnabled = ref(false);
+const editingPollOptions = ref<string[]>(['', '']);
+const editingPollMultiple = ref(false);
+const editingPollHideTotals = ref(false);
+const editingPollExpiresIn = ref('86400');
 const savingId = ref('');
+const POLL_MAX_OPTIONS = 4;
+const POLL_EXPIRY_OPTIONS = [
+	{ value: '300', label: '5 minutes' },
+	{ value: '3600', label: '1 hour' },
+	{ value: '86400', label: '1 day' },
+	{ value: '259200', label: '3 days' },
+	{ value: '604800', label: '7 days' },
+];
 
 onMounted(() => {
 	if (signedIn.value) {
@@ -62,6 +77,14 @@ function toLocalInput(value: string): string {
 function startEdit(post: ScheduledPost): void {
 	editingId.value = post.id;
 	editingAt.value = toLocalInput(post.scheduled_at);
+	editingContent.value = post.content;
+	editingWarning.value = post.content_warning ?? '';
+	const poll = post.poll ?? null;
+	editingPollEnabled.value = poll !== null;
+	editingPollOptions.value = poll !== null ? [...poll.options] : ['', ''];
+	editingPollMultiple.value = poll?.multiple ?? false;
+	editingPollHideTotals.value = poll?.hide_totals ?? false;
+	editingPollExpiresIn.value = String(poll?.expires_in ?? 86400);
 }
 
 function cancelEdit(): void {
@@ -69,26 +92,79 @@ function cancelEdit(): void {
 	editingAt.value = '';
 }
 
-async function saveEdit(post: ScheduledPost): Promise<void> {
-	if (editingAt.value === '' || savingId.value !== '') {
+function addPollOption(): void {
+	if (editingPollOptions.value.length < POLL_MAX_OPTIONS) {
+		editingPollOptions.value = [...editingPollOptions.value, ''];
+	}
+}
+
+function removePollOption(index: number): void {
+	if (editingPollOptions.value.length <= 2) {
 		return;
 	}
 
-	const date = new Date(editingAt.value);
-	if (Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 60_000) {
-		showToast('The new time must be at least one minute in the future.', 'error');
+	editingPollOptions.value = editingPollOptions.value.filter((_, i) => i !== index);
+}
+
+async function saveEdit(post: ScheduledPost): Promise<void> {
+	if (savingId.value !== '') {
+		return;
+	}
+
+	const patch: ScheduledPostUpdate = {};
+
+	if (editingAt.value !== '') {
+		const date = new Date(editingAt.value);
+		if (Number.isNaN(date.getTime()) || date.getTime() < Date.now() + 60_000) {
+			showToast('The new time must be at least one minute in the future.', 'error');
+			return;
+		}
+
+		patch.scheduled_at = date.toISOString();
+	}
+
+	if (editingContent.value.trim() !== post.content) {
+		patch.content = editingContent.value;
+	}
+
+	const warning = editingWarning.value.trim();
+	if (warning !== (post.content_warning ?? '')) {
+		patch.content_warning = warning === '' ? null : warning;
+	}
+
+	if (editingPollEnabled.value) {
+		const options = editingPollOptions.value.map((option) => option.trim()).filter((option) => option !== '');
+		if (options.length < 2) {
+			showToast('A poll needs at least two options.', 'error');
+			return;
+		}
+
+		const existing = post.poll ?? null;
+		patch.poll = {
+			options,
+			multiple: editingPollMultiple.value,
+			hide_totals: editingPollHideTotals.value,
+			expires_in: existing?.expires_at != null ? null : Number(editingPollExpiresIn.value),
+			expires_at: existing?.expires_at ?? null,
+		};
+	} else if (post.poll != null) {
+		patch.poll = null;
+	}
+
+	if (Object.keys(patch).length === 0) {
+		cancelEdit();
 		return;
 	}
 
 	savingId.value = post.id;
 	try {
-		const updated = await getApi().updateScheduledPost(post.id, date.toISOString());
+		const updated = await getApi().updateScheduledPost(post.id, patch);
 		posts.value = posts.value.map((entry) => entry.id === updated.id ? updated : entry);
 		editingId.value = '';
 		editingAt.value = '';
-		showToast('Time updated.', 'success');
+		showToast('Scheduled post updated.', 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The time could not be changed.', 'error');
+		showToast(caught instanceof Error ? caught.message : 'The scheduled post could not be updated.', 'error');
 	} finally {
 		savingId.value = '';
 	}
@@ -203,8 +279,8 @@ function stateClass(state: ScheduledPost['state']): string {
 							v-if="post.state === 'scheduled'"
 							type="button"
 							class="a-icon-btn"
-							aria-label="Change time"
-							title="Change time"
+							aria-label="Edit post"
+							title="Edit post"
 							@click="startEdit(post)"
 						>
 							<AppIcon name="clock" :size="16" />
@@ -232,6 +308,7 @@ function stateClass(state: ScheduledPost['state']): string {
 					{{ visibilityLabel(post.visibility) }}
 					<span v-if="post.attachment_ids.length > 0">· {{ post.attachment_ids.length }} attachment/Attachments</span>
 					<span v-if="post.in_reply_to_id">· Reply</span>
+					<span v-if="post.poll">· Poll</span>
 				</p>
 
 				<p v-if="post.state === 'failed' && post.failure_reason" class="a-form-error" role="alert">
@@ -239,8 +316,51 @@ function stateClass(state: ScheduledPost['state']): string {
 				</p>
 
 				<form v-if="editingId === post.id" class="a-management-inline-form" @submit.prevent="saveEdit(post)">
-					<label class="a-profile-edit__label" for="a-scheduled-time">New time</label>
+					<label class="a-profile-edit__label" for="a-scheduled-time">Publish at</label>
 					<input id="a-scheduled-time" v-model="editingAt" type="datetime-local">
+					<label class="a-profile-edit__label" for="a-scheduled-content">Content</label>
+					<textarea id="a-scheduled-content" v-model="editingContent" rows="3" />
+					<label class="a-profile-edit__label" for="a-scheduled-warning">Content warning <span class="a-muted">(optional)</span></label>
+					<input id="a-scheduled-warning" v-model="editingWarning" type="text" maxlength="200">
+					<div class="a-scheduled-edit__poll">
+						<label class="a-composer__check">
+							<input v-model="editingPollEnabled" type="checkbox" />
+							<span>{{ post.poll != null ? 'Keep the poll' : 'Add a poll' }}</span>
+						</label>
+						<template v-if="editingPollEnabled">
+							<div v-for="(option, index) in editingPollOptions" :key="index" class="a-scheduled-edit__poll-option">
+								<input v-model="editingPollOptions[index]" type="text" :placeholder="`Option ${index + 1}`" maxlength="100">
+								<button
+									type="button"
+									class="a-icon-btn"
+									aria-label="Remove option"
+									:disabled="editingPollOptions.length <= 2"
+									@click="removePollOption(index)"
+								>
+									<AppIcon name="trash" :size="14" />
+								</button>
+							</div>
+							<button v-if="editingPollOptions.length < POLL_MAX_OPTIONS" type="button" class="a-btn a-btn--ghost a-btn--small" @click="addPollOption">
+								<AppIcon name="plus" :size="14" /> Add option
+							</button>
+							<div class="a-composer__poll-settings">
+								<label v-if="post.poll?.expires_at == null" class="a-composer__field">
+									<span>Duration</span>
+									<select v-model="editingPollExpiresIn">
+										<option v-for="option in POLL_EXPIRY_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+									</select>
+								</label>
+								<label class="a-composer__check">
+									<input v-model="editingPollMultiple" type="checkbox" />
+									<span>Multiple choice</span>
+								</label>
+								<label class="a-composer__check">
+									<input v-model="editingPollHideTotals" type="checkbox" />
+									<span>Results only after the poll closes</span>
+								</label>
+							</div>
+						</template>
+					</div>
 					<div class="a-profile-edit__actions">
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="savingId === post.id" @click="cancelEdit">
 							Cancel
