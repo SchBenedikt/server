@@ -43,10 +43,15 @@ final class PdoEventBroker implements EventBroker
         $this->pruneExpired();
         $write = function () use ($event): void {
             $id = $this->ids->generate();
+            $notificationId = $event->name === 'notification.created'
+                && is_string($event->payload['notification_id'] ?? null)
+                ? $event->payload['notification_id']
+                : null;
             $this->db->execute(
                 'INSERT INTO mastodon_stream_event'
-                . ' (event_id, event_name, audience, actor_id, payload_json, occurred_at)'
-                . ' VALUES (:event_id, :event_name, :audience, :actor_id, :payload_json, :occurred_at)',
+                . ' (event_id, event_name, audience, actor_id, payload_json, occurred_at, notification_id)'
+                . ' VALUES (:event_id, :event_name, :audience, :actor_id, :payload_json, :occurred_at,'
+                . ' :notification_id)',
                 [
                     'event_id' => $id,
                     'event_name' => $event->name,
@@ -54,6 +59,7 @@ final class PdoEventBroker implements EventBroker
                     'actor_id' => $event->actorId,
                     'payload_json' => json_encode($event->payload, JSON_THROW_ON_ERROR),
                     'occurred_at' => $event->occurredAt,
+                    'notification_id' => $notificationId,
                 ],
             );
             $sequence = $this->db->fetchValue(
