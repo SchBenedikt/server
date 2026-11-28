@@ -12,6 +12,8 @@ namespace AlohaSocial\Server\Http;
 use AlohaSocial\Core\Domain\Atproto\Pds\PdsError;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
+use AlohaSocial\Core\Support\Time;
+use AlohaSocial\Server\Auth\AtprotoSessionRepository;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Bootstrap\Runtime;
 
@@ -26,9 +28,12 @@ final class AtprotoIdentityController
 {
     private const PREFIX = '/api/v1/host/atproto';
 
+    private readonly AtprotoSessionRepository $atprotoSessions;
+
     public function __construct(
         private readonly Runtime $runtime,
     ) {
+        $this->atprotoSessions = new AtprotoSessionRepository($runtime->database);
     }
 
     public function handle(Request $request, ?AuthenticatedSession $session): ?Response
@@ -55,6 +60,23 @@ final class AtprotoIdentityController
 
             if ($request->method === 'POST' && $request->path === self::PREFIX . '/identity/rotate') {
                 return $this->rotate($userId);
+            }
+
+            if ($request->method === 'GET' && $request->path === self::PREFIX . '/sessions') {
+                return Response::json([
+                    'sessions' => $this->atprotoSessions->listForAccount(
+                        $userId,
+                        Time::format($this->runtime->clock->now()),
+                    ),
+                ]);
+            }
+
+            if ($request->method === 'DELETE'
+                && preg_match('#^' . preg_quote(self::PREFIX . '/sessions/', '#') . '([0-9a-f]{16,64})$#', $request->path, $match) === 1
+            ) {
+                $removed = $this->atprotoSessions->revokeForAccount($userId, $match[1]);
+
+                return Response::json(['removed' => $removed], $removed ? 200 : 404);
             }
         } catch (PdsError $error) {
             return Response::json([

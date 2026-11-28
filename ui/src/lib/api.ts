@@ -117,6 +117,13 @@ export interface AtprotoIdentityData {
 	external: BlueskyAccountStatus;
 }
 
+export interface AtprotoSessionEntry {
+	id: string;
+	created_at: string;
+	access_expires_at: string;
+	refresh_expires_at: string;
+}
+
 export interface AtprotoPublicationStatus {
 	postId: string;
 	accountDid: string;
@@ -402,6 +409,8 @@ export interface Api {
 	activityPubDelivery(postId: string): Promise<ActivityPubDeliveryLookup>;
 	retryActivityPubDelivery(postId: string): Promise<ActivityPubDeliveryLookup & { retried: number }>;
 	atprotoIdentity(): Promise<AtprotoIdentityData>;
+	atprotoSessions(): Promise<AtprotoSessionEntry[]>;
+	revokeAtprotoSession(id: string): Promise<boolean>;
 	createAtprotoIdentity(handle?: string): Promise<{ did: string; handle: string }>;
 	rotateAtprotoKeys(): Promise<void>;
 	forYouImpressions(items: { post_id: string; dwell_ms: number }[]): Promise<void>;
@@ -3540,6 +3549,27 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				},
 				external: normalizeBlueskyAccount(data?.external),
 			};
+		},
+
+		async atprotoSessions(): Promise<AtprotoSessionEntry[]> {
+			const data = await request<{ sessions?: unknown }>('GET', '/api/v1/host/atproto/sessions');
+			const list = Array.isArray(data?.sessions) ? data.sessions : [];
+
+			return list.filter(isRecord).map((entry) => ({
+				id: typeof entry.id === 'string' ? entry.id : '',
+				created_at: typeof entry.created_at === 'string' ? entry.created_at : '',
+				access_expires_at: typeof entry.access_expires_at === 'string' ? entry.access_expires_at : '',
+				refresh_expires_at: typeof entry.refresh_expires_at === 'string' ? entry.refresh_expires_at : '',
+			})).filter((entry) => entry.id !== '');
+		},
+
+		async revokeAtprotoSession(id: string): Promise<boolean> {
+			const data = await request<{ removed?: unknown }>(
+				'DELETE',
+				`/api/v1/host/atproto/sessions/${encodeURIComponent(id)}`,
+			);
+
+			return data?.removed === true;
 		},
 
 		async createAtprotoIdentity(handle = ''): Promise<{ did: string; handle: string }> {

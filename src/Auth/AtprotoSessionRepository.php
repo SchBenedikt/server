@@ -109,4 +109,45 @@ final class AtprotoSessionRepository
             ['now' => $now],
         );
     }
+
+    /**
+     * Sessions are addressed by a prefix of the stored access-token hash —
+     * enough bits to name one session without ever exposing token material.
+     *
+     * @return list<array{id: string, created_at: string, access_expires_at: string, refresh_expires_at: string}>
+     */
+    public function listForAccount(string $accountId, string $now): array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT access_hash, created_at, access_expires_at, refresh_expires_at FROM atproto_session'
+            . ' WHERE account_id = :account_id AND refresh_expires_at > :now'
+            . ' ORDER BY created_at DESC',
+            ['account_id' => $accountId, 'now' => $now],
+        );
+
+        return array_map(static function (array $row): array {
+            return [
+                'id' => substr((string) $row['access_hash'], 0, 16),
+                'created_at' => (string) $row['created_at'],
+                'access_expires_at' => (string) $row['access_expires_at'],
+                'refresh_expires_at' => (string) $row['refresh_expires_at'],
+            ];
+        }, $rows);
+    }
+
+    /**
+     * Revokes one session owned by the account. The prefix must be at least
+     * 16 hex characters so a guessed fragment cannot match a foreign hash.
+     */
+    public function revokeForAccount(string $accountId, string $hashPrefix): bool
+    {
+        if (preg_match('/\A[0-9a-f]{16,64}\z/', $hashPrefix) !== 1) {
+            return false;
+        }
+
+        return $this->db->execute(
+            'DELETE FROM atproto_session WHERE account_id = :account_id AND access_hash LIKE :prefix',
+            ['account_id' => $accountId, 'prefix' => $hashPrefix . '%'],
+        ) > 0;
+    }
 }

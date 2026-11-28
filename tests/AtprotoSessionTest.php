@@ -192,4 +192,90 @@ final class AtprotoSessionTest extends TestCase
         ]);
         self::assertSame(401, $afterReactivation->status, $afterReactivation->body);
     }
+
+    public function testMemberCanListAndRevokeOwnPdsSessionsOnly(): void
+    {
+        $first = $this->server->json('POST', '/xrpc/com.atproto.server.createSession', [
+            'identifier' => 'alice',
+            'password' => TestServer::PASSWORD,
+        ]);
+        self::assertSame(200, $first->status, $first->body);
+        $firstToken = json_decode($first->body, true, 512, JSON_THROW_ON_ERROR);
+
+        $second = $this->server->json('POST', '/xrpc/com.atproto.server.createSession', [
+            'identifier' => 'alice',
+            'password' => TestServer::PASSWORD,
+        ]);
+        self::assertSame(200, $second->status, $second->body);
+        $secondToken = json_decode($second->body, true, 512, JSON_THROW_ON_ERROR);
+
+        $web = $this->server->signIn();
+        $list = $this->server->send('GET', '/api/v1/host/atproto/sessions', ['cookies' => $web['cookies']]);
+        self::assertSame(200, $list->status, $list->body);
+        $sessions = json_decode($list->body, true, 512, JSON_THROW_ON_ERROR)['sessions'];
+        self::assertCount(2, $sessions);
+        foreach ($sessions as $session) {
+            self::assertMatchesRegularExpression('/\A[0-9a-f]{16}\z/', $session['id']);
+            self::assertArrayNotHasKey('access_hash', $session);
+            self::assertArrayNotHasKey('refresh_hash', $session);
+        }
+
+        // Another member cannot see or revoke alice's sessions.
+        $this->server->createAccount('bob', 'bob@example.test');
+        $bob = $this->server->signIn('bob');
+        $foreign = $this->server->send('GET', '/api/v1/host/atproto/sessions', ['cookies' => $bob['cookies']]);
+        self::assertSame(200, $foreign->status, $foreign->body);
+        self::assertSame([], json_decode($foreign->body, true, 512, JSON_THROW_ON_ERROR)['sessions']);
+        $foreignRevoke = $this->server->json(
+            'DELETE',
+            '/api/v1/host/atproto/sessions/' . $sessions[0]['id'],
+            [],
+            $bob['cookies'],
+            $bob['csrf'],
+        );
+        self::assertSame(404, $foreignRevoke->status, $foreignRevoke->body);
+
+        // The owner revokes; the token stops working immediately.
+        $revoked = $this->server->json(
+            'DELETE',
+            '/api/v1/host/atproto/sessions/' . $sessions[0]['id'],
+            [],
+            $web['cookies'],
+            $web['csrf'],
+        );
+        self::assertSame(200, $revoked->status, $revoked->body);
+        self::assertTrue(json_decode($revoked->body, true, 512, JSON_THROW_ON_ERROR)['removed']);
+
+        // Exactly one of the two clients is signed out; which one depends on
+        // list ordering, so assert the count of live tokens instead.
+        $deadFirst = $this->server->send('GET', '/xrpc/com.atproto.server.getSession', [
+            'headers' => ['Authorization' => 'Bearer ' . $firstToken['accessJwt']],
+        ]);
+        $deadSecond = $this->server->send('GET', '/xrpc/com.atproto.server.getSession', [
+            'headers' => ['Authorization' => 'Bearer ' . $secondToken['accessJwt']],
+        ]);
+        self::assertSame(
+            1,
+            ($deadFirst->status === 200 ? 1 : 0) + ($deadSecond->status === 200 ? 1 : 0),
+            'Exactly one PDS session should survive the revoke.',
+        );
+
+        // Revoking again reports nothing removed; malformed prefixes are refused.
+        $again = $this->server->json(
+            'DELETE',
+            '/api/v1/host/atproto/sessions/' . $sessions[0]['id'],
+            [],
+            $web['cookies'],
+            $web['csrf'],
+        );
+        self::assertSame(404, $again->status, $again->body);
+        $bad = $this->server->json(
+            'DELETE',
+            '/api/v1/host/atproto/sessions/not-a-hash',
+            [],
+            $web['cookies'],
+            $web['csrf'],
+        );
+        self::assertSame(404, $bad->status, $bad->body);
+    }
 }
