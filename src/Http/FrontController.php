@@ -480,6 +480,23 @@ final class FrontController
             ]);
         }
 
+        // Coarse liveness for the UI's empty-feed states: whether the
+        // background worker is checking in. One indexed row, no internals —
+        // feeds use it to tell "genuinely quiet" apart from "sync is paused".
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/status') {
+            $beat = $this->runtime->database->fetchValue(
+                "SELECT value FROM runtime_state WHERE name = 'worker'",
+            );
+            $age = is_numeric($beat) ? max(0, time() - (int) $beat) : null;
+
+            return Response::json([
+                'worker' => [
+                    'online' => $age !== null && $age <= 90,
+                    'heartbeat_age_seconds' => $age,
+                ],
+            ]);
+        }
+
         if ($request->method === 'GET' && $request->path === '/api/v1/host/lookup') {
             $identity = $session?->userId() ?? $ip ?? 'anonymous';
             $retryAfter = $this->runtime->rateLimiter->attempt('host.remote_lookup', $identity, 30, 60);

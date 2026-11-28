@@ -337,4 +337,29 @@ final class HostExtensionTest extends TestCase
         $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
         self::assertEqualsCanonicalizing(['zoe' => 'Zoe Z', 'yan' => 'Yan Y'], $body['profiles']);
     }
+
+    public function testHostStatusReportsWorkerLivenessWithoutInternals(): void
+    {
+        $response = $this->server->send('GET', '/api/v1/host/status');
+        self::assertSame(200, $response->status);
+
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertArrayHasKey('worker', $body);
+        self::assertFalse($body['worker']['online']);
+        self::assertNull($body['worker']['heartbeat_age_seconds']);
+
+        $this->server->runtime->database->execute(
+            "INSERT INTO runtime_state (name, value, updated_at) VALUES ('worker', :beat, :now)",
+            ['beat' => (string) time(), 'now' => '2026-01-01T00:00:00Z'],
+        );
+
+        $fresh = json_decode(
+            $this->server->send('GET', '/api/v1/host/status')->body,
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+        self::assertTrue($fresh['worker']['online']);
+        self::assertLessThanOrEqual(5, $fresh['worker']['heartbeat_age_seconds']);
+    }
 }

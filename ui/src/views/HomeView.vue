@@ -20,8 +20,16 @@ import type { FeedKind } from '../lib/timelines';
 const feed = ref<{ refresh: () => void } | null>(null);
 const signedIn = computed(() => appState.session.user !== null);
 const onboardingVisible = ref(false);
+const workerStale = ref(false);
 
 onMounted(async () => {
+	try {
+		const status = await getApi().hostStatus();
+		workerStale.value = !status.worker.online;
+	} catch {
+		// A failed probe must not turn a healthy feed into a warning.
+	}
+
 	if (!signedIn.value) {
 		return;
 	}
@@ -135,6 +143,16 @@ function compose(): void {
 	openComposer();
 }
 
+async function recheck(): Promise<void> {
+	try {
+		const status = await getApi().hostStatus();
+		workerStale.value = !status.worker.online;
+	} catch {
+		// Keep the last known state when the probe itself fails.
+	}
+	refresh();
+}
+
 function refresh(): void {
 	feed.value?.refresh();
 }
@@ -216,7 +234,17 @@ function refresh(): void {
 		>
 			<template #empty="{ hasMore }">
 				<EmptyState
-					v-if="hasMore"
+					v-if="workerStale && !hasMore"
+					icon="refresh"
+					title="Sync is catching up"
+					text="The background worker has not checked in recently, so federated posts, imports and notifications may be delayed. Local posts still work."
+				>
+					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="recheck">
+						Check again
+					</button>
+				</EmptyState>
+				<EmptyState
+					v-else-if="hasMore"
 					icon="filter"
 					title="No posts on this page"
 					text="Some entries may be hidden by your settings or no longer available. Continue below to keep looking."

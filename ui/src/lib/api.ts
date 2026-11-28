@@ -224,6 +224,13 @@ export interface PushSubscriptionInfo {
 	last_seen_at: string;
 }
 
+export interface HostStatus {
+	worker: {
+		online: boolean;
+		heartbeat_age_seconds: number | null;
+	};
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
@@ -258,6 +265,7 @@ export interface Api {
 	followAtproto(did: string): Promise<AtprotoFollowEntry>;
 	unfollowAtproto(did: string): Promise<void>;
 	hostProfiles(ids?: string[]): Promise<Record<string, string>>;
+	hostStatus(): Promise<HostStatus>;
 	followAccount(id: string): Promise<Relationship>;
 	unfollowAccount(id: string): Promise<Relationship>;
 	notifications(limit?: number, before?: string | null): Promise<NotificationPageData>;
@@ -1451,6 +1459,20 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 			);
 
 			return normalizeMastodonStatuses(data);
+		},
+
+		async hostStatus(): Promise<HostStatus> {
+			const data = await request<{ worker?: unknown }>('GET', '/api/v1/host/status');
+			const worker = isRecord(data?.worker) ? data.worker : {};
+
+			return {
+				worker: {
+					online: worker.online === true,
+					heartbeat_age_seconds: typeof worker.heartbeat_age_seconds === 'number'
+						? worker.heartbeat_age_seconds
+						: null,
+				},
+			};
 		},
 
 		async hostProfiles(ids?: string[]): Promise<Record<string, string>> {
