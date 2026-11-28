@@ -17,6 +17,7 @@ use AlohaSocial\Server\Community\CommunityException;
 
 use function array_map;
 use function array_values;
+use function base64_decode;
 use function base64_encode;
 use function bin2hex;
 use function filter_var;
@@ -29,6 +30,8 @@ use function parse_url;
 use function random_bytes;
 use function rtrim;
 use function str_contains;
+use function str_pad;
+use function str_repeat;
 use function str_starts_with;
 use function strtr;
 use function strlen;
@@ -76,8 +79,9 @@ final class PushService
             'SELECT public_key FROM push_vapid WHERE id = :id',
             ['id' => self::ID],
         );
-        if ($row !== null && is_string($row['public_key']) && $row['public_key'] !== '') {
-            return $row['public_key'];
+        $stored = $row['public_key'] ?? null;
+        if (is_string($stored) && $stored !== '' && self::validVapidKey($stored)) {
+            return $stored;
         }
 
         $key = openssl_pkey_new([
@@ -93,7 +97,11 @@ final class PushService
             throw new \RuntimeException('The VAPID public key could not be derived.');
         }
 
-        $public = "\x04" . $details['ec']['x'] . $details['ec']['y'];
+        // OpenSSL reports the coordinates as minimal-length integers, so a
+        // leading zero byte must be restored or the point is not 65 bytes.
+        $public = "\x04"
+            . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
+            . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
         $publicKey = $this->base64Url($public);
         $privatePem = '';
         if (!openssl_pkey_export($key, $privatePem)) {
@@ -103,7 +111,8 @@ final class PushService
         $this->db->execute(
             'INSERT INTO push_vapid (id, public_key, private_pem, created_at)'
             . ' VALUES (:id, :public_key, :private_pem, :created_at)'
-            . ' ON CONFLICT (id) DO NOTHING',
+            . ' ON CONFLICT (id) DO UPDATE SET'
+            . ' public_key = excluded.public_key, private_pem = excluded.private_pem',
             [
                 'id' => self::ID,
                 'public_key' => $publicKey,
@@ -441,5 +450,19 @@ final class PushService
     private function base64Url(string $bytes): string
     {
         return rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
+    }
+
+    /**
+     * A stored key written before coordinates were padded can decode to 64
+     * bytes; such a key is not a usable P-256 point and must be replaced.
+     */
+    private static function validVapidKey(string $key): bool
+    {
+        $decoded = base64_decode(
+            strtr($key, '-_', '+/') . str_repeat('=', (4 - strlen($key) % 4) % 4),
+            true,
+        );
+
+        return is_string($decoded) && strlen($decoded) === 65 && $decoded[0] === "\x04";
     }
 }

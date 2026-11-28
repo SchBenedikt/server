@@ -31,6 +31,7 @@ use function openssl_pkey_derive;
 use function openssl_verify;
 use function ord;
 use function rtrim;
+use function str_pad;
 use function str_repeat;
 use function strtr;
 use function strlen;
@@ -62,7 +63,9 @@ final class WebPushTest extends TestCase
         self::assertNotFalse($key);
         $details = openssl_pkey_get_details($key);
         self::assertIsArray($details);
-        $point = "\x04" . $details['ec']['x'] . $details['ec']['y'];
+        $point = "\x04"
+            . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
+            . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
         $pem = '';
         self::assertTrue(openssl_pkey_export($key, $pem));
 

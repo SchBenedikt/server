@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Server\Push\WebPush;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -71,6 +72,34 @@ final class PushSubscriptionTest extends TestCase
 
         $second = $this->server->json('GET', '/api/v1/host/push/vapid-key', [], $this->bobCookies);
         self::assertSame($key, (string) json_decode($second->body, true)['key']);
+    }
+
+    public function testMalformedStoredVapidKeyIsReplaced(): void
+    {
+        // Keys written before coordinates were padded to 32 bytes decode to
+        // 64 bytes and are not usable P-256 points.
+        $shortPoint = "\x04" . random_bytes(63);
+        $this->server->runtime->database->execute(
+            'INSERT INTO push_vapid (id, public_key, private_pem, created_at)'
+            . ' VALUES (:id, :public_key, :private_pem, :created_at)',
+            [
+                'id' => 'instance',
+                'public_key' => WebPush::base64Url($shortPoint),
+                'private_pem' => 'sealed',
+                'created_at' => '2026-01-01T00:00:00+00:00',
+            ],
+        );
+
+        $key = $this->server->runtime->pushSubscriptions->vapidPublicKey();
+        $decoded = base64_decode(strtr($key, '-_', '+/') . str_repeat('=', (4 - strlen($key) % 4) % 4), true);
+        self::assertSame(65, strlen((string) $decoded));
+        self::assertSame("\x04", $decoded[0]);
+
+        $stored = $this->server->runtime->database->fetchValue(
+            'SELECT public_key FROM push_vapid WHERE id = :id',
+            ['id' => 'instance'],
+        );
+        self::assertSame($key, $stored);
     }
 
     public function testSubscribeListAndUnsubscribe(): void
