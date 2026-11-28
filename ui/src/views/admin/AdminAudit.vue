@@ -8,6 +8,7 @@ import AppIcon from '../../components/AppIcon.vue';
 import { getAdminApi, type AuditEntry } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
+import { loadErrorMessage } from '../../lib/api';
 
 const entries = ref<AuditEntry[]>([]);
 const loading = ref(false);
@@ -82,7 +83,7 @@ async function load(): Promise<void> {
 	try {
 		entries.value = await getAdminApi().audit(limit.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('audit.loadFailed');
+		error.value = loadErrorMessage(caught, t('audit.loadFailed'));
 	} finally {
 		loading.value = false;
 	}

@@ -8,7 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { relativeTime } from '../lib/format';
 import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
@@ -37,7 +37,7 @@ async function load(): Promise<void> {
 		const ids = rows.value.map((row) => row.post_id);
 		posts.value = ids.length === 0 ? {} : await getApi().posts(ids);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('archive.loadFailed');
+		error.value = loadErrorMessage(caught, t('archive.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -54,7 +54,7 @@ async function restore(row: ArchivedPost): Promise<void> {
 		rows.value = rows.value.filter((entry) => entry.post_id !== row.post_id);
 		showToast(t('archive.restored'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('archive.restoreFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('archive.restoreFailed')), 'error');
 	} finally {
 		restoring.value = '';
 	}

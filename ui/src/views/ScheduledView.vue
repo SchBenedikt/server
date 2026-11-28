@@ -7,7 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { absoluteTime, relativeTime, visibilityLabel } from '../lib/format';
 import { t } from '../lib/i18n';
 import { appState, openComposer, showToast } from '../lib/state';
@@ -59,7 +59,7 @@ async function load(): Promise<void> {
 	try {
 		posts.value = await getApi().scheduledPosts();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('scheduled.loadFailed');
+		error.value = loadErrorMessage(caught, t('scheduled.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -165,7 +165,7 @@ async function saveEdit(post: ScheduledPost): Promise<void> {
 		editingAt.value = '';
 		showToast(t('scheduled.updated'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('scheduled.updateFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('scheduled.updateFailed')), 'error');
 	} finally {
 		savingId.value = '';
 	}
@@ -195,7 +195,7 @@ async function cancel(post: ScheduledPost): Promise<void> {
 		confirmCancel.value = '';
 		showToast(t('scheduled.discarded'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('scheduled.discardFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('scheduled.discardFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

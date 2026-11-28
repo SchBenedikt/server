@@ -5,7 +5,7 @@
  */
 import { onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
-import { getApi } from '../../lib/api';
+import { getApi, loadErrorMessage } from '../../lib/api';
 import { relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { showToast } from '../../lib/state';
@@ -25,7 +25,7 @@ async function load(): Promise<void> {
 	try {
 		announcements.value = await getApi().announcements(true);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('aann.loadFailed');
+		error.value = loadErrorMessage(caught, t('aann.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -47,7 +47,7 @@ async function create(): Promise<void> {
 		expiresAt.value = '';
 		showToast(t('aann.live'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aann.saveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aann.saveFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -63,7 +63,7 @@ async function toggle(announcement: Announcement): Promise<void> {
 		const updated = await getApi().updateAnnouncement(announcement.id, { active: !announcement.active });
 		announcements.value = announcements.value.map((entry) => entry.id === updated.id ? updated : entry);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aann.changeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aann.changeFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -80,7 +80,7 @@ async function remove(announcement: Announcement): Promise<void> {
 		announcements.value = announcements.value.filter((entry) => entry.id !== announcement.id);
 		showToast(t('aann.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('aann.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('aann.deleteFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

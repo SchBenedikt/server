@@ -7,7 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { relativeTime, truncate, visibilityLabel } from '../lib/format';
 import { t } from '../lib/i18n';
 import { appState, openComposer, openDraft, showToast } from '../lib/state';
@@ -30,7 +30,7 @@ async function load(): Promise<void> {
 	try {
 		drafts.value = await getApi().drafts();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('drafts.loadFailed');
+		error.value = loadErrorMessage(caught, t('drafts.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -67,7 +67,7 @@ async function remove(draft: Draft): Promise<void> {
 		drafts.value = drafts.value.filter((entry) => entry.id !== draft.id);
 		showToast(t('drafts.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('drafts.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('drafts.deleteFailed')), 'error');
 	} finally {
 		deleting.value = '';
 	}

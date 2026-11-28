@@ -16,6 +16,7 @@ import {
 import { absoluteTime, relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { appState, showToast } from '../../lib/state';
+import { loadErrorMessage } from '../../lib/api';
 
 type FilterState = 'open' | 'resolved' | 'dismissed' | 'all';
 
@@ -48,7 +49,7 @@ async function assign(report: AdminReport): Promise<void> {
 		showToast(t('arep.assignUpdated'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('arep.assignFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('arep.assignFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -64,7 +65,7 @@ async function reopen(report: AdminReport): Promise<void> {
 		showToast(t('arep.reopened'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('arep.reopenFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('arep.reopenFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -109,7 +110,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().reports(state.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('arep.loadFailed');
+		error.value = loadErrorMessage(caught, t('arep.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -166,7 +167,7 @@ async function saveResolve(): Promise<void> {
 		showToast(t(resolveState.value === 'resolved' ? 'arep.resolvedToast' : 'arep.dismissedToast'), 'success');
 		await load();
 	} catch (caught) {
-		resolveError.value = caught instanceof Error ? caught.message : t('arep.updateFailed');
+		resolveError.value = loadErrorMessage(caught, t('arep.updateFailed'));
 	} finally {
 		resolveSaving.value = false;
 	}
@@ -202,7 +203,7 @@ async function confirmAction(): Promise<void> {
 		confirmOpen.value = false;
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('arep.actionFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('arep.actionFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

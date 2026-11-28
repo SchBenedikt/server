@@ -8,6 +8,7 @@ import AppIcon from '../../components/AppIcon.vue';
 import { absoluteTime, formatCount, relativeTime } from '../../lib/format';
 import { getAdminApi, type CommunicationData } from '../../lib/admin';
 import { t } from '../../lib/i18n';
+import { loadErrorMessage } from '../../lib/api';
 
 const data = ref<CommunicationData | null>(null);
 const loading = ref(false);
@@ -34,7 +35,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().communications();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('aerr.loadFailed');
+		error.value = loadErrorMessage(caught, t('aerr.loadFailed'));
 	} finally {
 		loading.value = false;
 	}

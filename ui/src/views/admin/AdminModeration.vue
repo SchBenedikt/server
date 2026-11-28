@@ -17,6 +17,7 @@ import {
 import { absoluteTime, relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { appState, showToast } from '../../lib/state';
+import { loadErrorMessage } from '../../lib/api';
 
 const actions = ref<ModerationActionList | null>(null);
 const blocks = ref<DomainBlock[]>([]);
@@ -82,7 +83,7 @@ async function load(): Promise<void> {
 		actions.value = actionList;
 		blocks.value = domainBlocks;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('amod.loadFailed');
+		error.value = loadErrorMessage(caught, t('amod.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -107,7 +108,7 @@ async function submitAction(): Promise<void> {
 		publicComment.value = '';
 		await load();
 	} catch (caught) {
-		actionError.value = caught instanceof Error ? caught.message : t('amod.applyFailed');
+		actionError.value = loadErrorMessage(caught, t('amod.applyFailed'));
 	} finally {
 		actionBusy.value = false;
 	}
@@ -143,7 +144,7 @@ async function pickImportFile(event: Event): Promise<void> {
 		importResult.value = await getAdminApi().importDomainBlockFile(content, format, false);
 	} catch (caught) {
 		importFile.value = null;
-		importError.value = caught instanceof Error ? caught.message : t('amod.fileFailed');
+		importError.value = loadErrorMessage(caught, t('amod.fileFailed'));
 	} finally {
 		importBusy.value = false;
 	}
@@ -169,7 +170,7 @@ async function previewImport(): Promise<void> {
 				false,
 			);
 		} catch (caught) {
-			importError.value = caught instanceof Error ? caught.message : t('amod.checkFailed');
+			importError.value = loadErrorMessage(caught, t('amod.checkFailed'));
 		} finally {
 			importBusy.value = false;
 		}
@@ -186,7 +187,7 @@ async function previewImport(): Promise<void> {
 	try {
 		importResult.value = await getAdminApi().importDomainBlocks(entries, false);
 	} catch (caught) {
-		importError.value = caught instanceof Error ? caught.message : t('amod.checkFailed');
+		importError.value = loadErrorMessage(caught, t('amod.checkFailed'));
 	} finally {
 		importBusy.value = false;
 	}
@@ -207,7 +208,7 @@ async function applyImport(): Promise<void> {
 		importFile.value = null;
 		await load();
 	} catch (caught) {
-		importError.value = caught instanceof Error ? caught.message : t('amod.importFailed');
+		importError.value = loadErrorMessage(caught, t('amod.importFailed'));
 	} finally {
 		importBusy.value = false;
 	}
@@ -230,7 +231,7 @@ async function confirmReverse(): Promise<void> {
 		reverseTarget.value = null;
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('amod.reverseFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('amod.reverseFailed')), 'error');
 	} finally {
 		reverseBusy.value = false;
 	}

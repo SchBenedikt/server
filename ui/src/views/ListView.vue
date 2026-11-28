@@ -10,7 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { onPostDeleted } from '../lib/events';
 import { route } from '../lib/router';
 import { t } from '../lib/i18n';
@@ -81,7 +81,7 @@ async function load(): Promise<void> {
 		list.value = found;
 		await Promise.all([loadPosts(true), loadMembers()]);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('list.loadFailed');
+		error.value = loadErrorMessage(caught, t('list.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -115,7 +115,7 @@ async function loadPosts(reset: boolean): Promise<void> {
 		cursor.value = page.length > 0 ? page[page.length - 1].id : cursor.value;
 		hasMore.value = page.length === 20;
 	} catch (caught) {
-		postsError.value = caught instanceof Error ? caught.message : t('list.timelineLoadFailed');
+		postsError.value = loadErrorMessage(caught, t('list.timelineLoadFailed'));
 	} finally {
 		postsLoading.value = false;
 	}
@@ -127,7 +127,7 @@ async function loadMembers(): Promise<void> {
 	try {
 		members.value = await getApi().listAccounts(listId.value);
 	} catch (caught) {
-		membersError.value = caught instanceof Error ? caught.message : t('list.membersLoadFailed');
+		membersError.value = loadErrorMessage(caught, t('list.membersLoadFailed'));
 	} finally {
 		membersLoading.value = false;
 	}
@@ -145,7 +145,7 @@ async function searchMembers(): Promise<void> {
 		const results = await getApi().search(query, 20);
 		memberResults.value = results.accounts.filter((account) => account.is_remote !== true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('list.searchFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('list.searchFailed')), 'error');
 	} finally {
 		memberSearching.value = false;
 	}
@@ -164,7 +164,7 @@ async function addMember(account: Account): Promise<void> {
 		showToast(t('list.memberAdded'), 'success');
 		void loadPosts(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('list.memberAddFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('list.memberAddFailed')), 'error');
 	} finally {
 		memberBusy.value = '';
 	}
@@ -182,7 +182,7 @@ async function removeMember(account: Account): Promise<void> {
 		showToast(t('list.memberRemoved'), 'success');
 		void loadPosts(true);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('list.memberRemoveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('list.memberRemoveFailed')), 'error');
 	} finally {
 		memberBusy.value = '';
 	}

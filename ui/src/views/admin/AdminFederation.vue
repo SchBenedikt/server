@@ -8,6 +8,7 @@ import AppIcon from '../../components/AppIcon.vue';
 import { getAdminApi, type FederationData } from '../../lib/admin';
 import { absoluteTime, formatCount, relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
+import { loadErrorMessage } from '../../lib/api';
 
 const data = ref<FederationData | null>(null);
 const loading = ref(false);
@@ -19,7 +20,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().federation();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('afed.loadFailed');
+		error.value = loadErrorMessage(caught, t('afed.loadFailed'));
 	} finally {
 		loading.value = false;
 	}

@@ -9,7 +9,7 @@ import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { displayNameFor, handleFor, resolveAccount } from '../lib/account';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { locale, t } from '../lib/i18n';
 import { relativeTime } from '../lib/format';
 import { appState, showToast } from '../lib/state';
@@ -140,7 +140,7 @@ async function load(reset = true): Promise<void> {
 		}
 		await resolvePeople(page);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('kokua.loadFailed');
+		error.value = loadErrorMessage(caught, t('kokua.loadFailed'));
 	} finally {
 		loading.value = false;
 		loadingMore.value = false;
@@ -187,7 +187,7 @@ async function create(): Promise<void> {
 		showToast(t('kokua.posted'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('kokua.postFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('kokua.postFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -211,7 +211,7 @@ async function submitHelp(entry: KokuaEntry): Promise<void> {
 		helpMessage.value = '';
 		showToast(t(updated.viewer_helping ? 'kokua.helpPrivate' : 'kokua.helpSaved'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('kokua.helpFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('kokua.helpFailed')), 'error');
 	} finally {
 		busyId.value = '';
 	}
@@ -228,7 +228,7 @@ async function withdraw(entry: KokuaEntry): Promise<void> {
 		replaceEntry(updated);
 		showToast(t('kokua.withdrawn'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('kokua.withdrawFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('kokua.withdrawFailed')), 'error');
 	} finally {
 		busyId.value = '';
 	}
@@ -245,7 +245,7 @@ async function setStatus(entry: KokuaEntry, status: KokuaStatus): Promise<void> 
 		showToast(t(status === 'done' ? 'kokua.markedDone' : 'kokua.reopened'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('kokua.changeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('kokua.changeFailed')), 'error');
 	} finally {
 		busyId.value = '';
 	}
@@ -262,7 +262,7 @@ async function remove(entry: KokuaEntry): Promise<void> {
 		showToast(t('kokua.removed'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('kokua.removeFailedToast'), 'error');
+		showToast(loadErrorMessage(caught, t('kokua.removeFailedToast')), 'error');
 	} finally {
 		busyId.value = '';
 	}

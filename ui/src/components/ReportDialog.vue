@@ -5,7 +5,7 @@
  */
 import { computed, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
-import { ApiError } from '../lib/api';
+import { ApiError, loadErrorMessage } from '../lib/api';
 import {
 	REPORT_CATEGORIES,
 	getAdminApi,
@@ -81,10 +81,10 @@ async function submit(): Promise<void> {
 		emit('close');
 	} catch (caught) {
 		if (caught instanceof ApiError) {
-			error.value = caught.message;
+			error.value = loadErrorMessage(caught, caught.message);
 			fieldErrors.value = caught.fields;
 		} else {
-			error.value = caught instanceof Error ? caught.message : t('report.sendFailed');
+			error.value = loadErrorMessage(caught, t('report.sendFailed'));
 		}
 	} finally {
 		saving.value = false;

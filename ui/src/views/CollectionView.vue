@@ -8,7 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { relativeTime } from '../lib/format';
 import { route } from '../lib/router';
 import { t } from '../lib/i18n';
@@ -60,7 +60,7 @@ async function load(): Promise<void> {
 		const ids = value.post_ids ?? [];
 		posts.value = ids.length === 0 ? [] : Object.values(await getApi().posts(ids));
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('collections.loadFailed');
+		error.value = loadErrorMessage(caught, t('collections.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -82,7 +82,7 @@ async function save(): Promise<void> {
 		editing.value = false;
 		showToast(t('collections.updated'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('collections.saveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('collections.saveFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -99,7 +99,7 @@ async function removePost(postId: string): Promise<void> {
 		posts.value = posts.value.filter((post) => post.id !== postId);
 		showToast(t('collections.postRemoved'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('collections.postRemoveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('collections.postRemoveFailed')), 'error');
 	}
 }
 

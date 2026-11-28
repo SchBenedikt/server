@@ -10,6 +10,7 @@ import type { AdminInstancePage } from '../../lib/admin';
 import { relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
 import { showToast } from '../../lib/state';
+import { loadErrorMessage } from '../../lib/api';
 
 const pages = ref<AdminInstancePage[]>([]);
 const loading = ref(false);
@@ -28,7 +29,7 @@ async function load(): Promise<void> {
 	try {
 		pages.value = await getAdminApi().instancePages();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('apage.loadFailed');
+		error.value = loadErrorMessage(caught, t('apage.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -68,7 +69,7 @@ async function save(): Promise<void> {
 		showToast(t(page.published ? 'apage.publishedToast' : 'apage.draftToast'), 'success');
 		reset();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('apage.saveFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('apage.saveFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -88,7 +89,7 @@ async function remove(page: AdminInstancePage): Promise<void> {
 		}
 		showToast(t('apage.deleted'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('apage.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('apage.deleteFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}

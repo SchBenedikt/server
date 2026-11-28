@@ -8,7 +8,7 @@ import AppIcon from '../components/AppIcon.vue';
 import Avatar from '../components/Avatar.vue';
 import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { t } from '../lib/i18n';
 import { navigate, route } from '../lib/router';
 import { appState, showToast } from '../lib/state';
@@ -64,7 +64,7 @@ async function load(): Promise<void> {
 		mine.value = data.mine;
 		discover.value = data.discover;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('pack.loadFailed');
+		error.value = loadErrorMessage(caught, t('pack.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -82,7 +82,7 @@ async function loadSelected(): Promise<void> {
 		selected.value = await getApi().starterPack(selectedId.value);
 	} catch (caught) {
 		selected.value = null;
-		error.value = caught instanceof Error ? caught.message : t('pack.loadOneFailed');
+		error.value = loadErrorMessage(caught, t('pack.loadOneFailed'));
 	} finally {
 		loadingPack.value = false;
 	}
@@ -103,7 +103,7 @@ async function create(): Promise<void> {
 		showToast(t('pack.created'), 'success');
 		navigate(`/starter-packs/${encodeURIComponent(pack.id)}`);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('pack.createFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('pack.createFailed')), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -124,7 +124,7 @@ async function removePack(): Promise<void> {
 		showToast(t('pack.deleted'), 'success');
 		navigate('/starter-packs');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('pack.deleteFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('pack.deleteFailed')), 'error');
 	} finally {
 		deleting.value = false;
 	}
@@ -143,7 +143,7 @@ async function addMember(): Promise<void> {
 		memberQuery.value = '';
 		showToast(t('pack.added'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('pack.addFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('pack.addFailed')), 'error');
 	} finally {
 		adding.value = false;
 	}
@@ -160,7 +160,7 @@ async function removeMember(member: StarterPackMember): Promise<void> {
 		mergePack(await getApi().removeStarterPackMember(pack.id, member.id));
 		showToast(t('pack.removed'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('pack.removeFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('pack.removeFailed')), 'error');
 	} finally {
 		removing.value = '';
 	}
@@ -191,7 +191,7 @@ async function follow(member: StarterPackMember): Promise<void> {
 		followed.value = { ...followed.value, [member.id]: true };
 		showToast(t('pack.followedYou', { name: memberName(member) }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('pack.followFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('pack.followFailed')), 'error');
 	}
 }
 

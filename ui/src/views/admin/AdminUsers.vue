@@ -6,7 +6,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
 import ConfirmDialog from '../../components/ConfirmDialog.vue';
-import { ApiError } from '../../lib/api';
+import { ApiError, loadErrorMessage } from '../../lib/api';
 import { getAdminApi, type AdminUser, type AdminUserPage, type CreateUserPayload } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
 import { t } from '../../lib/i18n';
@@ -70,7 +70,7 @@ async function load(): Promise<void> {
 	try {
 		page.value = await getAdminApi().users(query.value.trim(), currentPage.value, 20);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('ausers.loadFailed');
+		error.value = loadErrorMessage(caught, t('ausers.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
@@ -128,10 +128,10 @@ async function createUser(): Promise<void> {
 		await load();
 	} catch (caught) {
 		if (caught instanceof ApiError) {
-			createError.value = caught.message;
+			createError.value = loadErrorMessage(caught, caught.message);
 			createFields.value = caught.fields;
 		} else {
-			createError.value = caught instanceof Error ? caught.message : t('ausers.createFailed');
+			createError.value = loadErrorMessage(caught, t('ausers.createFailed'));
 		}
 	} finally {
 		createSaving.value = false;
@@ -154,7 +154,7 @@ async function changeRole(user: AdminUser, role: string): Promise<void> {
 				: 'ausers.roleMemberWord');
 		showToast(t('ausers.roleChanged', { handle: user.handle, role: label }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('ausers.roleFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('ausers.roleFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -171,7 +171,7 @@ async function enable(user: AdminUser): Promise<void> {
 		replace(saved);
 		showToast(t('ausers.activated', { handle: user.handle }), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('ausers.activateFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('ausers.activateFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -229,7 +229,7 @@ async function confirmAction(): Promise<void> {
 		}
 		confirmOpen.value = false;
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : t('ausers.actionFailed'), 'error');
+		showToast(loadErrorMessage(caught, t('ausers.actionFailed')), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -265,7 +265,7 @@ async function savePassword(): Promise<void> {
 		passwordOpen.value = false;
 		showToast(t('ausers.passwordChanged', { handle: target.handle, count: revoked }), 'success');
 	} catch (caught) {
-		passwordError.value = caught instanceof Error ? caught.message : t('ausers.passwordFailed');
+		passwordError.value = loadErrorMessage(caught, t('ausers.passwordFailed'));
 	} finally {
 		passwordSaving.value = false;
 	}

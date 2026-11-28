@@ -5,7 +5,7 @@
  */
 import { ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import type { PostRevisionData } from '../lib/types';
 import { t } from '../lib/i18n';
 import { absoluteTime } from '../lib/format';
@@ -31,7 +31,7 @@ watch(() => props.open, async (open) => {
 	try {
 		data.value = await getApi().postRevisions(props.postId);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : t('rev.loadFailed');
+		error.value = loadErrorMessage(caught, t('rev.loadFailed'));
 	} finally {
 		loading.value = false;
 	}
