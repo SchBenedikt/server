@@ -194,6 +194,10 @@ final class AccountLifecycleTest extends TestCase
         self::assertSame('erased', $body['deletion']['state']);
         self::assertTrue($body['account_disabled']);
         self::assertSame('ActivityPub and Bluesky data at remote servers may persist.', $body['remote_deletion']);
+        self::assertSame(
+            ['account_tombstone', 'deletion_record', 'audit_and_moderation_records', 'remote_copies'],
+            $body['host_data_retained'],
+        );
         self::assertNotEmpty($body['deletion']['deleted']);
 
         $account = $server->runtime->accounts->find('alice');

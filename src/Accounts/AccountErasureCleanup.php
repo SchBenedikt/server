@@ -23,6 +23,21 @@ use AlohaSocial\Server\Community\Collections;
  */
 final readonly class AccountErasureCleanup
 {
+    /**
+     * Data categories that intentionally survive erasure, surfaced to the
+     * account owner so the report states what remains rather than implying a
+     * total wipe. Remote copies are listed for completeness; independent
+     * peers are outside this instance's control.
+     *
+     * @var list<string>
+     */
+    public const RETAINED_CATEGORIES = [
+        'account_tombstone',
+        'deletion_record',
+        'audit_and_moderation_records',
+        'remote_copies',
+    ];
+
     public function __construct(
         private Connection $db,
         private ActivityFactory $activities,
