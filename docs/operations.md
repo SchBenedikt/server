@@ -310,6 +310,31 @@ post-upgrade `SELECT version, core_version, core_reference FROM
 schema_migration ORDER BY version DESC LIMIT 5` shows exactly which build
 produced the current schema.
 
+### Interrupted upgrades
+
+An interrupted `bin/update.php` run is recoverable in every supported state:
+
+- **Killed before or during the backup**: nothing changed; rerun the command.
+- **Killed during migrations**: the migration lock is released with the
+  process, and each migration commits inside its own transaction on
+  PostgreSQL/SQLite (on SQLite the whole pending batch is one transaction,
+  so it is all-or-nothing). `schema_migration` therefore never claims a
+  version whose DDL rolled back. Rerun `php bin/update.php`; already-applied
+  versions are skipped by checksum.
+- **Migration reported failure**: the output names the failing version and
+  the backup path. Do not retry blindly — inspect with `php bin/doctor.php`
+  and the database, and restore the backup if `schema_migration` and the
+  live schema disagree (the update command already verifies the account
+  count and prints the restore command when it drops).
+- **App or worker booting mid-upgrade**: they refuse to serve while
+  `schema_migration` lags the code's `Migrations::all()` — requests fail
+  fast instead of touching missing tables. Finish the upgrade, or roll the
+  code back to the version matching the applied schema.
+
+`php bin/doctor.php` is the single place to check `schema_installed`,
+`schema_version`, `pending_migrations`, `core_version` and
+`core_reference` before and after an upgrade.
+
 ### Core release upgrade and rollback
 
 For a tagged Core release, select **Release** and the exact Core version in
