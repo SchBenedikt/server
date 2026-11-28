@@ -238,6 +238,7 @@ final class ApplicationFactory
             $atprotoJetstream?->name() ?? JetstreamEventSource::NAME,
         );
         $mastodonEventBroker = new PdoEventBroker($database, $clock);
+        $remotePostImporter = new RemotePostImporter($database, $remoteDirectory, $clock);
 
         $app = Application::forHost(
             config: $this->config->coreConfig(),
@@ -249,6 +250,7 @@ final class ApplicationFactory
             activityLog: $activityLog,
             actorResolver: new HttpActorResolver($httpClient),
             actorInboxResolver: $remoteDirectory,
+            remotePostImporter: $remotePostImporter,
             mentionResolver: new RemoteMentionResolver($remoteDirectory),
             clock: $clock,
             logger: $logger,
@@ -352,7 +354,7 @@ final class ApplicationFactory
             remoteReactions: new RemoteReactions(
                 $database,
                 $app->reactions,
-                new RemotePostImporter($database, $remoteDirectory, $clock),
+                $remotePostImporter,
             ),
             remoteReplies: new RemoteReplies(
                 $database,
@@ -360,7 +362,7 @@ final class ApplicationFactory
                 new ActivityFactory($this->config->coreConfig(), $app->media),
                 $remoteDirectory,
                 $app->reactions,
-                new RemotePostImporter($database, $remoteDirectory, $clock),
+                $remotePostImporter,
             ),
             remoteActorProfiles: $remoteActorProfiles,
             federatedTimeline: new FederatedTimeline(

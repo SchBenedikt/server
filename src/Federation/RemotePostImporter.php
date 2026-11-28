@@ -41,7 +41,7 @@ use const FILTER_VALIDATE_URL;
  * reach the origin leaves the post uncached, so the caller keeps its normal
  * not-found answer.
  */
-final class RemotePostImporter
+final class RemotePostImporter implements \AlohaSocial\Core\Domain\Federation\RemotePostImporter
 {
     private readonly PdoRemotePostRepository $posts;
 
