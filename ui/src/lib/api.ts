@@ -1170,6 +1170,9 @@ function normalizePreferences(value: unknown): AccountPreferences {
 			? value.mirror_atproto_account_did
 			: null,
 		onboarding_dismissed: value.onboarding_dismissed === true,
+		dismissed_announcements: Array.isArray(value.dismissed_announcements)
+			? value.dismissed_announcements.filter((id): id is string => typeof id === 'string')
+			: [],
 		updated_at: typeof value.updated_at === 'string' ? value.updated_at : null,
 	};
 }
