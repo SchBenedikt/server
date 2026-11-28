@@ -431,6 +431,9 @@ $content = 'Federation smoke post ' . bin2hex(random_bytes(4));
     'body' => json_encode(['content' => $content, 'visibility' => 'public'], JSON_THROW_ON_ERROR),
 ]);
 check('A: post created', $status === 201, 'status ' . $status . ' ' . $body);
+$alicePostDecoded = json_decode($body, true);
+$alicePostId = is_array($alicePostDecoded) ? ($alicePostDecoded['post']['id'] ?? null) : null;
+check('A: post id returned for later edit', is_string($alicePostId) && $alicePostId !== '');
 
 $code = runPhp($root, ['bin/worker.php', '--once'], $envA, $output);
 check('A: worker drained the delivery queue', $code === 0, (string) $output);
@@ -552,6 +555,54 @@ if ($remoteObjectId !== null) {
         }
     }
     check('A: remote like recorded a favourite notification', $liked, 'status ' . $status . ' ' . $body);
+
+    // A edits her post. The signed Update reaches B's stored remote copy, so
+    // the canonical remote-post read must expose the new content.
+    if (is_string($alicePostId) && $alicePostId !== '') {
+        $editedContent = $content . ' (edited)';
+        [$status, $body] = httpRequest('PATCH', $baseA . '/api/v1/posts/' . rawurlencode($alicePostId), [
+            'jar' => $jarA,
+            'headers' => ['Content-Type: application/json', 'X-CSRF-Token: ' . $csrfA],
+            'body' => json_encode(['content' => $editedContent], JSON_THROW_ON_ERROR),
+        ]);
+        check('A: post edited', $status === 200 || $status === 204, 'status ' . $status . ' ' . $body);
+
+        $code = runPhp($root, ['bin/worker.php', '--once'], $envA, $output);
+        check('A: worker delivered the edit', $code === 0, (string) $output);
+        fwrite(STDOUT, '     worker: ' . str_replace("\n", ' | ', (string) $output) . "\n");
+
+        [$status, $body] = httpRequest(
+            'GET',
+            $baseB . '/api/v1/remote-posts/' . rawurlencode($remoteObjectId),
+            ['jar' => $jarB],
+        );
+        check('B: stored remote post reflects the edit', $status === 200 && str_contains($body, $editedContent), 'status ' . $status . ' ' . $body);
+    }
+
+    // B boosts the remote post. The Announce is delivered to the author
+    // inbox and A records it as a reblog notification.
+    [$status, $body] = httpRequest('POST', $baseB . '/api/v1/posts/' . rawurlencode($remoteObjectId) . '/boost', [
+        'jar' => $jarB,
+        'headers' => ['Content-Type: application/json', 'X-CSRF-Token: ' . $csrfB],
+        'body' => '{}',
+    ]);
+    check('B: boost on the remote post accepted', $status === 200, 'status ' . $status . ' ' . $body);
+
+    $code = runPhp($root, ['bin/worker.php', '--once'], $envB, $output);
+    check('B: worker delivered the boost', $code === 0, (string) $output);
+    fwrite(STDOUT, '     worker: ' . str_replace("\n", ' | ', (string) $output) . "\n");
+
+    [$status, $body] = httpRequest('GET', $baseA . '/api/v1/notifications', ['jar' => $jarA]);
+    $boosted = false;
+    if ($status === 200) {
+        foreach (json_decode($body, true)['notifications'] ?? [] as $notification) {
+            if (($notification['type'] ?? null) === 'reblog') {
+                $boosted = true;
+                break;
+            }
+        }
+    }
+    check('A: remote boost recorded a reblog notification', $boosted, 'status ' . $status . ' ' . $body);
 }
 
 [$status, $body] = httpRequest('GET', $baseB . '/api/v1/timelines/public');
