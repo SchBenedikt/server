@@ -103,7 +103,7 @@ function close(): void {
 				</header>
 
 				<p v-if="loading" class="a-muted">Loading collections…</p>
-				<p v-else-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+				<p v-else-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 
 				<ul v-else-if="collections.length > 0" class="a-collection-picker__list">
 					<li v-for="collection in collections" :key="collection.id">

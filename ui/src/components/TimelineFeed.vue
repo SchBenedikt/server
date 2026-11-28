@@ -121,7 +121,7 @@ defineExpose({
 			<EmptyState v-else :icon="emptyIcon" :title="emptyTitle" :text="emptyText" />
 		</slot>
 
-		<p v-if="timeline.error.value !== '' && timeline.posts.value.length > 0" class="a-feed__inline-error">
+		<p v-if="timeline.error.value !== '' && timeline.posts.value.length > 0" class="a-feed__inline-error" role="alert">
 			{{ timeline.error.value }}
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="timeline.loadMore">
 				Try loading more again

@@ -128,7 +128,7 @@ onMounted(load);
 			</div>
 		</form>
 
-		<p v-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+		<p v-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 		<p v-if="loading && pages.length === 0" class="a-muted">Loading pages…</p>
 
 		<ul v-else-if="pages.length > 0" class="a-announcement-list">

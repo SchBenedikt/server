@@ -382,7 +382,7 @@ function isFollowingTag(tag: string): boolean {
 
 				<TimelineSkeleton v-if="remoteLoading && remote === null" :count="2" />
 
-				<p v-if="remoteError !== ''" class="a-feed__inline-error">{{ remoteError }}</p>
+				<p v-if="remoteError !== ''" class="a-feed__inline-error" role="alert">{{ remoteError }}</p>
 
 				<template v-if="remote !== null">
 					<ul v-if="remote.accounts.length > 0" class="a-people a-people--wide">
@@ -556,7 +556,7 @@ function isFollowingTag(tag: string): boolean {
 					title="It's still quiet"
 					text="The public timeline fills up as soon as someone writes the first post."
 				/>
-				<p v-if="discover.error !== ''" class="a-feed__inline-error">{{ discover.error }}</p>
+				<p v-if="discover.error !== ''" class="a-feed__inline-error" role="alert">{{ discover.error }}</p>
 			</section>
 
 			<section v-if="videoPosts.length > 0" class="a-explore-section">

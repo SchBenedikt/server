@@ -255,7 +255,7 @@ void stopDeleted;
 				</a>
 			</div>
 
-			<p v-if="error !== ''" class="a-feed__inline-error">
+			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">
 				{{ error }}
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">
 					Try again
