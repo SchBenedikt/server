@@ -109,6 +109,24 @@ final class MetricsTest extends TestCase
         self::assertStringContainsString('aloha_engagement_refresh_pending 0', $response->body);
     }
 
+    public function testMetricsEndpointExposesDatabaseQueryStats(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('root', admin: true);
+        $session = $server->signIn('root');
+
+        // The instrumented connection counts every query the process runs;
+        // sign-in and account creation already produced fetch/execute work.
+        $server->runtime->database->fetchValue('SELECT 1');
+
+        $response = $server->send('GET', '/metrics', ['cookies' => $session['cookies']]);
+        self::assertSame(200, $response->status);
+        self::assertStringContainsString('aloha_db_queries_total{op="fetch_value"}', $response->body);
+        self::assertStringContainsString('aloha_db_query_seconds_sum{op="fetch_value"}', $response->body);
+        self::assertStringContainsString('aloha_db_query_seconds_count{op="fetch_value"}', $response->body);
+        self::assertStringContainsString('aloha_db_queries_total{op="execute"}', $response->body);
+    }
+
     public function testMetricsEndpointReportsQueueAgeAndStorage(): void
     {
         $server = new TestServer();

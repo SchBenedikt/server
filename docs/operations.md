@@ -606,6 +606,15 @@ Series provided:
   content is being served past its freshness window; `error=1` means the
   last poll attempt failed. `last_attempt_age` climbing while `stale=0`
   means sync is merely idle.
+- `aloha_db_queries_total{op}`, `aloha_db_query_seconds{op}` (sum/count),
+  `aloha_db_query_errors_total{op}` and `aloha_db_slow_queries_total{op}` —
+  database contention from the app process: every `Connection` call is
+  timed by `InstrumentedConnection` (`op` is `execute`, `fetch_all`,
+  `fetch_one` or `fetch_value`). `query_seconds_count` is the query rate;
+  `sum/count` is mean latency, and `slow_queries` counts statements over
+  100 ms. No SQL text, parameters or row data become labels. The worker
+  instruments its own connection the same way but has no scrape endpoint —
+  its contention shows up indirectly through queue-age and task metrics.
 - `aloha_metrics_collection_errors` — non-zero when a scrape-time gauge
   could not be read (database hiccup); the HTTP metrics still render.
 
