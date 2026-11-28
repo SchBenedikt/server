@@ -14,6 +14,7 @@ import {
 	setPrimarySidebar,
 } from '../lib/sidebar';
 import type { SidebarItem } from '../lib/sidebar';
+import { labelFor } from '../lib/i18n';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -111,16 +112,16 @@ function close(): void {
 						<li v-for="(item, index) in ordered" :key="item.id">
 							<span class="a-sidebar-settings__label">
 								<AppIcon :name="item.icon" :size="17" />
-								{{ item.label }}
+								{{ labelFor(item) }}
 							</span>
 							<span class="a-sidebar-settings__actions">
-								<button type="button" class="a-icon-btn" :disabled="index === 0" :aria-label="`Move ${item.label} up`" @click="move(item.id, -1)">
+								<button type="button" class="a-icon-btn" :disabled="index === 0" :aria-label="`Move ${labelFor(item)} up`" @click="move(item.id, -1)">
 									<AppIcon name="chevronDown" :size="16" class="a-sidebar-settings__up" />
 								</button>
-								<button type="button" class="a-icon-btn" :disabled="index === ordered.length - 1" :aria-label="`Move ${item.label} down`" @click="move(item.id, 1)">
+								<button type="button" class="a-icon-btn" :disabled="index === ordered.length - 1" :aria-label="`Move ${labelFor(item)} down`" @click="move(item.id, 1)">
 									<AppIcon name="chevronDown" :size="16" />
 								</button>
-								<button type="button" class="a-icon-btn a-icon-btn--danger" :aria-label="`Remove ${item.label} from the main navigation`" @click="toggle(item.id)">
+								<button type="button" class="a-icon-btn a-icon-btn--danger" :aria-label="`Remove ${labelFor(item)} from the main navigation`" @click="toggle(item.id)">
 									<AppIcon name="x" :size="16" />
 								</button>
 							</span>
@@ -135,7 +136,7 @@ function close(): void {
 						<li v-for="item in remaining" :key="item.id">
 							<span class="a-sidebar-settings__label">
 								<AppIcon :name="item.icon" :size="17" />
-								{{ item.label }}
+								{{ labelFor(item) }}
 							</span>
 							<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="draft.length >= MAX_PRIMARY" @click="toggle(item.id)">
 								<AppIcon name="plus" :size="14" />

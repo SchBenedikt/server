@@ -7,6 +7,7 @@ import { ref } from 'vue';
 export interface SidebarItem {
 	id: string;
 	label: string;
+	labelKey?: string;
 	icon: string;
 	href: string;
 	group: 'main' | 'library' | 'moderation' | 'instance';
@@ -15,28 +16,29 @@ export interface SidebarItem {
 }
 
 export const SIDEBAR_CATALOG: SidebarItem[] = [
-	{ id: 'home', label: 'Home', icon: 'home', href: '#/', group: 'main' },
-	{ id: 'explore', label: 'Explore', icon: 'compass', href: '#/explore', group: 'main' },
-	{ id: 'notifications', label: 'Notifications', icon: 'bell', href: '#/notifications', group: 'main' },
-	{ id: 'messages', label: 'Messages', icon: 'message', href: '#/messages', group: 'main', requiresAuth: true },
-	{ id: 'profile', label: 'Profile', icon: 'user', href: '#/profile', group: 'main', requiresAuth: true },
-	{ id: 'settings', label: 'Settings', icon: 'settings', href: '#/settings', group: 'main', requiresAuth: true },
-	{ id: 'search', label: 'Search', icon: 'search', href: '#/search', group: 'main' },
-	{ id: 'kokua', label: 'Kokua board', icon: 'handHeart', href: '#/kokua', group: 'main' },
-	{ id: 'memories', label: 'Memories', icon: 'clock', href: '#/memories', group: 'library', requiresAuth: true },
-	{ id: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', href: '#/bookmarks', group: 'library', requiresAuth: true },
-	{ id: 'collections', label: 'Collections', icon: 'list', href: '#/collections', group: 'library', requiresAuth: true },
-	{ id: 'starter-packs', label: 'Starter packs', icon: 'users', href: '#/starter-packs', group: 'library', requiresAuth: true },
-	{ id: 'lists', label: 'Lists', icon: 'list', href: '#/lists', group: 'library', requiresAuth: true },
-	{ id: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts', group: 'library', requiresAuth: true },
-	{ id: 'archived', label: 'Archive', icon: 'archive', href: '#/archived', group: 'library', requiresAuth: true },
-	{ id: 'scheduled', label: 'Scheduled posts', icon: 'calendar', href: '#/scheduled', group: 'library', requiresAuth: true },
-	{ id: 'follow-requests', label: 'Follow requests', icon: 'lock', href: '#/follow-requests', group: 'library', requiresAuth: true },
-	{ id: 'filters', label: 'Filters', icon: 'filter', href: '#/filters', group: 'moderation', requiresAuth: true },
-	{ id: 'muted', label: 'Muted', icon: 'bellOff', href: '#/muted', group: 'moderation', requiresAuth: true },
-	{ id: 'blocked', label: 'Blocked', icon: 'ban', href: '#/blocked', group: 'moderation', requiresAuth: true },
-	{ id: 'about', label: 'About this instance', icon: 'info', href: '#/about', group: 'instance' },        { id: 'admin', label: 'Administration', icon: 'shield', href: '/admin', group: 'instance', adminOnly: true },
-	{ id: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/', group: 'instance' },
+	{ id: 'home', label: 'Home', labelKey: 'nav.home', icon: 'home', href: '#/', group: 'main' },
+	{ id: 'explore', label: 'Explore', labelKey: 'nav.explore', icon: 'compass', href: '#/explore', group: 'main' },
+	{ id: 'notifications', label: 'Notifications', labelKey: 'nav.notifications', icon: 'bell', href: '#/notifications', group: 'main' },
+	{ id: 'messages', label: 'Messages', labelKey: 'nav.messages', icon: 'message', href: '#/messages', group: 'main', requiresAuth: true },
+	{ id: 'profile', label: 'Profile', labelKey: 'nav.profile', icon: 'user', href: '#/profile', group: 'main', requiresAuth: true },
+	{ id: 'settings', label: 'Settings', labelKey: 'nav.settings', icon: 'settings', href: '#/settings', group: 'main', requiresAuth: true },
+	{ id: 'search', label: 'Search', labelKey: 'nav.search', icon: 'search', href: '#/search', group: 'main' },
+	{ id: 'kokua', label: 'Kokua board', labelKey: 'nav.kokua', icon: 'handHeart', href: '#/kokua', group: 'main' },
+	{ id: 'memories', label: 'Memories', labelKey: 'nav.memories', icon: 'clock', href: '#/memories', group: 'library', requiresAuth: true },
+	{ id: 'bookmarks', label: 'Bookmarks', labelKey: 'nav.bookmarks', icon: 'bookmark', href: '#/bookmarks', group: 'library', requiresAuth: true },
+	{ id: 'collections', label: 'Collections', labelKey: 'nav.collections', icon: 'list', href: '#/collections', group: 'library', requiresAuth: true },
+	{ id: 'starter-packs', label: 'Starter packs', labelKey: 'nav.starterPacks', icon: 'users', href: '#/starter-packs', group: 'library', requiresAuth: true },
+	{ id: 'lists', label: 'Lists', labelKey: 'nav.lists', icon: 'list', href: '#/lists', group: 'library', requiresAuth: true },
+	{ id: 'drafts', label: 'Drafts', labelKey: 'nav.drafts', icon: 'pen', href: '#/drafts', group: 'library', requiresAuth: true },
+	{ id: 'archived', label: 'Archive', labelKey: 'nav.archive', icon: 'archive', href: '#/archived', group: 'library', requiresAuth: true },
+	{ id: 'scheduled', label: 'Scheduled posts', labelKey: 'nav.scheduled', icon: 'calendar', href: '#/scheduled', group: 'library', requiresAuth: true },
+	{ id: 'follow-requests', label: 'Follow requests', labelKey: 'nav.followRequests', icon: 'lock', href: '#/follow-requests', group: 'library', requiresAuth: true },
+	{ id: 'filters', label: 'Filters', labelKey: 'nav.filters', icon: 'filter', href: '#/filters', group: 'moderation', requiresAuth: true },
+	{ id: 'muted', label: 'Muted', labelKey: 'nav.muted', icon: 'bellOff', href: '#/muted', group: 'moderation', requiresAuth: true },
+	{ id: 'blocked', label: 'Blocked', labelKey: 'nav.blocked', icon: 'ban', href: '#/blocked', group: 'moderation', requiresAuth: true },
+	{ id: 'about', label: 'About this instance', labelKey: 'nav.about', icon: 'info', href: '#/about', group: 'instance' },
+	{ id: 'admin', label: 'Administration', labelKey: 'nav.administration', icon: 'shield', href: '/admin', group: 'instance', adminOnly: true },
+	{ id: 'dashboard', label: 'Server dashboard', labelKey: 'nav.dashboard', icon: 'server', href: '/', group: 'instance' },
 ];
 
 export const DEFAULT_PRIMARY = ['home', 'explore', 'notifications', 'messages', 'profile', 'settings'];

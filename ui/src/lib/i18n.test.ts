@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { describe, expect, it, vi } from 'vitest';
-import { locale, resolveLocale, setLocale, t } from './i18n';
+import { labelFor, locale, resolveLocale, setLocale, t } from './i18n';
 
 function stubBrowserLanguage(tag: string): void {
 	vi.stubGlobal('navigator', { language: tag, languages: [tag] });
@@ -52,5 +52,16 @@ describe('t', () => {
 		expect(locale.value).toBe('de');
 		setLocale(null);
 		expect(['en', 'de']).toContain(locale.value);
+	});
+});
+
+describe('labelFor', () => {
+	it('prefers the catalog key and falls back to the literal label', () => {
+		setLocale('de');
+		expect(labelFor({ label: 'Home', labelKey: 'nav.home' })).toBe('Start');
+		expect(labelFor({ label: 'Home' })).toBe('Home');
+		expect(labelFor({ label: 'Home', labelKey: 'nav.missing' })).toBe('Home');
+		setLocale('en');
+		expect(labelFor({ label: 'Home', labelKey: 'nav.home' })).toBe('Home');
 	});
 });

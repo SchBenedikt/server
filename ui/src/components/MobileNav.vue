@@ -9,6 +9,7 @@ import { route } from '../lib/router';
 import { getApi } from '../lib/api';
 import { resetAccountDirectory } from '../lib/account';
 import { appState, openComposer, toggleTheme } from '../lib/state';
+import { labelFor, t } from '../lib/i18n';
 
 const signedIn = computed(() => appState.session.user !== null);
 const handle = computed(() => appState.session.user?.handle ?? '');
@@ -21,76 +22,77 @@ const moreActive = computed(() => (
 ));
 
 const primaryItems = [
-	{ name: 'home', label: 'Start', icon: 'home', href: '#/' },
-	{ name: 'explore', label: 'Explore', icon: 'compass', href: '#/explore' },
-	{ name: 'notifications', label: 'Notifications', icon: 'bell', href: '#/notifications' },
-	{ name: 'messages', label: 'Messages', icon: 'message', href: '#/messages' },
+	{ name: 'home', label: 'Start', labelKey: 'nav.home', icon: 'home', href: '#/' },
+	{ name: 'explore', label: 'Explore', labelKey: 'nav.explore', icon: 'compass', href: '#/explore' },
+	{ name: 'notifications', label: 'Notifications', labelKey: 'nav.notifications', icon: 'bell', href: '#/notifications' },
+	{ name: 'messages', label: 'Messages', labelKey: 'nav.messages', icon: 'message', href: '#/messages' },
 ];
 
 const sheetGroups = computed(() => {
 	const groups: Array<{
 		title: string;
-		items: Array<{ name: string; label: string; icon: string; href: string }>;
+		titleKey?: string;
+		items: Array<{ name: string; label: string; labelKey?: string; icon: string; href: string }>;
 	}> = [];
 
 	if (signedIn.value) {
 		groups.push({
-			title: 'Your account',
+			title: 'Your account', titleKey: 'nav.group.account',
 			items: [
-				{ name: 'profile', label: 'Profile', icon: 'user', href: `#/u/${encodeURIComponent(handle.value)}` },
-				{ name: 'settings', label: 'Settings', icon: 'settings', href: '#/settings' },
-				{ name: 'follow-requests', label: 'Follow requests', icon: 'lock', href: '#/follow-requests' },
+				{ name: 'profile', label: 'Profile', labelKey: 'nav.profile', icon: 'user', href: `#/u/${encodeURIComponent(handle.value)}` },
+				{ name: 'settings', label: 'Settings', labelKey: 'nav.settings', icon: 'settings', href: '#/settings' },
+				{ name: 'follow-requests', label: 'Follow requests', labelKey: 'nav.followRequests', icon: 'lock', href: '#/follow-requests' },
 			],
 		});
 	}
 
 	groups.push({
-		title: 'Explore',
+		title: 'Explore', titleKey: 'nav.group.discover',
 		items: [
-			{ name: 'search', label: 'Search', icon: 'search', href: '#/search' },
-			{ name: 'kokua', label: 'Kokua', icon: 'handHeart', href: '#/kokua' },
-			{ name: 'memories', label: 'Memories', icon: 'clock', href: '#/memories' },
+			{ name: 'search', label: 'Search', labelKey: 'nav.search', icon: 'search', href: '#/search' },
+			{ name: 'kokua', label: 'Kokua', labelKey: 'nav.kokua', icon: 'handHeart', href: '#/kokua' },
+			{ name: 'memories', label: 'Memories', labelKey: 'nav.memories', icon: 'clock', href: '#/memories' },
 		],
 	});
 
 	if (signedIn.value) {
 		groups.push(
 			{
-				title: 'Library',
+				title: 'Library', titleKey: 'nav.group.library',
 				items: [
-					{ name: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', href: '#/bookmarks' },
-					{ name: 'collections', label: 'Collections', icon: 'list', href: '#/collections' },
-					{ name: 'starter-packs', label: 'Starter packs', icon: 'users', href: '#/starter-packs' },
-					{ name: 'lists', label: 'Lists', icon: 'list', href: '#/lists' },
-					{ name: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts' },
-					{ name: 'archived', label: 'Archive', icon: 'archive', href: '#/archived' },
-					{ name: 'scheduled', label: 'Scheduled', icon: 'calendar', href: '#/scheduled' },
+					{ name: 'bookmarks', label: 'Bookmarks', labelKey: 'nav.bookmarks', icon: 'bookmark', href: '#/bookmarks' },
+					{ name: 'collections', label: 'Collections', labelKey: 'nav.collections', icon: 'list', href: '#/collections' },
+					{ name: 'starter-packs', label: 'Starter packs', labelKey: 'nav.starterPacks', icon: 'users', href: '#/starter-packs' },
+					{ name: 'lists', label: 'Lists', labelKey: 'nav.lists', icon: 'list', href: '#/lists' },
+					{ name: 'drafts', label: 'Drafts', labelKey: 'nav.drafts', icon: 'pen', href: '#/drafts' },
+					{ name: 'archived', label: 'Archive', labelKey: 'nav.archive', icon: 'archive', href: '#/archived' },
+					{ name: 'scheduled', label: 'Scheduled', labelKey: 'nav.scheduled', icon: 'calendar', href: '#/scheduled' },
 				],
 			},
 			{
-				title: 'Moderation',
+				title: 'Moderation', titleKey: 'nav.group.moderation',
 				items: [
-					{ name: 'filters', label: 'Filters', icon: 'filter', href: '#/filters' },
-					{ name: 'muted', label: 'Muted', icon: 'bellOff', href: '#/muted' },
-					{ name: 'blocked', label: 'Blocked', icon: 'ban', href: '#/blocked' },
+					{ name: 'filters', label: 'Filters', labelKey: 'nav.filters', icon: 'filter', href: '#/filters' },
+					{ name: 'muted', label: 'Muted', labelKey: 'nav.muted', icon: 'bellOff', href: '#/muted' },
+					{ name: 'blocked', label: 'Blocked', labelKey: 'nav.blocked', icon: 'ban', href: '#/blocked' },
 				],
 			},
 		);
 	}
 
 	const instanceItems = [
-		{ name: 'about', label: 'About this instance', icon: 'info', href: '#/about' },
+		{ name: 'about', label: 'About this instance', labelKey: 'nav.about', icon: 'info', href: '#/about' },
 	];
 	if ((appState.session.admin || appState.session.moderator)) {
-		instanceItems.unshift({ name: 'admin', label: 'Administration', icon: 'shield', href: '#/admin' });
+		instanceItems.unshift({ name: 'admin', label: 'Administration', labelKey: 'nav.administration', icon: 'shield', href: '#/admin' });
 	}
-			instanceItems.push({ name: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/' });
-	groups.push({ title: 'instance', items: instanceItems });
+			instanceItems.push({ name: 'dashboard', label: 'Server dashboard', labelKey: 'nav.dashboard', icon: 'server', href: '/' });
+	groups.push({ title: 'Instance', titleKey: 'nav.group.instance', items: instanceItems });
 
 	if (!signedIn.value) {
 		groups.push({
-			title: 'Sign in',
-			items: [{ name: 'login', label: 'Sign in', icon: 'logout', href: '/login' }],
+			title: 'Sign in', titleKey: 'nav.signIn',
+			items: [{ name: 'login', label: 'Sign in', labelKey: 'nav.signIn', icon: 'logout', href: '/login' }],
 		});
 	}
 
@@ -154,7 +156,7 @@ watch(route, () => {
 			:href="item.href"
 			class="a-mobile-nav__item"
 			:class="{ 'a-mobile-nav__item--active': isActive(item.name) }"
-			:aria-label="item.label"
+			:aria-label="labelFor(item)"
 			:aria-current="isActive(item.name) ? 'page' : undefined"
 		>
 			<span class="a-mobile-nav__icon">
@@ -163,7 +165,7 @@ watch(route, () => {
 					{{ appState.unread > 9 ? '9+' : appState.unread }}
 				</span>
 			</span>
-			<span>{{ item.label }}</span>
+			<span>{{ labelFor(item) }}</span>
 		</a>
 
 		<button
@@ -196,7 +198,7 @@ watch(route, () => {
 
 				<div class="a-mobile-sheet__body">
 					<section v-for="group in sheetGroups" :key="group.title" class="a-mobile-sheet__group">
-						<p class="a-mobile-sheet__title">{{ group.title }}</p>
+						<p class="a-mobile-sheet__title">{{ group.titleKey === undefined ? group.title : t(group.titleKey) }}</p>
 						<div class="a-mobile-sheet__grid">
 							<a
 								v-for="item in group.items"
@@ -207,7 +209,7 @@ watch(route, () => {
 								@click="sheetOpen = false"
 							>
 								<AppIcon :name="item.icon" :size="19" />
-								<span>{{ item.label }}</span>
+								<span>{{ labelFor(item) }}</span>
 							</a>
 						</div>
 					</section>

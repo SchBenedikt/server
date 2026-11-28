@@ -13,6 +13,7 @@ import { appState, openComposer, toggleTheme } from '../lib/state';
 import { getApi } from '../lib/api';
 import { resetAccountDirectory } from '../lib/account';
 import { primaryCatalogItems } from '../lib/sidebar';
+import { labelFor, t } from '../lib/i18n';
 import type { SidebarItem } from '../lib/sidebar';
 
 const signedIn = computed(() => appState.session.user !== null);
@@ -54,12 +55,12 @@ const primaryItems = computed(() => primaryCatalogItems(canAccess).map((item) =>
 
 const moreGroups = computed(() => {
 	const pinned = new Set(primaryItems.value.map((item) => item.id));
-	const groups: Array<{ title: string; items: SidebarItem[] }> = [
+	const groups: Array<{ title: string; titleKey?: string; items: SidebarItem[] }> = [
 		{
-			title: 'Discover',
+			title: 'Discover', titleKey: 'nav.group.discover',
 			items: [
-				{ id: 'search', label: 'Search', icon: 'search', href: '#/search', group: 'main' },
-				{ id: 'kokua', label: 'Kokua board', icon: 'handHeart', href: '#/kokua', group: 'main' },
+				{ id: 'search', label: 'Search', labelKey: 'nav.search', icon: 'search', href: '#/search', group: 'main' },
+				{ id: 'kokua', label: 'Kokua board', labelKey: 'nav.kokua', icon: 'handHeart', href: '#/kokua', group: 'main' },
 			],
 		},
 	];
@@ -67,38 +68,38 @@ const moreGroups = computed(() => {
 	if (signedIn.value) {
 		groups.push(
 			{
-				title: 'Library',
+				title: 'Library', titleKey: 'nav.group.library',
 				items: [
-					{ id: 'memories', label: 'Memories', icon: 'clock', href: '#/memories', group: 'library', requiresAuth: true },
-					{ id: 'bookmarks', label: 'Bookmarks', icon: 'bookmark', href: '#/bookmarks', group: 'library', requiresAuth: true },
-					{ id: 'collections', label: 'Collections', icon: 'list', href: '#/collections', group: 'library', requiresAuth: true },
-					{ id: 'starter-packs', label: 'Starter packs', icon: 'users', href: '#/starter-packs', group: 'library', requiresAuth: true },
-					{ id: 'lists', label: 'Lists', icon: 'list', href: '#/lists', group: 'library', requiresAuth: true },
-					{ id: 'drafts', label: 'Drafts', icon: 'pen', href: '#/drafts', group: 'library', requiresAuth: true },
-					{ id: 'archived', label: 'Archive', icon: 'archive', href: '#/archived', group: 'library', requiresAuth: true },
-					{ id: 'scheduled', label: 'Scheduled posts', icon: 'calendar', href: '#/scheduled', group: 'library', requiresAuth: true },
-					{ id: 'follow-requests', label: 'Follow requests', icon: 'lock', href: '#/follow-requests', group: 'library', requiresAuth: true },
+					{ id: 'memories', label: 'Memories', labelKey: 'nav.memories', icon: 'clock', href: '#/memories', group: 'library', requiresAuth: true },
+					{ id: 'bookmarks', label: 'Bookmarks', labelKey: 'nav.bookmarks', icon: 'bookmark', href: '#/bookmarks', group: 'library', requiresAuth: true },
+					{ id: 'collections', label: 'Collections', labelKey: 'nav.collections', icon: 'list', href: '#/collections', group: 'library', requiresAuth: true },
+					{ id: 'starter-packs', label: 'Starter packs', labelKey: 'nav.starterPacks', icon: 'users', href: '#/starter-packs', group: 'library', requiresAuth: true },
+					{ id: 'lists', label: 'Lists', labelKey: 'nav.lists', icon: 'list', href: '#/lists', group: 'library', requiresAuth: true },
+					{ id: 'drafts', label: 'Drafts', labelKey: 'nav.drafts', icon: 'pen', href: '#/drafts', group: 'library', requiresAuth: true },
+					{ id: 'archived', label: 'Archive', labelKey: 'nav.archive', icon: 'archive', href: '#/archived', group: 'library', requiresAuth: true },
+					{ id: 'scheduled', label: 'Scheduled posts', labelKey: 'nav.scheduled', icon: 'calendar', href: '#/scheduled', group: 'library', requiresAuth: true },
+					{ id: 'follow-requests', label: 'Follow requests', labelKey: 'nav.followRequests', icon: 'lock', href: '#/follow-requests', group: 'library', requiresAuth: true },
 				],
 			},
 			{
-				title: 'Moderation',
+				title: 'Moderation', titleKey: 'nav.group.moderation',
 				items: [
-					{ id: 'filters', label: 'Filters', icon: 'filter', href: '#/filters', group: 'moderation', requiresAuth: true },
-					{ id: 'muted', label: 'Muted', icon: 'bellOff', href: '#/muted', group: 'moderation', requiresAuth: true },
-					{ id: 'blocked', label: 'Blocked', icon: 'ban', href: '#/blocked', group: 'moderation', requiresAuth: true },
+					{ id: 'filters', label: 'Filters', labelKey: 'nav.filters', icon: 'filter', href: '#/filters', group: 'moderation', requiresAuth: true },
+					{ id: 'muted', label: 'Muted', labelKey: 'nav.muted', icon: 'bellOff', href: '#/muted', group: 'moderation', requiresAuth: true },
+					{ id: 'blocked', label: 'Blocked', labelKey: 'nav.blocked', icon: 'ban', href: '#/blocked', group: 'moderation', requiresAuth: true },
 				],
 			},
 		);
 	}
 
 	const instanceItems: SidebarItem[] = [
-		{ id: 'about', label: 'About this instance', icon: 'info', href: '#/about', group: 'instance' },
+		{ id: 'about', label: 'About this instance', labelKey: 'nav.about', icon: 'info', href: '#/about', group: 'instance' },
 	];
 	if ((appState.session.admin || appState.session.moderator)) {
-		instanceItems.unshift({ id: 'admin', label: 'Administration', icon: 'shield', href: '#/admin', group: 'instance', adminOnly: true });
+		instanceItems.unshift({ id: 'admin', label: 'Administration', labelKey: 'nav.administration', icon: 'shield', href: '#/admin', group: 'instance', adminOnly: true });
 	}
-	instanceItems.push({ id: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/', group: 'instance' });
-	groups.push({ title: 'Instance', items: instanceItems });
+	instanceItems.push({ id: 'dashboard', label: 'Server dashboard', labelKey: 'nav.dashboard', icon: 'server', href: '/', group: 'instance' });
+	groups.push({ title: 'Instance', titleKey: 'nav.group.instance', items: instanceItems });
 
 	return groups
 		.map((group) => ({
@@ -205,7 +206,7 @@ onUnmounted(() => {
 				:href="item.href"
 				class="a-nav__item"
 				:class="{ 'a-nav__item--active': isActive(item.id) }"
-				:aria-label="item.label"
+				:aria-label="labelFor(item)"
 				:aria-current="isActive(item.id) ? 'page' : undefined"
 			>
 				<span class="a-nav__icon">
@@ -215,7 +216,7 @@ onUnmounted(() => {
 						class="a-nav__badge"
 					>{{ appState.unread > 9 ? '9+' : appState.unread }}</span>
 				</span>
-				<span>{{ item.label }}</span>
+				<span>{{ labelFor(item) }}</span>
 			</a>
 		</nav>
 
@@ -241,7 +242,7 @@ onUnmounted(() => {
 
 			<div v-if="moreOpen" class="a-sidebar__more-menu" role="menu">
 				<div v-for="group in moreGroups" :key="group.title" class="a-sidebar__more-group">
-					<p class="a-sidebar__more-title">{{ group.title }}</p>
+					<p class="a-sidebar__more-title">{{ group.titleKey === undefined ? group.title : t(group.titleKey) }}</p>
 					<a
 						v-for="item in group.items"
 						:key="item.id"
@@ -252,7 +253,7 @@ onUnmounted(() => {
 						@click="moreOpen = false"
 					>
 						<AppIcon :name="item.icon" :size="18" />
-						<span>{{ item.label }}</span>
+						<span>{{ labelFor(item) }}</span>
 					</a>
 				</div>
 
