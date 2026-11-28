@@ -14,6 +14,7 @@ import StoryBar from '../components/StoryBar.vue';
 import TimelineFeed from '../components/TimelineFeed.vue';
 import { getApi } from '../lib/api';
 import { formatCount, handleLabel } from '../lib/format';
+import { t } from '../lib/i18n';
 import { appState, openComposer, setHomeTab } from '../lib/state';
 import type { FeedKind } from '../lib/timelines';
 
@@ -60,74 +61,74 @@ const tabs = computed(() => {
 	}
 
 	return [
-		{ id: 'for-you' as const, label: 'For you' },
-		{ id: 'trending' as const, label: 'Trending' },
-		{ id: 'home' as const, label: 'Following' },
-		{ id: 'public' as const, label: 'Local' },
-		{ id: 'federated' as const, label: 'Federated' },
-		{ id: 'tags' as const, label: 'My Tags' },
+		{ id: 'for-you' as const, labelKey: 'home.tab.forYou' },
+		{ id: 'trending' as const, labelKey: 'home.tab.trending' },
+		{ id: 'home' as const, labelKey: 'home.tab.following' },
+		{ id: 'public' as const, labelKey: 'home.tab.local' },
+		{ id: 'federated' as const, labelKey: 'home.tab.federated' },
+		{ id: 'tags' as const, labelKey: 'home.tab.tags' },
 	];
 });
 
 const subtitle = computed(() => {
 	if (!signedIn.value) {
-		return "What's moving this instance and the fediverse right now.";
+		return t('home.subtitleGuest');
 	}
 
 	switch (currentTab.value) {
 		case 'for-you':
-			return 'Recommended from this instance and the fediverse — learned from who you follow, your tags, your reactions and what you actually read.';
+			return t('home.sub.forYou');
 		case 'trending':
-			return 'Local posts are ranked by known engagement and freshness; federated posts are ranked by recency.';
+			return t('home.sub.trending');
 		case 'home':
-			return 'Posts from people you follow.';
+			return t('home.sub.following');
 		case 'federated':
-			return 'The newest public posts this instance has received from the fediverse.';
+			return t('home.sub.federated');
 		case 'followed':
-			return 'Everything under the hashtags you follow.';
+			return t('home.sub.tags');
 		default:
-			return 'The latest public posts on this instance.';
+			return t('home.sub.local');
 	}
 });
 
 const emptyTitle = computed(() => {
 	if (currentTab.value === 'followed') {
-		return 'Your hashtag timeline is still empty';
+		return t('home.empty.tagsTitle');
 	}
 	if (currentTab.value === 'for-you') {
-		return 'No recommendations yet';
+		return t('home.empty.forYouTitle');
 	}
 	if (currentTab.value === 'trending') {
-		return 'Nothing is trending yet';
+		return t('home.empty.trendingTitle');
 	}
 	if (currentTab.value === 'home') {
-		return 'Your timeline is still quiet';
+		return t('home.empty.followingTitle');
 	}
 	if (currentTab.value === 'federated') {
-		return 'No federated posts yet';
+		return t('home.empty.federatedTitle');
 	}
 
-	return 'No local posts yet';
+	return t('home.empty.localTitle');
 });
 
 const emptyText = computed(() => {
 	if (currentTab.value === 'followed') {
-		return 'Follow hashtags you care about and their posts will show up here.';
+		return t('home.empty.tagsText');
 	}
 	if (currentTab.value === 'for-you') {
-		return 'Follow people and hashtags, and this feed mixes their posts with what is moving on this instance.';
+		return t('home.empty.forYouText');
 	}
 	if (currentTab.value === 'trending') {
-		return 'Local posts are ranked by engagement and freshness. Federated posts are included by recency because their global engagement is not available here.';
+		return t('home.empty.trendingText');
 	}
 	if (currentTab.value === 'home') {
-		return 'Follow people who share interesting things — or write the first post yourself.';
+		return t('home.empty.followingText');
 	}
 	if (currentTab.value === 'federated') {
-		return 'Posts from other servers appear here as soon as this instance follows someone or receives a public post.';
+		return t('home.empty.federatedText');
 	}
 
-	return 'This instance is new. Be the first voice heard here.';
+	return t('home.empty.localText');
 });
 
 function switchTab(tab: 'home' | 'for-you' | 'trending' | 'public' | 'federated' | 'tags'): void {
@@ -160,9 +161,9 @@ function refresh(): void {
 
 <template>
 	<div class="a-page a-home">
-		<PageHeader title="Home" :subtitle="subtitle">
+		<PageHeader :title="t('nav.home')" :subtitle="subtitle">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Feed refresh" title="Refresh" @click="refresh">
+				<button type="button" class="a-icon-btn" :aria-label="t('home.refresh')" :title="t('common.refresh')" @click="refresh">
 					<AppIcon name="refresh" :size="19" />
 				</button>
 			</template>
@@ -178,20 +179,20 @@ function refresh(): void {
 			<div class="a-welcome__glow" aria-hidden="true" />
 			<p class="a-welcome__eyebrow">
 				<AppIcon name="globe" :size="15" />
-				Open · federated · community-run
+				{{ t('home.welcomeEyebrow') }}
 			</p>
-			<h2>The social network that belongs to you.</h2>
+			<h2>{{ t('home.welcomeTitle') }}</h2>
 			<p>
-				{{ instance?.description || 'An independent instance for good conversations, images and ideas — connected to the fediverse.' }}
+				{{ instance?.description || t('home.welcomeText') }}
 			</p>
 			<div class="a-welcome__actions">
-				<a class="a-btn a-btn--primary" href="/login">Sign in</a>
-				<a class="a-btn a-btn--ghost" href="#/explore">Take a look around</a>
+				<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
+				<a class="a-btn a-btn--ghost" href="#/explore">{{ t('home.lookAround') }}</a>
 			</div>
 			<dl v-if="instance" class="a-welcome__stats">
-				<div><dt>People</dt><dd>{{ formatCount(instance.stats.user_count) }}</dd></div>
-				<div><dt>Posts</dt><dd>{{ formatCount(instance.stats.status_count) }}</dd></div>
-				<div><dt>Connected to</dt><dd>{{ formatCount(instance.stats.domain_count) }} servers</dd></div>
+				<div><dt>{{ t('rail.people') }}</dt><dd>{{ formatCount(instance.stats.user_count) }}</dd></div>
+				<div><dt>{{ t('rail.posts') }}</dt><dd>{{ formatCount(instance.stats.status_count) }}</dd></div>
+				<div><dt>{{ t('home.connected') }}</dt><dd>{{ t('home.servers', { count: formatCount(instance.stats.domain_count) }) }}</dd></div>
 			</dl>
 		</section>
 
@@ -201,15 +202,15 @@ function refresh(): void {
 				:name="selfName"
 				:size="42"
 			/>
-			<span class="a-inline-compose__placeholder">What's on your mind, {{ selfName.split(' ')[0] }}?</span>
+			<span class="a-inline-compose__placeholder">{{ t('home.composePlaceholder', { name: selfName.split(' ')[0] }) }}</span>
 			<span class="a-inline-compose__tools" aria-hidden="true">
 				<AppIcon name="image" :size="19" />
 				<AppIcon name="info" :size="19" />
-				<span class="a-btn a-btn--primary a-btn--small">Post</span>
+				<span class="a-btn a-btn--primary a-btn--small">{{ t('rail.post') }}</span>
 			</span>
 		</button>
 
-		<div v-if="tabs.length > 0" class="a-tabs" role="tablist" aria-label="Choose feed">
+		<div v-if="tabs.length > 0" class="a-tabs" role="tablist" :aria-label="t('home.chooseFeed')">
 			<button
 				v-for="tab in tabs"
 				:key="tab.id"
@@ -220,7 +221,7 @@ function refresh(): void {
 				:aria-selected="currentTab === (tab.id === 'tags' ? 'followed' : tab.id)"
 				@click="switchTab(tab.id)"
 			>
-				{{ tab.label }}
+				{{ t(tab.labelKey) }}
 			</button>
 		</div>
 
@@ -236,32 +237,32 @@ function refresh(): void {
 				<EmptyState
 					v-if="workerStale && !hasMore"
 					icon="refresh"
-					title="Sync is catching up"
-					text="The background worker has not checked in recently, so federated posts, imports and notifications may be delayed. Local posts still work."
+					:title="t('home.syncTitle')"
+					:text="t('home.syncText')"
 				>
 					<button type="button" class="a-btn a-btn--primary a-btn--small" @click="recheck">
-						Check again
+						{{ t('home.checkAgain') }}
 					</button>
 				</EmptyState>
 				<EmptyState
 					v-else-if="hasMore"
 					icon="filter"
-					title="No posts on this page"
-					text="Some entries may be hidden by your settings or no longer available. Continue below to keep looking."
+					:title="t('home.pageEmptyTitle')"
+					:text="t('home.pageEmptyText')"
 				/>
 				<EmptyState v-else :icon="currentTab === 'followed' ? 'hash' : 'sparkles'" :title="emptyTitle" :text="emptyText">
-					<a v-if="currentTab === 'followed'" class="a-btn a-btn--primary a-btn--small" href="#/explore">Discover hashtags</a>
+					<a v-if="currentTab === 'followed'" class="a-btn a-btn--primary a-btn--small" href="#/explore">{{ t('home.discoverTags') }}</a>
 					<template v-else-if="signedIn">
 						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="compose">
-							Write your first post
+							{{ t('home.writeFirst') }}
 						</button>
 						<a
 							v-if="currentTab === 'home' || currentTab === 'for-you'"
 							class="a-btn a-btn--ghost a-btn--small"
 							href="#/explore"
-						>Discover people</a>
+						>{{ t('home.discoverPeople') }}</a>
 					</template>
-					<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">Join the instance</a>
+					<a v-else class="a-btn a-btn--primary a-btn--small" href="/login">{{ t('home.join') }}</a>
 				</EmptyState>
 			</template>
 		</TimelineFeed>

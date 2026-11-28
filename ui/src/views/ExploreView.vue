@@ -16,6 +16,7 @@ import { getApi, loadErrorMessage } from '../lib/api';
 import { discover, discoveryPeople, loadDiscover, popularTags } from '../lib/discover';
 import { handleLabel, normalizeTag } from '../lib/format';
 import { navigate } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type {
 	Account,
@@ -185,7 +186,7 @@ async function searchRemote(reset: boolean): Promise<void> {
 		if (generation !== remoteGeneration) {
 			return;
 		}
-		remoteError.value = loadErrorMessage(error, 'The search failed.');
+		remoteError.value = loadErrorMessage(error, t('explore.searchFailed'));
 	} finally {
 		if (generation === remoteGeneration) {
 			remoteLoading.value = false;
@@ -231,9 +232,9 @@ function openRemoteAccount(account: Account): void {
 }
 
 function remoteAccountSubtitle(account: Account): string {
-	const network = account.network === 'bluesky' ? 'Bluesky' : 'fediverse';
+	const network = account.network === 'bluesky' ? 'Bluesky' : t('explore.networkFediverse');
 	if (account.followers_count !== null && account.followers_count !== undefined) {
-		return `${network} · ${account.followers_count} followers`;
+		return t('explore.accountSubtitle', { network, count: account.followers_count });
 	}
 
 	return network;
@@ -263,14 +264,14 @@ async function toggleTag(tag: string): Promise<void> {
 		if (isFollowing) {
 			await getApi().unfollowTag(tag);
 			followedTags.value = followedTags.value.filter((entry) => entry.tag !== tag);
-			showToast(`You no longer follow #${tag}.`, 'success');
+			showToast(t('tag.unfollowed', { tag }), 'success');
 		} else {
 			await getApi().followTag(tag);
 			followedTags.value = [{ tag, created_at: new Date().toISOString() }, ...followedTags.value];
-			showToast(`You now follow #${tag}.`, 'success');
+			showToast(t('tag.followed', { tag }), 'success');
 		}
 	} catch (error) {
-		showToast(loadErrorMessage(error, 'The hashtag could not be changed.'), 'error');
+		showToast(loadErrorMessage(error, t('tag.followFailed')), 'error');
 	} finally {
 		tagBusy.value = '';
 	}
@@ -283,36 +284,36 @@ function isFollowingTag(tag: string): boolean {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Explore" subtitle="Search public posts, open profiles from the fediverse and Bluesky, or find hashtags." />
+		<PageHeader :title="t('nav.explore')" :subtitle="t('explore.subtitle')" />
 
 		<form class="a-search" role="search" @submit.prevent="submitSearch">
 			<AppIcon name="search" :size="21" />
 			<input
 				v-model="query"
 				type="search"
-				placeholder="Words, @name@server, bsky.app/profile/…, #Tags …"
-				aria-label="Search public posts or open a profile"
+				:placeholder="t('explore.placeholder')"
+				:aria-label="t('explore.aria')"
 			/>
-			<button v-if="query !== ''" type="button" class="a-icon-btn" aria-label="Clear search" @click="query = ''">
+			<button v-if="query !== ''" type="button" class="a-icon-btn" :aria-label="t('explore.clear')" @click="query = ''">
 				<AppIcon name="x" :size="18" />
 			</button>
-			<button type="submit" class="a-btn a-btn--primary a-btn--small">Search</button>
+			<button type="submit" class="a-btn a-btn--primary a-btn--small">{{ t('common.search') }}</button>
 		</form>
 
 		<p v-if="isHashtagQuery" class="a-search-hint">
 			<AppIcon name="hash" :size="15" />
-			<button type="button" @click="openTag(suggestedTag)">#{{ suggestedTag }} as a hashtag</button>
+			<button type="button" @click="openTag(suggestedTag)">{{ t('explore.asHashtag', { tag: suggestedTag }) }}</button>
 		</p>
 
 		<p v-else-if="looksLikeProfile" class="a-search-hint">
 			<AppIcon name="globe" :size="15" />
-			<button type="button" @click="openProfile">{{ cleanedQuery }} as a profile</button>
+			<button type="button" @click="openProfile">{{ t('explore.asProfile', { query: cleanedQuery }) }}</button>
 		</p>
 
 		<template v-if="cleanedQuery !== ''">
 			<header class="a-section-head">
-				<h2>Search results</h2>
-				<span>{{ results.length }} {{ results.length === 1 ? 'results' : 'results' }}</span>
+				<h2>{{ t('explore.results') }}</h2>
+				<span>{{ t('explore.resultCount', { count: results.length }) }}</span>
 			</header>
 
 			<div v-if="discover.loading && discover.posts.length === 0">
@@ -328,11 +329,11 @@ function isFollowingTag(tag: string): boolean {
 			<EmptyState
 				v-else
 				icon="search"
-				title="Nothing found for this"
-				text="Try another word or open the hashtag directly."
+				:title="t('explore.emptyTitle')"
+				:text="t('explore.emptyText')"
 			>
 				<button v-if="suggestedTag" type="button" class="a-btn a-btn--primary a-btn--small" @click="openTag(suggestedTag)">
-					View #{{ suggestedTag }}
+					{{ t('explore.viewTag', { tag: suggestedTag }) }}
 				</button>
 			</EmptyState>
 
@@ -340,7 +341,7 @@ function isFollowingTag(tag: string): boolean {
 				<header class="a-section-head">
 					<h2>
 						<AppIcon name="globe" :size="16" />
-						Across the network
+						{{ t('explore.acrossNetwork') }}
 					</h2>
 					<button
 						v-if="!remoteOpen"
@@ -348,15 +349,15 @@ function isFollowingTag(tag: string): boolean {
 						class="a-btn a-btn--small"
 						@click="searchRemote(true)"
 					>
-						Search the fediverse &amp; Bluesky
+						{{ t('explore.searchNetwork') }}
 					</button>
-					<span v-else>Profiles and posts outside this instance</span>
+					<span v-else>{{ t('explore.networkHint') }}</span>
 				</header>
 
 				<div v-if="remoteOpen" class="a-remote-search__filters">
-					<div class="a-chip-row" role="group" aria-label="Result type">
+					<div class="a-chip-row" role="group" :aria-label="t('explore.resultType')">
 						<button
-							v-for="option in ([['all', 'All'], ['accounts', 'Profile'], ['posts', 'Posts']] as const)"
+							v-for="option in ([['all', t('common.all')], ['accounts', t('nav.profile')], ['posts', t('rail.posts')]] as const)"
 							:key="option[0]"
 							type="button"
 							class="a-tag-chip"
@@ -366,9 +367,9 @@ function isFollowingTag(tag: string): boolean {
 							{{ option[1] }}
 						</button>
 					</div>
-					<div class="a-chip-row" role="group" aria-label="Network">
+					<div class="a-chip-row" role="group" :aria-label="t('explore.network')">
 						<button
-							v-for="option in ([['all', 'All networks'], ['activitypub', 'fediverse'], ['bluesky', 'Bluesky']] as const)"
+							v-for="option in ([['all', t('explore.networkAll')], ['activitypub', t('explore.networkFediverse')], ['bluesky', 'Bluesky']] as const)"
 							:key="option[0]"
 							type="button"
 							class="a-tag-chip"
@@ -411,8 +412,8 @@ function isFollowingTag(tag: string): boolean {
 					<EmptyState
 						v-if="!remoteLoading && remote.accounts.length === 0 && remote.posts.length === 0"
 						icon="search"
-						title="Nothing found on the network"
-						:text="remote.notes.length > 0 ? remote.notes.join(' ') : 'Try another word or a full address like @name@server.'"
+						:title="t('explore.networkEmptyTitle')"
+						:text="remote.notes.length > 0 ? remote.notes.join(' ') : t('explore.networkEmptyText')"
 					/>
 
 					<p v-for="note in remote.notes" :key="note" class="a-remote-search__note">
@@ -428,9 +429,9 @@ function isFollowingTag(tag: string): boolean {
 							:disabled="remoteLoading"
 							@click="searchRemote(false)"
 						>
-							{{ remoteLoading ? 'Loading…' : 'Load more results' }}
+							{{ remoteLoading ? t('common.loading') : t('explore.loadMore') }}
 						</button>
-						<span v-else-if="remoteLoading">Searching…</span>
+						<span v-else-if="remoteLoading">{{ t('common.searching') }}</span>
 					</div>
 				</template>
 			</section>
@@ -441,9 +442,9 @@ function isFollowingTag(tag: string): boolean {
 				<header class="a-section-head">
 					<h2>
 						<AppIcon name="chart" :size="16" />
-						Trends this week
+						{{ t('explore.trendsTitle') }}
 					</h2>
-					<span>from public posts on this instance</span>
+					<span>{{ t('explore.trendsHint') }}</span>
 				</header>
 
 				<div v-if="trends.tags.length > 0" class="a-tag-cloud">
@@ -474,8 +475,8 @@ function isFollowingTag(tag: string): boolean {
 
 			<section class="a-explore-section">
 				<header class="a-section-head">
-					<h2>Trending</h2>
-					<span>from the most recently loaded posts</span>
+					<h2>{{ t('explore.trending') }}</h2>
+					<span>{{ t('explore.trendingHint') }}</span>
 				</header>
 
 				<div v-if="popularTags.length > 0" class="a-tag-cloud">
@@ -492,13 +493,13 @@ function isFollowingTag(tag: string): boolean {
 						<small>{{ tag.count }}</small>
 					</button>
 				</div>
-				<p v-else-if="!discover.loading" class="a-muted">No hashtags in public posts yet.</p>
+				<p v-else-if="!discover.loading" class="a-muted">{{ t('explore.noTags') }}</p>
 			</section>
 
 			<section v-if="signedIn" class="a-explore-section">
 				<header class="a-section-head">
-					<h2>Your hashtags</h2>
-					<span>{{ followedTags.length }} followed</span>
+					<h2>{{ t('explore.yourTags') }}</h2>
+					<span>{{ t('explore.followedCount', { count: followedTags.length }) }}</span>
 				</header>
 
 				<div v-if="followedTags.length > 0" class="a-chip-row">
@@ -507,20 +508,20 @@ function isFollowingTag(tag: string): boolean {
 						<button
 							type="button"
 							:disabled="tagBusy === entry.tag"
-							aria-label="Unfollow hashtag"
+							:aria-label="t('explore.unfollowTag')"
 							@click="toggleTag(entry.tag)"
 						>
 							<AppIcon name="x" :size="13" />
 						</button>
 					</span>
 				</div>
-				<p v-else class="a-muted">Follow hashtags on their page to collect them here.</p>
+				<p v-else class="a-muted">{{ t('explore.tagsHint') }}</p>
 			</section>
 
 			<section class="a-explore-section">
 				<header class="a-section-head">
-					<h2>People</h2>
-					<span>from this instance</span>
+					<h2>{{ t('explore.people') }}</h2>
+					<span>{{ t('explore.peopleHint') }}</span>
 				</header>
 
 				<ul v-if="discoveryPeople.length > 0" class="a-people a-people--wide">
@@ -535,13 +536,13 @@ function isFollowingTag(tag: string): boolean {
 						<FollowButton :account="accountFor(person.id)" compact />
 					</li>
 				</ul>
-				<p v-else-if="!discover.loading" class="a-muted">As others post, you will discover them here.</p>
+				<p v-else-if="!discover.loading" class="a-muted">{{ t('explore.peopleEmpty') }}</p>
 			</section>
 
 			<section class="a-explore-section">
 				<header class="a-section-head">
-					<h2>Fresh from the network</h2>
-					<span>latest public posts</span>
+					<h2>{{ t('explore.freshTitle') }}</h2>
+					<span>{{ t('explore.freshHint') }}</span>
 				</header>
 
 				<TimelineSkeleton v-if="discover.loading && recent.length === 0" :count="2" />
@@ -553,8 +554,8 @@ function isFollowingTag(tag: string): boolean {
 				<EmptyState
 					v-else
 					icon="globe"
-					title="It's still quiet"
-					text="The public timeline fills up as soon as someone writes the first post."
+					:title="t('explore.quietTitle')"
+					:text="t('explore.quietText')"
 				/>
 				<p v-if="discover.error !== ''" class="a-feed__inline-error" role="alert">{{ discover.error }}</p>
 			</section>
@@ -563,9 +564,9 @@ function isFollowingTag(tag: string): boolean {
 				<header class="a-section-head">
 					<h2>
 						<AppIcon name="play" :size="16" />
-						Videos
+						{{ t('explore.videos') }}
 					</h2>
-					<span>Video from the latest posts</span>
+					<span>{{ t('explore.videosHint') }}</span>
 				</header>
 
 				<ol class="a-feed__list">
