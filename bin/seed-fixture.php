@@ -41,9 +41,9 @@ if (PHP_SAPI !== 'cli') {
     exit(2);
 }
 
-$options = getopt('', ['accounts::', 'posts::', 'follows::', 'likes', 'boosts', 'seed::', 'dry-run', 'help']);
+$options = getopt('', ['accounts::', 'posts::', 'follows::', 'likes', 'boosts', 'bench', 'seed::', 'dry-run', 'help']);
 if (isset($options['help'])) {
-    fwrite(STDOUT, "Usage: php bin/seed-fixture.php [--accounts=N] [--posts=N] [--follows=K] [--likes] [--boosts] [--seed=S] [--dry-run]\n");
+    fwrite(STDOUT, "Usage: php bin/seed-fixture.php [--accounts=N] [--posts=N] [--follows=K] [--likes] [--boosts] [--bench] [--seed=S] [--dry-run]\n");
     exit(0);
 }
 
@@ -52,6 +52,7 @@ $postsWanted = max(0, (int) ($options['posts'] ?? 6));
 $followsWanted = max(0, (int) ($options['follows'] ?? 3));
 $likes = array_key_exists('likes', $options);
 $boosts = array_key_exists('boosts', $options);
+$bench = array_key_exists('bench', $options);
 $seed = (int) ($options['seed'] ?? 187);
 $dryRun = array_key_exists('dry-run', $options);
 
@@ -250,6 +251,27 @@ if ($likes || $boosts) {
         }
     }
     $check('likes', true, sprintf('%d likes, %d boosts', $likeCount, $boostCount));
+}
+
+if ($bench && $realActors !== [] && !$dryRun) {
+    // Reproducible read-path timings: one warmup, then the best of three
+    // runs so scheduler noise does not dominate the number.
+    $viewer = $realActors[0]->id;
+    $queries = [
+        'home' => static fn (): int => count($runtime->app->timelines->home($viewer, 20)),
+        'public' => static fn (): int => count($runtime->app->timelines->public(20)),
+    ];
+    foreach ($queries as $name => $query) {
+        $query();
+        $best = PHP_FLOAT_MAX;
+        $entries = 0;
+        for ($run = 0; $run < 3; ++$run) {
+            $start = microtime(true);
+            $entries = $query();
+            $best = min($best, (microtime(true) - $start) * 1000);
+        }
+        fwrite(STDOUT, sprintf("bench %-6s %8.1f ms  (%d entries)\n", $name, $best, $entries));
+    }
 }
 
 fwrite(STDOUT, sprintf(
