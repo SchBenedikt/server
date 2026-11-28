@@ -72,6 +72,7 @@ final class Migrations
             new Version202611280015InstallationIdentity(),
             new Version202611280016LocalPostRemoteReplyEdge(),
             new Version202611280017RemotePollAudience(),
+            new Version202611280018ScheduledPostPoll(),
         ];
     }
 }
