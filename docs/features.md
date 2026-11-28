@@ -318,6 +318,7 @@ the core deliberately has no administration API.
 | Overview | Account, post, federation, queue, report and storage counters; health checks; worker heartbeat; recent accounts, posts and audit entries. |
 | Accounts | Create accounts, change display names and roles, reset passwords, revoke sessions, disable and re-enable accounts. |
 | Meldungen | Open, resolved and dismissed reports with target preview, reporter, category, assignee and internal note; assign a report to an administrator, reopen a closed case, delete the reported post or disable the reported local account. |
+| Moderation | Apply `silence_actor`, `suspend_actor` or `block_domain` actions with a private note and optional publishable comment; reverse any active action; inspect the full action history; list blocked domains; and import a blocklist (one domain per line, `# comment` suffix) through the mandatory dry-run verdict flow. |
 | Federation | Peer domains, cached remote posts and actors, follower/following totals, active blocks and the most recent remote posts. |
 | Warteschlange | Pending, running and dead jobs with payload inspection, single retry/delete, retry-all, purge of old dead jobs and an immediate worker run. |
 | Instance | Effective identity, versions, feature flags, limits, paths, configuration checks and operator warnings. |
