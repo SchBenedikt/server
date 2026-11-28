@@ -63,6 +63,7 @@ use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountProfileProvider;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Accounts\EmailVerificationService;
 use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
@@ -285,6 +286,13 @@ final class ApplicationFactory
 
         $passwordHasher = new PasswordHasher();
         $mailOutbox = new MailOutbox($database, $mailer, $this->secretBox(), $clock);
+        $emailVerification = new EmailVerificationService(
+            $database,
+            $accounts,
+            $mailOutbox,
+            $clock,
+            $this->config->instanceUrl,
+        );
         $sessions = new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock);
         $interactions = new PostInteractions(
             $app->posts,
@@ -309,7 +317,14 @@ final class ApplicationFactory
                 $clock,
             ),
             directory: $directory,
-            registration: new RegistrationService($this->config, $accounts, $passwordHasher),
+            registration: new RegistrationService(
+                $this->config,
+                $accounts,
+                $passwordHasher,
+                $database,
+                $emailVerification,
+            ),
+            emailVerification: $emailVerification,
             sessions: $sessions,
             throttle: new LoginThrottle($database, $clock),
             passwordHasher: $passwordHasher,

@@ -31,6 +31,7 @@ final readonly class Account
         public string $createdAt,
         public ?string $disabledAt,
         public int $credentialVersion = 1,
+        public ?string $emailVerifiedAt = null,
     ) {
     }
 

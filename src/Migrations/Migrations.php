@@ -75,6 +75,7 @@ final class Migrations
             new Version202611280018ScheduledPostPoll(),
             new Version202611280019StreamEventNotificationId(),
             new Version202611280020MailOutbox(),
+            new Version202611280021EmailVerification(),
         ];
     }
 }

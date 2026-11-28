@@ -35,6 +35,7 @@ final class AccountErasureCoverageTest extends TestCase
         'atproto_oauth_flow',
         'atproto_session',
         'draft',
+        'email_verification',
         'featured_tag',
         'follow_request',
         'kokua',
