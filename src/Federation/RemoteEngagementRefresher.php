@@ -15,11 +15,14 @@ use AlohaSocial\Core\Platform\Db\DatabaseException;
 use AlohaSocial\Core\Support\Time;
 use Throwable;
 
+use function abs;
 use function count;
+use function crc32;
 use function is_string;
 use function max;
 use function min;
 use function str_starts_with;
+use function strtotime;
 use function time;
 use function trim;
 
@@ -203,18 +206,20 @@ final class RemoteEngagementRefresher
         ));
 
         // More candidates than attempts, so a post that is still in backoff
-        // does not starve the rest of the queue.
-        $candidates = min(self::MAX_LIMIT * 3, $remaining + count($this->failedAt));
+        // does not starve the rest of the queue. Rows that turn out fresh
+        // under their age-adaptive TTL are skipped without spending budget,
+        // so the fetch window is wider than the attempt budget.
+        $candidates = min(self::MAX_LIMIT * 4, $remaining + count($this->failedAt) * 2);
         try {
             $rows = $this->db->fetchAll(
-                'SELECT post.object_id FROM social_remote_post post'
+                'SELECT post.object_id, post.published_at, cache.fetched_at FROM social_remote_post post'
                 . ' LEFT JOIN social_remote_engagement cache ON cache.object_id = post.object_id'
                 . " WHERE post.deleted_at IS NULL AND post.kind = 'post'"
                 . ' AND (cache.object_id IS NULL OR cache.fetched_at < :stale)'
                 . " AND (post.object_id LIKE 'http://%'"
                 . " OR post.object_id LIKE 'https://%'"
                 . " OR post.object_id LIKE 'at://%')"
-                . ' ORDER BY post.published_at DESC LIMIT ' . max($remaining, $candidates),
+                . ' ORDER BY post.published_at DESC LIMIT ' . max($remaining * 2, $candidates),
                 ['stale' => $stale],
             );
         } catch (DatabaseException) {
@@ -231,6 +236,17 @@ final class RemoteEngagementRefresher
             if ($objectId === '' || isset($seen[$objectId]) || isset($this->failedAt[$objectId])) {
                 continue;
             }
+
+            // Counters on older posts move slower, so they earn a longer TTL;
+            // a deterministic per-object jitter keeps a cohort of posts that
+            // were fetched together from expiring in the same tick.
+            $fetchedAt = is_string($row['fetched_at'] ?? null) ? strtotime($row['fetched_at']) : false;
+            if ($fetchedAt !== false
+                && $now - $fetchedAt < $this->effectiveTtlSeconds($objectId, $row['published_at'] ?? null)
+            ) {
+                continue;
+            }
+
             $seen[$objectId] = true;
             $attempts++;
 
@@ -240,5 +256,25 @@ final class RemoteEngagementRefresher
         }
 
         return $refreshed;
+    }
+
+    /**
+     * The freshness window for one post: the base TTL scaled by how old the
+     * post is, plus a stable per-object jitter so refreshes do not herd.
+     */
+    private function effectiveTtlSeconds(string $objectId, mixed $publishedAt): int
+    {
+        $base = $this->engagement->ttlSeconds();
+        $published = is_string($publishedAt) ? strtotime($publishedAt) : false;
+        $ageDays = $published === false ? 0.0 : max(0.0, (time() - $published) / 86400);
+
+        $factor = match (true) {
+            $ageDays < 7 => 1,
+            $ageDays < 30 => 2,
+            $ageDays < 180 => 4,
+            default => 8,
+        };
+
+        return $base * $factor + (abs(crc32($objectId)) % 300);
     }
 }
