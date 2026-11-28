@@ -219,6 +219,59 @@ describe('scheduled posts', () => {
 	});
 });
 
+describe('postDelivery', () => {
+	function deliveryBridge(body: unknown) {
+		return {
+			apiBase: '/api/v1',
+			currentUser: async () => null,
+			request: async (): Promise<UiResponse> => ({
+				status: 200,
+				headers: {},
+				body: JSON.stringify(body),
+			}),
+			loginUrl: (returnTo: string) => `/login?next=${encodeURIComponent(returnTo)}`,
+			logout: async () => {},
+			navigate: () => {},
+			capabilities: () => ({ media: false, atproto: false }),
+		} as unknown as HostBridge;
+	}
+
+	it('normalizes counts and per-instance rows', async () => {
+		const api = createApi(deliveryBridge({
+			delivery: {
+				delivered: 3,
+				sending: 1,
+				waiting: 2,
+				failing: 0,
+				abandoned: 1,
+				total: 7,
+				instances: [
+					{ host: 'peer.example', state: 'failing', tries: 4, last: '2026-11-28 10:00:00' },
+					{ host: 'broken', state: 42 },
+				],
+			},
+		}), async () => {
+			throw new Error('unused');
+		});
+
+		const delivery = await api.postDelivery('post-1');
+		expect(delivery).not.toBeNull();
+		expect(delivery?.delivered).toBe(3);
+		expect(delivery?.total).toBe(7);
+		expect(delivery?.instances).toEqual([
+			{ host: 'peer.example', state: 'failing', tries: 4, last: '2026-11-28 10:00:00' },
+		]);
+	});
+
+	it('returns null when the payload has no delivery object', async () => {
+		const api = createApi(deliveryBridge({ ok: true }), async () => {
+			throw new Error('unused');
+		});
+
+		expect(await api.postDelivery('post-1')).toBeNull();
+	});
+});
+
 describe('network failures', () => {
 	it('reports a dropped connection as a friendly error and flags offline', async () => {
 		const { bridge } = (() => {

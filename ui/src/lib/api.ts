@@ -54,6 +54,7 @@ import type {
 	StarterPackMember,
 	PostRevisionData,
 	PostSource,
+	PostDelivery,
 	Draft,
 	ArchivedPost,
 	ForYouData,
@@ -373,6 +374,7 @@ export interface Api {
 	withdrawKokuaHelp(id: string): Promise<KokuaEntry>;
 	postRevisions(id: string): Promise<PostRevisionData>;
 	postSource(id: string): Promise<PostSource>;
+	postDelivery(id: string): Promise<PostDelivery | null>;
 	deleteAccount(): Promise<{ state: string }>;
 	accountMove(): Promise<AccountMoveStatus | null>;
 	startAccountMove(targetActorId: string): Promise<AccountMoveStatus>;
@@ -3173,6 +3175,45 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				id: typeof data.id === 'string' ? data.id : id,
 				text: data.text,
 				spoiler_text: typeof data.spoiler_text === 'string' ? data.spoiler_text : null,
+			};
+		},
+
+		async postDelivery(id: string): Promise<PostDelivery | null> {
+			const data = await request<{ delivery?: unknown }>(
+				'GET',
+				`/api/v1/posts/${encodeURIComponent(id)}/delivery`,
+			);
+			const delivery = data?.delivery;
+			if (typeof delivery !== 'object' || delivery === null || !Array.isArray((delivery as PostDelivery).instances)) {
+				return null;
+			}
+
+			const raw = delivery as Record<string, unknown>;
+			const count = (key: string): number => (typeof raw[key] === 'number' ? raw[key] as number : 0);
+
+			return {
+				delivered: count('delivered'),
+				sending: count('sending'),
+				waiting: count('waiting'),
+				failing: count('failing'),
+				abandoned: count('abandoned'),
+				total: count('total'),
+				instances: (raw.instances as unknown[]).flatMap((entry) => {
+					if (typeof entry !== 'object' || entry === null) {
+						return [];
+					}
+					const instance = entry as Record<string, unknown>;
+					if (typeof instance.host !== 'string' || typeof instance.state !== 'string') {
+						return [];
+					}
+
+					return [{
+						host: instance.host,
+						state: instance.state,
+						tries: typeof instance.tries === 'number' ? instance.tries : 0,
+						last: typeof instance.last === 'string' ? instance.last : '',
+					}];
+				}),
 			};
 		},
 
