@@ -51,6 +51,7 @@ final class MigrationTest extends TestCase
             'social_account_deletion',
             'social_pds_identity',
             'social_remote_reply',
+            'social_remote_object_tombstone',
             'atproto_session',
             'mastodon_oauth_app',
             'mastodon_oauth_code',

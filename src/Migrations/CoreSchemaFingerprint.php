@@ -49,6 +49,7 @@ final class CoreSchemaFingerprint
                 \AlohaSocial\Core\Domain\Federation\InboundBlockSchema::class,
                 \AlohaSocial\Core\Domain\Atproto\AtprotoInteractionSchema::class,
                 \AlohaSocial\Core\Domain\Conversation\ConversationMarkerSchema::class,
+                \AlohaSocial\Core\Domain\Federation\RemoteObjectTombstoneSchema::class,
             ],
         );
 

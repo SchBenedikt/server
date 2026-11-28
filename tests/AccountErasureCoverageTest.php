@@ -92,6 +92,7 @@ final class AccountErasureCoverageTest extends TestCase
         'social_remote_poll' => 'cached remote polls are peer data',
         'social_remote_post' => 'cached remote posts are peer data',
         'social_remote_post_attachment' => 'cached remote attachments are peer data',
+        'social_remote_object_tombstone' => 'deletion markers for remote objects are peer data',
         'social_remote_reply' => 'cached remote replies are peer data',
         'social_remote_thread_post' => 'cached remote thread posts are peer data',
         'social_search_trend' => 'aggregate trend counters',
