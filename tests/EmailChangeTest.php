@@ -216,4 +216,38 @@ final class EmailChangeTest extends TestCase
         ]);
         self::assertSame(401, $response->status, $response->body);
     }
+
+    public function testStatusReportsThePendingChangeAndCancelClearsIt(): void
+    {
+        $server = $this->server();
+        $server->createAccount();
+        $auth = $server->signIn();
+
+        $empty = $server->send('GET', '/api/v1/host/email-change', ['cookies' => $auth['cookies']]);
+        self::assertSame(200, $empty->status, $empty->body);
+        $status = json_decode($empty->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('alice@example.test', $status['email']);
+        self::assertNull($status['pending']);
+
+        $requested = $server->json('POST', '/api/v1/host/email-change', [
+            'email' => 'alice.new@example.test',
+            'password' => TestServer::PASSWORD,
+        ], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $requested->status, $requested->body);
+
+        $pending = $server->send('GET', '/api/v1/host/email-change', ['cookies' => $auth['cookies']]);
+        $status = json_decode($pending->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('alice.new@example.test', $status['pending']['email']);
+        self::assertNotSame('', $status['pending']['expires_at']);
+
+        $cancelled = $server->json('DELETE', '/api/v1/host/email-change', [], $auth['cookies'], $auth['csrf']);
+        self::assertSame(200, $cancelled->status, $cancelled->body);
+
+        $after = $server->send('GET', '/api/v1/host/email-change', ['cookies' => $auth['cookies']]);
+        self::assertNull(json_decode($after->body, true, 512, JSON_THROW_ON_ERROR)['pending']);
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM email_change',
+        ));
+        self::assertSame('alice@example.test', $server->runtime->accounts->find('alice')?->email);
+    }
 }

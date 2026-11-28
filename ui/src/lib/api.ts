@@ -167,6 +167,16 @@ export interface MfaEnrollment {
 	otpauth_uri: string;
 }
 
+export interface EmailChangePending {
+	email: string;
+	expires_at: string;
+}
+
+export interface EmailChangeStatus {
+	email: string;
+	pending: EmailChangePending | null;
+}
+
 export interface PushSubscriptionInfo {
 	id: string;
 	endpoint: string;
@@ -276,6 +286,9 @@ export interface Api {
 	mfaBegin(): Promise<MfaEnrollment>;
 	mfaConfirm(code: string): Promise<{ recovery_codes: string[] }>;
 	mfaDisable(code: string): Promise<void>;
+	emailChangeStatus(): Promise<EmailChangeStatus>;
+	requestEmailChange(email: string, password: string): Promise<{ pending_email: string }>;
+	cancelEmailChange(): Promise<void>;
 	pushVapidKey(): Promise<string>;
 	pushSubscriptions(): Promise<PushSubscriptionInfo[]>;
 	subscribePush(endpoint: string, keys: { p256dh: string; auth: string }): Promise<PushSubscriptionInfo>;
@@ -3235,6 +3248,29 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 		async mfaDisable(code: string): Promise<void> {
 			await request<unknown>('POST', '/api/v1/host/mfa/totp/disable', undefined, { code });
+		},
+
+		async emailChangeStatus(): Promise<EmailChangeStatus> {
+			const data = await request<{ email?: unknown; pending?: unknown }>('GET', '/api/v1/host/email-change');
+			const pending = isRecord(data?.pending) && typeof data.pending.email === 'string'
+				? {
+					email: data.pending.email,
+					expires_at: typeof data.pending.expires_at === 'string' ? data.pending.expires_at : '',
+				}
+				: null;
+			return {
+				email: typeof data?.email === 'string' ? data.email : '',
+				pending,
+			};
+		},
+
+		async requestEmailChange(email: string, password: string): Promise<{ pending_email: string }> {
+			const data = await request<{ pending_email?: unknown }>('POST', '/api/v1/host/email-change', undefined, { email, password });
+			return { pending_email: typeof data?.pending_email === 'string' ? data.pending_email : email };
+		},
+
+		async cancelEmailChange(): Promise<void> {
+			await request<unknown>('DELETE', '/api/v1/host/email-change');
 		},
 
 		async pushVapidKey(): Promise<string> {
