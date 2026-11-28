@@ -111,6 +111,7 @@ final readonly class AccountErasureCleanup
                 $user,
             );
             $delete('atproto_sessions', 'DELETE FROM atproto_session WHERE account_id = :account_id', $user);
+            $delete('push_subscriptions', 'DELETE FROM push_subscription WHERE account_id = :account_id', $user);
             $delete(
                 'linked_bluesky_credentials',
                 'DELETE FROM atproto_account WHERE account_id = :account_id',

@@ -99,6 +99,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Http\RateLimiter;
 use AlohaSocial\Server\Http\View;
+use AlohaSocial\Server\Push\PushService;
 use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
@@ -382,6 +383,7 @@ final class ApplicationFactory
                 $instancePages,
             ),
             instancePages: $instancePages,
+            pushSubscriptions: new PushService($database, $clock, $this->secretBox()),
             announcements: new Announcements($database, $clock),
             featuredTags: new FeaturedTags($database, $clock),
             trends: new Trends($database, $clock),
