@@ -234,6 +234,25 @@ database file against the manifest (read-only; S3 objects are reported as
 unchecked). The backup directory lives inside `var/`, so move it to a
 second disk or copy it off-host as part of your normal backup job.
 
+### Encrypted off-host export
+
+`bin/export.php` bundles the newest backup set, its manifest, the secret key
+and every local media blob into one encrypted file (XChaCha20-Poly1305
+secretstream, Argon2id key derivation):
+
+```shell
+export ALOHASOCIAL_EXPORT_PASSPHRASE='a long random passphrase'
+php bin/export.php --output=/mnt/offhost/instance-$(date +%F).alohasocial-export
+php bin/export.php --decrypt=instance-….alohasocial-export --output=/srv/restore-staging
+```
+
+The passphrase may also come from `--passphrase-file`; never put it in argv.
+Store the passphrase separately from the export — together they are the whole
+instance. Decryption writes the bundle contents (`backup/…`, `blobs/…`,
+`secret.key`) into the target directory for a restore rehearsal; it does not
+touch the running instance. Remote (S3) media is not included in the bundle —
+copy the bucket separately.
+
 The key and the database belong together: the instance signing key in the
 database is sealed with the secret key. Restoring one without the other leaves
 the instance unable to use its federation identity.
