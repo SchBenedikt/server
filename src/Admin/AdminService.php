@@ -1242,24 +1242,75 @@ final class AdminService
     private static function parseDomainBlockCsv(string $content): array
     {
         $entries = [];
+        $lines = preg_split('/\r\n|\r|\n/', $content) ?: [];
+        $columns = null;
         $first = true;
-        foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+        foreach ($lines as $line) {
             if (trim($line) === '') {
                 continue;
             }
             $cells = str_getcsv($line, ',', '"', '');
             if ($first) {
                 $first = false;
-                if (strtolower(trim((string) ($cells[0] ?? ''))) === 'domain') {
+                $header = array_map(
+                    static fn (string $cell): string => strtolower(trim($cell)),
+                    array_map('strval', $cells),
+                );
+                // Mastodon-style exports name their columns (`#domain`,
+                // `#severity`, `#public_comment`, …); a bare `domain` header
+                // keeps the historic domain,comment layout.
+                if (in_array($header[0] ?? '', ['#domain', 'domain', 'host', 'hostname'], true)) {
+                    $columns = [
+                        'domain' => self::csvColumnIndex($header, ['#domain', 'domain', 'host', 'hostname']),
+                        'severity' => self::csvColumnIndex($header, ['#severity', 'severity']),
+                        'comment' => self::csvColumnIndex($header, ['#public_comment', 'public_comment', '#comment', 'comment']),
+                    ];
+                    if ($columns['domain'] === null) {
+                        $columns = null;
+                    }
+                }
+                if ($columns !== null) {
                     continue;
                 }
             }
+
+            if ($columns !== null) {
+                $domain = trim((string) ($cells[$columns['domain']] ?? ''));
+                $comment = $columns['comment'] === null ? '' : trim((string) ($cells[$columns['comment']] ?? ''));
+                $severity = $columns['severity'] === null ? '' : trim((string) ($cells[$columns['severity']] ?? ''));
+                $row = ['domain' => $domain];
+                if ($comment !== '') {
+                    $row['comment'] = $comment;
+                }
+                if ($severity !== '') {
+                    $row['severity'] = $severity;
+                }
+                $entries[] = $row;
+
+                continue;
+            }
+
             $domain = trim((string) ($cells[0] ?? ''));
             $comment = trim((string) ($cells[1] ?? ''));
             $entries[] = $comment === '' ? $domain : ['domain' => $domain, 'comment' => $comment];
         }
 
         return $entries;
+    }
+
+    /**
+     * @param list<string> $header
+     * @param list<string> $names
+     */
+    private static function csvColumnIndex(array $header, array $names): ?int
+    {
+        foreach ($header as $index => $name) {
+            if (in_array($name, $names, true)) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -1300,8 +1351,26 @@ final class AdminService
         $verdicts = [];
         foreach ($entries as $entry) {
             $raw = is_array($entry) ? ($entry['domain'] ?? null) : $entry;
-            $comment = is_array($entry) ? ($entry['comment'] ?? null) : null;
+            $comment = is_array($entry) ? ($entry['comment'] ?? $entry['public_comment'] ?? null) : null;
+            $severity = is_array($entry) && isset($entry['severity']) && is_scalar($entry['severity'])
+                ? strtolower(trim((string) $entry['severity']))
+                : '';
             $verdict = ['input' => is_scalar($raw) ? (string) $raw : '', 'status' => 'invalid', 'domain' => null];
+
+            // Mastodon-style lists carry a severity per row: `noop` rows ask
+            // for nothing and `silence` needs a domain-level silence the core
+            // does not model — reporting either as invalid would mislead.
+            if ($severity === 'noop') {
+                $verdict['status'] = 'noop';
+                $verdicts[] = $verdict;
+
+                continue;
+            }
+            if ($severity !== '' && $severity !== 'suspend' && $severity !== 'silence') {
+                $verdicts[] = $verdict;
+
+                continue;
+            }
 
             try {
                 $domain = $this->normalizeDomain(is_scalar($raw) ? (string) $raw : '');
@@ -1316,7 +1385,9 @@ final class AdminService
             }
 
             $verdict['domain'] = $domain;
-            if (isset($seen[$domain])) {
+            if ($severity === 'silence') {
+                $verdict['status'] = 'unsupported';
+            } elseif (isset($seen[$domain])) {
                 $verdict['status'] = 'duplicate';
             } elseif ($this->domainBlockActive($domain)) {
                 $verdict['status'] = 'already_blocked';
@@ -1328,7 +1399,7 @@ final class AdminService
             $verdicts[] = $verdict;
         }
 
-        $counts = ['new' => 0, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0];
+        $counts = ['new' => 0, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0, 'noop' => 0, 'unsupported' => 0];
         foreach ($verdicts as $verdict) {
             ++$counts[$verdict['status']];
         }

@@ -357,7 +357,12 @@ written until the caller repeats the request with `apply: true`. Entries may
 be bare domains or `{domain, comment}` objects; alternatively `content` plus
 `format` (`lines`, `csv` with an optional `domain,comment` header, or `json`)
 carries a whole file — the admin console's Upload file control uses this.
-Invalid, duplicate and already-blocked domains are reported rather than
+Mastodon-style lists work too: CSV exports with named `#domain`/`#severity`/
+`#public_comment` columns and JSON rows carrying `severity`/`public_comment`
+are understood. `suspend` rows apply as domain blocks, `noop` rows are
+reported as skipped, and `silence` rows come back `unsupported` because the
+core has no domain-level silence — they are never silently upgraded to a
+block. Invalid, duplicate and already-blocked domains are reported rather than
 skipped silently. Setting
 `ALOHASOCIAL_PUBLISH_DOMAIN_BLOCKS=true` (or the matching admin toggle)
 exposes the list at `GET /api/v1/instance/domain_blocks` for Mastodon
