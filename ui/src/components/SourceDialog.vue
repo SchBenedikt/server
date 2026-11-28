@@ -39,7 +39,7 @@ watch(() => props.open, async (open) => {
 		source.value = sourceResult;
 		delivery.value = deliveryResult;
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The post source could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('srcdlg.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -60,15 +60,15 @@ function close(): void {
 			<article class="a-management-dialog a-revision-dialog" role="dialog" aria-modal="true" aria-labelledby="a-source-title">
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Post</p>
-						<h2 id="a-source-title">Source</h2>
+						<p class="a-profile-edit__eyebrow">{{ t('post.title') }}</p>
+						<h2 id="a-source-title">{{ t('srcdlg.title') }}</h2>
 					</div>
 					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" @click="close">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
-				<p v-if="loading" class="a-muted">Loading source…</p>
+				<p v-if="loading" class="a-muted">{{ t('srcdlg.loading') }}</p>
 				<p v-else-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 
 				<template v-else-if="source !== null">

@@ -6,7 +6,8 @@
 import { onMounted, ref } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { getApi } from '../lib/api';
-import { relativeTime } from '../lib/format';
+import { absoluteTime, relativeTime } from '../lib/format';
+import { t } from '../lib/i18n';
 import { appState } from '../lib/state';
 import type { Announcement } from '../lib/types';
 
@@ -73,7 +74,7 @@ onMounted(async () => {
 </script>
 
 <template>
-	<section v-if="announcements.some((entry) => !dismissed.has(entry.id))" class="a-announcements" aria-label="Announcements">
+	<section v-if="announcements.some((entry) => !dismissed.has(entry.id))" class="a-announcements" :aria-label="t('announce.aria')">
 		<article
 			v-for="entry in announcements.filter((item) => !dismissed.has(item.id))"
 			:key="entry.id"
@@ -85,15 +86,15 @@ onMounted(async () => {
 			<div class="a-announcement__copy">
 				<p>{{ entry.content }}</p>
 				<small>
-					instance-announcement · {{ relativeTime(entry.created_at) }}
-					<template v-if="entry.expires_at"> · until {{ new Date(entry.expires_at).toLocaleString() }}</template>
+					{{ t('announce.source') }} · {{ relativeTime(entry.created_at) }}
+					<template v-if="entry.expires_at"> · {{ t('announce.until', { time: absoluteTime(entry.expires_at) }) }}</template>
 				</small>
 			</div>
 			<button
 				type="button"
 				class="a-icon-btn"
-				aria-label="Hide announcement"
-				title="Hide"
+				:aria-label="t('announce.hide')"
+				:title="t('common.hide')"
 				@click="dismiss(entry.id)"
 			>
 				<AppIcon name="x" :size="16" />
