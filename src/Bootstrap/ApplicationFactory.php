@@ -107,6 +107,7 @@ use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
+use AlohaSocial\Server\Setup\FederationPreflight;
 use AlohaSocial\Server\Setup\SetupService;
 use AlohaSocial\Server\Support\Metrics;
 use AlohaSocial\Server\Support\RuntimeLogger;
@@ -439,6 +440,13 @@ final class ApplicationFactory
                 $clock,
             ),
             blueskyAccounts: $blueskyAccounts,
+            preflight: new FederationPreflight(
+                $this->config,
+                $database,
+                $httpClient,
+                $clock,
+                new MigrationRunner($database, $clock, Migrations::all()),
+            ),
             atprotoOAuth: new AtprotoOAuthService($database, $httpClient, $this->secretBox(), $clock, $targetGuard, $blueskyAccounts, $this->config),
             pds: $app->pds,
             pdsRepository: $pdsRepository,
