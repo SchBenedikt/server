@@ -6695,3 +6695,38 @@ dialog.a-modal::backdrop {
 .a-settings__session .a-btn {
 	margin-left: auto;
 }
+
+/* Compact density (#169/#173): tighter cards so more posts fit per screen.
+   Applied via <html data-density="compact"> from the ui_density preference. */
+html[data-density='compact'] .a-post {
+	padding: 10px 14px;
+	border-radius: 14px;
+}
+
+html[data-density='compact'] .a-post__header {
+	gap: 8px;
+}
+
+html[data-density='compact'] .a-post__meta {
+	font-size: 11px;
+}
+
+html[data-density='compact'] .a-post__content,
+html[data-density='compact'] .a-rich-text {
+	margin-top: 6px !important;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+html[data-density='compact'] .a-post__actions {
+	margin-top: 7px;
+	padding-top: 5px;
+}
+
+html[data-density='compact'] .a-post__action {
+	height: 28px;
+}
+
+html[data-density='compact'] .a-feed__list {
+	gap: 8px;
+}

@@ -170,6 +170,39 @@ final class PreferencesTest extends TestCase
         }
     }
 
+    public function testUiDensityPersistsAndValidates(): void
+    {
+        $initial = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertNull($initial['ui_density']);
+
+        $updated = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'ui_density' => 'compact',
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $updated->status);
+        self::assertSame('compact', $this->decoded($updated)['preferences']['ui_density']);
+
+        $reloaded = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertSame('compact', $reloaded['ui_density']);
+
+        // NULL resets to the comfortable default.
+        $reset = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'ui_density' => null,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $reset->status);
+        self::assertNull($this->decoded($reset)['preferences']['ui_density']);
+
+        foreach (['dense', 'COMPACT', 42] as $bad) {
+            $invalid = $this->server->json('PATCH', '/api/v1/host/preferences', [
+                'ui_density' => $bad,
+            ], $this->aliceCookies, $this->aliceCsrf);
+            self::assertSame(422, $invalid->status, 'ui_density ' . var_export($bad, true));
+        }
+    }
+
     public function testOnboardingDismissalPersistsPerAccount(): void
     {
         $initial = $this->decoded(

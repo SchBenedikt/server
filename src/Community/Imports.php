@@ -133,6 +133,7 @@ final class Imports
         'notify_favourites',
         'notify_boosts',
         'notify_mentions',
+        'ui_density',
     ];
 
     private readonly FollowedHashtagService $hashtags;
