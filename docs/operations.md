@@ -300,6 +300,16 @@ worker never migrate on boot — they refuse to serve while `schema_migration`
 lags `Migrations::all()`, so an upgrade in progress is visible via
 `php bin/doctor.php` rather than half-applied state.
 
+`bin/update.php` also runs preflight checks before the safety backup:
+warnings for a missing/invalid secret key on populated installs, an
+unwritable blob directory or low disk space; an unwritable data directory
+stops the run. Each applied `schema_migration` row records the Core
+version and commit reference that ran it (`core_version`,
+`core_reference`; NULL for rows applied before provenance tracking), so a
+post-upgrade `SELECT version, core_version, core_reference FROM
+schema_migration ORDER BY version DESC LIMIT 5` shows exactly which build
+produced the current schema.
+
 ### Core release upgrade and rollback
 
 For a tagged Core release, select **Release** and the exact Core version in

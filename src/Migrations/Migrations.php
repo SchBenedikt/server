@@ -77,6 +77,7 @@ final class Migrations
             new Version202611280020MailOutbox(),
             new Version202611280021EmailVerification(),
             new Version202611280022EmailChange(),
+            new Version202611280023SchemaMigrationProvenance(),
         ];
     }
 }

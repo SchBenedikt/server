@@ -427,6 +427,18 @@ final class MigrationTest extends TestCase
         $runner->migrate();
     }
 
+    public function testAppliedMigrationsRecordCoreProvenance(): void
+    {
+        $server = new TestServer();
+
+        $row = $server->runtime->database->fetchOne(
+            'SELECT core_version, core_reference FROM schema_migration WHERE version = :version',
+            ['version' => '202611280023'],
+        );
+        self::assertNotNull($row);
+        self::assertNotSame('', (string) $row['core_version']);
+    }
+
     public function testASecondMigratorFailsWhileAnotherHoldsTheWriteLock(): void
     {
         $server = new TestServer();
