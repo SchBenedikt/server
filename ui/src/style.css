@@ -4822,6 +4822,27 @@ dialog.a-modal::backdrop {
 	border-top: 1px solid var(--a-border);
 }
 
+.a-management-inline-form textarea {
+	resize: vertical;
+}
+
+.a-scheduled-edit__poll {
+	display: grid;
+	gap: 8px;
+	padding: 8px 0;
+}
+
+.a-scheduled-edit__poll-option {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.a-scheduled-edit__poll-option input {
+	flex: 1;
+	min-width: 0;
+}
+
 .a-management-dialog {
 	display: grid;
 	width: min(430px, 100%);

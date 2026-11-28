@@ -349,6 +349,14 @@ export interface FilterPayload {
 	expires_at?: string | null;
 }
 
+export interface ScheduledPostPoll {
+	options: string[];
+	multiple: boolean;
+	hide_totals: boolean;
+	expires_in: number | null;
+	expires_at: string | null;
+}
+
 export interface ScheduledPost {
 	id: string;
 	author_id: string;
@@ -360,10 +368,19 @@ export interface ScheduledPost {
 	in_reply_to_id: string | null;
 	scheduled_at: string;
 	language?: string | null;
+	poll?: ScheduledPostPoll | null;
 	created_at: string;
 	state: 'scheduled' | 'published' | 'failed' | 'cancelled';
 	published_at: string | null;
 	failure_reason: string | null;
+}
+
+export interface ScheduledPostUpdate {
+	content?: string;
+	content_warning?: string | null;
+	language?: string | null;
+	scheduled_at?: string;
+	poll?: ScheduledPostPoll | null;
 }
 
 export interface ScheduledPostPayload {
@@ -375,6 +392,12 @@ export interface ScheduledPostPayload {
 	in_reply_to_id?: string | null;
 	scheduled_at: string;
 	language?: string | null;
+	poll?: {
+		options: string[];
+		multiple?: boolean;
+		hide_totals?: boolean;
+		expires_in?: number;
+	} | null;
 }
 
 export interface BlockEntry {
