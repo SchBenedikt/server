@@ -1757,6 +1757,31 @@ button.a-nav__item {
 	height: 1px;
 }
 
+.a-feed__new {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 auto 12px;
+	padding: 7px 14px;
+	border: 1px solid var(--a-border);
+	border-radius: 999px;
+	background: var(--a-surface);
+	color: var(--a-accent, #2457a6);
+	font-size: 12.5px;
+	font-weight: 600;
+	cursor: pointer;
+	box-shadow: 0 2px 10px rgb(0 0 0 / 8%);
+}
+
+.a-feed__new:hover {
+	border-color: var(--a-accent, #2457a6);
+}
+
+.a-feed__new:focus-visible {
+	outline: 2px solid var(--a-focus, #2457a6);
+	outline-offset: 2px;
+}
+
 .a-feed__interests {
 	display: flex;
 	flex-wrap: wrap;

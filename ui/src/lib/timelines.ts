@@ -49,6 +49,7 @@ function messageFor(error: unknown): string {
 
 export function useTimeline(source: () => TimelineSource) {
 	const posts = ref<TimelineItem[]>([]);
+	const pendingNew = ref<TimelineItem[]>([]);
 	const loading = ref(false);
 	const loadingMore = ref(false);
 	const error = ref('');
@@ -213,6 +214,16 @@ export function useTimeline(source: () => TimelineSource) {
 		void load(true);
 	}
 
+	function showNewPosts(): void {
+		const fresh = pendingNew.value
+			.filter((post) => !posts.value.some((item) => item.id === post.id))
+			.sort((a, b) => b.published_at.localeCompare(a.published_at));
+		pendingNew.value = [];
+		if (fresh.length > 0) {
+			posts.value = [...fresh, ...posts.value];
+		}
+	}
+
 	function loadMore(): void {
 		if (!loading.value && !loadingMore.value && hasMore.value) {
 			void load(false);
@@ -220,17 +231,19 @@ export function useTimeline(source: () => TimelineSource) {
 	}
 
 	const stopCreated = onPostCreated((post, live) => {
-		if (posts.value.some((item) => item.id === post.id)) {
+		if (posts.value.some((item) => item.id === post.id)
+			|| pendingNew.value.some((item) => item.id === post.id)) {
 			return;
 		}
 
 		const current = source();
 		if (live) {
 			// A polled post is already filtered by the server for this viewer.
-			// Put it on top of a chronological feed instead of reloading the
-			// first page, which would throw away the pages already scrolled.
+			// Buffer it behind a "new posts" pill instead of prepending: an
+			// insertion above the reader's scroll position would shove the
+			// whole feed down while they are reading.
 			if ((current.kind === 'home' || current.kind === 'public' || current.kind === 'federated') && include(post)) {
-				posts.value = [post, ...posts.value];
+				pendingNew.value = [...pendingNew.value, post];
 			}
 
 			return;
@@ -294,6 +307,7 @@ export function useTimeline(source: () => TimelineSource) {
 
 	watch(key, () => {
 		posts.value = [];
+		pendingNew.value = [];
 		cursor = null;
 		hasMore.value = true;
 		loaded.value = false;
@@ -310,6 +324,7 @@ export function useTimeline(source: () => TimelineSource) {
 
 	return {
 		posts,
+		pendingNew,
 		loading,
 		loadingMore,
 		error,
@@ -318,5 +333,6 @@ export function useTimeline(source: () => TimelineSource) {
 		interests,
 		refresh,
 		loadMore,
+		showNewPosts,
 	};
 }
