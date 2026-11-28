@@ -69,6 +69,7 @@ final class AccountErasureCoverageTest extends TestCase
         'mastodon_oauth_app' => 'registered OAuth clients are instance configuration',
         'moderation_report' => 'moderation accountability record',
         'rate_limit' => 'ephemeral per-bucket counters',
+        'remote_engagement_request' => 'transient refresh hints keyed by remote object id',
         'runtime_error' => 'operations log',
         'runtime_state' => 'instance runtime state',
         'schema_migration' => 'migration bookkeeping',
