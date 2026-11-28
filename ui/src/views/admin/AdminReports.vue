@@ -14,6 +14,7 @@ import {
 	type ReportList,
 } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
+import { t } from '../../lib/i18n';
 import { appState, showToast } from '../../lib/state';
 
 type FilterState = 'open' | 'resolved' | 'dismissed' | 'all';
@@ -44,10 +45,10 @@ async function assign(report: AdminReport): Promise<void> {
 	busy.value = 'assign';
 	try {
 		await getAdminApi().assignReport(report.id, report.assigned_to === myId.value ? null : myId.value);
-		showToast('Report assignment updated.', 'success');
+		showToast(t('arep.assignUpdated'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The report could not be assigned.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('arep.assignFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -60,28 +61,26 @@ async function reopen(report: AdminReport): Promise<void> {
 	busy.value = 'reopen';
 	try {
 		await getAdminApi().reopenReport(report.id);
-		showToast('Report reopened.', 'success');
+		showToast(t('arep.reopened'), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The report could not be reopened.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('arep.reopenFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
 }
 
-const filters: { id: FilterState; label: string }[] = [
-	{ id: 'open', label: 'Open' },
-	{ id: 'resolved', label: 'Resolved' },
-	{ id: 'dismissed', label: 'Dismissed' },
-	{ id: 'all', label: 'All' },
+const filters: { id: FilterState; labelKey: string }[] = [
+	{ id: 'open', labelKey: 'arep.filter.open' },
+	{ id: 'resolved', labelKey: 'arep.filter.resolved' },
+	{ id: 'dismissed', labelKey: 'arep.filter.dismissed' },
+	{ id: 'all', labelKey: 'arep.filter.all' },
 ];
 
 const reports = computed(() => data.value?.reports ?? []);
 const counts = computed(() => data.value?.counts ?? { open: 0, resolved: 0, dismissed: 0 });
 
-const resolveTitle = computed(() => (
-	resolveState.value === 'resolved' ? 'Resolve report' : 'Dismiss report'
-));
+const resolveTitle = computed(() => t(resolveState.value === 'resolved' ? 'arep.resolveTitle' : 'arep.dismissTitle'));
 
 const confirmCopy = computed(() => {
 	const report = confirmTarget.value;
@@ -91,16 +90,16 @@ const confirmCopy = computed(() => {
 
 	if (confirmKind.value === 'post') {
 		return {
-			title: 'Delete reported post',
-			message: 'The post is removed and — for a local post — a federated delete is queued. This cannot be undone.',
-			label: 'Delete post',
+			title: t('arep.confirmDeleteTitle'),
+			message: t('arep.confirmDeleteMessage'),
+			label: t('arep.confirmDeleteLabel'),
 		};
 	}
 
 	return {
-		title: 'Deactivate reported account',
-		message: `The local account @${report.target.id} will no longer be able to sign in. Posts are kept and the deactivation can be reversed.`,
-		label: 'account deactivate',
+		title: t('arep.confirmAccountTitle'),
+		message: t('arep.confirmAccountMessage', { handle: report.target.id }),
+		label: t('arep.deactivate'),
 	};
 });
 
@@ -110,7 +109,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().reports(state.value);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Reports could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('arep.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -155,7 +154,7 @@ async function saveResolve(): Promise<void> {
 		return;
 	}
 	if (resolveNote.value.length > 500) {
-		resolveError.value = 'The note may be at most 500 characters long.';
+		resolveError.value = t('arep.noteTooLong');
 		return;
 	}
 
@@ -164,13 +163,10 @@ async function saveResolve(): Promise<void> {
 	try {
 		await getAdminApi().resolveReport(target.id, resolveState.value, resolveNote.value.trim());
 		resolveOpen.value = false;
-		showToast(
-			resolveState.value === 'resolved' ? 'Report marked as resolved.' : 'Report dismissed.',
-			'success',
-		);
+		showToast(t(resolveState.value === 'resolved' ? 'arep.resolvedToast' : 'arep.dismissedToast'), 'success');
 		await load();
 	} catch (caught) {
-		resolveError.value = caught instanceof Error ? caught.message : 'The report could not be updated.';
+		resolveError.value = caught instanceof Error ? caught.message : t('arep.updateFailed');
 	} finally {
 		resolveSaving.value = false;
 	}
@@ -198,15 +194,15 @@ async function confirmAction(): Promise<void> {
 	try {
 		if (confirmKind.value === 'post') {
 			await getAdminApi().deletePost(report.target.id);
-			showToast('Post deleted.', 'success');
+			showToast(t('arep.postDeleted'), 'success');
 		} else {
 			await getAdminApi().setUserDisabled(report.target.id, true);
-			showToast('account deactivated.', 'success');
+			showToast(t('arep.accountDeactivated'), 'success');
 		}
 		confirmOpen.value = false;
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The action could not be completed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('arep.actionFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -221,20 +217,19 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Moderation</p>
-				<h2>Reported Content</h2>
+				<p class="a-admin-eyebrow">{{ t('arep.eyebrow') }}</p>
+				<h2>{{ t('arep.title') }}</h2>
 				<p class="a-admin-lead">
-					Each report shows the target, reason and context. Resolve or dismiss it with
-					an internal note; if needed, remove the post or deactivate the account.
+					{{ t('arep.lead') }}
 				</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Refresh
+				{{ t('arep.refresh') }}
 			</button>
 		</div>
 
-		<div class="a-admin-filterbar" role="tablist" aria-label="Report status">
+		<div class="a-admin-filterbar" role="tablist" :aria-label="t('arep.tabsAria')">
 			<button
 				v-for="filter in filters"
 				:key="filter.id"
@@ -245,7 +240,7 @@ onMounted(() => {
 				:aria-selected="state === filter.id"
 				@click="selectState(filter.id)"
 			>
-				{{ filter.label }}
+				{{ t(filter.labelKey) }}
 				<span v-if="filter.id !== 'all'" class="a-admin-filter__count">{{ counts[filter.id] }}</span>
 			</button>
 		</div>
@@ -259,11 +254,9 @@ onMounted(() => {
 		<div v-else-if="reports.length === 0" class="a-admin-empty-panel">
 			<AppIcon name="flag" :size="24" />
 			<div>
-				<strong>{{ state === 'open' ? 'No open reports' : 'No reports in this view' }}</strong>
+				<strong>{{ t(state === 'open' ? 'arep.emptyOpenTitle' : 'arep.emptyTitle') }}</strong>
 				<p>
-					{{ state === 'open'
-						? 'As soon as someone reports a post or profile, the case appears here.'
-						: 'Change the filter to see other reports.' }}
+					{{ t(state === 'open' ? 'arep.emptyOpenText' : 'arep.emptyText') }}
 				</p>
 			</div>
 		</div>
@@ -282,9 +275,9 @@ onMounted(() => {
 						{{ reportStateLabel(report.state) }}
 					</span>
 					<span class="a-admin-report__meta">
-						By @{{ report.reporter_handle }} · {{ relativeTime(report.created_at) }}
+						{{ t('arep.byReporter', { handle: report.reporter_handle, time: relativeTime(report.created_at) }) }}
 						<template v-if="report.assigned_to !== null">
-							· Assigned to @{{ report.assignee_handle ?? report.assigned_to }}
+							· {{ t('arep.assignedTo', { handle: report.assignee_handle ?? report.assigned_to }) }}
 						</template>
 					</span>
 				</header>
@@ -292,18 +285,18 @@ onMounted(() => {
 				<div class="a-admin-report__target">
 					<span class="a-admin-report__type">
 						<AppIcon :name="report.target_type === 'post' ? 'message' : 'user'" :size="15" />
-						{{ report.target_type === 'post' ? 'Post' : 'account' }}
+						{{ t(report.target_type === 'post' ? 'arep.typePost' : 'arep.typeAccount') }}
 					</span>
 					<div class="a-admin-report__target-body">
 						<strong>{{ report.target.author_name ?? report.target.id }}</strong>
 						<p v-if="report.target.content">{{ report.target.content }}</p>
 						<p v-else-if="report.target_type === 'post'" class="a-admin-muted">
-							The post is no longer in the local or cached store.
+							{{ t('arep.postGone') }}
 						</p>
 						<small>
-							<span v-if="report.target.scope === 'local'">local</span>
-							<span v-else-if="report.target.scope === 'remote'">Remote</span>
-							<span v-else>unknown origin</span>
+							<span v-if="report.target.scope === 'local'">{{ t('arep.scopeLocal') }}</span>
+							<span v-else-if="report.target.scope === 'remote'">{{ t('arep.scopeRemote') }}</span>
+							<span v-else>{{ t('arep.scopeUnknown') }}</span>
 							<template v-if="report.target.published_at"> · {{ absoluteTime(report.target.published_at) }}</template>
 						</small>
 					</div>
@@ -313,7 +306,7 @@ onMounted(() => {
 						:href="report.target.href"
 						target="_blank"
 						rel="noopener noreferrer"
-					>Open <AppIcon name="external" :size="13" /></a>
+					>{{ t('arep.open') }} <AppIcon name="external" :size="13" /></a>
 				</div>
 
 				<p v-if="report.comment" class="a-admin-report__comment">
@@ -322,7 +315,7 @@ onMounted(() => {
 				</p>
 
 				<p v-if="report.resolution_note" class="a-admin-report__resolution">
-					<strong>Internal note:</strong> {{ report.resolution_note }}
+					<strong>{{ t('arep.internalNote') }}</strong> {{ report.resolution_note }}
 					<span v-if="report.resolved_at"> · {{ relativeTime(report.resolved_at) }}</span>
 				</p>
 
@@ -335,13 +328,13 @@ onMounted(() => {
 							@click="assign(report)"
 						>
 							<AppIcon name="user" :size="15" />
-							{{ report.assigned_to === myId ? 'Unassign me' : report.assigned_to === null ? 'Assign to me' : 'Take over' }}
+							{{ t(report.assigned_to === myId ? 'arep.unassign' : report.assigned_to === null ? 'arep.assignMe' : 'arep.takeOver') }}
 						</button>
 						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="openResolve(report, 'resolved')">
-							<AppIcon name="check" :size="15" /> Resolve
+							<AppIcon name="check" :size="15" /> {{ t('arep.resolve') }}
 						</button>
 						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="openResolve(report, 'dismissed')">
-							<AppIcon name="x" :size="15" /> Dismiss
+							<AppIcon name="x" :size="15" /> {{ t('arep.dismiss') }}
 						</button>
 					</template>
 					<button
@@ -351,7 +344,7 @@ onMounted(() => {
 						:disabled="busy !== ''"
 						@click="reopen(report)"
 					>
-						<AppIcon name="refresh" :size="15" /> Reopen
+						<AppIcon name="refresh" :size="15" /> {{ t('arep.reopen') }}
 					</button>
 					<button
 						v-if="report.target_type === 'post' && report.target.exists"
@@ -359,7 +352,7 @@ onMounted(() => {
 						class="a-btn a-btn--danger a-btn--small"
 						@click="askPost(report)"
 					>
-						<AppIcon name="trash" :size="15" /> Delete post
+						<AppIcon name="trash" :size="15" /> {{ t('arep.deletePost') }}
 					</button>
 					<button
 						v-if="report.target_type === 'account' && report.target.scope === 'local' && !report.target.disabled"
@@ -367,16 +360,16 @@ onMounted(() => {
 						class="a-btn a-btn--danger a-btn--small"
 						@click="askAccount(report)"
 					>
-						<AppIcon name="ban" :size="15" /> account deactivate
+						<AppIcon name="ban" :size="15" /> {{ t('arep.deactivate') }}
 					</button>
 					<a
 						v-if="report.target_type === 'account' && report.target.scope === 'local'"
 						class="a-btn a-btn--ghost a-btn--small"
 						:href="`#/u/${encodeURIComponent(report.target.id)}`"
 					>
-						<AppIcon name="user" :size="15" /> profiles
+						<AppIcon name="user" :size="15" /> {{ t('arep.profiles') }}
 					</a>
-					<span class="a-admin-report__id">Fall {{ report.id.slice(0, 8) }}</span>
+					<span class="a-admin-report__id">{{ t('arep.caseId', { id: report.id.slice(0, 8) }) }}</span>
 				</footer>
 			</article>
 		</div>
@@ -386,41 +379,39 @@ onMounted(() => {
 				<form class="a-management-dialog" role="dialog" aria-modal="true" aria-labelledby="a-resolve-title" @submit.prevent="saveResolve">
 					<header class="a-profile-edit__head">
 						<div>
-							<p class="a-profile-edit__eyebrow">Case handling</p>
+							<p class="a-profile-edit__eyebrow">{{ t('arep.caseEyebrow') }}</p>
 							<h2 id="a-resolve-title">{{ resolveTitle }}</h2>
 						</div>
-						<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="resolveSaving" @click="closeResolve">
+						<button type="button" class="a-icon-btn" :aria-label="t('ausers.closeDialog')" :disabled="resolveSaving" @click="closeResolve">
 							<AppIcon name="x" :size="19" />
 						</button>
 					</header>
 
 					<p class="a-admin-muted">
-						{{ resolveState === 'resolved'
-							? 'The report is considered handled. The note is visible only to the administration.'
-							: 'The report is closed without further action. The note is visible only to the administration.' }}
+						{{ t(resolveState === 'resolved' ? 'arep.resolvedHint' : 'arep.dismissedHint') }}
 					</p>
 
-					<label class="a-profile-edit__label" for="a-resolve-note">Internal note <span class="a-admin-muted">(optional)</span></label>
+					<label class="a-profile-edit__label" for="a-resolve-note">{{ t('arep.noteLabel') }} <span class="a-admin-muted">{{ t('ausers.optional') }}</span></label>
 					<textarea
 						id="a-resolve-note"
 						v-model="resolveNote"
 						class="a-admin-textarea"
 						rows="4"
 						maxlength="500"
-						placeholder="What was reviewed and decided?"
+						:placeholder="t('arep.notePlaceholder')"
 					/>
-					<p class="a-profile-edit__hint">{{ resolveNote.length }} / 500 characters</p>
+					<p class="a-profile-edit__hint">{{ t('arep.charCount', { count: resolveNote.length }) }}</p>
 					<p v-if="resolveError !== ''" class="a-form-error" role="alert">{{ resolveError }}</p>
 
 					<footer class="a-profile-edit__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="resolveSaving" @click="closeResolve">Cancel</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="resolveSaving" @click="closeResolve">{{ t('common.cancel') }}</button>
 						<button
 							type="submit"
 							class="a-btn a-btn--small"
 							:class="resolveState === 'resolved' ? 'a-btn--primary' : 'a-btn--danger'"
 							:disabled="resolveSaving"
 						>
-							{{ resolveSaving ? 'Saving…' : resolveTitle }}
+							{{ resolveSaving ? t('common.saving') : resolveTitle }}
 						</button>
 					</footer>
 				</form>
