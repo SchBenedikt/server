@@ -30,6 +30,8 @@ use AlohaSocial\Server\Auth\PasswordPolicy;
 use AlohaSocial\Server\Auth\SessionManager;
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Community\InstancePages;
+use AlohaSocial\Server\Mail\MailException;
+use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Support\EnvFile;
@@ -67,6 +69,7 @@ use function round;
 use function rtrim;
 use function sprintf;
 use function str_contains;
+use function strrpos;
 use function str_starts_with;
 use function strstr;
 use function strtolower;
@@ -105,6 +108,7 @@ final class AdminService
         private readonly ?S3CompatibleClient $s3Client = null,
         private readonly ?EmailChangeService $emailChange = null,
         private readonly ?InstancePages $instancePages = null,
+        private readonly ?Mailer $mailer = null,
     ) {
         $this->atprotoSessions = new AtprotoSessionRepository($db);
         $this->mastodonOAuth = new MastodonOAuthRepository($db);
@@ -1449,9 +1453,53 @@ final class AdminService
                     "SELECT COUNT(*) FROM runtime_error WHERE level IN ('error', 'critical', 'alert', 'emergency')",
                 ),
                 'dead_jobs' => $this->intValue('SELECT COUNT(*) FROM social_job WHERE dead_at IS NOT NULL'),
+                'mail_outbox_pending' => $this->intValue("SELECT COUNT(*) FROM mail_outbox WHERE status = 'pending'"),
+                'mail_outbox_failed' => $this->intValue("SELECT COUNT(*) FROM mail_outbox WHERE status = 'failed'"),
             ],
             'dead_jobs' => array_map(fn (array $row): array => $this->jobRow($row), $dead),
         ];
+    }
+
+    /**
+     * Send a diagnostic mail to the calling administrator's own address.
+     *
+     * This bypasses the durable outbox on purpose: the operator needs the
+     * transport's answer now, not after the next worker tick. Failures are
+     * reported as a sanitized error class — never the recipient list or
+     * message body.
+     *
+     * @return array{sent: bool, transport: string, error?: string}
+     */
+    public function sendTestMail(string $adminId): array
+    {
+        if ($this->mailer === null) {
+            throw AdminException::invalid('Mail is not configured on this host.');
+        }
+
+        $account = $this->accounts->find($adminId);
+        if ($account === null || $account->isDisabled()) {
+            throw AdminException::notFound('This account was not found.');
+        }
+
+        $result = ['sent' => false, 'transport' => $this->config->mailTransport];
+        try {
+            $this->mailer->send(
+                $account->email,
+                'Aloha Social mail test',
+                "This is a test message from " . $this->config->instanceName . " (" . $this->config->instanceUrl . ").\n"
+                . "If you received it, the configured mail transport works.\n",
+            );
+            $result['sent'] = true;
+        } catch (MailException $exception) {
+            $result['error'] = substr(get_class($exception), (int) strrpos(get_class($exception), '\\') + 1) . ': send failed';
+        }
+
+        $this->record($adminId, 'mail.test', 'account', $adminId, [
+            'sent' => $result['sent'],
+            'transport' => $this->config->mailTransport,
+        ]);
+
+        return $result;
     }
 
     /**

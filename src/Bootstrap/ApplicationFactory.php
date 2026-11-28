@@ -388,6 +388,7 @@ final class ApplicationFactory
                 $storage->s3Client,
                 $emailChange,
                 $instancePages,
+                $mailer,
             ),
             instancePages: $instancePages,
             pushSubscriptions: $pushSubscriptions,

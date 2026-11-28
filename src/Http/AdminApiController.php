@@ -284,6 +284,10 @@ final class AdminApiController
             ], 201);
         }
 
+        if ($method === 'POST' && $path === self::PREFIX . '/mail/test') {
+            return Response::json($this->runtime->admin->sendTestMail($userId));
+        }
+
         if ($method === 'GET' && $path === self::PREFIX . '/domain-blocks') {
             return Response::json(['blocks' => $this->runtime->admin->domainBlocks()]);
         }
