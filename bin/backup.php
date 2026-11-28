@@ -9,7 +9,9 @@ declare(strict_types=1);
 
 use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
+use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Support\DatabaseBackup;
+use AlohaSocial\Server\Support\InstanceManifest;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -73,12 +75,18 @@ try {
         $keep,
     );
 
+    $manifest = (new InstanceManifest($service, $config, StorageFactory::create($config)->blobStore))
+        ->create($backup['path'], $backup['metadata_path']);
+
     if ($json) {
+        $backup['manifest_path'] = $manifest['path'];
+        $backup['manifest_objects'] = $manifest['objects'];
         fwrite(STDOUT, json_encode($backup, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
         exit(0);
     }
 
     fwrite(STDOUT, 'Backup written to ' . $backup['path'] . "\n");
+    fwrite(STDOUT, 'Instance manifest: ' . $manifest['path'] . ' (' . $manifest['objects'] . " blobs)\n");
     fwrite(STDOUT, 'Accounts in backup: ' . ($backup['accounts'] ?? 'unknown') . "\n");
     fwrite(STDOUT, 'Schema version: ' . ($backup['schema_version'] ?? 'not installed') . "\n");
     fwrite(STDOUT, 'Keep the database and ' . $config->secretKeyFile . " together.\n");

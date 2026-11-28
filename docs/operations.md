@@ -222,7 +222,13 @@ and schema version, plus a SHA-256 checksum, the creating core version and a
 fingerprint of the instance secret key. `--verify=FILE` recomputes the checksum
 of an existing backup (a pre-checksum backup is reported as unverifiable, not
 trusted) — run it when copying backups off-host or before a restore rehearsal.
-The backup directory lives inside `var/`, so move it to a
+
+Every backup also writes a `<name>.manifest.json` next to it: the full-instance
+inventory — database checksum and driver, every media blob with size and (for
+the local store) SHA-256, the secret-key fingerprint, and the core/schema
+versions. It is the anchor for the encrypted off-host export and the restore
+rehearsal; copy the `.sqlite`/`.dump`, `.json`, `.manifest.json` and your
+secret key together. The backup directory lives inside `var/`, so move it to a
 second disk or copy it off-host as part of your normal backup job.
 
 The key and the database belong together: the instance signing key in the
