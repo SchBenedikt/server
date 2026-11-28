@@ -328,6 +328,20 @@ onMounted(() => {
 								<span class="a-admin-badge" :class="user.disabled_at !== null ? 'a-admin-badge--danger' : 'a-admin-badge--ok'">
 									{{ user.disabled_at !== null ? 'Deactivated' : 'Active' }}
 								</span>
+								<span
+									v-if="user.pending_email !== null"
+									class="a-admin-badge a-admin-badge--amber"
+									:title="`Pending change to ${user.pending_email}`"
+								>
+									Email pending
+								</span>
+								<span
+									v-else-if="user.email_verified_at === null"
+									class="a-admin-badge a-admin-badge--muted"
+									title="Email address not verified"
+								>
+									Unverified
+								</span>
 							</td>
 							<td class="a-admin-num">
 								{{ user.posts }}

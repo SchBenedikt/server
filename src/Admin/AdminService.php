@@ -396,7 +396,7 @@ final class AdminService
         $total = $this->intValue('SELECT COUNT(*) FROM account' . $where, $parameters);
 
         $rows = $this->db->fetchAll(
-            'SELECT a.id, a.handle, a.email, a.role, a.display_name, a.created_at, a.disabled_at,'
+            'SELECT a.id, a.handle, a.email, a.pending_email, a.email_verified_at, a.role, a.display_name, a.created_at, a.disabled_at,'
             . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = a.id AND p.deleted_at IS NULL) AS post_count,'
             . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = a.id) AS follower_count,'
             . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = a.id) AS following_count'
@@ -1801,7 +1801,7 @@ final class AdminService
     private function user(string $id): array
     {
         $row = $this->db->fetchOne(
-            'SELECT a.id, a.handle, a.email, a.role, a.display_name, a.created_at, a.disabled_at,'
+            'SELECT a.id, a.handle, a.email, a.pending_email, a.email_verified_at, a.role, a.display_name, a.created_at, a.disabled_at,'
             . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = a.id AND p.deleted_at IS NULL) AS post_count,'
             . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = a.id) AS follower_count,'
             . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = a.id) AS following_count'
@@ -1826,6 +1826,8 @@ final class AdminService
             'id' => (string) $row['id'],
             'handle' => (string) $row['handle'],
             'email' => (string) $row['email'],
+            'pending_email' => $row['pending_email'] === null ? null : (string) $row['pending_email'],
+            'email_verified_at' => $row['email_verified_at'] === null ? null : (string) $row['email_verified_at'],
             'role' => (string) $row['role'],
             'display_name' => $row['display_name'] === null ? null : (string) $row['display_name'],
             'created_at' => (string) $row['created_at'],
@@ -2300,7 +2302,7 @@ final class AdminService
     private function recentUsers(int $limit): array
     {
         $rows = $this->db->fetchAll(
-            'SELECT id, handle, email, role, display_name, created_at, disabled_at,'
+            'SELECT id, handle, email, pending_email, email_verified_at, role, display_name, created_at, disabled_at,'
             . ' (SELECT COUNT(*) FROM social_post p WHERE p.author_id = account.id AND p.deleted_at IS NULL) AS post_count,'
             . ' (SELECT COUNT(*) FROM social_follower f WHERE f.local_user_id = account.id) AS follower_count,'
             . ' (SELECT COUNT(*) FROM social_following g WHERE g.local_user_id = account.id) AS following_count'

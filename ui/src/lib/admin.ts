@@ -135,6 +135,8 @@ export interface AdminUser {
 	id: string;
 	handle: string;
 	email: string;
+	pending_email: string | null;
+	email_verified_at: string | null;
 	role: 'admin' | 'user' | string;
 	display_name: string | null;
 	created_at: string;

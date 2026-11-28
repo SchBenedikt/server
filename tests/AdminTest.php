@@ -830,4 +830,27 @@ final class AdminTest extends TestCase
             "SELECT COUNT(*) FROM admin_audit WHERE action = 'job.retry' AND target_id = 'job-dead'",
         ));
     }
+
+    public function testUserListExposesPendingAndVerifiedEmailState(): void
+    {
+        ['server' => $server, 'cookies' => $cookies] = $this->admin();
+        $server->createAccount('bob', 'bob@example.test', TestServer::PASSWORD);
+        $bob = $server->signIn('bob');
+
+        $change = $server->json('POST', '/api/v1/host/email-change', [
+            'email' => 'bob.new@example.test',
+            'password' => TestServer::PASSWORD,
+        ], $bob['cookies'], $bob['csrf']);
+        self::assertSame(200, $change->status, $change->body);
+
+        $response = $server->send('GET', '/api/v1/host/admin/users', [
+            'cookies' => $cookies,
+            'query' => ['query' => 'bob'],
+        ]);
+        self::assertSame(200, $response->status, $response->body);
+        $users = $this->decoded($response)['users'];
+        self::assertCount(1, $users);
+        self::assertSame('bob.new@example.test', $users[0]['pending_email']);
+        self::assertArrayHasKey('email_verified_at', $users[0]);
+    }
 }

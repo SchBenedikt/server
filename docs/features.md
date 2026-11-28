@@ -92,7 +92,9 @@ durable outbox. The address only switches when the link is consumed; until
 then password recovery keeps targeting the verified address, outstanding
 reset links are deleted on switch, and a member can cancel the pending
 change from Settings. Password resets and account suspension cancel pending
-changes so a stale candidate can never complete later.
+changes so a stale candidate can never complete later. A confirmed change
+keeps existing sessions valid — the password-gated request is the
+reauthentication step, and the actor ID/handle never changes.
 
 Home offers **For you**, **Trending**, **Following**, **Local** and
 **Federated**. Local is the public timeline of this instance; Federated is
