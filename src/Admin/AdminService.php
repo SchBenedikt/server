@@ -106,6 +106,16 @@ final class AdminService
 
     private const WORKER_HEARTBEAT = 'worker';
 
+    private const TASK_HEARTBEAT_PREFIX = 'worker_task.';
+
+    /** A task that has not succeeded for this long is reported as stale. */
+    private const TASK_STALE_SECONDS = 600;
+
+    /** Success writes are throttled; the worker loop runs several times a second. */
+    private const TASK_WRITE_INTERVAL = 15;
+
+    private array $taskWriteThrottle = [];
+
     private readonly AtprotoSessionRepository $atprotoSessions;
 
     private readonly MastodonOAuthRepository $mastodonOAuth;
@@ -146,6 +156,106 @@ final class AdminService
                 ['name' => self::WORKER_HEARTBEAT, 'value' => (string) time(), 'updated_at' => $now],
             );
         }
+    }
+
+    /**
+     * Records that a periodic worker task completed. Called by `bin/worker.php`
+     * after each bounded step so diagnostics can distinguish a live worker
+     * from one whose background pipelines silently stopped.
+     */
+    public function taskSuccess(string $task): void
+    {
+        $this->recordTask($task, 'ok');
+    }
+
+    /**
+     * Records a failed worker task. The reason is truncated and never carries
+     * request bodies, secrets or actor tokens.
+     */
+    public function taskFailure(string $task, string $reason): void
+    {
+        $this->recordTask($task, 'fail', $reason);
+    }
+
+    private function recordTask(string $task, string $outcome, ?string $reason = null): void
+    {
+        $task = (string) preg_replace('/[^a-z0-9-]/', '', strtolower($task));
+        if ($task === '') {
+            return;
+        }
+
+        $now = time();
+        if ($outcome === 'ok') {
+            if (isset($this->taskWriteThrottle[$task])
+                && $now - $this->taskWriteThrottle[$task] < self::TASK_WRITE_INTERVAL) {
+                return;
+            }
+            $this->taskWriteThrottle[$task] = $now;
+        }
+
+        $name = self::TASK_HEARTBEAT_PREFIX . $task;
+        $row = $this->db->fetchOne(
+            'SELECT value FROM runtime_state WHERE name = :name',
+            ['name' => $name],
+        );
+        $data = is_array($row) ? json_decode((string) $row['value'], true) : null;
+        $data = is_array($data) ? $data : [];
+
+        if ($outcome === 'ok') {
+            // The last failure reason stays visible until the next failure;
+            // diagnostics benefit from knowing what broke even after recovery.
+            $data['ok'] = $now;
+        } else {
+            $data['fail'] = $now;
+            $data['error'] = mb_substr($reason ?? 'unknown', 0, 200);
+        }
+
+        $value = json_encode($data, JSON_THROW_ON_ERROR);
+        $updated = $this->db->execute(
+            'UPDATE runtime_state SET value = :value, updated_at = :updated_at WHERE name = :name',
+            ['value' => $value, 'updated_at' => Time::format($this->clock->now()), 'name' => $name],
+        );
+        if ($updated === 0) {
+            $this->db->execute(
+                'INSERT INTO runtime_state (name, value, updated_at) VALUES (:name, :value, :updated_at)',
+                ['name' => $name, 'value' => $value, 'updated_at' => Time::format($this->clock->now())],
+            );
+        }
+    }
+
+    /**
+     * Per-task worker health for the diagnostics surface. Only tasks that have
+     * reported at least once are listed, so disabled pipelines (for example
+     * AT Protocol sync without a relay) never warn.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function workerTasks(): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT name, value FROM runtime_state WHERE name LIKE '" . self::TASK_HEARTBEAT_PREFIX . "%'",
+        );
+
+        $now = time();
+        $tasks = [];
+        foreach ($rows as $row) {
+            $data = json_decode((string) $row['value'], true);
+            if (!is_array($data)) {
+                continue;
+            }
+            $ok = isset($data['ok']) ? (int) $data['ok'] : null;
+            $age = $ok === null ? null : $now - $ok;
+            $tasks[] = [
+                'task' => substr((string) $row['name'], strlen(self::TASK_HEARTBEAT_PREFIX)),
+                'last_ok_seconds_ago' => $age,
+                'stale' => $age === null || $age > self::TASK_STALE_SECONDS,
+                'last_failure_seconds_ago' => isset($data['fail']) ? $now - (int) $data['fail'] : null,
+                'error' => isset($data['error']) ? (string) $data['error'] : null,
+            ];
+        }
+        usort($tasks, static fn (array $a, array $b): int => $a['task'] <=> $b['task']);
+
+        return $tasks;
     }
 
     /**
@@ -2032,6 +2142,13 @@ final class AdminService
 
         $adminsWithoutMfa = (int) ($stats['accounts']['admins_without_mfa'] ?? 0);
         $schema = $this->schemaStatus();
+        $tasks = $this->workerTasks();
+        $staleTasks = [];
+        foreach ($tasks as $task) {
+            if ($task['stale']) {
+                $staleTasks[] = (string) $task['task'];
+            }
+        }
 
         return [
             [
@@ -2053,6 +2170,14 @@ final class AdminService
                 'detail' => $worker['online']
                     ? 'Last heartbeat ' . $worker['last_beat']
                     : 'No recent heartbeat',
+            ],
+            [
+                'id' => 'background-tasks',
+                'label' => 'Background tasks',
+                'status' => $staleTasks === [] ? 'ok' : 'warn',
+                'detail' => $staleTasks === []
+                    ? ($tasks === [] ? 'No task reports yet' : count($tasks) . ' pipeline(s) reporting')
+                    : 'Stale: ' . implode(', ', $staleTasks),
             ],
             [
                 'id' => 'queue',

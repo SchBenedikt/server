@@ -180,6 +180,18 @@ Do not run both a service and cron for the same queue. A backlog is visible in
 worker output/journal; an empty queue makes the loop sleep instead of busy
 spinning.
 
+### Background task health
+
+Every loop iteration also records a heartbeat per pipeline — queue drain,
+mail outbox, push delivery, account-erasure cleanup, AT Protocol sync and
+reconciliation (only when configured), remote engagement refresh and remote
+actor profile refresh. The admin **Overview → health** cards show a
+*Background tasks* check: a task that has not succeeded for ten minutes is
+reported as stale by name, together with its last failure reason. A live
+worker heartbeat with a stale task means that pipeline is stuck while the
+rest of the worker keeps running — check the worker journal for the
+matching `… failed:` line.
+
 ### Cleanup
 
 `php bin/cleanup.php` queues a bounded retention job; `--now` runs it directly.
