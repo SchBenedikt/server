@@ -454,6 +454,155 @@ watch(() => appState.composer.open, async (open) => {
 	}
 }, { immediate: false });
 
+interface Suggestion {
+	insert: string;
+	label: string;
+	sub: string;
+}
+
+const caretPos = ref(0);
+const suggestKind = ref<'mention' | 'tag' | null>(null);
+const suggestQuery = ref('');
+const suggestStart = ref(0);
+const suggestions = ref<Suggestion[]>([]);
+const suggestIndex = ref(0);
+let suggestTimer: number | null = null;
+let suggestRequest = 0;
+
+const suggestOpen = computed(() => suggestKind.value !== null && suggestions.value.length > 0);
+
+/**
+ * The `@partial` or `#partial` token ending at the caret, if any. Only a
+ * whitespace boundary counts, so `mail@x` or `C#` never trigger.
+ */
+function tokenAtCaret(): { kind: 'mention' | 'tag'; query: string; start: number } | null {
+	const before = content.value.slice(0, caretPos.value);
+	const match = /(?:^|\s)([@#])([\p{L}\p{N}._-]*)$/u.exec(before);
+	if (match === null) {
+		return null;
+	}
+
+	return {
+		kind: match[1] === '@' ? 'mention' : 'tag',
+		query: match[2],
+		start: before.length - match[0].length + (match[0].startsWith(match[1]) ? 0 : 1),
+	};
+}
+
+function updateSuggestions(): void {
+	const token = tokenAtCaret();
+	if (token === null || token.query === '') {
+		suggestKind.value = null;
+		suggestions.value = [];
+		return;
+	}
+
+	suggestKind.value = token.kind;
+	suggestQuery.value = token.query;
+	suggestStart.value = token.start;
+	suggestIndex.value = 0;
+
+	if (suggestTimer !== null) {
+		window.clearTimeout(suggestTimer);
+	}
+	const request = ++suggestRequest;
+	suggestTimer = window.setTimeout(() => {
+		void loadSuggestions(token.kind, token.query, request);
+	}, 200);
+}
+
+async function loadSuggestions(kind: 'mention' | 'tag', query: string, request: number): Promise<void> {
+	try {
+		if (kind === 'mention') {
+			const data = await getApi().remoteSearch(query, 'accounts', 'all');
+			if (request !== suggestRequest || suggestQuery.value !== query) {
+				return;
+			}
+			suggestions.value = data.accounts.slice(0, 6).map((account) => ({
+				insert: `@${account.handle}`,
+				label: account.display_name !== '' ? account.display_name : account.handle,
+				sub: `@${account.handle}`,
+			}));
+		} else {
+			const data = await getApi().search(`#${query}`, 6);
+			if (request !== suggestRequest || suggestQuery.value !== query) {
+				return;
+			}
+			suggestions.value = data.hashtags.slice(0, 6).map((tag) => ({
+				insert: `#${tag.name}`,
+				label: `#${tag.name}`,
+				sub: '',
+			}));
+		}
+	} catch {
+		if (request === suggestRequest) {
+			suggestions.value = [];
+		}
+	}
+}
+
+function closeSuggestions(): void {
+	suggestKind.value = null;
+	suggestions.value = [];
+	if (suggestTimer !== null) {
+		window.clearTimeout(suggestTimer);
+		suggestTimer = null;
+	}
+}
+
+function pickSuggestion(index: number): void {
+	const suggestion = suggestions.value[index];
+	if (suggestion === undefined || suggestKind.value === null) {
+		return;
+	}
+
+	const caret = caretPos.value;
+	const next = content.value.slice(0, suggestStart.value) + suggestion.insert + ' ' + content.value.slice(caret);
+	content.value = next;
+	caretPos.value = suggestStart.value + suggestion.insert.length + 1;
+	closeSuggestions();
+	void nextTick(() => {
+		textarea.value?.focus();
+		textarea.value?.setSelectionRange(caretPos.value, caretPos.value);
+	});
+}
+
+function onTextareaKeydown(event: KeyboardEvent): void {
+	if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+		event.preventDefault();
+		void submit();
+		return;
+	}
+
+	if (!suggestOpen.value) {
+		return;
+	}
+
+	if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+		event.preventDefault();
+		const delta = event.key === 'ArrowDown' ? 1 : -1;
+		suggestIndex.value = (suggestIndex.value + delta + suggestions.value.length) % suggestions.value.length;
+		return;
+	}
+
+	if (event.key === 'Enter' || event.key === 'Tab') {
+		event.preventDefault();
+		pickSuggestion(suggestIndex.value);
+		return;
+	}
+
+	if (event.key === 'Escape') {
+		event.preventDefault();
+		event.stopPropagation();
+		closeSuggestions();
+	}
+}
+
+function onTextareaCaret(): void {
+	caretPos.value = textarea.value?.selectionStart ?? content.value.length;
+	updateSuggestions();
+}
+
 function requestClose(): void {
 	if (submitting.value) {
 		return;
@@ -818,15 +967,37 @@ async function submit(): Promise<void> {
 					<span>Post as <strong>@{{ appState.session.user?.handle ?? 'Guest' }}</strong></span>
 				</div>
 
-				<textarea
-					ref="textarea"
-					v-model="content"
-					class="a-composer__textarea"
-					rows="5"
-					maxlength="5200"
-					placeholder="What's on your mind?"
-					aria-label="Post text"
-				/>
+				<div class="a-composer__field-wrap">
+					<textarea
+						ref="textarea"
+						v-model="content"
+						class="a-composer__textarea"
+						rows="5"
+						maxlength="5200"
+						placeholder="What's on your mind?"
+						aria-label="Post text"
+						@input="onTextareaCaret"
+						@keyup="onTextareaCaret"
+						@click="onTextareaCaret"
+						@select="onTextareaCaret"
+						@keydown="onTextareaKeydown"
+					/>
+					<ul v-if="suggestOpen" class="a-composer__suggest" role="listbox">
+						<li
+							v-for="(suggestion, index) in suggestions"
+							:key="suggestion.insert"
+							role="option"
+							:aria-selected="index === suggestIndex"
+							class="a-composer__suggest-item"
+							:class="{ 'a-composer__suggest-item--active': index === suggestIndex }"
+							@mousedown.prevent="pickSuggestion(index)"
+							@mouseenter="suggestIndex = index"
+						>
+							<strong>{{ suggestion.label }}</strong>
+							<span v-if="suggestion.sub !== ''" class="a-composer__suggest-sub">{{ suggestion.sub }}</span>
+						</li>
+					</ul>
+				</div>
 
 				<div v-if="showWarning" class="a-composer__cw">
 					<label for="a-composer-cw">Content warning</label>

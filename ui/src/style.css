@@ -3467,6 +3467,50 @@ dialog.a-modal::backdrop {
 	color: var(--a-faint);
 }
 
+.a-composer__field-wrap {
+	position: relative;
+}
+
+.a-composer__suggest {
+	position: absolute;
+	z-index: 5;
+	left: 0;
+	right: 0;
+	top: calc(100% + 4px);
+	margin: 0;
+	padding: 4px;
+	list-style: none;
+	border: 1px solid var(--a-border);
+	border-radius: 12px;
+	background: var(--a-bg);
+	box-shadow: var(--a-shadow, 0 8px 24px rgba(0, 0, 0, 0.12));
+	max-height: 220px;
+	overflow-y: auto;
+}
+
+.a-composer__suggest-item {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 7px 10px;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 14px;
+}
+
+.a-composer__suggest-item--active,
+.a-composer__suggest-item:hover {
+	background: var(--a-bg-soft);
+}
+
+.a-composer__suggest-sub {
+	color: var(--a-faint);
+	font-size: 12px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .a-composer__cw {
 	display: grid;
 	grid-template-columns: 1fr auto;
