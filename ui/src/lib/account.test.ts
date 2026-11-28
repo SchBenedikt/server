@@ -8,7 +8,6 @@ import {
 	accountFor,
 	directory,
 	displayNameFor,
-	loadHostDisplayNames,
 	refreshAccount,
 	resetAccountDirectory,
 	resolveAccount,
@@ -127,18 +126,17 @@ describe('resolveAccount', () => {
 		expect(accountFor('alice')).toBeNull();
 	});
 
-	it('prefers the freshly fetched display name over the bootstrap map', async () => {
-		configureApi({
-			account: async (id: string) => account(id),
-			hostProfiles: async () => ({ alice: 'Stale Bootstrap Name' }),
-		} as unknown as Api);
-
-		await loadHostDisplayNames();
-		expect(displayNameFor('alice')).toBe('Stale Bootstrap Name');
+	it('propagates a renamed display name on refresh', async () => {
+		let name = 'Name alice';
+		configureApi(apiWith(async (id) => ({ ...account(id), display_name: name })));
 
 		await resolveAccount('alice');
-		expect(accountFor('alice')?.display_name).toBe('Name alice');
 		expect(displayNameFor('alice')).toBe('Name alice');
+
+		name = 'Renamed Alice';
+		await refreshAccount('alice');
+		expect(accountFor('alice')?.display_name).toBe('Renamed Alice');
+		expect(displayNameFor('alice')).toBe('Renamed Alice');
 	});
 
 	it('refreshAccount bypasses a recent failure entry', async () => {

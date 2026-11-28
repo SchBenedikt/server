@@ -43,7 +43,7 @@ import ScheduledView from './views/ScheduledView.vue';
 import SearchView from './views/SearchView.vue';
 import SettingsView from './views/SettingsView.vue';
 import TagView from './views/TagView.vue';
-import { loadHostDisplayNames, setAccount } from './lib/account';
+import { setAccount } from './lib/account';
 import { configureApi, createApi, getApi } from './lib/api';
 import { configureAdminApi, createAdminApi } from './lib/admin';
 import { useLiveUpdates } from './lib/live';
@@ -190,8 +190,6 @@ async function refreshUnread(): Promise<void> {
 }
 
 async function bootstrap(): Promise<void> {
-	await loadHostDisplayNames();
-
 	try {
 		const instance = await getApi().instance();
 		setInstance(instance);
