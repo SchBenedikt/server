@@ -293,8 +293,17 @@ or `did:` even before they are cached; the moderation view marks them as
 for the same target answer `409`. Resolving or dismissing a report, deleting a
 post and disabling an account are written to the audit log.
 
+`GET /api/v1/host/admin/preflight` runs a read-only readiness check. Local
+checks cover the instance URL, database, pending migrations, worker heartbeat,
+mail transport and blob storage; `?external=1` (the default) additionally
+fetches the configured public origin, NodeInfo and a real account's WebFinger
+JRD, so a loopback-only deployment reports `warn` instead of claiming
+federation readiness. Each check returns `ok`, `warn`, `fail` or `skip` with a
+remediation hint; `?external=0` skips the network probes entirely.
+
 ```text
 GET    /api/v1/host/admin/overview
+GET    /api/v1/host/admin/preflight?external=0|1
 GET    /api/v1/host/admin/users?query=&page=&per_page=
 POST   /api/v1/host/admin/users
 PATCH  /api/v1/host/admin/users/{id}

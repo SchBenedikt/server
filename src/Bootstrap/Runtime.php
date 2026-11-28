@@ -63,6 +63,7 @@ use AlohaSocial\Server\Interactions\PostInteractions;
 use AlohaSocial\Server\Interactions\AtprotoRemoteInteractions;
 use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Mail\MailOutbox;
+use AlohaSocial\Server\Setup\FederationPreflight;
 use AlohaSocial\Server\Setup\SetupService;
 use AlohaSocial\Server\Support\Metrics;
 
@@ -123,6 +124,7 @@ final readonly class Runtime
         public KokuaBoard $kokua,
         public SetupService $setup,
         public BlueskyAccounts $blueskyAccounts,
+        public FederationPreflight $preflight,
         public AtprotoOAuthService $atprotoOAuth,
         public PostRevisionRepository $postRevisions,
         public Metrics $metrics,

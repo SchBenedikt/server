@@ -18,6 +18,7 @@ use Throwable;
 
 use function array_key_exists;
 use function explode;
+use function in_array;
 use function is_array;
 use function is_int;
 use function is_string;
@@ -104,6 +105,13 @@ final class AdminApiController
 
         if ($method === 'GET' && $path === self::PREFIX . '/overview') {
             return Response::json($this->runtime->admin->overview());
+        }
+
+        if ($method === 'GET' && $path === self::PREFIX . '/preflight') {
+            $external = $request->queryParam('external');
+            return Response::json(
+                $this->runtime->preflight->run(!in_array($external, ['0', 'false'], true)),
+            );
         }
 
         if ($method === 'GET' && $path === self::PREFIX . '/users') {
