@@ -91,6 +91,7 @@ final class Migrations
             new Version202611280034DraftLanguage(),
             new Version202611280035AccountInvitations(),
             new Version202611280036DismissedAnnouncements(),
+            new Version202611280037CoreSchemaFingerprintRefresh(),
         ];
     }
 }

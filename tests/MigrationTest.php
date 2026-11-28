@@ -274,6 +274,30 @@ final class MigrationTest extends TestCase
         ));
     }
 
+    public function testFingerprintRefreshMigrationHealsUpgradedInstalls(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+
+        // Upgraded installations kept the hash stored before the Core schema
+        // statements changed; the refresh migration must rewrite it.
+        $database->execute(
+            'UPDATE runtime_state SET value = :value WHERE name = :name',
+            ['value' => 'stale', 'name' => 'core_schema_fingerprint'],
+        );
+        $database->execute("DELETE FROM schema_migration WHERE version = '202611280037'");
+
+        $runner = new MigrationRunner($database, new SystemClock(), Migrations::all());
+        self::assertSame(['202611280037'], $runner->migrate());
+        self::assertSame(
+            \AlohaSocial\Server\Migrations\CoreSchemaFingerprint::current(),
+            (string) $database->fetchValue(
+                "SELECT value FROM runtime_state WHERE name = 'core_schema_fingerprint'",
+            ),
+        );
+        self::assertSame([], $runner->migrate());
+    }
+
     public function testCoreSchemaDriftIsReportedBeforeQueriesRun(): void
     {
         $server = new TestServer();
