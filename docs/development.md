@@ -199,7 +199,9 @@ of local follows, and optional likes/boosts via `--likes`/`--boosts`. Every
 value derives from `--seed` (default 187) and posts carry deterministic ids,
 so re-running with the same arguments never duplicates rows. Fixture accounts
 sign in with password `Fixture!Passw0rd-<seed>`; `--dry-run` prints the plan
-without writing.
+without writing. `--bench` additionally times the home and public timeline
+reads (warmup plus best of three) so fixture runs produce reproducible
+numbers for #187.
 
 The PostgreSQL path is exercised separately: migrations twice, account
 creation, login, post write/read, media upload/serve and WebFinger against a
