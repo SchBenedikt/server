@@ -11,6 +11,7 @@ import { route } from '../lib/router';
 import { handleLabel } from '../lib/format';
 import { appState, openComposer, toggleTheme } from '../lib/state';
 import { getApi } from '../lib/api';
+import { resetAccountDirectory } from '../lib/account';
 import { primaryCatalogItems } from '../lib/sidebar';
 import type { SidebarItem } from '../lib/sidebar';
 
@@ -153,6 +154,7 @@ async function logout(): Promise<void> {
 	}
 
 	loggingOut.value = true;
+	resetAccountDirectory();
 	try {
 		await getApi().logout();
 	} finally {
