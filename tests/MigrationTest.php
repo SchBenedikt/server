@@ -99,6 +99,59 @@ final class MigrationTest extends TestCase
         }
     }
 
+    /**
+     * Every Core `*Schema` class must be fully materialized by the host
+     * migrations: the table exists and every column its upgrade statements
+     * add is present. This is the guard that catches a Core release shipping
+     * new schema without a matching host migration — the failure mode that
+     * previously reached production as inbox 500s and fingerprint drift.
+     */
+    public function testEveryCoreSchemaTableAndUpgradeColumnExists(): void
+    {
+        $server = new TestServer();
+        $database = $server->runtime->database;
+        $missing = [];
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(dirname(__DIR__) . '/vendor/alohasocial/core/src'),
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile() || substr($file->getFilename(), -10) !== 'Schema.php') {
+                continue;
+            }
+
+            $source = (string) file_get_contents($file->getPathname());
+            if (preg_match("/const TABLE = '([^']+)'/", $source, $match) !== 1) {
+                continue;
+            }
+
+            $table = $match[1];
+            $exists = (int) $database->fetchValue(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = :name",
+                ['name' => $table],
+            );
+            if ($exists === 0) {
+                $missing[] = 'table ' . $table . ' (' . $file->getFilename() . ')';
+                continue;
+            }
+
+            if (preg_match_all('/ADD COLUMN (\w+)/', $source, $columns) === false) {
+                continue;
+            }
+            $present = array_column(
+                $database->fetchAll('PRAGMA table_info(' . $table . ')'),
+                'name',
+            );
+            foreach ($columns[1] as $column) {
+                if (!in_array($column, $present, true)) {
+                    $missing[] = $table . '.' . $column . ' (' . $file->getFilename() . ')';
+                }
+            }
+        }
+
+        self::assertSame([], $missing, 'Core schema not materialized by host migrations: ' . implode(', ', $missing));
+    }
+
     public function testSecondRunIsANoOp(): void
     {
         $server = new TestServer();
