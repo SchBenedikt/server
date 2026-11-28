@@ -323,4 +323,18 @@ final class HostExtensionTest extends TestCase
         self::assertSame(200, $profiles->status);
         self::assertStringContainsString('"bob":"Bobby"', $profiles->body);
     }
+
+    public function testHostProfilesAcceptsABoundedExplicitIdList(): void
+    {
+        $this->server->runtime->accounts->create('zoe', 'zoe@example.test', 'hash', 'user', 'Zoe Z');
+        $this->server->runtime->accounts->create('yan', 'yan@example.test', 'hash', 'user', 'Yan Y');
+
+        $response = $this->server->send('GET', '/api/v1/host/profiles', [
+            'query' => ['ids' => 'zoe,yan,missing,nobody@else'],
+        ]);
+        self::assertSame(200, $response->status);
+
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+        self::assertEqualsCanonicalizing(['zoe' => 'Zoe Z', 'yan' => 'Yan Y'], $body['profiles']);
+    }
 }
