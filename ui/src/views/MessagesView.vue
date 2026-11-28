@@ -163,7 +163,7 @@ async function loadMore(): Promise<void> {
 
 function openConversation(conversation: ConversationSummary): void {
 	void getApi().markConversationRead(conversation.last.id).catch((caught: unknown) => {
-		showToast(loadErrorMessage(caught, 'The conversation could not be marked as read.'), 'error';
+		showToast(loadErrorMessage(caught, 'The conversation could not be marked as read.'), 'error');
 	});
 	navigate(`/messages/${encodeURIComponent(`thread:${conversation.id}`)}`);
 }
@@ -175,7 +175,7 @@ async function dismissConversation(conversation: ConversationSummary): Promise<v
 			? { ...message, dismissed: true }
 			: message);
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The conversation could not be dismissed.'), 'error';
+		showToast(loadErrorMessage(caught, 'The conversation could not be dismissed.'), 'error');
 	}
 }
 
@@ -213,7 +213,7 @@ function searchPeople(): void {
 			const results = await getApi().search(term, 12);
 			pickerResults.value = results.accounts.filter((account) => account.id !== myId.value);
 		} catch (caught) {
-			showToast(loadErrorMessage(caught, 'The search failed.'), 'error';
+			showToast(loadErrorMessage(caught, 'The search failed.'), 'error');
 			pickerResults.value = [];
 		} finally {
 			pickerLoading.value = false;

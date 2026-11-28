@@ -109,7 +109,7 @@ async function reviewSender(id: string, decision: 'accept' | 'dismiss'): Promise
 		);
 		await load(true);
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The sender request could not be updated.'), 'error';
+		showToast(loadErrorMessage(caught, 'The sender request could not be updated.'), 'error');
 	} finally {
 		mutatingSender.value = '';
 	}
@@ -136,7 +136,7 @@ async function toggleConversationMute(postId: string): Promise<void> {
 		const isMuted = await getApi().toggleConversationMute(postId);
 		showToast(isMuted ? 'Conversation notifications muted.' : 'Conversation notifications resumed.', 'success');
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The conversation setting could not be updated.'), 'error';
+		showToast(loadErrorMessage(caught, 'The conversation setting could not be updated.'), 'error');
 	} finally {
 		mutating.value = '';
 	}
@@ -153,7 +153,7 @@ async function dismiss(item: NotificationItem): Promise<void> {
 		items.value = items.value.filter((entry) => entry.id !== item.id);
 		appState.unread = Math.max(0, appState.unread - 1);
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'The notification could not be removed.'), 'error';
+		showToast(loadErrorMessage(caught, 'The notification could not be removed.'), 'error');
 	} finally {
 		mutating.value = '';
 	}
@@ -177,7 +177,7 @@ async function clearAll(): Promise<void> {
 		confirmClear.value = false;
 		showToast(`${cleared} ${cleared === 1 ? 'notification' : 'Notifications'} marked as read.`, 'success');
 	} catch (caught) {
-		showToast(loadErrorMessage(caught, 'Notifications could not be cleared.'), 'error';
+		showToast(loadErrorMessage(caught, 'Notifications could not be cleared.'), 'error');
 	} finally {
 		mutating.value = '';
 	}

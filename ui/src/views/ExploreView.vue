@@ -270,7 +270,7 @@ async function toggleTag(tag: string): Promise<void> {
 			showToast(`You now follow #${tag}.`, 'success');
 		}
 	} catch (error) {
-		showToast(loadErrorMessage(error, 'The hashtag could not be changed.'), 'error';
+		showToast(loadErrorMessage(error, 'The hashtag could not be changed.'), 'error');
 	} finally {
 		tagBusy.value = '';
 	}
