@@ -2869,9 +2869,14 @@ final class FrontController
     private function appPage(?AuthenticatedSession $session): Response
     {
         $account = $session?->account;
+        $uiLocale = $account === null
+            ? null
+            : ($this->runtime->preferences->forAccount($account->id)['ui_locale'] ?? null);
 
         return $this->page('app', [
             'instance' => $this->runtime->config->instanceName,
+            'lang' => is_string($uiLocale) && $uiLocale !== '' ? $uiLocale : 'en',
+            'locale' => $uiLocale,
             'csrf' => $session?->session->csrfToken ?? '',
             'handle' => $account?->handle ?? '',
             'displayName' => $account?->name() ?? '',

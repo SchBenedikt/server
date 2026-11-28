@@ -17,7 +17,7 @@ $appShell = $appShell ?? false;
 
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<?= $escape($lang ?? 'en') ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
