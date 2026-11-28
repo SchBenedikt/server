@@ -39,6 +39,7 @@ use AlohaSocial\Server\Community\FederatedTimeline;
 use AlohaSocial\Server\Community\FollowRequests;
 use AlohaSocial\Server\Community\ForYouFeed;
 use AlohaSocial\Server\Community\InstancePages;
+use AlohaSocial\Server\Community\Imports;
 use AlohaSocial\Server\Community\KokuaBoard;
 use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
@@ -125,6 +126,7 @@ final readonly class Runtime
         public ForYouFeed $forYou,
         public Preferences $preferences,
         public Exports $exports,
+        public Imports $imports,
         public FollowRequests $followRequests,
         public PinnedPosts $pinnedPosts,
         public KokuaBoard $kokua,

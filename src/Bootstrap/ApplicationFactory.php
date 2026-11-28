@@ -77,6 +77,7 @@ use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
 use AlohaSocial\Server\Community\Drafts;
 use AlohaSocial\Server\Community\Exports;
+use AlohaSocial\Server\Community\Imports;
 use AlohaSocial\Server\Community\FeaturedTags;
 use AlohaSocial\Server\Community\FederatedTimeline;
 use AlohaSocial\Server\Community\FollowRequests;
@@ -441,6 +442,7 @@ final class ApplicationFactory
             liveUpdates: new LiveUpdates($database, $clock, $socialGraph),
             preferences: $preferences,
             exports: new Exports($database, $clock, $preferences, $this->config),
+            imports: new Imports(),
             followRequests: new FollowRequests(
                 $database,
                 $clock,

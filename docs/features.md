@@ -497,6 +497,17 @@ peer servers. The deletion response enumerates the retained categories
 explicitly (`host_data_retained`): the disabled account tombstone, the
 deletion record, audit and moderation records, and remote copies.
 
+`POST /api/v1/host/import/preview` is the dry-run half of the move-in
+workflow: it accepts an `aloha-account-export` document and reports, without
+writing anything, which sections a future import could take verbatim
+(`local`: preferences, followed hashtags, keyword filters, featured tags)
+and which are `deferred` because their rows reference source-instance
+accounts, posts or attachments that need canonical identity mapping.
+Unrecognized sections are reported as `unknown`, and `core_archive` /
+`linked_bluesky_account` are listed under `not_transferred` — core-owned
+data and external identity never move. Applying an import is not available
+yet; the preview's `apply.available` flag stays `false` until it is.
+
 ## Reading lists and text stories
 
 Both surfaces now persist in the core tables; there is no second host table

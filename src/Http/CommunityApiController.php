@@ -1030,6 +1030,16 @@ final class CommunityApiController
                 );
             }
 
+            if ($method === 'POST' && $path === '/api/v1/host/import/preview') {
+                if ($userId === null) {
+                    return $this->error(401, 'not_authenticated', 'Sign in to preview an import.');
+                }
+
+                return Response::json([
+                    'preview' => $this->runtime->imports->preview($this->jsonBody($request)),
+                ]);
+            }
+
             if ($method === 'DELETE' && $path === '/api/v1/account/data') {
                 if ($userId === null) {
                     return $this->error(401, 'not_authenticated', 'Sign in to delete your account.');
