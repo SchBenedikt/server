@@ -544,6 +544,12 @@ Series provided:
   so high-cardinality paths do not explode the series count.
 - `aloha_queue_jobs_pending`, `aloha_queue_jobs_running`,
   `aloha_queue_jobs_dead` — `social_job` backlog; `dead` should be zero.
+- `aloha_queue_oldest_pending_age_seconds` — age of the oldest job already
+  due but not yet reserved. Growth means the worker is stalled or
+  backlogged even while `pending` looks small.
+- `aloha_storage_free_bytes`, `aloha_storage_total_bytes` — local blob
+  disk headroom (omitted for S3-backed storage, which reports its own
+  metrics). Alert below ~10% free.
 - `aloha_mail_outbox_pending`, `aloha_mail_outbox_failed` — queued mail;
   `failed` grows only when SMTP is unreachable past the retry budget.
 - `aloha_worker_heartbeat_age_seconds` — seconds since the worker's last
@@ -561,7 +567,10 @@ Series provided:
   could not be read (database hiccup); the HTTP metrics still render.
 
 Suggested alerts: `aloha_queue_jobs_dead > 0` for longer than one worker
-tick, `aloha_worker_heartbeat_age_seconds > 90` for 5 minutes,
+tick, `aloha_queue_oldest_pending_age_seconds > 300` for 10 minutes,
+`aloha_worker_heartbeat_age_seconds > 90` for 5 minutes,
+`aloha_storage_free_bytes / aloha_storage_total_bytes < 0.1` for 15
+minutes,
 `aloha_atproto_sync_stale == 1` or `aloha_atproto_sync_error == 1` for
 10 minutes (per source), `aloha_push_delivery_pending` growing for an
 hour, `aloha_http_request_duration_seconds` p99 above a few seconds
