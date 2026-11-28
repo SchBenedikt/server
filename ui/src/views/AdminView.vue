@@ -13,6 +13,7 @@ import AdminAnnouncements from './admin/AdminAnnouncements.vue';
 import AdminAudit from './admin/AdminAudit.vue';
 import AdminErrors from './admin/AdminErrors.vue';
 import AdminFederation from './admin/AdminFederation.vue';
+import AdminModeration from './admin/AdminModeration.vue';
 import AdminOverview from './admin/AdminOverview.vue';
 import AdminPages from './admin/AdminPages.vue';
 import AdminQueue from './admin/AdminQueue.vue';
@@ -31,6 +32,8 @@ const sectionView = computed(() => {
 			return AdminUsers;
 		case 'reports':
 			return AdminReports;
+		case 'moderation':
+			return AdminModeration;
 		case 'federation':
 			return AdminFederation;
 		case 'communications':

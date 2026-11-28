@@ -11,6 +11,7 @@ export type AdminSection =
 	| 'overview'
 	| 'users'
 	| 'reports'
+	| 'moderation'
 	| 'federation'
 	| 'communications'
 	| 'queue'
@@ -30,6 +31,7 @@ export const ADMIN_SECTIONS: AdminSectionDefinition[] = [
 	{ id: 'overview', label: 'Overview', icon: 'activity', hint: 'Metrics, health and recent activity' },
 	{ id: 'users', label: 'Accounts', icon: 'users', hint: 'Create accounts, manage roles and access' },
 	{ id: 'reports', label: 'Reports', icon: 'flag', hint: 'Review reported posts and profiles' },
+	{ id: 'moderation', label: 'Moderation', icon: 'shield', hint: 'Actor and domain actions, blocklist imports' },
 	{ id: 'federation', label: 'Federation', icon: 'globe', hint: 'Peers, blocks and remote posts' },
 	{ id: 'communications', label: 'Errors', icon: 'alert', hint: 'Delivery, federation and background failures' },
 	{ id: 'queue', label: 'Queue', icon: 'server', hint: 'Jobs, retries and dead tasks' },
@@ -220,6 +222,48 @@ export interface ReportList {
 	reports: AdminReport[];
 	counts: Record<ReportState, number>;
 	state: string;
+}
+
+export type ModerationKind = 'silence_actor' | 'suspend_actor' | 'block_domain' | string;
+
+export interface ModerationAction {
+	id: string;
+	kind: ModerationKind;
+	target: string;
+	report_id: string | null;
+	moderator_id: string;
+	note: string | null;
+	public_comment: string | null;
+	created_at: string;
+	reversed_at: string | null;
+	reversed_by: string | null;
+	reversal_note: string | null;
+}
+
+export interface ModerationActionList {
+	actions: ModerationAction[];
+	active: number;
+}
+
+export interface DomainBlock {
+	domain: string;
+	digest: string;
+	severity: string;
+	comment: string;
+}
+
+export interface DomainImportVerdict {
+	input: string;
+	status: 'new' | 'duplicate' | 'already_blocked' | 'invalid' | string;
+	domain: string | null;
+	comment?: string | null;
+}
+
+export interface DomainImportResult {
+	applied: boolean;
+	counts: Record<string, number>;
+	entries: DomainImportVerdict[];
+	applied_count: number;
 }
 
 export interface AdminJob {
@@ -413,6 +457,19 @@ export interface AdminApi {
 	resolveReport(id: string, state: 'resolved' | 'dismissed', note?: string): Promise<AdminReport>;
 	assignReport(id: string, assignedTo: string | null): Promise<AdminReport>;
 	reopenReport(id: string): Promise<AdminReport>;
+	moderation(limit?: number): Promise<ModerationActionList>;
+	applyModeration(payload: {
+		kind: ModerationKind;
+		target: string;
+		note?: string | null;
+		public_comment?: string | null;
+	}): Promise<ModerationAction>;
+	reverseModeration(id: string, note?: string | null): Promise<ModerationAction>;
+	domainBlocks(): Promise<DomainBlock[]>;
+	importDomainBlocks(
+		entries: (string | { domain: string; comment?: string | null })[],
+		apply?: boolean,
+	): Promise<DomainImportResult>;
 	deletePost(id: string): Promise<void>;
 	jobs(state?: 'all' | 'pending' | 'running' | 'dead'): Promise<JobList>;
 	retryJob(id: string): Promise<AdminJob>;
@@ -597,6 +654,49 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 			);
 
 			return data.report;
+		},
+
+		async moderation(limit = 100): Promise<ModerationActionList> {
+			return request<ModerationActionList>('GET', '/api/v1/host/admin/moderation', {
+				limit: String(limit),
+			});
+		},
+
+		async applyModeration(payload): Promise<ModerationAction> {
+			const data = await request<{ action: ModerationAction }>(
+				'POST',
+				'/api/v1/host/admin/moderation',
+				undefined,
+				payload,
+			);
+
+			return data.action;
+		},
+
+		async reverseModeration(id, note = null): Promise<ModerationAction> {
+			const data = await request<{ action: ModerationAction }>(
+				'POST',
+				`/api/v1/host/admin/moderation/${encodeURIComponent(id)}/reverse`,
+				undefined,
+				note === null ? {} : { note },
+			);
+
+			return data.action;
+		},
+
+		async domainBlocks(): Promise<DomainBlock[]> {
+			const data = await request<{ blocks?: DomainBlock[] }>('GET', '/api/v1/host/admin/domain-blocks');
+
+			return Array.isArray(data.blocks) ? data.blocks : [];
+		},
+
+		async importDomainBlocks(entries, apply = false): Promise<DomainImportResult> {
+			return request<DomainImportResult>(
+				'POST',
+				'/api/v1/host/admin/domain-blocks/import',
+				undefined,
+				{ entries, apply },
+			);
 		},
 
 		async deletePost(id): Promise<void> {
