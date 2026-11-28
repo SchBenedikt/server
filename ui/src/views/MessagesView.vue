@@ -278,7 +278,7 @@ function startWith(account: Account): void {
 				<p v-else class="a-muted">Type a name to find an account.</p>
 			</div>
 
-			<p v-if="error !== ''" class="a-feed__inline-error">
+			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">
 				{{ error }}
 				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">
 					Try again

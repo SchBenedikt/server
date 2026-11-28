@@ -303,7 +303,7 @@ onMounted(load);
 				</div>
 			</form>
 
-			<p v-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 
 			<section v-if="selected !== null" class="a-panel a-starter-pack">
 				<header class="a-starter-pack__header">

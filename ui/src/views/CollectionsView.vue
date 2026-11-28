@@ -129,7 +129,7 @@ onMounted(load);
 				</div>
 			</form>
 
-			<p v-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+			<p v-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 			<p v-if="loading && collections.length === 0" class="a-muted">Loading collections…</p>
 
 			<EmptyState

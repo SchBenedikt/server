@@ -55,7 +55,7 @@ function close(): void {
 				</header>
 
 				<p v-if="loading" class="a-muted">Loading history…</p>
-				<p v-else-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+				<p v-else-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 
 				<template v-else-if="data !== null">
 					<section class="a-revision a-revision--current">

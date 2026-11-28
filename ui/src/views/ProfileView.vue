@@ -1134,7 +1134,7 @@ onUnmounted(() => {
 				{{ postsLoading ? 'Loading…' : 'Load more posts' }}
 			</button>
 
-			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error">{{ postsError }}</p>
+			<p v-if="postsError !== '' && posts.length > 0" class="a-feed__inline-error" role="alert">{{ postsError }}</p>
 		</template>
 
 		<ReportDialog

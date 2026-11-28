@@ -511,7 +511,7 @@ onUnmounted(() => {
 				<template v-if="engagementTab !== null">
 					<TimelineSkeleton v-if="engagementLoading && engagement[engagementTab].length === 0" :count="1" />
 
-					<p v-if="engagementError !== ''" class="a-feed__inline-error">{{ engagementError }}</p>
+					<p v-if="engagementError !== ''" class="a-feed__inline-error" role="alert">{{ engagementError }}</p>
 
 					<ul v-else-if="engagement[engagementTab].length > 0" class="a-people a-people--wide">
 						<li v-for="account in engagement[engagementTab]" :key="account.id" class="a-person">
