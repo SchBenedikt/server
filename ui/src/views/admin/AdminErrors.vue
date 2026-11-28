@@ -7,6 +7,7 @@ import { onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
 import { absoluteTime, formatCount, relativeTime } from '../../lib/format';
 import { getAdminApi, type CommunicationData } from '../../lib/admin';
+import { t } from '../../lib/i18n';
 
 const data = ref<CommunicationData | null>(null);
 const loading = ref(false);
@@ -33,7 +34,7 @@ async function load(): Promise<void> {
 	try {
 		data.value = await getAdminApi().communications();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Communication errors could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('aerr.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -48,17 +49,13 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Operations</p>
-				<h2>Delivery, federation and background errors</h2>
-				<p class="a-admin-lead">
-					Warnings and failures the worker and the federation layer recorded,
-					plus jobs that exhausted their retries. The PHP error log still receives
-					the full detail; this view keeps the operational picture in the app.
-				</p>
+				<p class="a-admin-eyebrow">{{ t('aq.eyebrow') }}</p>
+				<h2>{{ t('aerr.title') }}</h2>
+				<p class="a-admin-lead">{{ t('aerr.lead') }}</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="load">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Refresh
+				{{ t('common.refresh') }}
 			</button>
 		</div>
 
@@ -73,33 +70,33 @@ onMounted(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="alert" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Last 24 hours</p>
+						<p class="a-admin-stat__label">{{ t('aerr.last24h') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.last_24h) }}</strong>
-						<p class="a-admin-stat__meta">Recorded errors</p>
+						<p class="a-admin-stat__meta">{{ t('aerr.recorded') }}</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="alert" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Warnings</p>
+						<p class="a-admin-stat__label">{{ t('aerr.warnings') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.warnings) }}</strong>
-						<p class="a-admin-stat__meta">Kept for review</p>
+						<p class="a-admin-stat__meta">{{ t('aerr.keptReview') }}</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="server" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Failures</p>
+						<p class="a-admin-stat__label">{{ t('aerr.failures') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.failures) }}</strong>
-						<p class="a-admin-stat__meta">Warnings excluded</p>
+						<p class="a-admin-stat__meta">{{ t('aerr.excluded') }}</p>
 					</div>
 				</article>
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="server" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Dead jobs</p>
+						<p class="a-admin-stat__label">{{ t('aerr.deadJobs') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(data.counts.dead_jobs) }}</strong>
-						<p class="a-admin-stat__meta">Awaiting a retry</p>
+						<p class="a-admin-stat__meta">{{ t('aerr.awaitingRetry') }}</p>
 					</div>
 				</article>
 			</div>
@@ -107,10 +104,10 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Recent errors</h3>
-						<p>Newest first. A warning is a delivery attempt that was skipped or retried.</p>
+						<h3>{{ t('aerr.recent') }}</h3>
+						<p>{{ t('aerr.recentHint') }}</p>
 					</div>
-					<a class="a-admin-link" href="#/admin/queue">Open queue</a>
+					<a class="a-admin-link" href="#/admin/queue">{{ t('aerr.openQueue') }}</a>
 				</header>
 				<ul class="a-admin-list">
 					<li v-for="entry in data.errors" :key="entry.id" class="a-admin-list__row a-admin-list__row--error">
@@ -128,7 +125,7 @@ onMounted(() => {
 						</div>
 					</li>
 					<li v-if="data.errors.length === 0" class="a-admin-empty">
-						No runtime or communication errors recorded.
+						{{ t('aerr.emptyErrors') }}
 					</li>
 				</ul>
 			</section>
@@ -136,8 +133,8 @@ onMounted(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Dead delivery jobs</h3>
-						<p>Jobs that exhausted their attempts. Retry them from the queue view.</p>
+						<h3>{{ t('aerr.deadTitle') }}</h3>
+						<p>{{ t('aerr.deadHint') }}</p>
 					</div>
 				</header>
 				<ul class="a-admin-list">
@@ -145,13 +142,13 @@ onMounted(() => {
 						<div>
 							<strong class="a-admin-mono">{{ job.type }}</strong>
 							<small>
-								{{ job.attempts }} attempts · failed {{ relativeTime(job.dead_at ?? job.available_at) }}
+								{{ t('aerr.attemptsFailed', { attempts: job.attempts, time: relativeTime(job.dead_at ?? job.available_at) }) }}
 								· {{ job.id }}
 							</small>
 						</div>
-						<span class="a-admin-badge a-admin-badge--danger">dead</span>
+						<span class="a-admin-badge a-admin-badge--danger">{{ t('aerr.deadBadge') }}</span>
 					</li>
-					<li v-if="data.dead_jobs.length === 0" class="a-admin-empty">No dead jobs.</li>
+					<li v-if="data.dead_jobs.length === 0" class="a-admin-empty">{{ t('aerr.emptyJobs') }}</li>
 				</ul>
 			</section>
 		</template>

@@ -8,6 +8,7 @@ import AppIcon from '../../components/AppIcon.vue';
 import { bytesLabel, getAdminApi, type AdminOverview, type ChecklistItem } from '../../lib/admin';
 import { absoluteTime, formatCount, relativeTime } from '../../lib/format';
 import { showToast } from '../../lib/state';
+import { t } from '../../lib/i18n';
 
 const overview = ref<AdminOverview | null>(null);
 const loading = ref(false);
@@ -46,7 +47,7 @@ async function load(quiet = false): Promise<void> {
 	try {
 		overview.value = await getAdminApi().overview();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The overview could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('aov.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -54,7 +55,7 @@ async function load(quiet = false): Promise<void> {
 
 function refresh(): void {
 	void load();
-	showToast('Overview updated.', 'success');
+	showToast(t('aov.updated'), 'success');
 }
 
 onMounted(() => {
@@ -71,16 +72,13 @@ onBeforeUnmount(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Overview</p>
-				<h2>What's happening on this instance right now</h2>
-				<p class="a-admin-lead">
-					Metrics, system health and recent changes. The view refreshes
-					every 30 seconds without reloading the page.
-				</p>
+				<p class="a-admin-eyebrow">{{ t('aov.eyebrow') }}</p>
+				<h2>{{ t('aov.title') }}</h2>
+				<p class="a-admin-lead">{{ t('aov.lead') }}</p>
 			</div>
 			<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="loading" @click="refresh">
 				<AppIcon name="refresh" :size="15" :class="{ 'a-spin': loading }" />
-				Refresh
+				{{ t('common.refresh') }}
 			</button>
 		</div>
 
@@ -94,8 +92,8 @@ onBeforeUnmount(() => {
 			<section v-if="pendingChecklist.length > 0" class="a-admin-card a-admin-card--checklist">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Getting started</h3>
-						<p class="a-admin-card__hint">{{ pendingChecklist.length }} setup step(s) left — each links to where it is completed.</p>
+						<h3>{{ t('aov.gettingStarted') }}</h3>
+						<p class="a-admin-card__hint">{{ t('aov.stepsLeft', { count: pendingChecklist.length }) }}</p>
 					</div>
 				</header>
 				<ul class="a-admin-checklist">
@@ -109,7 +107,7 @@ onBeforeUnmount(() => {
 							<strong>{{ item.label }}</strong>
 							<small>{{ item.hint }}</small>
 						</div>
-						<a class="a-btn a-btn--ghost a-btn--small" :href="item.href">Open</a>
+						<a class="a-btn a-btn--ghost a-btn--small" :href="item.href">{{ t('aov.open') }}</a>
 					</li>
 				</ul>
 			</section>
@@ -118,10 +116,10 @@ onBeforeUnmount(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="users" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">accounts</p>
+						<p class="a-admin-stat__label">{{ t('aov.accounts') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(overview.stats.accounts.total) }}</strong>
 						<p class="a-admin-stat__meta">
-							{{ overview.stats.accounts.active }} active · {{ overview.stats.accounts.admins }} admins
+							{{ t('aov.accountsMeta', { active: formatCount(overview.stats.accounts.active), admins: formatCount(overview.stats.accounts.admins) }) }}
 						</p>
 					</div>
 				</article>
@@ -129,10 +127,10 @@ onBeforeUnmount(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="message" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Posts</p>
+						<p class="a-admin-stat__label">{{ t('aov.posts') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(overview.stats.posts.total) }}</strong>
 						<p class="a-admin-stat__meta">
-							{{ overview.stats.posts.today }} today · {{ overview.stats.posts.public }} public
+							{{ t('aov.postsMeta', { today: formatCount(overview.stats.posts.today), public: formatCount(overview.stats.posts.public) }) }}
 						</p>
 					</div>
 				</article>
@@ -140,10 +138,10 @@ onBeforeUnmount(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="globe" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Federation</p>
+						<p class="a-admin-stat__label">{{ t('aov.federation') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(overview.stats.federation.peer_domains) }}</strong>
 						<p class="a-admin-stat__meta">
-							{{ overview.stats.federation.remote_posts }} remote posts
+							{{ t('aov.federationMeta', { count: formatCount(overview.stats.federation.remote_posts) }) }}
 						</p>
 					</div>
 				</article>
@@ -151,10 +149,10 @@ onBeforeUnmount(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="server" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">queue</p>
+						<p class="a-admin-stat__label">{{ t('aov.queue') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(overview.stats.queue.pending) }}</strong>
 						<p class="a-admin-stat__meta">
-							{{ overview.stats.queue.running }} running · {{ overview.stats.queue.dead }} dead
+							{{ t('aov.queueMeta', { running: formatCount(overview.stats.queue.running), dead: formatCount(overview.stats.queue.dead) }) }}
 						</p>
 					</div>
 				</article>
@@ -162,20 +160,20 @@ onBeforeUnmount(() => {
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="flag" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Open Reports</p>
+						<p class="a-admin-stat__label">{{ t('aov.openReports') }}</p>
 						<strong class="a-admin-stat__value">{{ formatCount(overview.stats.reports.open) }}</strong>
-						<p class="a-admin-stat__meta">{{ overview.stats.reports.total }} total</p>
+						<p class="a-admin-stat__meta">{{ t('aov.reportsMeta', { count: formatCount(overview.stats.reports.total) }) }}</p>
 					</div>
 				</article>
 
 				<article class="a-admin-stat">
 					<span class="a-admin-stat__icon"><AppIcon name="image" :size="19" /></span>
 					<div>
-						<p class="a-admin-stat__label">Media storage</p>
+						<p class="a-admin-stat__label">{{ t('aov.media') }}</p>
 						<strong class="a-admin-stat__value">{{ overview.stats.media.blob_bytes === null ? 'S3 / MinIO' : bytesLabel(overview.stats.media.blob_bytes) }}</strong>
 						<p class="a-admin-stat__meta">
-							<template v-if="overview.stats.media.blobs === null">{{ overview.stats.media.attachments }} Attachments · remote storage</template>
-							<template v-else>{{ overview.stats.media.blobs }} files · {{ overview.stats.media.attachments }} Attachments</template>
+							<template v-if="overview.stats.media.blobs === null">{{ t('aov.mediaRemote', { attachments: formatCount(overview.stats.media.attachments) }) }}</template>
+							<template v-else>{{ t('aov.mediaLocal', { blobs: formatCount(overview.stats.media.blobs), attachments: formatCount(overview.stats.media.attachments) }) }}</template>
 						</p>
 					</div>
 				</article>
@@ -185,11 +183,11 @@ onBeforeUnmount(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>System health</h3>
-							<p>Database, worker, storage and configuration.</p>
+							<h3>{{ t('aov.health') }}</h3>
+							<p>{{ t('aov.healthHint') }}</p>
 						</div>
 						<span class="a-admin-pill" :class="`a-admin-pill--${summaryTone}`">
-							{{ healthCounts.ok }} OK<span v-if="healthCounts.warn > 0"> · {{ healthCounts.warn }} Warning</span><span v-if="healthCounts.error > 0"> · {{ healthCounts.error }} Error</span>
+							{{ t('aov.pillOk', { count: healthCounts.ok }) }}<span v-if="healthCounts.warn > 0"> · {{ t('aov.pillWarn', { count: healthCounts.warn }) }}</span><span v-if="healthCounts.error > 0"> · {{ t('aov.pillError', { count: healthCounts.error }) }}</span>
 						</span>
 					</header>
 					<ul class="a-admin-health">
@@ -199,7 +197,7 @@ onBeforeUnmount(() => {
 								<strong>{{ check.label }}</strong>
 								<small>{{ check.detail }}</small>
 							</div>
-							<span class="a-admin-health__state">{{ check.status === 'ok' ? 'OK' : check.status === 'warn' ? 'Warning' : 'Error' }}</span>
+							<span class="a-admin-health__state">{{ t(check.status === 'ok' ? 'aov.stateOk' : check.status === 'warn' ? 'aov.stateWarn' : 'aov.stateError') }}</span>
 						</li>
 					</ul>
 				</section>
@@ -207,38 +205,38 @@ onBeforeUnmount(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Worker</h3>
-							<p>The process that runs deliveries and cleanup jobs.</p>
+							<h3>{{ t('aov.worker') }}</h3>
+							<p>{{ t('aov.workerHint') }}</p>
 						</div>
 						<span class="a-admin-pill" :class="overview.worker.online ? 'a-admin-pill--ok' : 'a-admin-pill--warn'">
-							{{ overview.worker.online ? 'Online' : 'No signal' }}
+							{{ t(overview.worker.online ? 'common.online' : 'common.noSignal') }}
 						</span>
 					</header>
 					<dl class="a-admin-facts">
 						<div>
-							<dt>Last heartbeat</dt>
-							<dd>{{ overview.worker.last_beat ?? 'None yet' }}</dd>
+							<dt>{{ t('aov.lastHeartbeat') }}</dt>
+							<dd>{{ overview.worker.last_beat ?? t('aov.noneYet') }}</dd>
 						</div>
 						<div>
-							<dt>Timestamp</dt>
+							<dt>{{ t('aov.timestamp') }}</dt>
 							<dd>{{ overview.worker.updated_at ? absoluteTime(overview.worker.updated_at) : '–' }}</dd>
 						</div>
 						<div>
-							<dt>Scheduled posts</dt>
-							<dd>{{ overview.stats.scheduled.pending }} pending · {{ overview.stats.scheduled.published }} published</dd>
+							<dt>{{ t('aov.scheduledPosts') }}</dt>
+							<dd>{{ t('aov.scheduledMeta', { pending: formatCount(overview.stats.scheduled.pending), published: formatCount(overview.stats.scheduled.published) }) }}</dd>
 						</div>
 						<div>
-							<dt>Notifications</dt>
-							<dd>{{ overview.stats.notifications.total }} total · {{ overview.stats.notifications.unread }} unread</dd>
+							<dt>{{ t('aov.notifications') }}</dt>
+							<dd>{{ t('aov.notificationsMeta', { total: formatCount(overview.stats.notifications.total), unread: formatCount(overview.stats.notifications.unread) }) }}</dd>
 						</div>
 					</dl>
 					<p v-if="!overview.worker.online" class="a-admin-hint">
-						Start the worker with <code>php bin/worker.php</code> or a cron entry for
+						{{ t('aov.workerHintStart') }} <code>php bin/worker.php</code> {{ t('aov.workerHintEnd') }}
 						<code>--once</code>.
 					</p>
 					<div class="a-admin-actions">
-						<a class="a-btn a-btn--ghost a-btn--small" href="#/admin/queue">Open queue</a>
-						<a class="a-btn a-btn--ghost a-btn--small" href="#/admin/settings">Check instance</a>
+						<a class="a-btn a-btn--ghost a-btn--small" href="#/admin/queue">{{ t('aov.openQueue') }}</a>
+						<a class="a-btn a-btn--ghost a-btn--small" href="#/admin/settings">{{ t('aov.checkInstance') }}</a>
 					</div>
 				</section>
 			</div>
@@ -247,10 +245,10 @@ onBeforeUnmount(() => {
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>New accounts</h3>
-							<p>The most recently created accounts on this instance.</p>
+							<h3>{{ t('aov.newAccounts') }}</h3>
+							<p>{{ t('aov.newAccountsHint') }}</p>
 						</div>
-						<a class="a-admin-link" href="#/admin/users">All accounts</a>
+						<a class="a-admin-link" href="#/admin/users">{{ t('aov.allAccounts') }}</a>
 					</header>
 					<ul class="a-admin-list">
 						<li v-for="user in overview.recent_users" :key="user.id" class="a-admin-list__row">
@@ -262,18 +260,18 @@ onBeforeUnmount(() => {
 								</span>
 							</a>
 							<span class="a-admin-badge" :class="user.role === 'admin' ? 'a-admin-badge--primary' : ''">
-								{{ user.role === 'admin' ? 'Admin' : 'Member' }}
+								{{ t(user.role === 'admin' ? 'aov.admin' : 'aov.member') }}
 							</span>
 						</li>
-						<li v-if="overview.recent_users.length === 0" class="a-admin-empty">No accounts yet.</li>
+						<li v-if="overview.recent_users.length === 0" class="a-admin-empty">{{ t('aov.noAccounts') }}</li>
 					</ul>
 				</section>
 
 				<section class="a-admin-card">
 					<header class="a-admin-card__head">
 						<div>
-							<h3>Recent posts</h3>
-							<p>Public and internal posts, newest first.</p>
+							<h3>{{ t('aov.recentPosts') }}</h3>
+							<p>{{ t('aov.recentPostsHint') }}</p>
 						</div>
 					</header>
 					<ul class="a-admin-list">
@@ -283,11 +281,11 @@ onBeforeUnmount(() => {
 								<span>{{ post.content }}</span>
 								<small>
 									{{ relativeTime(post.published_at) }} ·
-									{{ post.visibility }}{{ post.reply ? ' · Reply' : '' }}
+									{{ t(`visibility.${post.visibility}`) }}{{ post.reply ? ` · ${t('aov.reply')}` : '' }}
 								</small>
 							</a>
 						</li>
-						<li v-if="overview.recent_posts.length === 0" class="a-admin-empty">No posts yet.</li>
+						<li v-if="overview.recent_posts.length === 0" class="a-admin-empty">{{ t('aov.noPosts') }}</li>
 					</ul>
 				</section>
 			</div>
@@ -295,10 +293,10 @@ onBeforeUnmount(() => {
 			<section class="a-admin-card">
 				<header class="a-admin-card__head">
 					<div>
-						<h3>Recent administrative changes</h3>
-						<p>An excerpt from the audit log.</p>
+						<h3>{{ t('aov.changes') }}</h3>
+						<p>{{ t('aov.changesHint') }}</p>
 					</div>
-					<a class="a-admin-link" href="#/admin/audit">Full audit log</a>
+					<a class="a-admin-link" href="#/admin/audit">{{ t('aov.fullAudit') }}</a>
 				</header>
 				<ul class="a-admin-timeline">
 					<li v-for="entry in overview.audit" :key="entry.id">
@@ -312,7 +310,7 @@ onBeforeUnmount(() => {
 							</small>
 						</div>
 					</li>
-					<li v-if="overview.audit.length === 0" class="a-admin-empty">No logged actions yet.</li>
+					<li v-if="overview.audit.length === 0" class="a-admin-empty">{{ t('aov.noActions') }}</li>
 				</ul>
 			</section>
 		</template>
