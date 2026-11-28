@@ -330,13 +330,13 @@ final class AtprotoReconciler
         $this->db->execute(
             'INSERT INTO social_remote_post'
             . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, object_metadata,'
-            . ' quoted_object_id, content, content_warning, published_at, updated_at, deleted_at)'
+            . ' quoted_object_id, content, content_warning, published_at, updated_at, deleted_at, audience)'
             . ' VALUES (:activity_id, :object_id, :object_author, :actor, :kind, :object_type, NULL,'
-            . ' NULL, :content, NULL, :published_at, :updated_at, NULL)'
+            . ' NULL, :content, NULL, :published_at, :updated_at, NULL, \'public\')'
             . ' ON CONFLICT (activity_id) DO UPDATE SET object_id = excluded.object_id,'
             . ' object_author_id = excluded.object_author_id, actor_id = excluded.actor_id,'
             . ' kind = excluded.kind, object_type = excluded.object_type, content = excluded.content,'
-            . ' published_at = excluded.published_at, updated_at = excluded.updated_at, deleted_at = NULL',
+            . ' published_at = excluded.published_at, updated_at = excluded.updated_at, deleted_at = NULL, audience = \'public\'',
             [
                 'activity_id' => $repostUri,
                 'object_id' => $subjectUri,
@@ -368,9 +368,9 @@ final class AtprotoReconciler
             $this->db->execute(
                 'INSERT INTO social_remote_post'
                 . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, object_metadata,'
-                . ' quoted_object_id, content, content_warning, published_at, updated_at, deleted_at)'
+                . ' quoted_object_id, content, content_warning, published_at, updated_at, deleted_at, audience)'
                 . " VALUES (:activity_id, :object_id, :author, :actor, 'post', 'note', NULL, NULL,"
-                . ' :content, NULL, :published_at, :updated_at, NULL)',
+                . ' :content, NULL, :published_at, :updated_at, NULL, \'public\')',
                 [
                     'activity_id' => $projection->uri,
                     'object_id' => $projection->uri,
@@ -387,7 +387,7 @@ final class AtprotoReconciler
 
         $this->db->execute(
             'UPDATE social_remote_post SET content = :content, object_author_id = :author,'
-            . ' published_at = :published_at, updated_at = :updated_at, deleted_at = NULL'
+            . ' published_at = :published_at, updated_at = :updated_at, deleted_at = NULL, audience = \'public\''
             . ' WHERE activity_id = :activity_id',
             [
                 'content' => $projection->text,

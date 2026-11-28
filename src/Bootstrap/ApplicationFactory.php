@@ -15,6 +15,8 @@ use AlohaSocial\Core\Domain\Atproto\Pds\PdoPdsRepository;
 use AlohaSocial\Core\Domain\Atproto\PdoAtprotoFollowRepository;
 use AlohaSocial\Core\Domain\Atproto\PdoAtprotoInboundRepository;
 use AlohaSocial\Core\Domain\Federation\PdoBlockRepository;
+use AlohaSocial\Core\Domain\Federation\PdoFollowingRepository;
+use AlohaSocial\Core\Domain\Federation\PdoInboundBlockRepository;
 use AlohaSocial\Core\Protocol\Atproto\PlcDirectoryClient;
 use AlohaSocial\Core\Protocol\Atproto\XrpcAtprotoPublisher;
 use AlohaSocial\Core\Domain\Federation\PdoActivityLog;
@@ -36,6 +38,7 @@ use AlohaSocial\Core\Protocol\ActivityPub\HttpActorResolver;
 use AlohaSocial\Core\Security\OpenSslSecretBox;
 use AlohaSocial\Core\Security\SecretBox;
 use AlohaSocial\Core\Service\Federation\FederationTargetGuard;
+use AlohaSocial\Core\Service\Federation\RemotePostAccess;
 use AlohaSocial\Core\Service\NotificationService;
 use AlohaSocial\Core\Support\RandomIdGenerator;
 use AlohaSocial\Server\Federation\Atproto\AtprotoBackoff;
@@ -357,6 +360,11 @@ final class ApplicationFactory
             clock: $clock,
             interactions: $interactions,
             remoteDirectory: $remoteDirectory,
+            remotePostAccess: new RemotePostAccess(
+                new PdoFollowingRepository($database),
+                new PdoBlockRepository($database),
+                new PdoInboundBlockRepository($database),
+            ),
             admin: new AdminService(
                 $database,
                 $clock,

@@ -111,8 +111,8 @@ final class RemotePostImportTest extends TestCase
         $this->http->html(self::OBJECT, 'origin unavailable', 503);
         $this->server->runtime->database->execute(
             'INSERT INTO social_remote_post'
-            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at)'
-            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at)',
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at, audience)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at, \'public\')',
             [
                 'activity_id' => 'https://peer.example/activities/live-1',
                 'object_id' => self::OBJECT,

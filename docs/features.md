@@ -83,9 +83,12 @@ sign-in.
 
 Home offers **For you**, **Trending**, **Following**, **Local** and
 **Federated**. Local is the public timeline of this instance; Federated is
-every public post the instance has received from other servers, read from the
-remote-post cache so paging makes no peer request and shows the origin's
-counters. Author display names and avatars come from the host's
+every post the instance has received from other servers whose audience is
+verified public, read from the remote-post cache so paging makes no peer
+request and shows the origin's counters. Followers-only, unlisted and
+unknown-audience rows never enter a listing; they stay readable through
+direct links for viewers whose follow of the content author permits it,
+the same rule `RemotePostAccess` applies everywhere else. Author display names and avatars come from the host's
 `social_remote_actor_profile` cache: the worker reads each author's actor
 document once with the guarded fetcher, keeps a successful profile for a week
 and backs off for six hours after a failure. Until a profile is cached the card

@@ -94,7 +94,11 @@ final class FederatedTimeline
     ): array {
         $limit = max(1, min(self::MAX_LIMIT, $limit));
 
-        $where = ['deleted_at IS NULL'];
+        // This timeline is a discovery listing readable without an account.
+        // Only a verified public audience may appear: unlisted stays out of
+        // every listing by definition, followers-only and unknown audiences
+        // require a follow, and direct rows are never stored for display.
+        $where = ['deleted_at IS NULL', "audience = 'public'"];
         $parameters = [];
 
         $tag = $this->normalizeTag($tag);
@@ -197,9 +201,9 @@ final class FederatedTimeline
             $values = $counts[$postObjectId] ?? $counts[$postId] ?? null;
 
             $post['is_remote'] = true;
-            // Every entry in this store passed the audience check when it
-            // arrived; the reader sees the same public projection as on the
-            // origin instance.
+            // Remote entries are public or unlisted by the query above; the
+            // reader sees the same public projection as on the origin
+            // instance.
             $post['visibility'] = 'public';
             $displayAuthorId = (string) ($post['object_author_id'] ?? '');
             if ($displayAuthorId === '') {

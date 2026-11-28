@@ -129,6 +129,22 @@ final class FederatedTimelineTest extends TestCase
         self::assertFalse($secondBody['has_more']);
     }
 
+    public function testFederatedTimelineOnlyListsVerifiedPublicAudience(): void
+    {
+        $this->seed('https://peer.example/activities/public', 'https://peer.example/notes/p', 'Public', '2026-11-20T10:00:00Z', audience: 'public');
+        $this->seed('https://peer.example/activities/followers', 'https://peer.example/notes/f', 'Followers only', '2026-11-21T10:00:00Z', audience: 'followers');
+        $this->seed('https://peer.example/activities/unknown', 'https://peer.example/notes/u', 'Unknown audience', '2026-11-22T10:00:00Z', audience: null);
+        $this->seed('https://peer.example/activities/unlisted', 'https://peer.example/notes/u2', 'Unlisted', '2026-11-23T10:00:00Z', audience: 'unlisted');
+        $this->seed('https://peer.example/activities/direct', 'https://peer.example/notes/d', 'Direct', '2026-11-24T10:00:00Z', audience: 'direct');
+
+        $response = $this->server->send('GET', '/api/v1/host/federated');
+        self::assertSame(200, $response->status, $response->body);
+        /** @var array{posts: list<array<string, mixed>>} $body */
+        $body = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
+
+        self::assertSame(['https://peer.example/activities/public'], array_column($body['posts'], 'id'));
+    }
+
     public function testFederatedTimelineDoesNotExposeLocalPosts(): void
     {
         $this->server->createAccount('alice');
@@ -154,13 +170,14 @@ final class FederatedTimelineTest extends TestCase
         string $actorId = 'https://peer.example/users/bob',
         string $kind = 'post',
         ?string $deletedAt = null,
+        ?string $audience = 'public',
     ): void {
         $this->server->runtime->database->execute(
             'INSERT INTO social_remote_post'
             . ' (activity_id, object_id, object_author_id, actor_id, kind, content,'
-            . ' content_warning, published_at, deleted_at)'
+            . ' content_warning, published_at, deleted_at, audience)'
             . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content,'
-            . ' NULL, :published_at, :deleted_at)',
+            . ' NULL, :published_at, :deleted_at, :audience)',
             [
                 'activity_id' => $activityId,
                 'object_id' => $objectId,
@@ -170,6 +187,7 @@ final class FederatedTimelineTest extends TestCase
                 'content' => $content,
                 'published_at' => $publishedAt,
                 'deleted_at' => $deletedAt,
+                'audience' => $audience,
             ],
         );
     }

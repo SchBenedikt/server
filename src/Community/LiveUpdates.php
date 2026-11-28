@@ -84,7 +84,11 @@ final class LiveUpdates
             'remote_since' => $start,
             'remote_follower_main' => $accountId,
             'remote_follower_atproto' => $accountId,
+            'live_author_viewer' => $accountId,
+            'live_atproto_author_viewer' => $accountId,
         ];
+        $audienceClause = $this->remoteAudienceSql('r');
+        $engagementAudienceClause = $this->remoteAudienceSql('remote');
 
         $local = $this->db->fetchAll(
             'SELECT id FROM social_post'
@@ -96,13 +100,14 @@ final class LiveUpdates
         );
 
         $remote = $this->db->fetchAll(
-            'SELECT activity_id FROM social_remote_post'
-            . " WHERE published_at > :remote_since AND deleted_at IS NULL AND kind = 'post'"
-            . ' AND actor_id IN ('
+            'SELECT r.activity_id FROM social_remote_post r'
+            . ' WHERE r.published_at > :remote_since AND r.deleted_at IS NULL AND r.kind = \'post\''
+            . ' AND r.actor_id IN ('
             . ' SELECT actor_id FROM social_following'
             . " WHERE local_user_id = :remote_follower_main AND state = 'accepted'"
             . ' UNION SELECT subject_did FROM ' . AtprotoFollowSchema::TABLE
             . " WHERE local_user_id = :remote_follower_atproto AND state = 'active')"
+            . $audienceClause
             . ' ORDER BY published_at ASC LIMIT ' . self::MAX_ITEMS,
             $remoteParameters,
         );
@@ -114,8 +119,22 @@ final class LiveUpdates
             array_merge(['since' => $start, 'viewer' => $accountId], $localFollowed['params']),
         );
         $deletedRemote = $this->db->fetchAll(
-            'SELECT activity_id FROM social_remote_post WHERE deleted_at > :since LIMIT ' . self::MAX_ITEMS,
-            ['since' => $start],
+            'SELECT activity_id FROM social_remote_post r'
+            . ' WHERE r.deleted_at > :deleted_since AND r.kind = \'post\''
+            . ' AND r.actor_id IN ('
+            . ' SELECT actor_id FROM social_following'
+            . " WHERE local_user_id = :deleted_follower_main AND state = 'accepted'"
+            . ' UNION SELECT subject_did FROM ' . AtprotoFollowSchema::TABLE
+            . " WHERE local_user_id = :deleted_follower_atproto AND state = 'active')"
+            . $audienceClause
+            . ' LIMIT ' . self::MAX_ITEMS,
+            [
+                'deleted_since' => $start,
+                'deleted_follower_main' => $accountId,
+                'deleted_follower_atproto' => $accountId,
+                'live_author_viewer' => $accountId,
+                'live_atproto_author_viewer' => $accountId,
+            ],
         );
 
         // A counter refresh changes no post row, so the page would otherwise
@@ -132,11 +151,14 @@ final class LiveUpdates
             . " WHERE local_user_id = :engagement_follower_main AND state = 'accepted'"
             . ' UNION SELECT subject_did FROM ' . AtprotoFollowSchema::TABLE
             . " WHERE local_user_id = :engagement_follower_atproto AND state = 'active')"
+            . $engagementAudienceClause
             . ' ORDER BY cache.fetched_at ASC LIMIT ' . self::MAX_ITEMS,
             [
                 'engagement_since' => $start,
                 'engagement_follower_main' => $accountId,
                 'engagement_follower_atproto' => $accountId,
+                'live_author_viewer' => $accountId,
+                'live_atproto_author_viewer' => $accountId,
             ],
         );
 
@@ -162,5 +184,28 @@ final class LiveUpdates
                 $engagement,
             ), static fn (array $entry): bool => $entry['id'] !== '' && $entry['object_id'] !== '')),
         ];
+    }
+
+    /**
+     * The audience half of the remote visibility rule, mirroring
+     * RemotePostAccess: verified public posts pass once their deliverer is
+     * followed (the caller's own clause); followers-only and unknown
+     * audiences additionally need a follow of the content author —
+     * object_author_id, falling back to the delivering actor. Unlisted stays
+     * out of listings and direct is never stored, so both are excluded.
+     * Expects :live_author_viewer and :live_atproto_author_viewer params.
+     */
+    private function remoteAudienceSql(string $alias): string
+    {
+        $author = 'COALESCE(NULLIF(' . $alias . '.object_author_id, \'\'), ' . $alias . '.actor_id)';
+
+        return ' AND (' . $alias . ".audience = 'public' OR ((" . $alias . ".audience IS NULL OR "
+            . $alias . ".audience = 'followers') AND ("
+            . $author . ' IN (SELECT f.actor_id FROM social_following f'
+            . " WHERE f.local_user_id = :live_author_viewer AND f.state = 'accepted')"
+            . ' OR EXISTS (SELECT 1 FROM ' . AtprotoFollowSchema::TABLE . ' af'
+            . ' WHERE af.local_user_id = :live_atproto_author_viewer'
+            . ' AND af.subject_did = ' . $author
+            . " AND af.state = 'active'))))";
     }
 }
