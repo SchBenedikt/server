@@ -4,7 +4,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HostBridge, UiResponse } from '@alohasocial/ui';
-import { createApi, normalizeMastodonStatus } from './api';
+import { ApiError, createApi, normalizeMastodonStatus } from './api';
 import { markOnline, offline } from './connectivity';
 
 describe('normalizeMastodonStatus', () => {
@@ -111,6 +111,24 @@ describe('request retry', () => {
 		await vi.advanceTimersByTimeAsync(6_000);
 		await rejected;
 		expect(failing.calls()).toBe(1);
+	});
+
+	it('carries the server request id and classifies the transport kind', async () => {
+		const { bridge } = scriptedBridge([
+			json(500, { error: { code: 'boom', message: 'nope', request_id: 'req_test123' } }),
+		]);
+		const api = createApi(bridge, async () => {
+			throw new Error('unused');
+		});
+
+		const failure = await api.likePost('post-1').then(
+			() => null,
+			(error: unknown) => error,
+		);
+		expect(failure).toBeInstanceOf(ApiError);
+		const error = failure as ApiError;
+		expect(error.requestId).toBe('req_test123');
+		expect(error.kind).toBe('http');
 	});
 });
 
