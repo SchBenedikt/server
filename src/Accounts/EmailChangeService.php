@@ -18,6 +18,7 @@ use AlohaSocial\Server\Mail\MailOutbox;
 use function base64_encode;
 use function filter_var;
 use function hash;
+use function is_string;
 use function random_bytes;
 use function rtrim;
 use function strtr;
@@ -227,6 +228,32 @@ final class EmailChangeService
         } catch (\RuntimeException) {
             return false;
         }
+    }
+
+    /**
+     * The account's outstanding change, if any: the reserved address and
+     * when its confirmation link expires. Read-only; used by the settings
+     * surface so a member can see and cancel a pending request.
+     *
+     * @return array{email: string, expires_at: string}|null
+     */
+    public function pendingFor(string $accountId): ?array
+    {
+        $row = $this->db->fetchOne(
+            'SELECT a.pending_email AS pending_email, e.expires_at AS expires_at'
+            . ' FROM account a LEFT JOIN email_change e'
+            . '   ON e.account_id = a.id AND e.used_at IS NULL'
+            . ' WHERE a.id = :id',
+            ['id' => $accountId],
+        );
+        if ($row === null || !is_string($row['pending_email']) || $row['pending_email'] === '') {
+            return null;
+        }
+
+        return [
+            'email' => $row['pending_email'],
+            'expires_at' => is_string($row['expires_at']) ? $row['expires_at'] : '',
+        ];
     }
 
     /**

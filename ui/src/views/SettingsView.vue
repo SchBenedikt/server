@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type HostSession, type MfaEnrollment, type MfaStatus } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type EmailChangeStatus, type HostSession, type MfaEnrollment, type MfaStatus } from '../lib/api';
 import { disablePush, enablePush, pushSupport, subscribed as pushSubscribed } from '../lib/push';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
@@ -75,6 +75,12 @@ const mfaEnrollment = ref<MfaEnrollment | null>(null);
 const mfaRecoveryCodes = ref<string[]>([]);
 const mfaCode = ref('');
 const mfaBusy = ref(false);
+const emailChange = ref<EmailChangeStatus | null>(null);
+const emailBusy = ref(false);
+const emailError = ref('');
+const newEmail = ref('');
+const emailPassword = ref('');
+const confirmCancelEmail = ref(false);
 
 const visibilityOptions = [
 	{ value: 'public', label: 'Public', hint: 'Everyone can see the post.' },
@@ -145,6 +151,11 @@ async function load(): Promise<void> {
 			mfa.value = await getApi().mfaStatus();
 		} catch {
 			mfa.value = { enabled: false, pending: false };
+		}
+		try {
+			emailChange.value = await getApi().emailChangeStatus();
+		} catch {
+			emailChange.value = null;
 		}
 		pushState.value = await resolvePushState();
 		try {
@@ -492,6 +503,51 @@ async function disableMfa(): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'A current code is required to disable.', 'error');
 	} finally {
 		mfaBusy.value = false;
+	}
+}
+
+async function submitEmailChange(): Promise<void> {
+	if (emailBusy.value || newEmail.value.trim() === '' || emailPassword.value === '') {
+		return;
+	}
+
+	emailBusy.value = true;
+	emailError.value = '';
+	try {
+		const result = await getApi().requestEmailChange(newEmail.value.trim(), emailPassword.value);
+		newEmail.value = '';
+		emailPassword.value = '';
+		emailChange.value = await getApi().emailChangeStatus();
+		confirmCancelEmail.value = false;
+		showToast(`Confirmation sent to ${result.pending_email}.`, 'success');
+	} catch (caught) {
+		emailError.value = caught instanceof Error ? caught.message : 'The email change could not be requested.';
+	} finally {
+		emailBusy.value = false;
+	}
+}
+
+async function cancelPendingEmail(): Promise<void> {
+	if (emailBusy.value) {
+		return;
+	}
+
+	if (!confirmCancelEmail.value) {
+		confirmCancelEmail.value = true;
+		return;
+	}
+
+	emailBusy.value = true;
+	emailError.value = '';
+	try {
+		await getApi().cancelEmailChange();
+		emailChange.value = await getApi().emailChangeStatus();
+		confirmCancelEmail.value = false;
+		showToast('The pending email change was cancelled.', 'success');
+	} catch (caught) {
+		emailError.value = caught instanceof Error ? caught.message : 'The change could not be cancelled.';
+	} finally {
+		emailBusy.value = false;
 	}
 }
 
@@ -917,6 +973,50 @@ watch(signedIn, (value) => {
 					<button type="submit" class="a-btn a-btn--danger a-btn--small" :disabled="moveBusy">
 						<AppIcon :name="moveBusy ? 'refresh' : 'arrowRight'" :size="15" :class="{ 'a-spin': moveBusy }" />
 						{{ moveBusy ? 'Announcing…' : confirmMove ? 'Confirm account move' : 'Move account' }}
+					</button>
+				</form>
+			</section>
+
+			<section v-if="emailChange !== null" class="a-settings__section">
+				<h2>Email address</h2>
+				<p class="a-settings__hint">
+					Used for password recovery and account notices. A new address only
+					takes effect after it confirms a link sent to it; your current address
+					keeps working until then.
+				</p>
+				<p v-if="emailChange.email !== ''" class="a-settings__hint">
+					Current address: <strong>{{ emailChange.email }}</strong>
+				</p>
+
+				<div v-if="emailChange.pending !== null" class="a-settings__sender-policy">
+					<p>
+						Change pending to <strong>{{ emailChange.pending.email }}</strong>.
+						Check that inbox for the confirmation link — it expires
+						<template v-if="emailChange.pending.expires_at !== ''">on {{ emailChange.pending.expires_at }}</template>
+						<template v-else>in 24 hours</template>.
+					</p>
+					<button
+						type="button"
+						class="a-btn a-btn--ghost a-btn--small"
+						:disabled="emailBusy"
+						@click="cancelPendingEmail"
+					>
+						{{ emailBusy ? 'Working…' : confirmCancelEmail ? 'Confirm cancellation' : 'Cancel change' }}
+					</button>
+				</div>
+
+				<form class="a-settings__sender-policy" @submit.prevent="submitEmailChange">
+					<label>
+						<span>New email address</span>
+						<input v-model="newEmail" class="a-input" type="email" maxlength="254" autocomplete="email" />
+					</label>
+					<label>
+						<span>Confirm with your password</span>
+						<input v-model="emailPassword" class="a-input" type="password" autocomplete="current-password" />
+					</label>
+					<p v-if="emailError !== ''" class="a-form-error" role="alert">{{ emailError }}</p>
+					<button type="submit" class="a-btn a-btn--ghost a-btn--small" :disabled="emailBusy">
+						{{ emailBusy ? 'Sending…' : 'Request email change' }}
 					</button>
 				</form>
 			</section>

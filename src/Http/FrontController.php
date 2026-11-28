@@ -1019,6 +1019,32 @@ final class FrontController
             return Response::json(['pending_email' => strtolower(trim($email))]);
         }
 
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/email-change') {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $account = $this->runtime->accounts->find($userId);
+            if ($account === null) {
+                return $this->apiError(404, 'not_found', 'The account was not found.');
+            }
+
+            return Response::json([
+                'email' => $account->email,
+                'pending' => $this->runtime->emailChange->pendingFor($userId),
+            ]);
+        }
+
+        if ($request->method === 'DELETE' && $request->path === '/api/v1/host/email-change') {
+            if ($userId === null) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $this->runtime->emailChange->cancelForAccount($userId);
+
+            return Response::json(['cancelled' => true]);
+        }
+
         if ($request->method === 'GET' && $request->path === '/api/v1/host/sessions') {
             if ($session === null || !$session->isSignedIn()) {
                 return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
