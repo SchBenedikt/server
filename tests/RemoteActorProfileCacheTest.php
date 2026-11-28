@@ -128,9 +128,9 @@ final class RemoteActorProfileCacheTest extends TestCase
         $this->server->runtime->database->execute(
             'INSERT INTO social_remote_post'
             . ' (activity_id, object_id, object_author_id, actor_id, kind, content,'
-            . ' content_warning, published_at, deleted_at)'
+            . ' content_warning, published_at, deleted_at, audience)'
             . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content,'
-            . ' NULL, :published_at, NULL)',
+            . ' NULL, :published_at, NULL, \'public\')',
             [
                 'activity_id' => $activityId,
                 'object_id' => $objectId,

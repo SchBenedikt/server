@@ -342,6 +342,7 @@ final class ForYouFeed
             . ' 0 AS favourites, 0 AS boosts, 0 AS replies, 1 AS remote'
             . ' FROM social_remote_post r'
             . " WHERE r.deleted_at IS NULL AND r.kind = 'post' AND r.in_reply_to_id IS NULL"
+            . " AND r.audience = 'public'"
             . $remoteWindow
             . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             $remoteParameters,
@@ -786,6 +787,28 @@ final class ForYouFeed
             . ' SELECT 1 FROM social_block b WHERE b.local_user_id = :remote_block_viewer'
             . ' AND (b.actor_id = r.actor_id OR b.actor_id = r.object_author_id)'
             . ')'
+            // Audience rule, mirroring RemotePostAccess: a verified public post
+            // is fine once its deliverer is followed; followers-only and
+            // unknown audiences additionally need a follow of the content
+            // author (object_author_id, falling back to the delivering actor
+            // for plain posts). Unlisted stays out of listings and direct is
+            // never stored, so both fall through the predicate.
+            . ' AND ('
+            . " r.audience = 'public'"
+            . ' OR ('
+            . " (r.audience IS NULL OR r.audience = 'followers')"
+            . ' AND ('
+            . ' COALESCE(NULLIF(r.object_author_id, \'\'), r.actor_id) IN ('
+            . ' SELECT f.actor_id FROM social_following f'
+            . ' WHERE f.local_user_id = :remote_author_viewer AND f.state = \'accepted\''
+            . ' )'
+            . ' OR EXISTS (SELECT 1 FROM ' . AtprotoFollowSchema::TABLE . ' af2'
+            . ' WHERE af2.local_user_id = :atproto_author_viewer'
+            . ' AND af2.subject_did = COALESCE(NULLIF(r.object_author_id, \'\'), r.actor_id)'
+            . " AND af2.state = 'active')"
+            . ' )'
+            . ' )'
+            . ')'
             . $olderRemote
             . ' ORDER BY r.published_at DESC LIMIT ' . self::CANDIDATE_LIMIT,
             array_merge(
@@ -795,6 +818,8 @@ final class ForYouFeed
                     'atproto_viewer' => $accountId,
                     'remote_mute_viewer' => $accountId,
                     'remote_block_viewer' => $accountId,
+                    'remote_author_viewer' => $accountId,
+                    'atproto_author_viewer' => $accountId,
                     'mute_now' => Time::format($now),
                 ],
                 $olderThan === null ? [] : ['older_remote' => $olderThan],

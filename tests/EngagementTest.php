@@ -476,8 +476,8 @@ final class EngagementTest extends TestCase
         foreach ([[$remoteParent, null], [$remoteReply, $remoteParent]] as [$activityId, $replyTo]) {
             $this->server->runtime->database->execute(
                 'INSERT INTO social_remote_post'
-                . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, in_reply_to_id)'
-                . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content, :published_at, :in_reply_to_id)',
+                . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, in_reply_to_id, audience)'
+                . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content, :published_at, :in_reply_to_id, \'public\')',
                 [
                     'activity_id' => $activityId,
                     'object_id' => str_replace('/activities/', '/objects/', $activityId),
@@ -527,8 +527,8 @@ final class EngagementTest extends TestCase
 
         $this->server->runtime->database->execute(
             'INSERT INTO social_remote_post'
-            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
-            . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content, :published_at)',
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, audience)'
+            . ' VALUES (:activity_id, :object_id, :object_author_id, :actor_id, :kind, :content, :published_at, \'public\')',
             [
                 'activity_id' => $remoteId,
                 'object_id' => $objectId,

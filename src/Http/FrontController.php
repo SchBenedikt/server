@@ -515,7 +515,7 @@ final class FrontController
                 // the feed or in a notification. An authoritative 404 stays a
                 // 404 so a deleted post is not resurrected from the cache.
                 if ($exception->status !== 404) {
-                    $cached = $this->presentRemotePost($id);
+                    $cached = $this->presentRemotePost($id, $session?->userId());
                     if ($cached !== null) {
                         return Response::json([
                             'network' => 'activitypub',
@@ -708,7 +708,7 @@ final class FrontController
                     $post = $this->runtime->app->posts->getVisible($id, $session?->userId());
                     $posts[$id] = $this->runtime->app->media?->presentPost($post) ?? $post->toArray();
                 } catch (PostNotFoundException) {
-                    $remote = $this->presentRemotePost($id);
+                    $remote = $this->presentRemotePost($id, $session?->userId());
                     if ($remote !== null) {
                         $posts[$id] = $remote;
                     }
@@ -1402,7 +1402,7 @@ final class FrontController
      *
      * @return array<string, mixed>|null
      */
-    private function presentRemotePost(string $id): ?array
+    private function presentRemotePost(string $id, ?string $viewerId): ?array
     {
         $repository = new PdoRemotePostRepository($this->runtime->database);
         // Feed cards link to the object id, while the store is keyed by the
@@ -1411,7 +1411,10 @@ final class FrontController
         $post = str_starts_with($id, 'at://')
             ? $repository->findPostByObjectId($id)
             : ($repository->findByActivityId($id) ?? $repository->findPostByObjectId($id));
-        if (!$post instanceof RemotePost || $post->deletedAt !== null) {
+        if (!$post instanceof RemotePost
+            || $post->deletedAt !== null
+            || !$this->runtime->remotePostAccess->viewerMayRead($post, $viewerId)
+        ) {
             return null;
         }
 

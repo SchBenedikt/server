@@ -80,6 +80,7 @@ final class Migrations
             new Version202611280023SchemaMigrationProvenance(),
             new Version202611280024JobLastError(),
             new Version202611280025Mfa(),
+            new Version202611280026AtprotoRemoteAudience(),
         ];
     }
 }

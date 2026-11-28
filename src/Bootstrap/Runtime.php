@@ -16,6 +16,7 @@ use AlohaSocial\Core\Domain\Post\PostRevisionRepository;
 use AlohaSocial\Core\Http\Router;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\PdoConnection;
+use AlohaSocial\Core\Service\Federation\RemotePostAccess;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
@@ -96,6 +97,7 @@ final readonly class Runtime
         public Clock $clock,
         public PostInteractions $interactions,
         public RemoteDirectory $remoteDirectory,
+        public RemotePostAccess $remotePostAccess,
         public RemoteEngagement $remoteEngagement,
         public RemoteEngagementRefresher $remoteEngagementRefresher,
         public RemoteReactions $remoteReactions,

@@ -168,8 +168,8 @@ final class RemoteLikeCountTest extends TestCase
         $actorId = 'https://remote.example/@bob';
         $server->runtime->database->execute(
             'INSERT INTO social_remote_post'
-            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at)'
-            . ' VALUES (:activity_id, :object_id, :author, :actor, :kind, :content, :published)',
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, content, published_at, audience)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, :kind, :content, :published, \'public\')',
             [
                 'activity_id' => $activityId,
                 'object_id' => $objectId,
