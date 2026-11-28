@@ -49,7 +49,7 @@ final class PushDeliveryTest extends TestCase
         $server->createAccount('alice', 'alice@example.test', TestServer::PASSWORD, true);
 
         $push = $server->runtime->pushSubscriptions;
-        $sink = new NotificationPushSink($push, 'Test Instance');
+        $sink = new NotificationPushSink($push, $server->runtime->preferences, 'Test Instance');
         $sink->emit(new Notification(
             'n1',
             'alice',
@@ -68,6 +68,42 @@ final class PushDeliveryTest extends TestCase
         self::assertSame('#/notifications', $payload['url']);
         // The payload must never carry notification content.
         self::assertStringNotContainsString('actor-1', (string) $due[0]['payload']);
+    }
+
+    public function testMutedNotificationTypesProduceNoPush(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice', 'alice@example.test', TestServer::PASSWORD, true);
+
+        $server->runtime->preferences->update('alice', [
+            'notify_follows' => false,
+            'notify_mentions' => false,
+        ]);
+
+        $sink = new NotificationPushSink($server->runtime->pushSubscriptions, $server->runtime->preferences, 'Test Instance');
+
+        foreach ([NotificationType::Follow, NotificationType::Mention] as $type) {
+            $sink->emit(new Notification(
+                'n-' . $type->value,
+                'alice',
+                'actor-1',
+                $type,
+                $type === NotificationType::Follow ? null : 'post-1',
+                $server->runtime->clock->now(),
+            ));
+        }
+        self::assertCount(0, $server->runtime->pushSubscriptions->dueDeliveries(10));
+
+        // Types the reader did not mute still queue.
+        $sink->emit(new Notification(
+            'n-favourite',
+            'alice',
+            'actor-1',
+            NotificationType::Favourite,
+            'post-1',
+            $server->runtime->clock->now(),
+        ));
+        self::assertCount(1, $server->runtime->pushSubscriptions->dueDeliveries(10));
     }
 
     public function testQueueBackoffAndDropAfterFiveAttempts(): void

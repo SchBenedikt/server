@@ -441,7 +441,11 @@ host adapter (`NotificationPushSink`) that enqueues one row per visible
 notification into `push_delivery` (migration `202611280032`) — the payload
 is deliberately generic ("You have a new notification.", deep-linking to
 the bell) so a push never leaks post text, actor names or the
-notification type to a lock screen or push service.
+notification type to a lock screen or push service. The sink consults the
+account's `notify_*` preferences first: a muted notification type
+(favourite/follow/mention/reblog → `notify_favourites`/`notify_follows`/
+`notify_mentions`/`notify_boosts`) produces no push, though the in-app
+notification is still recorded.
 
 `PushSender` performs the actual RFC 8291/8292 send: aes128gcm payload
 encryption against the subscription's `p256dh`/`auth` keys, an ES256 VAPID

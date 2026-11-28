@@ -286,6 +286,7 @@ final class ApplicationFactory
             eventBroker: $mastodonEventBroker,
             notificationEventSink: new NotificationPushSink(
                 $pushSubscriptions,
+                $preferences,
                 $this->config->instanceName,
             ),
         );
