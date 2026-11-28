@@ -30,6 +30,8 @@ const actionBusy = ref(false);
 const actionError = ref('');
 
 const importText = ref('');
+const importFile = ref<{ name: string; content: string; format: 'lines' | 'csv' | 'json' } | null>(null);
+const importFileInput = ref<HTMLInputElement | null>(null);
 const importResult = ref<DomainImportResult | null>(null);
 const importBusy = ref(false);
 const importError = ref('');
@@ -110,9 +112,72 @@ async function submitAction(): Promise<void> {
 	}
 }
 
+function importFileFormat(name: string): 'lines' | 'csv' | 'json' {
+	const lower = name.toLowerCase();
+	if (lower.endsWith('.csv')) {
+		return 'csv';
+	}
+	if (lower.endsWith('.json')) {
+		return 'json';
+	}
+
+	return 'lines';
+}
+
+async function pickImportFile(event: Event): Promise<void> {
+	const input = event.target as HTMLInputElement;
+	const file = input.files?.[0];
+	input.value = '';
+	if (file === undefined || importBusy.value) {
+		return;
+	}
+
+	importBusy.value = true;
+	importError.value = '';
+	importResult.value = null;
+	try {
+		const content = await file.text();
+		const format = importFileFormat(file.name);
+		importFile.value = { name: file.name, content, format };
+		importResult.value = await getAdminApi().importDomainBlockFile(content, format, false);
+	} catch (caught) {
+		importFile.value = null;
+		importError.value = caught instanceof Error ? caught.message : 'The import file could not be read.';
+	} finally {
+		importBusy.value = false;
+	}
+}
+
+function clearImportFile(): void {
+	importFile.value = null;
+	importResult.value = null;
+	importError.value = '';
+}
+
 async function previewImport(): Promise<void> {
+	if (importBusy.value) {
+		return;
+	}
+	if (importFile.value !== null) {
+		importBusy.value = true;
+		importError.value = '';
+		try {
+			importResult.value = await getAdminApi().importDomainBlockFile(
+				importFile.value.content,
+				importFile.value.format,
+				false,
+			);
+		} catch (caught) {
+			importError.value = caught instanceof Error ? caught.message : 'The import could not be checked.';
+		} finally {
+			importBusy.value = false;
+		}
+
+		return;
+	}
+
 	const entries = parseImportLines();
-	if (importBusy.value || entries.length === 0) {
+	if (entries.length === 0) {
 		return;
 	}
 	importBusy.value = true;
@@ -127,16 +192,18 @@ async function previewImport(): Promise<void> {
 }
 
 async function applyImport(): Promise<void> {
-	const entries = parseImportLines();
-	if (importBusy.value || entries.length === 0) {
+	if (importBusy.value || !canApplyImport.value) {
 		return;
 	}
 	importBusy.value = true;
 	importError.value = '';
 	try {
-		importResult.value = await getAdminApi().importDomainBlocks(entries, true);
+		importResult.value = importFile.value !== null
+			? await getAdminApi().importDomainBlockFile(importFile.value.content, importFile.value.format, true)
+			: await getAdminApi().importDomainBlocks(parseImportLines(), true);
 		showToast(`${importResult.value.applied_count} domain(s) blocked.`, 'success');
 		importText.value = '';
+		importFile.value = null;
 		await load();
 	} catch (caught) {
 		importError.value = caught instanceof Error ? caught.message : 'The import could not be applied.';
@@ -274,13 +341,35 @@ onMounted(() => {
 					<header class="a-admin-card__head">
 						<div>
 							<h3>Import blocklist</h3>
-							<p>One domain per line; append <code># comment</code> for a public reason. Always dry-run first.</p>
+							<p>Paste one domain per line (<code># comment</code> for a public reason) or upload a <code>.txt</code>, <code>.csv</code> (<code>domain,comment</code>) or <code>.json</code> file. Always dry-run first.</p>
 						</div>
 					</header>
-					<textarea v-model="importText" class="a-admin-textarea" rows="7" placeholder="spam.example&#10;bad.example # repeated abuse" />
+					<div class="a-admin-import-source">
+						<input
+							ref="importFileInput"
+							type="file"
+							accept=".txt,.csv,.json,text/plain,text/csv,application/json"
+							class="a-visually-hidden"
+							@change="pickImportFile"
+						/>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="importBusy" @click="importFileInput?.click()">
+							<AppIcon name="archive" :size="15" />
+							Upload file
+						</button>
+						<span v-if="importFile !== null" class="a-admin-import-file">
+							{{ importFile.name }} ({{ importFile.format }})
+							<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="clearImportFile">Clear</button>
+						</span>
+					</div>
+					<textarea v-model="importText" class="a-admin-textarea" rows="7" placeholder="spam.example&#10;bad.example # repeated abuse" :disabled="importFile !== null" />
 					<p v-if="importError !== ''" class="a-form-error" role="alert">{{ importError }}</p>
 					<div class="a-admin-form__actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="importBusy || importText.trim() === ''" @click="previewImport">
+						<button
+							type="button"
+							class="a-btn a-btn--ghost a-btn--small"
+							:disabled="importBusy || (importFile === null && importText.trim() === '')"
+							@click="previewImport"
+						>
 							Check import
 						</button>
 						<button type="button" class="a-btn a-btn--danger a-btn--small" :disabled="importBusy || !canApplyImport" @click="applyImport">

@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Http;
 use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Server\Admin\AdminException;
+use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\AuthenticatedSession;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Community\CommunityException;
@@ -294,15 +295,24 @@ final class AdminApiController
 
         if ($method === 'POST' && $path === self::PREFIX . '/domain-blocks/import') {
             $body = $this->jsonBody($request);
-            $entries = $body['entries'] ?? null;
-            if (!is_array($entries)) {
-                throw AdminException::invalid('entries must be a list of domains or {domain, comment} objects.', [
-                    'entries' => 'Provide a JSON array.',
-                ]);
-            }
             $apply = $body['apply'] ?? false;
             if (!is_bool($apply)) {
                 throw AdminException::invalid('apply must be a boolean.', ['apply' => 'true or false']);
+            }
+
+            $entries = $body['entries'] ?? null;
+            if (!is_array($entries)) {
+                // File uploads arrive as raw content plus a format hint; the
+                // service parses lines/CSV/JSON into the same entry shape.
+                $content = $body['content'] ?? null;
+                $format = $body['format'] ?? 'lines';
+                if (!is_string($content) || !is_string($format)) {
+                    throw AdminException::invalid(
+                        'entries must be a list of domains or {domain, comment} objects, or content plus format.',
+                        ['entries' => 'Provide a JSON array, or content with format lines|csv|json.'],
+                    );
+                }
+                $entries = AdminService::parseDomainBlockImport($content, $format);
             }
 
             return Response::json($this->runtime->admin->importDomainBlocks($userId, $entries, $apply));
