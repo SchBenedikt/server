@@ -10,6 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import { getApi } from '../lib/api';
 import { handleLabel, relativeTime } from '../lib/format';
+import { t } from '../lib/i18n';
 import { appState, showToast } from '../lib/state';
 import type { Account, BlockEntry } from '../lib/types';
 
@@ -75,7 +76,7 @@ async function load(): Promise<void> {
 		entries.value = await getApi().blocks();
 		void resolveProfiles();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Blocks could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('blocks.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -106,9 +107,9 @@ async function unblock(entry: BlockEntry): Promise<void> {
 	try {
 		await getApi().unblockActor(entry.id);
 		entries.value = entries.value.filter((item) => item.id !== entry.id);
-		showToast('Block removed.', 'success');
+		showToast(t('blocks.removed'), 'success');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The block could not be removed.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('blocks.removeFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -122,9 +123,9 @@ function accountFor(entry: BlockEntry): Account | null {
 
 <template>
 	<div class="a-page">
-		<PageHeader title="Blocked" subtitle="Accounts whose interactions are fully prevented.">
+		<PageHeader :title="t('nav.blocked')" :subtitle="t('blocks.subtitle')">
 			<template #actions>
-				<button type="button" class="a-icon-btn" aria-label="Reload" title="Reload" :disabled="loading" @click="load">
+				<button type="button" class="a-icon-btn" :aria-label="t('common.reload')" :title="t('common.reload')" :disabled="loading" @click="load">
 					<AppIcon name="refresh" :size="19" :class="{ 'a-spin': loading }" />
 				</button>
 			</template>
@@ -132,9 +133,9 @@ function accountFor(entry: BlockEntry): Account | null {
 
 		<div v-if="!signedIn" class="a-login-panel">
 			<span class="a-login-panel__icon"><AppIcon name="ban" :size="26" /></span>
-			<h2>blocks</h2>
-			<p>Sign in to see and manage the accounts you have blocked.</p>
-			<a class="a-btn a-btn--primary" href="/login">Sign in</a>
+			<h2>{{ t('nav.blocked') }}</h2>
+			<p>{{ t('blocks.loginText') }}</p>
+			<a class="a-btn a-btn--primary" href="/login">{{ t('common.signIn') }}</a>
 		</div>
 
 		<div v-else-if="loading && entries.length === 0" class="a-management-skeleton" aria-hidden="true">
@@ -143,15 +144,15 @@ function accountFor(entry: BlockEntry): Account | null {
 
 		<div v-else-if="error !== ''" class="a-error-panel">
 			<AppIcon name="info" :size="22" />
-			<div><strong>Blocks unavailable</strong><p>{{ error }}</p></div>
-			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">Try again</button>
+			<div><strong>{{ t('blocks.unavailable') }}</strong><p>{{ error }}</p></div>
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">{{ t('common.tryAgain') }}</button>
 		</div>
 
 		<EmptyState
 			v-else-if="entries.length === 0"
 			icon="ban"
-			title="Nobody blocked"
-			text="Blocks prevent an account from following or mentioning you."
+			:title="t('blocks.emptyTitle')"
+			:text="t('blocks.emptyText')"
 		/>
 
 		<ul v-else class="a-management-people">
@@ -165,7 +166,7 @@ function accountFor(entry: BlockEntry): Account | null {
 							@click="unblock(entry)"
 						>
 							<AppIcon name="ban" :size="14" />
-							{{ busy === entry.id ? 'Removing…' : 'Unblock account' }}
+							{{ busy === entry.id ? t('common.removing') : t('blocks.unblock') }}
 						</button>
 					</template>
 				</AccountRow>
@@ -174,7 +175,7 @@ function accountFor(entry: BlockEntry): Account | null {
 						<span class="a-management-avatar" aria-hidden="true"><AppIcon name="ban" :size="18" /></span>
 						<span class="a-account-row__copy">
 							<strong>{{ actorText(entry.actor) }}</strong>
-							<small>{{ handleLabel(entry.actor) !== actorText(entry.actor) ? handleLabel(entry.actor) : 'Blocked since ' + relativeTime(entry.blocked_at) }}</small>
+							<small>{{ handleLabel(entry.actor) !== actorText(entry.actor) ? handleLabel(entry.actor) : t('blocks.since', { time: relativeTime(entry.blocked_at) }) }}</small>
 						</span>
 					</div>
 					<div class="a-account-row__actions">
@@ -193,7 +194,7 @@ function accountFor(entry: BlockEntry): Account | null {
 		</ul>
 
 		<p v-if="entries.length > 0" class="a-management-footnote">
-			Blocked since the respective action. Removing a block takes effect immediately.
+			{{ t('blocks.footnote') }}
 		</p>
 	</div>
 </template>
