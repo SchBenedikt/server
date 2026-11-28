@@ -11,6 +11,7 @@ import { accountFor, displayNameFor, hasDistinctDisplayName, resolveAccount } fr
 import { discover, discoveryPeople, loadDiscover, popularTags } from '../lib/discover';
 import { formatCount, handleLabel } from '../lib/format';
 import { navigate } from '../lib/router';
+import { t } from '../lib/i18n';
 import { appState, openComposer, setSearchSeed } from '../lib/state';
 
 const instance = computed(() => appState.instance);
@@ -57,14 +58,14 @@ function submitSearch(): void {
 </script>
 
 <template>
-	<aside class="a-rail" aria-label="Explore">
+	<aside class="a-rail" :aria-label="t('rail.aria')">
 		<form class="a-rail-search" role="search" @submit.prevent="submitSearch">
 			<AppIcon name="search" :size="18" />
 			<input
 				v-model="searchQuery"
 				type="search"
-				placeholder="Search Aloha"
-				aria-label="Search Aloha"
+				:placeholder="t('rail.searchPlaceholder')"
+				:aria-label="t('rail.searchPlaceholder')"
 				autocomplete="off"
 			/>
 		</form>
@@ -75,32 +76,32 @@ function submitSearch(): void {
 				<strong>{{ selfName }}</strong>
 				<span v-if="selfName !== handleLabel(self.handle)">{{ handleLabel(self.handle) }}</span>
 			</div>
-			<button type="button" class="a-icon-btn" aria-label="Write a new post" @click="compose">
+			<button type="button" class="a-icon-btn" :aria-label="t('common.newPost')" @click="compose">
 				<AppIcon name="pen" :size="18" />
 			</button>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
-				<h2>This instance</h2>
-				<a href="#/about" class="a-rail__more" aria-label="More about this instance">More</a>
+				<h2>{{ t('rail.instanceTitle') }}</h2>
+				<a href="#/about" class="a-rail__more" :aria-label="t('rail.instanceMore')">{{ t('common.more') }}</a>
 			</header>
 			<template v-if="instance">
 				<p class="a-rail__instance-name">{{ instance.name }}</p>
 				<p class="a-rail__instance-description">
-					{{ instance.description || 'A small, open instance in the fediverse.' }}
+					{{ instance.description || t('rail.instanceDefaultDescription') }}
 				</p>
 				<dl class="a-stats">
 					<div>
-						<dt>People</dt>
+						<dt>{{ t('rail.people') }}</dt>
 						<dd>{{ formatCount(instance.stats.user_count) }}</dd>
 					</div>
 					<div>
-						<dt>Posts</dt>
+						<dt>{{ t('rail.posts') }}</dt>
 						<dd>{{ formatCount(instance.stats.status_count) }}</dd>
 					</div>
 					<div>
-						<dt>Server</dt>
+						<dt>{{ t('rail.server') }}</dt>
 						<dd>{{ formatCount(instance.stats.domain_count) }}</dd>
 					</div>
 				</dl>
@@ -110,27 +111,27 @@ function submitSearch(): void {
 				<span class="a-skeleton a-skeleton--line a-skeleton--short" />
 			</div>
 			<a v-if="!signedIn" href="/login" class="a-btn a-btn--primary a-rail__login">
-				<AppIcon name="globe" :size="16" /> Sign in
+				<AppIcon name="globe" :size="16" /> {{ t('common.signIn') }}
 			</a>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
 				<h2>Kokua</h2>
-				<a href="#/kokua" class="a-rail__more">Open</a>
+				<a href="#/kokua" class="a-rail__more">{{ t('common.open') }}</a>
 			</header>
 			<p class="a-rail__instance-description">
-				Need a hand, or have one to offer? The Kokua board is for practical help between people here.
+				{{ t('rail.kokuaText') }}
 			</p>
 			<a href="#/kokua" class="a-btn a-btn--ghost a-btn--small a-rail__login">
-				<AppIcon name="handHeart" :size="16" /> Visit the board
+				<AppIcon name="handHeart" :size="16" /> {{ t('rail.kokuaVisit') }}
 			</a>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
-				<h2>Popular Tags</h2>
-				<a href="#/explore" class="a-rail__more">All</a>
+				<h2>{{ t('rail.tagsTitle') }}</h2>
+				<a href="#/explore" class="a-rail__more">{{ t('common.all') }}</a>
 			</header>
 			<div v-if="discover.loading && visibleTags.length === 0" class="a-rail__skeleton">
 				<span class="a-skeleton a-skeleton--line" />
@@ -142,19 +143,19 @@ function submitSearch(): void {
 						<span class="a-tag-row__hash">#</span>
 						<span class="a-tag-row__copy">
 							<strong>{{ tag.tag }}</strong>
-							<small>{{ tag.count }} {{ tag.count === 1 ? 'Post' : 'Posts' }}</small>
+							<small>{{ tag.count }} {{ tag.count === 1 ? t('rail.post') : t('rail.posts') }}</small>
 						</span>
 						<AppIcon name="chevronDown" :size="15" class="a-tag-row__arrow" />
 					</a>
 				</li>
 			</ul>
-			<p v-else class="a-rail__muted">As soon as posts include hashtags, they appear here.</p>
+			<p v-else class="a-rail__muted">{{ t('rail.tagsEmpty') }}</p>
 		</section>
 
 		<section class="a-rail__card">
 			<header class="a-rail__card-head">
-				<h2>People you should know</h2>
-				<a href="#/explore" class="a-rail__more">More</a>
+				<h2>{{ t('rail.peopleTitle') }}</h2>
+				<a href="#/explore" class="a-rail__more">{{ t('common.more') }}</a>
 			</header>
 			<ul v-if="visiblePeople.length > 0" class="a-people">
 				<li v-for="person in visiblePeople" :key="person.id" class="a-person">
@@ -169,17 +170,17 @@ function submitSearch(): void {
 				</li>
 			</ul>
 			<p v-else class="a-rail__muted">
-				No other voices loaded yet.
+				{{ t('rail.peopleEmpty') }}
 			</p>
 		</section>
 
 		<footer class="a-rail__footer">
-			<a href="#/about">About</a>
+			<a href="#/about">{{ t('rail.about') }}</a>
 			<span>·</span>
-			<a href="https://github.com/SchBenedikt/core" target="_blank" rel="noopener noreferrer">Source code</a>
+			<a href="https://github.com/SchBenedikt/core" target="_blank" rel="noopener noreferrer">{{ t('rail.sourceCode') }}</a>
 			<span>·</span>
 			<a href="/api/v1/instance" target="_blank" rel="noopener noreferrer">API</a>
-			<p>Aloha Social · open, federated, ad-free.</p>
+			<p>{{ t('rail.tagline') }}</p>
 		</footer>
 	</aside>
 </template>
