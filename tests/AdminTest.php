@@ -277,7 +277,7 @@ final class AdminTest extends TestCase
         ];
         $dry = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', $payload, $cookies, $csrf));
         self::assertFalse($dry['applied']);
-        self::assertSame(['new' => 2, 'duplicate' => 1, 'already_blocked' => 1, 'invalid' => 1], $dry['counts']);
+        self::assertSame(['new' => 2, 'duplicate' => 1, 'already_blocked' => 1, 'invalid' => 1, 'noop' => 0, 'unsupported' => 0], $dry['counts']);
         self::assertSame(0, $dry['applied_count']);
 
         $stillOne = $this->decoded($server->send('GET', '/api/v1/host/admin/moderation', ['cookies' => $cookies]));
@@ -317,7 +317,7 @@ final class AdminTest extends TestCase
             'format' => 'lines',
             'content' => "spam.example # Spam network\n\nother.example\n",
         ], $cookies, $csrf));
-        self::assertSame(['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0], $lines['counts']);
+        self::assertSame(['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0, 'noop' => 0, 'unsupported' => 0], $lines['counts']);
         $spam = array_values(array_filter($lines['entries'], static fn (array $e): bool => $e['domain'] === 'spam.example'))[0];
         self::assertSame('Spam network', $spam['comment']);
 
@@ -326,7 +326,7 @@ final class AdminTest extends TestCase
             'format' => 'csv',
             'content' => "domain,comment\nthird.example,\"Repeated, scripted abuse\"\n",
         ], $cookies, $csrf));
-        self::assertSame(['new' => 1, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0], $csv['counts']);
+        self::assertSame(['new' => 1, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0, 'noop' => 0, 'unsupported' => 0], $csv['counts']);
         self::assertSame('Repeated, scripted abuse', $csv['entries'][0]['comment']);
 
         // JSON array of strings and {domain, comment} objects.
@@ -334,7 +334,7 @@ final class AdminTest extends TestCase
             'format' => 'json',
             'content' => '["fourth.example", {"domain": "fifth.example", "comment": "Phishing"}]',
         ], $cookies, $csrf));
-        self::assertSame(['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0], $json['counts']);
+        self::assertSame(['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0, 'noop' => 0, 'unsupported' => 0], $json['counts']);
 
         // Apply once through the file path; the earlier calls were dry runs,
         // so both CSV rows are new and get written.
@@ -348,6 +348,63 @@ final class AdminTest extends TestCase
         $blocks = $this->decoded($server->send('GET', '/api/v1/host/admin/domain-blocks', ['cookies' => $cookies]));
         self::assertSame(
             ['sixth.example', 'spam.example'],
+            array_column($blocks['blocks'], 'domain'),
+        );
+    }
+
+    public function testDomainBlockImportReadsMastodonSeverityFormats(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        // Mastodon CSV export: named columns, severity and public_comment.
+        $csv = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'csv',
+            'apply' => true,
+            'content' => "#domain,#severity,#public_comment\n"
+                . "mastodon-a.example,suspend,Spam network\n"
+                . "mastodon-b.example,silence,Quiet but kept\n"
+                . "mastodon-c.example,noop,Nothing to do\n"
+                . "mastodon-d.example,,No severity column value\n",
+        ], $cookies, $csrf));
+        self::assertSame(
+            ['new' => 2, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0, 'noop' => 1, 'unsupported' => 1],
+            $csv['counts'],
+        );
+        $statuses = [];
+        foreach ($csv['entries'] as $entry) {
+            $statuses[$entry['input']] = $entry['status'];
+        }
+        self::assertSame('new', $statuses['mastodon-a.example']);
+        self::assertSame('unsupported', $statuses['mastodon-b.example']);
+        self::assertSame('noop', $statuses['mastodon-c.example']);
+        self::assertSame('new', $statuses['mastodon-d.example']);
+        self::assertSame(2, $csv['applied_count']);
+
+        // Mastodon JSON export: {domain, severity, public_comment} objects.
+        $json = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'json',
+            'apply' => true,
+            'content' => '[{"domain":"mastodon-e.example","severity":"suspend","public_comment":"Phishing"},'
+                . '{"domain":"mastodon-f.example","severity":"silence"}]',
+        ], $cookies, $csrf));
+        self::assertSame(1, $json['counts']['new']);
+        self::assertSame(1, $json['counts']['unsupported']);
+        self::assertSame(1, $json['applied_count']);
+        $e = array_values(array_filter($json['entries'], static fn (array $x): bool => $x['domain'] === 'mastodon-e.example'))[0];
+        self::assertSame('Phishing', $e['comment']);
+
+        // Applying writes only the suspend rows; silence/noop stay untouched.
+        $applied = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', [
+            'format' => 'json',
+            'content' => '[{"domain":"mastodon-g.example","severity":"suspend"},'
+                . '{"domain":"mastodon-h.example","severity":"silence"}]',
+            'apply' => true,
+        ], $cookies, $csrf));
+        self::assertSame(1, $applied['applied_count']);
+
+        $blocks = $this->decoded($server->send('GET', '/api/v1/host/admin/domain-blocks', ['cookies' => $cookies]));
+        self::assertSame(
+            ['mastodon-a.example', 'mastodon-d.example', 'mastodon-e.example', 'mastodon-g.example'],
             array_column($blocks['blocks'], 'domain'),
         );
     }
