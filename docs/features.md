@@ -376,6 +376,28 @@ remote profile. The list is read from
 `/api/mastodon/v1/accounts/{handle}/followers|following`; remote profiles keep
 their existing public ActivityPub/Bluesky lookup.
 
+## Push notifications
+
+The host stores Web Push subscriptions per account (`push_subscription`)
+plus a single instance VAPID identity (`push_vapid`, migration
+`202611280031`). The private VAPID key is sealed at rest like the instance
+signing key and is generated once — rotating it breaks every existing
+subscription, so it stays a deliberate operation.
+
+`GET /api/v1/host/push/vapid-key` returns the base64url P-256 public key a
+browser needs for `pushManager.subscribe()`; `GET/POST/DELETE
+/api/v1/host/push/subscriptions` manage the signed-in account's endpoints.
+Endpoints must be plain public HTTPS URLs — private/loopback IP literals,
+embedded credentials and non-HTTPS schemes are refused at subscribe time so
+the delivery worker can never be turned into an SSRF proxy. Re-subscribing
+the same endpoint moves it to the current account, so a shared browser
+does not keep delivering to the previous sign-in. Account erasure deletes
+the account's subscriptions; the VAPID identity is instance data and
+survives.
+
+Delivery itself — VAPID JWT, payload encryption and the worker send loop —
+is not wired yet; subscriptions accumulate until it lands.
+
 ## Account export and deletion
 
 Account export and deletion are available in Settings. Export combines

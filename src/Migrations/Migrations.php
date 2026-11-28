@@ -85,6 +85,7 @@ final class Migrations
             new Version202611280028OnboardingDismissal(),
             new Version202611280029ReportAssignment(),
             new Version202611280030InstancePages(),
+            new Version202611280031PushSubscriptions(),
         ];
     }
 }

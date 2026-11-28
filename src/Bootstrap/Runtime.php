@@ -44,6 +44,7 @@ use AlohaSocial\Server\Community\LiveUpdates;
 use AlohaSocial\Server\Community\Memories;
 use AlohaSocial\Server\Community\PinnedPosts;
 use AlohaSocial\Server\Community\Preferences;
+use AlohaSocial\Server\Push\PushService;
 use AlohaSocial\Server\Community\StarterPacks;
 use AlohaSocial\Server\Community\Stories;
 use AlohaSocial\Server\Community\Trends;
@@ -109,6 +110,7 @@ final readonly class Runtime
         public LiveUpdates $liveUpdates,
         public AdminService $admin,
         public InstancePages $instancePages,
+        public PushService $pushSubscriptions,
         public Announcements $announcements,
         public FeaturedTags $featuredTags,
         public Trends $trends,
