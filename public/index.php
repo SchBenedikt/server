@@ -13,6 +13,7 @@ use AlohaSocial\Server\Http\BootstrapFailureResponse;
 use AlohaSocial\Server\Http\FrontController;
 use AlohaSocial\Server\Http\GlobalsRequestFactory;
 use AlohaSocial\Server\Http\TrustedProxyClientAddress;
+use AlohaSocial\Server\Migrations\SchemaNotReady;
 
 $root = dirname(__DIR__);
 
@@ -56,7 +57,8 @@ try {
         || str_contains($accept, 'application/json')
         || str_contains($accept, 'application/activity+json');
 
-    $response = BootstrapFailureResponse::create($wantsJson);
+    $schemaKind = $exception instanceof SchemaNotReady ? $exception->kind : null;
+    $response = BootstrapFailureResponse::create($wantsJson, $schemaKind);
 }
 
 $response->send();

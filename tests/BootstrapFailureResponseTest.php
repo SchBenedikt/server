@@ -36,4 +36,30 @@ final class BootstrapFailureResponseTest extends TestCase
         self::assertStringNotContainsString('secret-password', $response->body);
         self::assertStringNotContainsString('/var/private', $response->body);
     }
+
+    public function testPendingMigrationsReportUpgradeInProgress(): void
+    {
+        $json = BootstrapFailureResponse::create(true, 'pending');
+        self::assertSame(503, $json->status);
+        self::assertStringContainsString('upgrade_in_progress', $json->body);
+        self::assertStringContainsString('An upgrade is in progress.', $json->body);
+        self::assertStringNotContainsString('2026', $json->body);
+
+        $html = BootstrapFailureResponse::create(false, 'pending');
+        self::assertStringContainsString('Upgrade in progress', $html->body);
+        self::assertStringNotContainsString('Version2026', $html->body);
+    }
+
+    public function testFingerprintMismatchAlsoReportsUpgrade(): void
+    {
+        $response = BootstrapFailureResponse::create(true, 'fingerprint');
+        self::assertStringContainsString('upgrade_in_progress', $response->body);
+    }
+
+    public function testMissingSchemaReportsSetupRequired(): void
+    {
+        $response = BootstrapFailureResponse::create(true, 'install');
+        self::assertSame(503, $response->status);
+        self::assertStringContainsString('setup_required', $response->body);
+    }
 }

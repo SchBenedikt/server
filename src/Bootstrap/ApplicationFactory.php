@@ -113,6 +113,7 @@ use AlohaSocial\Server\Mail\SmtpMailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
 use AlohaSocial\Server\Migrations\MigrationRunner;
 use AlohaSocial\Server\Migrations\Migrations;
+use AlohaSocial\Server\Migrations\SchemaNotReady;
 use AlohaSocial\Server\Setup\FederationPreflight;
 use AlohaSocial\Server\Setup\SetupService;
 use AlohaSocial\Server\Support\Metrics;
@@ -508,7 +509,10 @@ final class ApplicationFactory
         $runner = new MigrationRunner($database, new SystemClock(), $migrations);
 
         if (!$runner->isInstalled()) {
-            throw new RuntimeException('The database schema is not installed. Run: php bin/update.php');
+            throw new SchemaNotReady(
+                SchemaNotReady::KIND_INSTALL,
+                'The database schema is not installed. Run: php bin/update.php',
+            );
         }
 
         // A new migration that nobody ran would otherwise surface as a 500 on
@@ -522,12 +526,17 @@ final class ApplicationFactory
         }
 
         if ($pending !== []) {
-            throw new RuntimeException(
+            throw new SchemaNotReady(
+                SchemaNotReady::KIND_PENDING,
                 'Pending migrations: ' . implode(', ', $pending) . '. Run: php bin/update.php',
             );
         }
 
-        CoreSchemaFingerprint::assertCurrent($database);
+        try {
+            CoreSchemaFingerprint::assertCurrent($database);
+        } catch (RuntimeException $exception) {
+            throw new SchemaNotReady(SchemaNotReady::KIND_FINGERPRINT, $exception->getMessage(), $exception);
+        }
     }
 
     /**
