@@ -1225,29 +1225,82 @@ function normalizeMastodonNotification(value: unknown): NotificationItem | null 
 }
 
 export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
+	/**
+	 * Bounded retry for safe reads: a dropped connection, a 429 or a 5xx gets
+	 * up to two more attempts with exponential backoff and jitter, honoring
+	 * `Retry-After` when the server sends one. Mutations are never retried —
+	 * a repeated POST could double-submit.
+	 */
+	const MAX_READ_ATTEMPTS = 3;
+	const RETRY_BASE_MS = 400;
+	const RETRY_MAX_MS = 5_000;
+
+	function retryDelay(response: { headers: Record<string, string> } | null, attempt: number): number {
+		const retryAfter = response?.headers['retry-after'] ?? response?.headers['Retry-After'];
+		if (retryAfter !== undefined) {
+			const seconds = Number.parseInt(retryAfter, 10);
+			if (Number.isFinite(seconds) && seconds > 0) {
+				return Math.min(seconds * 1000, RETRY_MAX_MS);
+			}
+		}
+
+		const backoff = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempt - 1));
+		return backoff + Math.floor(Math.random() * RETRY_BASE_MS);
+	}
+
+	function sleep(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
+	}
+
 	async function request<T>(
 		method: UiMethod,
 		path: string,
 		query?: Record<string, string>,
 		body?: unknown,
 	): Promise<T> {
-		const response = await bridge.request({ method, path, query, body });
-		let parsed: unknown = undefined;
+		const safeRead = method === 'GET';
+		let attempt = 0;
 
-		if (response.body.trim() !== '') {
+		for (;;) {
+			attempt += 1;
+			let response: Awaited<ReturnType<typeof bridge.request>>;
 			try {
-				parsed = JSON.parse(response.body);
-			} catch {
-				parsed = response.body;
+				response = await bridge.request({ method, path, query, body });
+			} catch (error) {
+				if (safeRead && attempt < MAX_READ_ATTEMPTS) {
+					await sleep(retryDelay(null, attempt));
+					continue;
+				}
+
+				throw error;
 			}
-		}
 
-		if (response.status < 200 || response.status >= 300) {
-			const error = errorMessage(response.body, response.status);
-			throw new ApiError(response.status, error.code, error.message, error.fields);
-		}
+			if (
+				safeRead
+				&& attempt < MAX_READ_ATTEMPTS
+				&& (response.status === 429 || response.status >= 500)
+			) {
+				await sleep(retryDelay(response, attempt));
+				continue;
+			}
 
-		return parsed as T;
+			let parsed: unknown = undefined;
+
+			if (response.body.trim() !== '') {
+				try {
+					parsed = JSON.parse(response.body);
+				} catch {
+					parsed = response.body;
+				}
+			}
+
+			if (response.status < 200 || response.status >= 300) {
+				const error = errorMessage(response.body, response.status);
+				throw new ApiError(response.status, error.code, error.message, error.fields);
+			}
+
+			return parsed as T;
+		}
 	}
 
 	async function pagedTimeline(
