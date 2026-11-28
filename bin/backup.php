@@ -17,6 +17,7 @@ require $root . '/vendor/autoload.php';
 $outputDirectory = null;
 $keep = 10;
 $json = false;
+$verify = null;
 
 foreach (array_slice($argv, 1) as $option) {
     if (str_starts_with($option, '--output=')) {
@@ -29,13 +30,18 @@ foreach (array_slice($argv, 1) as $option) {
         continue;
     }
 
+    if (str_starts_with($option, '--verify=')) {
+        $verify = substr($option, 9);
+        continue;
+    }
+
     if ($option === '--json') {
         $json = true;
         continue;
     }
 
     if ($option === '--help' || $option === '-h') {
-        fwrite(STDOUT, "Usage: php bin/backup.php [--output=directory] [--keep=10] [--json]\n");
+        fwrite(STDOUT, "Usage: php bin/backup.php [--output=directory] [--keep=10] [--json] [--verify=backup-file]\n");
         exit(0);
     }
 
@@ -46,7 +52,23 @@ foreach (array_slice($argv, 1) as $option) {
 try {
     $config = HostConfig::load($root);
     $database = PdoFactory::connect($config);
-    $backup = (new DatabaseBackup($database, $config))->create(
+    $service = new DatabaseBackup($database, $config);
+
+    if ($verify !== null) {
+        $result = $service->verify($verify);
+
+        if ($json) {
+            fwrite(STDOUT, json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+            exit($result['ok'] ? 0 : 1);
+        }
+
+        fwrite($result['ok'] ? STDOUT : STDERR, $result['ok']
+            ? 'Backup verified: ' . $verify . "\n"
+            : "Backup verification failed for {$verify}:\n  - " . implode("\n  - ", $result['problems']) . "\n");
+        exit($result['ok'] ? 0 : 1);
+    }
+
+    $backup = $service->create(
         $outputDirectory ?? $config->varDirectory . '/backups',
         $keep,
     );

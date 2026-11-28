@@ -108,15 +108,21 @@ final class DatabaseBackup
             $this->verifySqlite($path, $accounts);
         }
 
+        $core = CoreVersion::details();
         $metadata = [
             'format' => 'alohasocial.database-backup',
-            'version' => 1,
+            'version' => 2,
             'created_at' => date('c'),
             'driver' => $driver,
             'database' => $this->databaseLabel(),
+            'instance_url' => $this->config->instanceUrl,
             'accounts' => $accounts,
             'schema_version' => $schemaVersion,
             'bytes' => $bytes,
+            'sha256' => self::fileSha256($path),
+            'core_version' => $core['version'],
+            'core_reference' => $core['reference'],
+            'key_fingerprint' => $this->keyFingerprint(),
         ];
 
         $metadataPath = $base . '.json';
@@ -136,6 +142,93 @@ final class DatabaseBackup
             'schema_version' => $schemaVersion,
             'bytes' => $bytes,
         ];
+    }
+
+    /**
+     * Read-only integrity check of an existing backup pair.
+     *
+     * Recomputes the SHA-256 recorded at creation time and compares it with
+     * the metadata; a backup written before provenance tracking (version 1,
+     * no sha256) is reported as unverifiable rather than silently trusted.
+     *
+     * @return array{ok: bool, problems: list<string>, metadata: array<string, mixed>}
+     */
+    public function verify(string $path): array
+    {
+        $problems = [];
+        $metadata = [];
+
+        $metadataPath = $this->metadataPathFor($path);
+        if (!is_file($metadataPath)) {
+            $problems[] = 'The backup metadata file is missing: ' . $metadataPath;
+        } else {
+            $decoded = json_decode((string) file_get_contents($metadataPath), true);
+            if (!is_array($decoded)) {
+                $problems[] = 'The backup metadata is not valid JSON: ' . $metadataPath;
+            } else {
+                $metadata = $decoded;
+                if (($metadata['format'] ?? null) !== 'alohasocial.database-backup') {
+                    $problems[] = 'The metadata does not describe an Aloha Social backup.';
+                }
+            }
+        }
+
+        if (!is_file($path)) {
+            $problems[] = 'The backup file is missing: ' . $path;
+
+            return ['ok' => false, 'problems' => $problems, 'metadata' => $metadata];
+        }
+
+        $expected = $metadata['sha256'] ?? null;
+        if (!is_string($expected) || $expected === '') {
+            $problems[] = 'The backup predates integrity tracking; its contents cannot be verified.';
+        } else {
+            $actual = self::fileSha256($path);
+            if ($actual === null) {
+                $problems[] = 'The backup file could not be read: ' . $path;
+            } elseif (!hash_equals($expected, $actual)) {
+                $problems[] = 'The backup file does not match its recorded checksum (corrupt or truncated).';
+            }
+        }
+
+        $bytes = $metadata['bytes'] ?? null;
+        if (is_int($bytes) && filesize($path) !== $bytes) {
+            $problems[] = 'The backup size differs from the recorded metadata.';
+        }
+
+        return ['ok' => $problems === [], 'problems' => $problems, 'metadata' => $metadata];
+    }
+
+    private function metadataPathFor(string $path): string
+    {
+        $dot = strrpos($path, '.');
+
+        return ($dot === false ? $path : substr($path, 0, $dot)) . '.json';
+    }
+
+    private static function fileSha256(string $path): ?string
+    {
+        $hash = @hash_file('sha256', $path);
+
+        return is_string($hash) ? $hash : null;
+    }
+
+    /**
+     * Fingerprint of the instance secret key for restore matching. The key
+     * itself is random 32 bytes, so its SHA-256 cannot be brute-forced and
+     * lets a restored instance prove it holds the same identity material.
+     */
+    private function keyFingerprint(): ?string
+    {
+        $encoded = $this->config->secretKey;
+        if ($encoded === null && is_file($this->config->secretKeyFile)) {
+            $encoded = file_get_contents($this->config->secretKeyFile);
+        }
+        if (!is_string($encoded)) {
+            return null;
+        }
+
+        return hash('sha256', trim($encoded));
     }
 
     /**
