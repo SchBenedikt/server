@@ -186,6 +186,9 @@ final class AdminService
                 'active' => $this->intValue('SELECT COUNT(*) FROM account WHERE disabled_at IS NULL'),
                 'disabled' => $this->intValue('SELECT COUNT(*) FROM account WHERE disabled_at IS NOT NULL'),
                 'admins' => $this->intValue("SELECT COUNT(*) FROM account WHERE role = 'admin' AND disabled_at IS NULL"),
+                'admins_without_mfa' => $this->intValue(
+                    "SELECT COUNT(*) FROM account WHERE role = 'admin' AND disabled_at IS NULL AND totp_enabled_at IS NULL",
+                ),
                 'new_7d' => $this->intValue('SELECT COUNT(*) FROM account WHERE created_at >= :cutoff', ['cutoff' => $weekAgo]),
             ],
             'posts' => [
@@ -1522,6 +1525,8 @@ final class AdminService
             ? $this->freeDiskRatio($this->config->blobDirectory)
             : null;
 
+        $adminsWithoutMfa = (int) ($stats['accounts']['admins_without_mfa'] ?? 0);
+
         return [
             [
                 'id' => 'database',
@@ -1570,6 +1575,14 @@ final class AdminService
                 'detail' => $this->config->mailTransport === 'smtp'
                     ? 'SMTP configured'
                     : 'Log transport: emails are only written to files',
+            ],
+            [
+                'id' => 'admin-mfa',
+                'label' => 'Admin two-factor sign-in',
+                'status' => $adminsWithoutMfa > 0 ? 'warn' : 'ok',
+                'detail' => $adminsWithoutMfa === 0
+                    ? 'Every admin uses two-factor sign-in'
+                    : $adminsWithoutMfa . ' admin account(s) without two-factor sign-in',
             ],
             [
                 'id' => 'https',

@@ -48,6 +48,8 @@ final class AccountErasureCoverageTest extends TestCase
         // Recipient rows cascade when the cleanup deletes the events the
         // account received.
         'mastodon_stream_event_recipient',
+        'mfa_pending',
+        'mfa_recovery_code',
         'password_reset',
         'recommendation_feedback',
         'recommendation_impression',

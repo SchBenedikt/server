@@ -316,6 +316,10 @@ final class FrontController
             return $this->login($request, $session, $rawCookie, $userAgent, $ip);
         }
 
+        if ($request->method === 'POST' && $request->path === '/login/mfa') {
+            return $this->loginMfa($request, $session, $rawCookie, $userAgent, $ip);
+        }
+
         if ($request->path === '/signup' && in_array($request->method, ['GET', 'POST'], true)) {
             if (!$this->runtime->registration->enabled()) {
                 return $this->redirect('/login');
@@ -995,6 +999,72 @@ final class FrontController
             }
 
             return Response::json(['revoked' => true]);
+        }
+
+        if ($request->method === 'GET' && $request->path === '/api/v1/host/mfa') {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            return Response::json(['mfa' => $this->runtime->mfa->status((string) $session->userId())]);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/api/v1/host/mfa/totp/begin') {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $enrollment = $this->runtime->mfa->begin((string) $session->userId());
+            if ($enrollment === null) {
+                return $this->apiError(409, 'mfa_already_enabled', 'Two-factor sign-in is already enabled. Disable it first to enroll a new authenticator.');
+            }
+
+            return Response::json($enrollment);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/api/v1/host/mfa/totp/confirm') {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $rateLimited = $this->enforceIdentityRateLimit('host.mfa_confirm', (string) $session->userId(), 10, 900);
+            if ($rateLimited !== null) {
+                return $rateLimited;
+            }
+
+            $body = json_decode($request->body, true);
+            $code = is_array($body) && is_string($body['code'] ?? null) ? $body['code'] : '';
+
+            try {
+                $result = $this->runtime->mfa->confirm((string) $session->userId(), $code);
+            } catch (Throwable) {
+                return $this->apiError(409, 'no_pending_enrollment', 'No two-factor enrollment is in progress.');
+            }
+            if ($result === null) {
+                return $this->apiError(422, 'invalid_code', 'That code is incorrect. Check your authenticator and try again.');
+            }
+
+            return Response::json($result);
+        }
+
+        if ($request->method === 'POST' && $request->path === '/api/v1/host/mfa/totp/disable') {
+            if ($session === null || !$session->isSignedIn()) {
+                return $this->apiError(401, 'not_authenticated', 'You must be signed in for this action.');
+            }
+
+            $rateLimited = $this->enforceIdentityRateLimit('host.mfa_disable', (string) $session->userId(), 10, 900);
+            if ($rateLimited !== null) {
+                return $rateLimited;
+            }
+
+            $body = json_decode($request->body, true);
+            $code = is_array($body) && is_string($body['code'] ?? null) ? $body['code'] : '';
+
+            if (!$this->runtime->mfa->disable((string) $session->userId(), $code)) {
+                return $this->apiError(403, 'invalid_code', 'A current authenticator code is required to disable two-factor sign-in.');
+            }
+
+            return Response::json(['disabled' => true]);
         }
 
         if (preg_match('#^/api/v1/posts/([^/]+)/boost$#', $request->path, $matches) === 1
@@ -2204,12 +2274,79 @@ final class FrontController
 
         $this->runtime->throttle->clear($handle, $ip);
 
+        if ($this->runtime->mfa->isEnabled($account->id)) {
+            // The password alone no longer signs in: a short-lived pending
+            // challenge carries the member to the second-factor form.
+            $token = $this->runtime->mfa->beginLogin($account->id, $returnTo);
+
+            return $this->mfaChallenge($session, $token, null);
+        }
+
         // Session fixation: the anonymous session is replaced, not upgraded.
         $issue = $this->runtime->sessions->issue($account, $rawCookie, $userAgent, $ip);
 
         // A signed-in member expects the interface, not the technical
         // overview page. Keep an explicit `next` target for deep links.
         return $this->redirect($returnTo !== '' ? $returnTo : '/app', $issue);
+    }
+
+    private function loginMfa(
+        Request $request,
+        ?AuthenticatedSession $session,
+        ?string $rawCookie,
+        ?string $userAgent,
+        ?string $ip,
+    ): Response {
+        $params = $this->formParams($request);
+        $csrf = (string) ($params['_csrf'] ?? '');
+        $token = (string) ($params['token'] ?? '');
+        $code = (string) ($params['code'] ?? '');
+
+        if (!$this->runtime->sessions->csrfMatches($session, $csrf) || $token === '') {
+            return $this->loginResponse($session, 'Your session has expired. Please try again.', 403, null, null, '');
+        }
+
+        $retryAfter = $this->runtime->rateLimiter->attempt(
+            'host.mfa_login',
+            $ip ?? $request->remoteAddress ?? 'unknown',
+            20,
+            300,
+        );
+        if ($retryAfter !== null) {
+            return $this->mfaChallenge(
+                $session,
+                $token,
+                'Too many attempts. Please try again in ' . $retryAfter . ' seconds.',
+                429,
+            );
+        }
+
+        $result = $this->runtime->mfa->completeLogin($token, $code);
+        if ($result === null) {
+            return $this->mfaChallenge($session, $token, 'That code is incorrect or the challenge expired. Sign in again.');
+        }
+
+        $account = $this->runtime->accounts->find($result['account_id']);
+        if ($account === null || $account->isDisabled()) {
+            return $this->loginResponse($session, 'Handle or password is incorrect.', 401, null, null, '');
+        }
+
+        $this->runtime->throttle->clear($account->handle, $ip);
+
+        // Same fixation rule as password login: replace, never upgrade.
+        $issue = $this->runtime->sessions->issue($account, $rawCookie, $userAgent, $ip);
+
+        return $this->redirect($result['return_to'] !== '' ? $result['return_to'] : '/app', $issue);
+    }
+
+    private function mfaChallenge(?AuthenticatedSession $session, string $token, ?string $error, int $status = 200): Response
+    {
+        return $this->page('mfa', [
+            'instance' => $this->runtime->config->instanceName,
+            'csrf' => $session?->session->csrfToken ?? '',
+            'token' => $token,
+            'error' => $error,
+        ], 'Two-factor sign-in', $status);
     }
 
     private function logout(Request $request, ?AuthenticatedSession $session, ?string $rawCookie): Response

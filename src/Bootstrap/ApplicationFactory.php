@@ -68,6 +68,7 @@ use AlohaSocial\Server\Accounts\EmailVerificationService;
 use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
+use AlohaSocial\Server\Auth\MfaService;
 use AlohaSocial\Server\Community\Announcements;
 use AlohaSocial\Server\Community\Archives;
 use AlohaSocial\Server\Community\Collections;
@@ -304,6 +305,7 @@ final class ApplicationFactory
             $this->config->instanceUrl,
         );
         $sessions = new SessionManager(new SessionRepository($database), $accounts, $this->config, $clock);
+        $mfa = new MfaService($database, $accounts, $this->secretBox(), $this->config, $clock);
         $interactions = new PostInteractions(
             $app->posts,
             $database,
@@ -337,6 +339,7 @@ final class ApplicationFactory
             emailVerification: $emailVerification,
             emailChange: $emailChange,
             sessions: $sessions,
+            mfa: $mfa,
             throttle: new LoginThrottle($database, $clock),
             passwordHasher: $passwordHasher,
             passwordReset: new PasswordResetService(

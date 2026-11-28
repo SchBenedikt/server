@@ -6130,6 +6130,17 @@ dialog.a-modal::backdrop {
 	width: 90px;
 }
 
+.a-settings__secret {
+	display: inline-block;
+	padding: 6px 10px;
+	border-radius: 8px;
+	background: var(--a-surface-alt, rgba(127, 127, 127, 0.12));
+	font-size: 14px;
+	letter-spacing: 0.08em;
+	word-break: break-all;
+	user-select: all;
+}
+
 @media (max-width: 560px) {
 	.a-notification-request {
 		align-items: flex-start;

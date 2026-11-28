@@ -96,8 +96,18 @@ final class AdminTest extends TestCase
         self::assertArrayHasKey('worker', $body);
         self::assertSame(1, $body['stats']['accounts']['total']);
         self::assertSame(1, $body['stats']['accounts']['admins']);
+        self::assertSame(1, $body['stats']['accounts']['admins_without_mfa']);
         self::assertIsArray($body['health']);
         self::assertNotEmpty($body['health']);
+
+        $mfa = null;
+        foreach ($body['health'] as $check) {
+            if ($check['id'] === 'admin-mfa') {
+                $mfa = $check;
+            }
+        }
+        self::assertNotNull($mfa);
+        self::assertSame('warn', $mfa['status']);
     }
 
     public function testCommunicationErrorsAreListedForTheAdministration(): void

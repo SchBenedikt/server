@@ -24,6 +24,7 @@ use AlohaSocial\Server\Accounts\EmailVerificationService;
 use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
+use AlohaSocial\Server\Auth\MfaService;
 use AlohaSocial\Server\Auth\PasswordHasher;
 use AlohaSocial\Server\Auth\PasswordResetService;
 use AlohaSocial\Server\Auth\SessionManager;
@@ -85,6 +86,7 @@ final readonly class Runtime
         public EmailVerificationService $emailVerification,
         public EmailChangeService $emailChange,
         public SessionManager $sessions,
+        public MfaService $mfa,
         public LoginThrottle $throttle,
         public PasswordHasher $passwordHasher,
         public PasswordResetService $passwordReset,
