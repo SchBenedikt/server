@@ -423,7 +423,11 @@ The host stores Web Push subscriptions per account (`push_subscription`)
 plus a single instance VAPID identity (`push_vapid`, migration
 `202611280031`). The private VAPID key is sealed at rest like the instance
 signing key and is generated once — rotating it breaks every existing
-subscription, so it stays a deliberate operation.
+subscription, so it stays a deliberate operation. First installs use
+insert-if-absent and repairs compare-and-swap against the observed row,
+so concurrent workers can never overwrite a valid identity; a malformed
+public half is repaired by re-deriving it from the sealed private key
+when that opens, preserving the identity and its subscriptions.
 
 `GET /api/v1/host/push/vapid-key` returns the base64url P-256 public key a
 browser needs for `pushManager.subscribe()`; `GET/POST/DELETE

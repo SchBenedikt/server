@@ -9,9 +9,19 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Core\Platform\Clock\SystemClock;
+use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Security\OpenSslSecretBox;
+use AlohaSocial\Server\Db\PdoFactory;
+use AlohaSocial\Server\Push\PushService;
 use AlohaSocial\Server\Push\WebPush;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
+
+use function file_get_contents;
+use function random_bytes;
+use function str_contains;
+use function trim;
 
 /**
  * Web Push subscription storage: VAPID identity, endpoint validation and
@@ -100,6 +110,101 @@ final class PushSubscriptionTest extends TestCase
             ['id' => 'instance'],
         );
         self::assertSame($key, $stored);
+    }
+
+    public function testMalformedPublicKeyIsRepairedFromStoredPrivateIdentity(): void
+    {
+        $original = $this->server->runtime->pushSubscriptions->vapidPublicKey();
+
+        // A public half stored unpadded is unusable, but the sealed private
+        // half still opens — repair must derive the same public point so the
+        // identity (and its subscriptions) survives instead of rotating.
+        $this->server->runtime->database->execute(
+            'UPDATE push_vapid SET public_key = :public_key WHERE id = :id',
+            [
+                'public_key' => WebPush::base64Url("\x04" . random_bytes(63)),
+                'id' => 'instance',
+            ],
+        );
+
+        self::assertSame($original, $this->server->runtime->pushSubscriptions->vapidPublicKey());
+        self::assertSame(
+            $original,
+            $this->server->runtime->pushSubscriptions->vapidKeyPair()['public_key'],
+        );
+    }
+
+    public function testLosingConcurrentInstallReturnsTheWinnerKey(): void
+    {
+        $clock = new SystemClock();
+        $box = OpenSslSecretBox::fromBase64Key(
+            trim((string) file_get_contents($this->server->config->secretKeyFile)),
+        );
+
+        // Two independent connections, as two PHP processes would hold. The
+        // "loser" pauses at its write; the "winner" completes a full install
+        // first — the exact interleaving that used to overwrite the row.
+        $winner = new PushService(PdoFactory::connect($this->server->config), $clock, $box);
+        $loserDb = new InterleavingConnection(PdoFactory::connect($this->server->config));
+        $winnerKey = null;
+        $loserDb->beforeWrite = static function () use ($winner, &$winnerKey): void {
+            $winnerKey = $winner->vapidPublicKey();
+        };
+        $loser = new PushService($loserDb, $clock, $box);
+
+        $loserKey = $loser->vapidPublicKey();
+        self::assertNotNull($winnerKey);
+        self::assertSame($winnerKey, $loserKey);
+        self::assertSame(
+            $winnerKey,
+            $this->server->runtime->pushSubscriptions->vapidPublicKey(),
+        );
+        self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
+            'SELECT COUNT(*) FROM push_vapid',
+        ));
+    }
+
+    public function testLosingConcurrentRepairReturnsTheWinnerKey(): void
+    {
+        // A malformed row whose private half cannot be opened forces the
+        // rotation path, where the compare-and-swap decides the winner.
+        $this->server->runtime->database->execute(
+            'INSERT INTO push_vapid (id, public_key, private_pem, created_at)'
+            . ' VALUES (:id, :public_key, :private_pem, :created_at)',
+            [
+                'id' => 'instance',
+                'public_key' => WebPush::base64Url("\x04" . random_bytes(63)),
+                'private_pem' => 'stale-observed',
+                'created_at' => '2026-01-01T00:00:00+00:00',
+            ],
+        );
+
+        $clock = new SystemClock();
+        $box = OpenSslSecretBox::fromBase64Key(
+            trim((string) file_get_contents($this->server->config->secretKeyFile)),
+        );
+
+        $winner = new PushService(PdoFactory::connect($this->server->config), $clock, $box);
+        $loserDb = new InterleavingConnection(PdoFactory::connect($this->server->config));
+        $winnerKey = null;
+        $loserDb->beforeWrite = static function () use ($winner, &$winnerKey): void {
+            $winnerKey = $winner->vapidPublicKey();
+        };
+        $loser = new PushService($loserDb, $clock, $box);
+
+        $loserKey = $loser->vapidPublicKey();
+        self::assertNotNull($winnerKey);
+        self::assertSame($winnerKey, $loserKey);
+        self::assertSame(
+            $winnerKey,
+            $this->server->runtime->pushSubscriptions->vapidPublicKey(),
+        );
+
+        // The winning pair is coherent: the stored public point is the one
+        // the sealed private key derives, so worker signing stays valid.
+        $pair = $this->server->runtime->pushSubscriptions->vapidKeyPair();
+        self::assertSame($winnerKey, $pair['public_key']);
+        self::assertStringContainsString('PRIVATE KEY', $pair['private_pem']);
     }
 
     public function testSubscribeListAndUnsubscribe(): void
@@ -201,5 +306,60 @@ final class PushSubscriptionTest extends TestCase
         self::assertSame(1, (int) $this->server->runtime->database->fetchValue(
             'SELECT COUNT(*) FROM push_vapid',
         ));
+    }
+}
+
+/**
+ * Wraps a connection and runs a hook once, right before the first write to
+ * push_vapid — a deterministic stand-in for a second process that read the
+ * row before this one did.
+ */
+final class InterleavingConnection implements Connection
+{
+    /** @var (callable(): void)|null */
+    public $beforeWrite = null;
+
+    private bool $fired = false;
+
+    public function __construct(private readonly Connection $inner)
+    {
+    }
+
+    public function execute(string $sql, array $parameters = []): int
+    {
+        if (!$this->fired && str_contains($sql, 'push_vapid')) {
+            $this->fired = true;
+            $hook = $this->beforeWrite;
+            if ($hook !== null) {
+                $hook();
+            }
+        }
+
+        return $this->inner->execute($sql, $parameters);
+    }
+
+    public function fetchAll(string $sql, array $parameters = []): array
+    {
+        return $this->inner->fetchAll($sql, $parameters);
+    }
+
+    public function fetchOne(string $sql, array $parameters = []): ?array
+    {
+        return $this->inner->fetchOne($sql, $parameters);
+    }
+
+    public function fetchValue(string $sql, array $parameters = []): mixed
+    {
+        return $this->inner->fetchValue($sql, $parameters);
+    }
+
+    public function transaction(callable $work): mixed
+    {
+        return $this->inner->transaction($work);
+    }
+
+    public function driver(): string
+    {
+        return $this->inner->driver();
     }
 }

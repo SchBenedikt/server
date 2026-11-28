@@ -72,63 +72,42 @@ final class PushService
      * The base64url-encoded uncompressed P-256 point browsers pass to
      * `pushManager.subscribe()`. Generated once and kept stable: rotating it
      * silently breaks every existing subscription.
+     *
+     * First installs and repairs race on this single row, so writes are
+     * insert-if-absent or compare-and-swap against the observed row — the
+     * first persisted valid identity wins and every caller re-reads it.
+     * A caller never returns a key it failed to persist.
      */
     public function vapidPublicKey(): string
     {
-        $row = $this->db->fetchOne(
-            'SELECT public_key FROM push_vapid WHERE id = :id',
-            ['id' => self::ID],
-        );
-        $stored = $row['public_key'] ?? null;
-        if (is_string($stored) && $stored !== '' && self::validVapidKey($stored)) {
-            return $stored;
+        for ($attempt = 0; $attempt < 3; $attempt++) {
+            $row = $this->db->fetchOne(
+                'SELECT public_key, private_pem FROM push_vapid WHERE id = :id',
+                ['id' => self::ID],
+            );
+
+            $stored = $row['public_key'] ?? null;
+            if (is_string($stored) && self::validVapidKey($stored)) {
+                return $stored;
+            }
+
+            if ($row === null) {
+                $this->installKeyPair();
+            } else {
+                $this->repairKeyPair((string) ($row['private_pem'] ?? ''));
+            }
+
+            $winner = $this->db->fetchOne(
+                'SELECT public_key FROM push_vapid WHERE id = :id',
+                ['id' => self::ID],
+            );
+            $winnerKey = $winner['public_key'] ?? null;
+            if (is_string($winnerKey) && self::validVapidKey($winnerKey)) {
+                return $winnerKey;
+            }
         }
 
-        $key = openssl_pkey_new([
-            'private_key_type' => OPENSSL_KEYTYPE_EC,
-            'curve_name' => 'prime256v1',
-        ]);
-        if ($key === false) {
-            throw new \RuntimeException('The VAPID key pair could not be generated.');
-        }
-
-        $details = openssl_pkey_get_details($key);
-        if (!is_array($details) || !isset($details['ec']['x'], $details['ec']['y'])) {
-            throw new \RuntimeException('The VAPID public key could not be derived.');
-        }
-
-        // OpenSSL reports the coordinates as minimal-length integers, so a
-        // leading zero byte must be restored or the point is not 65 bytes.
-        $public = "\x04"
-            . str_pad($details['ec']['x'], 32, "\x00", STR_PAD_LEFT)
-            . str_pad($details['ec']['y'], 32, "\x00", STR_PAD_LEFT);
-        $publicKey = $this->base64Url($public);
-        $privatePem = '';
-        if (!openssl_pkey_export($key, $privatePem)) {
-            throw new \RuntimeException('The VAPID private key could not be exported.');
-        }
-
-        $this->db->execute(
-            'INSERT INTO push_vapid (id, public_key, private_pem, created_at)'
-            . ' VALUES (:id, :public_key, :private_pem, :created_at)'
-            . ' ON CONFLICT (id) DO UPDATE SET'
-            . ' public_key = excluded.public_key, private_pem = excluded.private_pem',
-            [
-                'id' => self::ID,
-                'public_key' => $publicKey,
-                'private_pem' => $this->box->seal($privatePem),
-                'created_at' => Time::format($this->clock->now()),
-            ],
-        );
-
-        // A concurrent request may have won the insert; always answer with
-        // the stored value so every client sees the same key.
-        $stored = $this->db->fetchOne(
-            'SELECT public_key FROM push_vapid WHERE id = :id',
-            ['id' => self::ID],
-        );
-
-        return is_string($stored['public_key'] ?? null) ? $stored['public_key'] : $publicKey;
+        throw new \RuntimeException('The VAPID public key could not be stabilized.');
     }
 
     /**
@@ -152,6 +131,148 @@ final class PushService
             'public_key' => (string) $row['public_key'],
             'private_pem' => $this->box->open((string) $row['private_pem']),
         ];
+    }
+
+    /**
+     * First install: insert-if-absent. A concurrent initializer wins the
+     * row; the loser's freshly generated pair is discarded and the caller
+     * re-reads the winner's key.
+     */
+    private function installKeyPair(): void
+    {
+        [$publicKey, $sealedPem] = $this->generateKeyPair();
+
+        $this->db->execute(
+            'INSERT INTO push_vapid (id, public_key, private_pem, created_at)'
+            . ' VALUES (:id, :public_key, :private_pem, :created_at)'
+            . ' ON CONFLICT (id) DO NOTHING',
+            [
+                'id' => self::ID,
+                'public_key' => $publicKey,
+                'private_pem' => $sealedPem,
+                'created_at' => Time::format($this->clock->now()),
+            ],
+        );
+    }
+
+    /**
+     * Repair of a malformed row, compare-and-swapped on the observed
+     * private half so a concurrent repair or rotation is never overwritten.
+     *
+     * The private PEM is authoritative — the VAPID JWT is signed with it —
+     * so a recoverable key yields the correct public point and the identity
+     * (and its subscriptions) survives. Only an unreadable private half
+     * forces rotation.
+     */
+    private function repairKeyPair(string $observedPem): void
+    {
+        $repaired = $this->publicKeyFromPrivatePem($observedPem);
+        if ($repaired !== null) {
+            $this->db->execute(
+                'UPDATE push_vapid SET public_key = :public_key'
+                . ' WHERE id = :id AND private_pem = :observed',
+                [
+                    'public_key' => $repaired,
+                    'id' => self::ID,
+                    'observed' => $observedPem,
+                ],
+            );
+
+            return;
+        }
+
+        [$publicKey, $sealedPem] = $this->generateKeyPair();
+        $this->db->execute(
+            'UPDATE push_vapid SET public_key = :public_key, private_pem = :private_pem'
+            . ' WHERE id = :id AND private_pem = :observed',
+            [
+                'public_key' => $publicKey,
+                'private_pem' => $sealedPem,
+                'id' => self::ID,
+                'observed' => $observedPem,
+            ],
+        );
+    }
+
+    /**
+     * @return array{0: string, 1: string} base64url public point, sealed PEM
+     */
+    private function generateKeyPair(): array
+    {
+        $key = openssl_pkey_new([
+            'private_key_type' => OPENSSL_KEYTYPE_EC,
+            'curve_name' => 'prime256v1',
+        ]);
+        if ($key === false) {
+            throw new \RuntimeException('The VAPID key pair could not be generated.');
+        }
+
+        $details = openssl_pkey_get_details($key);
+        $public = $this->publicPoint(is_array($details) ? $details : []);
+        if ($public === null) {
+            throw new \RuntimeException('The VAPID public key could not be derived.');
+        }
+
+        $privatePem = '';
+        if (!openssl_pkey_export($key, $privatePem)) {
+            throw new \RuntimeException('The VAPID private key could not be exported.');
+        }
+
+        $publicKey = $this->base64Url($public);
+        if (!self::validVapidKey($publicKey)) {
+            throw new \RuntimeException('The VAPID public key could not be derived.');
+        }
+
+        return [$publicKey, $this->box->seal($privatePem)];
+    }
+
+    /**
+     * The public point a sealed private PEM implies, or null when the PEM
+     * cannot be opened or is not an EC key.
+     */
+    private function publicKeyFromPrivatePem(string $sealedPem): ?string
+    {
+        try {
+            $pem = $this->box->open($sealedPem);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $key = openssl_pkey_get_private($pem);
+        if ($key === false) {
+            return null;
+        }
+
+        $details = openssl_pkey_get_details($key);
+        $public = $this->publicPoint(is_array($details) ? $details : []);
+
+        if ($public === null) {
+            return null;
+        }
+
+        $encoded = $this->base64Url($public);
+
+        return self::validVapidKey($encoded) ? $encoded : null;
+    }
+
+    /**
+     * OpenSSL reports the coordinates as minimal-length integers, so a
+     * leading zero byte must be restored or the point is not 65 bytes.
+     *
+     * @param array<string, mixed> $details openssl_pkey_get_details() result
+     */
+    private function publicPoint(array $details): ?string
+    {
+        $ec = $details['ec'] ?? null;
+        if (!is_array($ec) || !isset($ec['x'], $ec['y'])
+            || !is_string($ec['x']) || !is_string($ec['y'])
+        ) {
+            return null;
+        }
+
+        return "\x04"
+            . str_pad($ec['x'], 32, "\x00", STR_PAD_LEFT)
+            . str_pad($ec['y'], 32, "\x00", STR_PAD_LEFT);
     }
 
     /**
