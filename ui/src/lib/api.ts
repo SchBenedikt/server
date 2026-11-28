@@ -146,6 +146,15 @@ export interface AccountMoveStatus {
 	updated_at: string;
 }
 
+export interface HostSession {
+	id: string;
+	created_at: string;
+	expires_at: string;
+	user_agent: string | null;
+	ip: string | null;
+	current: boolean;
+}
+
 export interface Api {
 	instance(): Promise<InstanceInfo>;
 	publicTimeline(limit?: number, before?: string | null, beforeId?: string | null): Promise<TimelineItem[]>;
@@ -239,6 +248,9 @@ export interface Api {
 	deleteAccount(): Promise<{ state: string }>;
 	accountMove(): Promise<AccountMoveStatus | null>;
 	startAccountMove(targetActorId: string): Promise<AccountMoveStatus>;
+	sessions(): Promise<HostSession[]>;
+	revokeSession(id: string): Promise<void>;
+	revokeOtherSessions(): Promise<number>;
 	drafts(): Promise<Draft[]>;
 	saveDraft(payload: {
 		context?: string;
@@ -3106,6 +3118,29 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 				throw new ApiError(502, 'invalid_response', 'The account move could not be confirmed.');
 			}
 			return data.move;
+		},
+
+		async sessions(): Promise<HostSession[]> {
+			const data = await request<{ sessions?: unknown }>('GET', '/api/v1/host/sessions');
+			return Array.isArray(data?.sessions)
+				? data.sessions.filter(isRecord).map((row) => ({
+					id: typeof row.id === 'string' ? row.id : '',
+					created_at: typeof row.created_at === 'string' ? row.created_at : '',
+					expires_at: typeof row.expires_at === 'string' ? row.expires_at : '',
+					user_agent: typeof row.user_agent === 'string' ? row.user_agent : null,
+					ip: typeof row.ip === 'string' ? row.ip : null,
+					current: row.current === true,
+				})).filter((session) => session.id !== '')
+				: [];
+		},
+
+		async revokeSession(id: string): Promise<void> {
+			await request<unknown>('DELETE', `/api/v1/host/sessions/${encodeURIComponent(id)}`);
+		},
+
+		async revokeOtherSessions(): Promise<number> {
+			const data = await request<{ revoked?: unknown }>('POST', '/api/v1/host/sessions/revoke-others', undefined, {});
+			return typeof data?.revoked === 'number' ? data.revoked : 0;
 		},
 
 		async atprotoIdentity(): Promise<AtprotoIdentityData> {

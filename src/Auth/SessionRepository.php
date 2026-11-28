@@ -71,4 +71,39 @@ final class SessionRepository
     {
         return $this->db->execute('DELETE FROM session WHERE expires_at <= :now', ['now' => $now]);
     }
+
+    /**
+     * Live sessions of one account, newest first. Only hashes and metadata
+     * leave this method — never a usable cookie value.
+     *
+     * @return list<array{id_hash: string, created_at: string, expires_at: string, user_agent: ?string, ip_hash: ?string}>
+     */
+    public function listForAccount(string $accountId, string $now): array
+    {
+        return $this->db->fetchAll(
+            'SELECT id_hash, created_at, expires_at, user_agent, ip_hash FROM session'
+            . ' WHERE account_id = :account AND expires_at > :now ORDER BY created_at DESC',
+            ['account' => $accountId, 'now' => $now],
+        );
+    }
+
+    /**
+     * Deletes one session scoped to its account, so a guessed hash can never
+     * revoke somebody else's session.
+     */
+    public function deleteForAccountSession(string $accountId, string $idHash): bool
+    {
+        return $this->db->execute(
+            'DELETE FROM session WHERE id_hash = :id_hash AND account_id = :account_id',
+            ['id_hash' => $idHash, 'account_id' => $accountId],
+        ) > 0;
+    }
+
+    public function deleteOthersForAccount(string $accountId, string $keepIdHash): int
+    {
+        return $this->db->execute(
+            'DELETE FROM session WHERE account_id = :account_id AND id_hash != :keep',
+            ['account_id' => $accountId, 'keep' => $keepIdHash],
+        );
+    }
 }

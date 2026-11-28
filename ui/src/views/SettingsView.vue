@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AccountMoveStatus, type AtprotoIdentityData } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type HostSession } from '../lib/api';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
 	AccountPreferences,
@@ -64,6 +64,9 @@ const accountMove = ref<AccountMoveStatus | null>(null);
 const moveTarget = ref('');
 const moveBusy = ref(false);
 const confirmMove = ref(false);
+const sessions = ref<HostSession[]>([]);
+const sessionsBusy = ref(false);
+const confirmRevokeOthers = ref(false);
 
 const visibilityOptions = [
 	{ value: 'public', label: 'Public', hint: 'Everyone can see the post.' },
@@ -124,6 +127,11 @@ async function load(): Promise<void> {
 			moveTarget.value = accountMove.value?.target_actor_id ?? '';
 		} catch {
 			accountMove.value = null;
+		}
+		try {
+			sessions.value = await getApi().sessions();
+		} catch {
+			sessions.value = [];
 		}
 		try {
 			notificationPolicy.value = await getApi().notificationPolicy();
@@ -372,6 +380,73 @@ async function startAccountMove(): Promise<void> {
 		showToast(caught instanceof Error ? caught.message : 'The account move could not be started.', 'error');
 	} finally {
 		moveBusy.value = false;
+	}
+}
+
+function sessionLabel(session: HostSession): string {
+	const agent = session.user_agent ?? '';
+	if (/Mobile|Android|iPhone/i.test(agent)) {
+		return 'Mobile device';
+	}
+	if (/Firefox/i.test(agent)) {
+		return 'Firefox';
+	}
+	if (/Edg\//i.test(agent)) {
+		return 'Edge';
+	}
+	if (/Chrome|Chromium/i.test(agent)) {
+		return 'Chrome';
+	}
+	if (/Safari/i.test(agent)) {
+		return 'Safari';
+	}
+	if (/curl|Wget|Python|Go-http/i.test(agent)) {
+		return 'Script or API client';
+	}
+	return agent === '' ? 'Unknown device' : agent.slice(0, 60);
+}
+
+function sessionDate(value: string): string {
+	const date = new Date(value.replace(' ', 'T') + 'Z');
+	return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+async function revokeSession(session: HostSession): Promise<void> {
+	if (sessionsBusy.value) {
+		return;
+	}
+	sessionsBusy.value = true;
+	try {
+		await getApi().revokeSession(session.id);
+		sessions.value = sessions.value.filter((entry) => entry.id !== session.id);
+		showToast('Session signed out.', 'success');
+	} catch (caught) {
+		showToast(caught instanceof Error ? caught.message : 'The session could not be revoked.', 'error');
+	} finally {
+		sessionsBusy.value = false;
+	}
+}
+
+async function revokeOtherSessions(): Promise<void> {
+	if (sessionsBusy.value) {
+		return;
+	}
+	if (!confirmRevokeOthers.value) {
+		confirmRevokeOthers.value = true;
+		return;
+	}
+
+	sessionsBusy.value = true;
+	try {
+		await getApi().revokeOtherSessions();
+		confirmRevokeOthers.value = false;
+		sessions.value = (await getApi().sessions()).filter((session) => session.current);
+		showToast('All other sessions were signed out.', 'success');
+	} catch (caught) {
+		confirmRevokeOthers.value = false;
+		showToast(caught instanceof Error ? caught.message : 'The other sessions could not be revoked.', 'error');
+	} finally {
+		sessionsBusy.value = false;
 	}
 }
 
@@ -739,6 +814,41 @@ watch(signedIn, (value) => {
 						{{ moveBusy ? 'Announcing…' : confirmMove ? 'Confirm account move' : 'Move account' }}
 					</button>
 				</form>
+			</section>
+
+			<section class="a-settings__section">
+				<h2>Signed-in sessions</h2>
+				<p class="a-settings__hint">
+					Devices currently signed in to your account. Sign out anything you do not recognize.
+				</p>
+				<div v-if="sessions.length === 0" class="a-settings__hint">No active sessions found.</div>
+				<label v-for="session in sessions" :key="session.id" class="a-settings__row">
+					<span>
+						<strong>{{ sessionLabel(session) }}<template v-if="session.current"> — this device</template></strong>
+						<small>
+							Signed in {{ sessionDate(session.created_at) }}
+							<template v-if="session.ip !== null"> · network {{ session.ip }}</template>
+						</small>
+					</span>
+					<button
+						v-if="!session.current"
+						type="button"
+						class="a-btn a-btn--ghost a-btn--small"
+						:disabled="sessionsBusy"
+						@click="revokeSession(session)"
+					>
+						Sign out
+					</button>
+				</label>
+				<button
+					v-if="sessions.length > 1"
+					type="button"
+					class="a-btn a-btn--ghost a-btn--small"
+					:disabled="sessionsBusy"
+					@click="revokeOtherSessions"
+				>
+					{{ sessionsBusy ? 'Signing out…' : confirmRevokeOthers ? 'Confirm sign-out of other sessions' : 'Sign out other sessions' }}
+				</button>
 			</section>
 
 			<section class="a-settings__section">

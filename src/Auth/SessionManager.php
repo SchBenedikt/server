@@ -115,6 +115,34 @@ final class SessionManager
         return $this->sessions->deleteForAccount($accountId);
     }
 
+    /**
+     * Live sessions of an account for the security settings page. Rows carry
+     * the stored id hash (never a usable cookie) plus device metadata.
+     *
+     * @return list<array{id_hash: string, created_at: string, expires_at: string, user_agent: ?string, ip_hash: ?string}>
+     */
+    public function listForAccount(string $accountId): array
+    {
+        return $this->sessions->listForAccount($accountId, Time::format($this->clock->now()));
+    }
+
+    /**
+     * Revokes one of the account's own sessions by its stored id hash.
+     */
+    public function revokeSession(string $accountId, string $idHash): bool
+    {
+        return $this->sessions->deleteForAccountSession($accountId, $idHash);
+    }
+
+    /**
+     * Revokes every session of the account except the given one — the
+     * caller's current session survives.
+     */
+    public function revokeOtherSessions(string $accountId, string $keepIdHash): int
+    {
+        return $this->sessions->deleteOthersForAccount($accountId, $keepIdHash);
+    }
+
     public function csrfMatches(?AuthenticatedSession $session, string $token): bool
     {
         if ($session === null || $token === '') {
