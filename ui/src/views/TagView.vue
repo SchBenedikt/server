@@ -182,7 +182,12 @@ async function toggleFollow(): Promise<void> {
 				<span>Public posts other servers delivered to this instance</span>
 			</header>
 
-			<p v-if="remoteError !== ''" class="a-feed__inline-error">{{ remoteError }}</p>
+			<p v-if="remoteError !== ''" class="a-feed__inline-error">
+				{{ remoteError }}
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="loadRemote()">
+					Try again
+				</button>
+			</p>
 
 			<ol v-if="remotePosts.length > 0" class="a-feed__list">
 				<li v-for="post in remotePosts" :key="post.id">

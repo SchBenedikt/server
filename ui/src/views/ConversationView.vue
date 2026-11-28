@@ -255,7 +255,12 @@ void stopDeleted;
 				</a>
 			</div>
 
-			<p v-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+			<p v-if="error !== ''" class="a-feed__inline-error">
+				{{ error }}
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">
+					Try again
+				</button>
+			</p>
 
 			<TimelineSkeleton v-if="loading && items.length === 0" :count="2" />
 

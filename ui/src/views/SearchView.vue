@@ -141,7 +141,12 @@ function hashtagHref(tag: HashtagResult): string {
 			<a href="/login">Sign in</a>
 		</p>
 
-		<p v-if="error" class="a-form-error" role="alert">{{ error }}</p>
+		<p v-if="error" class="a-form-error" role="alert">
+			{{ error }}
+			<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="search">
+				Try again
+			</button>
+		</p>
 
 		<TimelineSkeleton v-if="searching && !hasResults" :count="3" />
 
