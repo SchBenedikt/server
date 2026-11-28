@@ -434,6 +434,11 @@ final class AdminTest extends TestCase
         self::assertSame('ok', $storageHealth['status']);
         self::assertSame('s3://aloha-media-test', $instance['paths']['blobs']);
         self::assertSame('s3', $instance['features']['storage_driver']);
+        self::assertMatchesRegularExpression('/^[0-9a-f]{12}$/', (string) $instance['versions']['ui_bundle']);
+        self::assertTrue(
+            $instance['versions']['server_build'] === null
+            || is_string($instance['versions']['server_build']),
+        );
         self::assertFalse(str_contains(json_encode($instance, JSON_THROW_ON_ERROR), 'private-key-secret'));
         self::assertFalse(str_contains(json_encode($instance, JSON_THROW_ON_ERROR), 'access-key-secret'));
     }
