@@ -31,7 +31,7 @@ final class ClientApiCors
      *
      * @var list<string>
      */
-    private const EXACT_PATHS = ['/api/v1/apps', '/oauth/token', '/oauth/revoke'];
+    private const EXACT_PATHS = ['/api/v1/apps', '/api/v2/instance', '/oauth/token', '/oauth/revoke'];
 
     public function __construct(
         private readonly string $mastodonPrefix,
