@@ -2145,6 +2145,7 @@ final class AdminService
         $adminsWithoutMfa = (int) ($stats['accounts']['admins_without_mfa'] ?? 0);
         $schema = $this->schemaStatus();
         $tasks = $this->workerTasks();
+        $feed = $this->feedFreshness($queue);
         $staleTasks = [];
         foreach ($tasks as $task) {
             if ($task['stale']) {
@@ -2180,6 +2181,12 @@ final class AdminService
                 'detail' => $staleTasks === []
                     ? ($tasks === [] ? 'No task reports yet' : count($tasks) . ' pipeline(s) reporting')
                     : 'Stale: ' . implode(', ', $staleTasks),
+            ],
+            [
+                'id' => 'feed',
+                'label' => 'Federated feed',
+                'status' => $feed['status'],
+                'detail' => $feed['detail'],
             ],
             [
                 'id' => 'queue',
@@ -2270,6 +2277,64 @@ final class AdminService
         $latest = $applied === [] ? 'none' : (string) max(array_keys($applied));
 
         return ['status' => 'ok', 'detail' => count($applied) . ' applied · latest ' . $latest];
+    }
+
+    /**
+     * Feed catch-up signal for #170: app readiness alone does not prove fresh
+     * federated content, so the card reports cache freshness and queue backlog
+     * age. A quiet instance is healthy; a backed-up queue is not.
+     *
+     * @param array<string, mixed> $queue
+     * @return array{status: string, detail: string}
+     */
+    private function feedFreshness(array $queue): array
+    {
+        $latest = $this->db->fetchValue(
+            'SELECT MAX(published_at) FROM social_remote_post WHERE deleted_at IS NULL',
+        );
+        $latestAge = $this->ageOf(is_string($latest) ? $latest : null);
+
+        $pending = (int) ($queue['pending'] ?? 0);
+        $oldest = $queue['oldest_pending'] ?? null;
+        $oldestAge = $this->ageOf(is_string($oldest) ? $oldest : null);
+
+        $detail = ($latestAge === null
+                ? 'No federated posts cached yet'
+                : 'Latest remote post ' . $this->describeAge($latestAge) . ' ago')
+            . ' · ' . ($pending === 0
+                ? 'queue empty'
+                : $pending . ' job(s) pending'
+                    . ($oldestAge === null ? '' : ', oldest ' . $this->describeAge($oldestAge)));
+
+        return [
+            'status' => $pending > 0 && $oldestAge !== null && $oldestAge > 3600 ? 'warn' : 'ok',
+            'detail' => $detail,
+        ];
+    }
+
+    private function ageOf(?string $timestamp): ?int
+    {
+        if ($timestamp === null || $timestamp === '') {
+            return null;
+        }
+
+        try {
+            return max(0, $this->clock->now()->getTimestamp() - Time::parse($timestamp)->getTimestamp());
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function describeAge(int $seconds): string
+    {
+        if ($seconds < 3600) {
+            return max(1, (int) round($seconds / 60)) . ' min';
+        }
+        if ($seconds < 86400) {
+            return (int) round($seconds / 3600) . ' h';
+        }
+
+        return (int) round($seconds / 86400) . ' d';
     }
 
     /**

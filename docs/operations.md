@@ -192,6 +192,14 @@ worker heartbeat with a stale task means that pipeline is stuck while the
 rest of the worker keeps running — check the worker journal for the
 matching `… failed:` line.
 
+The *Federated feed* card answers a different question — whether catch-up
+is actually delivering content, not just whether the worker is alive. It
+shows the age of the newest cached remote post and the pending-job
+backlog with its oldest entry; the check turns amber only when a job has
+been waiting for over an hour. A quiet instance with an empty queue stays
+green, while app readiness (`/readyz`) can be green at the same time the
+feed is hours behind.
+
 ### Cleanup
 
 `php bin/cleanup.php` queues a bounded retention job; `--now` runs it directly.
