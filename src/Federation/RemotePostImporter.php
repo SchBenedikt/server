@@ -140,8 +140,19 @@ final class RemotePostImporter implements \AlohaSocial\Core\Domain\Federation\Re
         try {
             $this->posts->insert($post);
         } catch (DatabaseException) {
-            // Another request imported the same object first. Its row is the
-            // one the reaction service has to use.
+            // Another request imported the same object first — or an earlier
+            // inbox delivery tombstoned a placeholder under this activity
+            // id. The origin just proved the object live, so replace the row
+            // instead of leaving the interaction permanently refused. A live
+            // row that merely shares the activity id belongs to a different
+            // object and must not be overwritten.
+            $stored = $this->posts->findByActivityId($objectId);
+            if ($stored !== null && $stored->deletedAt === null && $stored->objectId !== $objectId) {
+                return $this->posts->findPostByObjectId($objectId);
+            }
+
+            $this->posts->upsert($post);
+
             return $this->posts->findPostByObjectId($objectId);
         }
 
