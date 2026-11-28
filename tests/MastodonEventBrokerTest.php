@@ -161,6 +161,34 @@ final class MastodonEventBrokerTest extends TestCase
         self::assertSame(0, (int) $server->runtime->database->fetchValue('SELECT COUNT(*) FROM mastodon_stream_event_recipient'));
     }
 
+    public function testAccountErasureRemovesNotificationCopiesFromOtherUsersStreams(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+        $server->createAccount('bob');
+        // A notification to bob caused by alice: its stream copy sits in
+        // bob's replay log, addressed to bob, never to alice.
+        $server->runtime->app->notifications?->recordFollow('bob', 'alice');
+        $server->runtime->app->posts->create(new CreatePost('bob', 'unrelated'));
+
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mastodon_stream_event WHERE event_name = 'notification.created'",
+        ));
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mastodon_stream_event"
+            . " WHERE event_name = 'notification.created' AND notification_id IS NOT NULL",
+        ));
+
+        $server->runtime->accountErasureCleanup->erase('alice');
+
+        self::assertSame(0, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mastodon_stream_event WHERE event_name = 'notification.created'",
+        ));
+        self::assertSame(1, (int) $server->runtime->database->fetchValue(
+            "SELECT COUNT(*) FROM mastodon_stream_event WHERE event_name = 'status.created'",
+        ));
+    }
+
     public function testStreamingRouteRequiresOAuthAndEmitsMastodonUpdateFrames(): void
     {
         $server = new TestServer(['mastodon_api' => true]);
