@@ -12,7 +12,7 @@ import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { accountFor, displayNameFor, hasDistinctDisplayName, resolveAccount } from '../lib/account';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { discover, discoveryPeople, loadDiscover, popularTags } from '../lib/discover';
 import { handleLabel, normalizeTag } from '../lib/format';
 import { navigate } from '../lib/router';
@@ -185,7 +185,7 @@ async function searchRemote(reset: boolean): Promise<void> {
 		if (generation !== remoteGeneration) {
 			return;
 		}
-		remoteError.value = error instanceof Error ? error.message : 'The search failed.';
+		remoteError.value = loadErrorMessage(error, 'The search failed.');
 	} finally {
 		if (generation === remoteGeneration) {
 			remoteLoading.value = false;
@@ -270,7 +270,7 @@ async function toggleTag(tag: string): Promise<void> {
 			showToast(`You now follow #${tag}.`, 'success');
 		}
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The hashtag could not be changed.', 'error');
+		showToast(loadErrorMessage(error, 'The hashtag could not be changed.'), 'error');
 	} finally {
 		tagBusy.value = '';
 	}

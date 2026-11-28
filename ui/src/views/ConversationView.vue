@@ -11,7 +11,7 @@ import PageHeader from '../components/PageHeader.vue';
 import PostCard from '../components/PostCard.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { resolveAccount } from '../lib/account';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { handleLabel } from '../lib/format';
 import { onPostCreated, onPostDeleted } from '../lib/events';
 import { navigate, route } from '../lib/router';
@@ -112,7 +112,7 @@ async function load(): Promise<void> {
 		}
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'The conversation could not be loaded.';
+			error.value = loadErrorMessage(caught, 'The conversation could not be loaded.');
 		}
 	} finally {
 		if (current === generation) {
@@ -141,7 +141,7 @@ async function loadMore(): Promise<void> {
 		))].sort(compareOldToNew);
 	} catch (caught) {
 		if (current === generation) {
-			error.value = caught instanceof Error ? caught.message : 'Older messages could not be loaded.';
+			error.value = loadErrorMessage(caught, 'Older messages could not be loaded.');
 		}
 	} finally {
 		if (current === generation) {

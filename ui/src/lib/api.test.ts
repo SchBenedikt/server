@@ -254,3 +254,23 @@ describe('network failures', () => {
 		markOnline();
 	});
 });
+
+describe('loadErrorMessage', () => {
+	it('gives network failures offline-specific copy', async () => {
+		const { loadErrorMessage } = await import('./api');
+		const error = new ApiError(0, 'network_error', 'Failed to fetch');
+		expect(loadErrorMessage(error, 'fallback')).toBe('No connection — check your network and try again.');
+	});
+
+	it('appends the request id to server errors', async () => {
+		const { loadErrorMessage } = await import('./api');
+		const error = new ApiError(500, 'http_error', 'Server error', {}, 'req_abc123');
+		expect(loadErrorMessage(error, 'fallback')).toBe('Server error (ref req_abc123)');
+	});
+
+	it('uses the fallback for non-error throws', async () => {
+		const { loadErrorMessage } = await import('./api');
+		expect(loadErrorMessage('boom', 'fallback')).toBe('fallback');
+		expect(loadErrorMessage(new Error(''), 'fallback')).toBe('fallback');
+	});
+});

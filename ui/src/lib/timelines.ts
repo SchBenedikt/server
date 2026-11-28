@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { ApiError, getApi, hydrateTimelineBoosts } from './api';
+import { ApiError, getApi, hydrateTimelineBoosts, loadErrorMessage } from './api';
 import { onEngagement, onPostCreated, onPostDeleted, onPostUpdated } from './events';
 import { primeAuthorNames } from './account';
 import type { FeedInterest, TimelineItem } from './types';
@@ -38,13 +38,9 @@ function messageFor(error: unknown): string {
 		if (error.status === 404) {
 			return 'This feed is unavailable.';
 		}
-
-		return error.message;
 	}
 
-	return error instanceof Error
-		? error.message
-		: 'The feed could not be loaded.';
+	return loadErrorMessage(error, 'The feed could not be loaded.');
 }
 
 export function useTimeline(source: () => TimelineSource) {

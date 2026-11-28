@@ -10,7 +10,7 @@ import EmptyState from '../components/EmptyState.vue';
 import PageHeader from '../components/PageHeader.vue';
 import TimelineSkeleton from '../components/TimelineSkeleton.vue';
 import { resolveAccount } from '../lib/account';
-import { getApi } from '../lib/api';
+import { getApi, loadErrorMessage } from '../lib/api';
 import { handleLabel, relativeTime, truncate } from '../lib/format';
 import { navigate } from '../lib/router';
 import { appState, openDirectMessage, showToast } from '../lib/state';
@@ -132,7 +132,7 @@ async function load(): Promise<void> {
 			void resolveAccount(conversation.counterpart.split(',')[0] ?? '');
 		}
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Messages could not be loaded.';
+		error.value = loadErrorMessage(caught, 'Messages could not be loaded.');
 	} finally {
 		loading.value = false;
 	}
@@ -155,7 +155,7 @@ async function loadMore(): Promise<void> {
 			void resolveAccount(conversation.counterpart.split(',')[0] ?? '');
 		}
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Older messages could not be loaded.';
+		error.value = loadErrorMessage(caught, 'Older messages could not be loaded.');
 	} finally {
 		loadingMore.value = false;
 	}
@@ -163,7 +163,7 @@ async function loadMore(): Promise<void> {
 
 function openConversation(conversation: ConversationSummary): void {
 	void getApi().markConversationRead(conversation.last.id).catch((caught: unknown) => {
-		showToast(caught instanceof Error ? caught.message : 'The conversation could not be marked as read.', 'error');
+		showToast(loadErrorMessage(caught, 'The conversation could not be marked as read.'), 'error');
 	});
 	navigate(`/messages/${encodeURIComponent(`thread:${conversation.id}`)}`);
 }
@@ -175,7 +175,7 @@ async function dismissConversation(conversation: ConversationSummary): Promise<v
 			? { ...message, dismissed: true }
 			: message);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The conversation could not be dismissed.', 'error');
+		showToast(loadErrorMessage(caught, 'The conversation could not be dismissed.'), 'error');
 	}
 }
 
@@ -213,7 +213,7 @@ function searchPeople(): void {
 			const results = await getApi().search(term, 12);
 			pickerResults.value = results.accounts.filter((account) => account.id !== myId.value);
 		} catch (caught) {
-			showToast(caught instanceof Error ? caught.message : 'The search failed.', 'error');
+			showToast(loadErrorMessage(caught, 'The search failed.'), 'error');
 			pickerResults.value = [];
 		} finally {
 			pickerLoading.value = false;
