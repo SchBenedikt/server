@@ -340,6 +340,7 @@ export interface AdminSettingsData {
 		plc_url: string;
 	};
 	instance: { name: string; description: string; contact_email: string };
+	moderation: { publish_domain_blocks: boolean };
 	jetstream: string;
 	restart_required: boolean;
 }
@@ -357,6 +358,7 @@ export interface AdminSettingsPayload {
 	instance_description?: string;
 	contact_email?: string;
 	atproto_jetstream?: string;
+	publish_domain_blocks?: boolean;
 }
 
 export interface CreateUserPayload {

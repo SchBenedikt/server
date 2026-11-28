@@ -21,6 +21,7 @@ use function array_key_exists;
 use function explode;
 use function in_array;
 use function is_array;
+use function is_bool;
 use function is_int;
 use function is_string;
 use function json_decode;
@@ -278,8 +279,29 @@ final class AdminApiController
                     $this->text($body, 'kind'),
                     $this->text($body, 'target'),
                     $this->optionalText($body, 'note'),
+                    $this->optionalText($body, 'public_comment'),
                 ),
             ], 201);
+        }
+
+        if ($method === 'GET' && $path === self::PREFIX . '/domain-blocks') {
+            return Response::json(['blocks' => $this->runtime->admin->domainBlocks()]);
+        }
+
+        if ($method === 'POST' && $path === self::PREFIX . '/domain-blocks/import') {
+            $body = $this->jsonBody($request);
+            $entries = $body['entries'] ?? null;
+            if (!is_array($entries)) {
+                throw AdminException::invalid('entries must be a list of domains or {domain, comment} objects.', [
+                    'entries' => 'Provide a JSON array.',
+                ]);
+            }
+            $apply = $body['apply'] ?? false;
+            if (!is_bool($apply)) {
+                throw AdminException::invalid('apply must be a boolean.', ['apply' => 'true or false']);
+            }
+
+            return Response::json($this->runtime->admin->importDomainBlocks($userId, $entries, $apply));
         }
 
         if ($method === 'POST' && preg_match('#^' . self::PREFIX . '/moderation/([^/]+)/reverse$#', $path, $match) === 1) {

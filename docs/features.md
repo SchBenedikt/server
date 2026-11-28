@@ -319,6 +319,20 @@ reports can be reopened, which clears the resolution fields while the audit
 log keeps the history. Resolving or dismissing a report, assigning it,
 deleting a post and disabling an account are written to the audit log.
 
+`block_domain` moderation actions normalize their target to a bare lowercase
+host and accept an optional `public_comment` (≤ 500 characters) next to the
+internal `note`. `GET /api/v1/host/admin/domain-blocks` lists the active
+blocks in the Mastodon `instance/domain_blocks` shape; a moderator's public
+comment is the only text that may leave the admin surface. Bulk imports go
+through `POST /api/v1/host/admin/domain-blocks/import`, which always answers
+with a per-domain verdict first — `apply` defaults to `false`, so nothing is
+written until the caller repeats the request with `apply: true`. Entries may
+be bare domains or `{domain, comment}` objects; invalid, duplicate and
+already-blocked domains are reported rather than skipped silently. Setting
+`ALOHASOCIAL_PUBLISH_DOMAIN_BLOCKS=true` (or the matching admin toggle)
+exposes the list at `GET /api/v1/instance/domain_blocks` for Mastodon
+clients; the endpoint answers `404` while publishing is off.
+
 `GET /api/v1/host/admin/preflight` runs a read-only readiness check. Local
 checks cover the instance URL, database, pending migrations, worker heartbeat,
 mail transport and blob storage; `?external=1` (the default) additionally
@@ -343,6 +357,8 @@ DELETE /api/v1/host/admin/jobs/{id}
 POST   /api/v1/host/admin/jobs/retry-dead|purge
 POST   /api/v1/host/admin/queue/run
 GET    /api/v1/host/admin/federation|communications|instance|audit
+GET    /api/v1/host/admin/domain-blocks
+POST   /api/v1/host/admin/domain-blocks/import
 POST   /api/v1/host/reports
 ```
 
