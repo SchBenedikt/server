@@ -20,6 +20,7 @@ use AlohaSocial\Core\Http\Request;
 use AlohaSocial\Core\Http\Response;
 use AlohaSocial\Core\Service\ReactionException;
 use AlohaSocial\Core\Service\ValidationException;
+use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Core\Domain\Atproto\AtprotoInteractionRecord;
 use AlohaSocial\Core\Service\Atproto\AtprotoAccountNotConnectedException;
 use AlohaSocial\Core\Service\Atproto\AtprotoInteractionRejectedException;
@@ -234,6 +235,32 @@ final class FrontController
             $beat = $db->fetchValue("SELECT value FROM runtime_state WHERE name = 'worker'");
             if (is_numeric($beat)) {
                 $gauges['aloha_worker_heartbeat_age_seconds'] = max(0.0, (float) (time() - (int) $beat));
+            }
+
+            // Oldest job already due but not yet picked up — a stalled or
+            // backlogged worker shows up here before the dead count moves.
+            $oldest = $db->fetchValue(
+                'SELECT MIN(available_at) FROM social_job'
+                . ' WHERE dead_at IS NULL AND reserved_at IS NULL AND available_at <= :now',
+                ['now' => Time::format(new \DateTimeImmutable())],
+            );
+            if (is_string($oldest) && $oldest !== '') {
+                $due = strtotime($oldest);
+                if ($due !== false) {
+                    $gauges['aloha_queue_oldest_pending_age_seconds'] = max(0.0, (float) (time() - $due));
+                }
+            }
+
+            // Local blob storage headroom; S3 reports its own metrics.
+            if ($this->runtime->config->storageDriver === 'local') {
+                $free = @disk_free_space($this->runtime->config->blobDirectory);
+                $total = @disk_total_space($this->runtime->config->blobDirectory);
+                if ($free !== false) {
+                    $gauges['aloha_storage_free_bytes'] = (float) $free;
+                }
+                if ($total !== false && $total > 0) {
+                    $gauges['aloha_storage_total_bytes'] = (float) $total;
+                }
             }
         } catch (Throwable) {
             $collectionErrors = 1;

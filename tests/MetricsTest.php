@@ -109,6 +109,33 @@ final class MetricsTest extends TestCase
         self::assertStringContainsString('aloha_engagement_refresh_pending 0', $response->body);
     }
 
+    public function testMetricsEndpointReportsQueueAgeAndStorage(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('root', admin: true);
+        $session = $server->signIn('root');
+
+        $db = $server->runtime->database;
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts)'
+            . " VALUES ('j1', 'test.job', '{}', '2020-01-01T00:00:00Z', 0)",
+        );
+        // A future-scheduled job must not skew the oldest-due age.
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts)'
+            . " VALUES ('j2', 'test.job', '{}', '2999-01-01T00:00:00Z', 0)",
+        );
+
+        $response = $server->send('GET', '/metrics', ['cookies' => $session['cookies']]);
+        self::assertSame(200, $response->status);
+        self::assertMatchesRegularExpression(
+            '/aloha_queue_oldest_pending_age_seconds [1-9][0-9]{8,}/',
+            $response->body,
+        );
+        self::assertStringContainsString('aloha_storage_free_bytes', $response->body);
+        self::assertStringContainsString('aloha_storage_total_bytes', $response->body);
+    }
+
     public function testMetricsEndpointRequiresTheBearerToken(): void
     {
         $server = new TestServer(['metrics_token' => 'scrape-secret-123']);
