@@ -9,6 +9,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.vue';
 import { ApiError } from '../../lib/api';
 import { getAdminApi, type AdminInvitation } from '../../lib/admin';
 import { absoluteTime, relativeTime } from '../../lib/format';
+import { t } from '../../lib/i18n';
 import { showToast } from '../../lib/state';
 
 const invitations = ref<AdminInvitation[]>([]);
@@ -34,7 +35,7 @@ async function load(): Promise<void> {
 	try {
 		invitations.value = await getAdminApi().invitations();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'Invitations could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('ainv.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -48,11 +49,11 @@ async function create(): Promise<void> {
 	const uses = Number.parseInt(maxUses.value, 10);
 	const days = expiresInDays.value.trim() === '' ? null : Number.parseInt(expiresInDays.value, 10);
 	if (!Number.isInteger(uses) || uses < 1 || uses > 500) {
-		createError.value = 'Uses must be a whole number between 1 and 500.';
+		createError.value = t('ainv.usesInvalid');
 		return;
 	}
 	if (days !== null && (!Number.isInteger(days) || days < 1 || days > 3650)) {
-		createError.value = 'Expiry must be a whole number of days between 1 and 3650.';
+		createError.value = t('ainv.daysInvalid');
 		return;
 	}
 
@@ -76,7 +77,7 @@ async function create(): Promise<void> {
 			createError.value = caught.message;
 			createFields.value = caught.fields;
 		} else {
-			createError.value = caught instanceof Error ? caught.message : 'The invitation could not be created.';
+			createError.value = caught instanceof Error ? caught.message : t('ainv.createFailed');
 		}
 	} finally {
 		creating.value = false;
@@ -87,9 +88,9 @@ async function copyCode(): Promise<void> {
 	try {
 		await navigator.clipboard.writeText(createdCode.value);
 		copied.value = true;
-		showToast('Invitation code copied.', 'success');
+		showToast(t('ainv.codeCopied'), 'success');
 	} catch {
-		showToast('Copy failed — select the code and copy it manually.', 'error');
+		showToast(t('ainv.copyFailed'), 'error');
 	}
 }
 
@@ -108,28 +109,19 @@ async function confirmRevoke(): Promise<void> {
 	try {
 		await getAdminApi().revokeInvitation(target.id);
 		confirmOpen.value = false;
-		showToast(`Invitation ${target.code_prefix}… revoked.`, 'success');
+		showToast(t('ainv.revoked', { code: target.code_prefix }), 'success');
 		await load();
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The invitation could not be revoked.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('ainv.revokeFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
 }
 
 function stateLabel(state: string): string {
-	switch (state) {
-		case 'active':
-			return 'Active';
-		case 'revoked':
-			return 'Revoked';
-		case 'expired':
-			return 'Expired';
-		case 'exhausted':
-			return 'Used up';
-		default:
-			return state;
-	}
+	const key = `ainv.state.${state}`;
+	const translated = t(key);
+	return translated === key ? state : translated;
 }
 
 onMounted(() => {
@@ -141,30 +133,29 @@ onMounted(() => {
 	<section class="a-admin-section">
 		<div class="a-admin-section__head">
 			<div>
-				<p class="a-admin-eyebrow">Access</p>
-				<h2>Registration invitations</h2>
+				<p class="a-admin-eyebrow">{{ t('ainv.eyebrow') }}</p>
+				<h2>{{ t('ainv.title') }}</h2>
 				<p class="a-admin-lead">
-					Issue invitation codes so specific people can register while sign-up is closed
-					or an approval queue is configured. Each code is shown only once when created.
+					{{ t('ainv.lead') }}
 				</p>
 			</div>
 		</div>
 
 		<section class="a-admin-card">
 			<header class="a-admin-card__head">
-				<h3>New invitation</h3>
+				<h3>{{ t('ainv.newTitle') }}</h3>
 			</header>
 			<form class="a-admin-form-grid" @submit.prevent="create">
-				<label class="a-profile-edit__label" for="a-invite-uses">Uses</label>
+				<label class="a-profile-edit__label" for="a-invite-uses">{{ t('ainv.uses') }}</label>
 				<input id="a-invite-uses" v-model="maxUses" type="number" min="1" max="500" step="1">
 				<p v-if="createFields.max_uses" class="a-form-error">{{ createFields.max_uses }}</p>
 
-				<label class="a-profile-edit__label" for="a-invite-days">Expires in days <span class="a-admin-muted">(optional)</span></label>
-				<input id="a-invite-days" v-model="expiresInDays" type="number" min="1" max="3650" step="1" placeholder="Never">
+				<label class="a-profile-edit__label" for="a-invite-days">{{ t('ainv.expiresDays') }} <span class="a-admin-muted">{{ t('ausers.optional') }}</span></label>
+				<input id="a-invite-days" v-model="expiresInDays" type="number" min="1" max="3650" step="1" :placeholder="t('ainv.never')">
 				<p v-if="createFields.expires_in_days" class="a-form-error">{{ createFields.expires_in_days }}</p>
 
-				<label class="a-profile-edit__label" for="a-invite-note">Note <span class="a-admin-muted">(optional)</span></label>
-				<input id="a-invite-note" v-model="note" type="text" maxlength="255" placeholder="e.g. Mara from the meetup" autocomplete="off">
+				<label class="a-profile-edit__label" for="a-invite-note">{{ t('ainv.note') }} <span class="a-admin-muted">{{ t('ausers.optional') }}</span></label>
+				<input id="a-invite-note" v-model="note" type="text" maxlength="255" :placeholder="t('ainv.notePlaceholder')" autocomplete="off">
 				<p v-if="createFields.note" class="a-form-error">{{ createFields.note }}</p>
 
 				<p v-if="createError !== ''" class="a-form-error" role="alert">{{ createError }}</p>
@@ -172,20 +163,20 @@ onMounted(() => {
 				<div class="a-profile-edit__actions">
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="creating">
 						<AppIcon v-if="creating" name="refresh" :size="15" class="a-spin" />
-						{{ creating ? 'Creating…' : 'Create invitation' }}
+						{{ creating ? t('ainv.creating') : t('ainv.create') }}
 					</button>
 				</div>
 			</form>
 
 			<div v-if="createdCode !== ''" class="a-admin-invite-code" role="status">
-				<p class="a-admin-eyebrow">Invitation created — copy it now, it will not be shown again</p>
+				<p class="a-admin-eyebrow">{{ t('ainv.createdEyebrow') }}</p>
 				<div class="a-admin-invite-code__row">
 					<code>{{ createdCode }}</code>
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="copyCode">
 						<AppIcon :name="copied ? 'check' : 'copy'" :size="15" />
-						{{ copied ? 'Copied' : 'Copy' }}
+						{{ t(copied ? 'ainv.copied' : 'ainv.copy') }}
 					</button>
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="createdCode = ''">Dismiss</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="createdCode = ''">{{ t('ainv.dismiss') }}</button>
 				</div>
 			</div>
 		</section>
@@ -200,26 +191,26 @@ onMounted(() => {
 			<table class="a-admin-table">
 				<thead>
 					<tr>
-						<th scope="col">Code</th>
-						<th scope="col">Uses</th>
-						<th scope="col">Expires</th>
-						<th scope="col">Note</th>
-						<th scope="col">Created by</th>
-						<th scope="col">State</th>
-						<th scope="col"><span class="a-admin-sr">actions</span></th>
+						<th scope="col">{{ t('ainv.colCode') }}</th>
+						<th scope="col">{{ t('ainv.colUses') }}</th>
+						<th scope="col">{{ t('ainv.colExpires') }}</th>
+						<th scope="col">{{ t('ainv.colNote') }}</th>
+						<th scope="col">{{ t('ainv.colCreatedBy') }}</th>
+						<th scope="col">{{ t('ainv.colState') }}</th>
+						<th scope="col"><span class="a-admin-sr">{{ t('ainv.colActions') }}</span></th>
 					</tr>
 				</thead>
 				<tbody>
 					<tr v-for="invitation in invitations" :key="invitation.id">
 						<td><code>{{ invitation.code_prefix }}…</code></td>
 						<td class="a-admin-num">{{ invitation.uses }} / {{ invitation.max_uses }}</td>
-						<td class="a-admin-nowrap" :title="invitation.expires_at ? absoluteTime(invitation.expires_at) : 'Never'">
-							{{ invitation.expires_at ? relativeTime(invitation.expires_at) : 'Never' }}
+						<td class="a-admin-nowrap" :title="invitation.expires_at ? absoluteTime(invitation.expires_at) : t('ainv.never')">
+							{{ invitation.expires_at ? relativeTime(invitation.expires_at) : t('ainv.never') }}
 						</td>
 						<td>{{ invitation.note ?? '—' }}</td>
 						<td>
 							<span v-if="invitation.created_by_handle">@{{ invitation.created_by_handle }}</span>
-							<span v-else class="a-admin-muted">account removed</span>
+							<span v-else class="a-admin-muted">{{ t('ainv.accountRemoved') }}</span>
 						</td>
 						<td>
 							<span class="a-admin-badge" :class="invitation.state === 'active' ? 'a-admin-badge--ok' : 'a-admin-badge--danger'">
@@ -231,8 +222,8 @@ onMounted(() => {
 								v-if="invitation.state === 'active'"
 								type="button"
 								class="a-icon-btn a-icon-btn--danger"
-								title="Revoke invitation"
-								aria-label="Revoke invitation"
+								:title="t('ainv.revokeAria')"
+								:aria-label="t('ainv.revokeAria')"
 								:disabled="busy !== ''"
 								@click="askRevoke(invitation)"
 							>
@@ -243,13 +234,13 @@ onMounted(() => {
 				</tbody>
 			</table>
 		</div>
-		<p v-else-if="!loading" class="a-admin-empty">No invitations issued yet.</p>
+		<p v-else-if="!loading" class="a-admin-empty">{{ t('ainv.empty') }}</p>
 
 		<ConfirmDialog
 			:open="confirmOpen"
-			title="revoke invitation"
-			:message="`The code ${confirmTarget?.code_prefix ?? ''}… stops working immediately. Accounts already created with it are not affected.`"
-			confirm-label="Revoke invitation"
+			:title="t('ainv.confirmTitle')"
+			:message="t('ainv.confirmMessage', { code: confirmTarget?.code_prefix ?? '' })"
+			:confirm-label="t('ainv.confirmLabel')"
 			tone="danger"
 			:busy="busy !== ''"
 			@confirm="confirmRevoke"
