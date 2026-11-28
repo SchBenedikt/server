@@ -44,9 +44,11 @@
     "scripts": {
         "test": "@php vendor/bin/phpunit",
         "smoke:federation": "@php bin/federation-smoke.php",
+        "smoke:user-journey": "@php bin/user-journey-smoke.php",
         "check": [
             "@test",
-            "@smoke:federation"
+            "@smoke:federation",
+            "@smoke:user-journey"
         ]
     },
     "config": {

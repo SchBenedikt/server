@@ -144,7 +144,8 @@ The most important values are:
 ```shell
 composer test                 # PHPUnit against a throwaway SQLite database
 composer smoke:federation     # two real instances, signed Follow, Accept and Create
-composer check                # test + federation smoke
+composer smoke:user-journey   # one instance, sign-in through logout user journeys
+composer check                # test + both smokes
 ```
 
 The core checkout in `vendor/alohasocial/core` is loaded directly by the host.
