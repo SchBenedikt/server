@@ -168,6 +168,69 @@ final class AdminTest extends TestCase
         self::assertContains('moderation.block_domain', $actions);
     }
 
+    public function testDomainBlocksAreListedAndImportedWithAMandatoryDryRun(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+
+        $blocked = $server->json('POST', '/api/v1/host/admin/moderation', [
+            'kind' => 'block_domain',
+            'target' => 'https://bad.example/@spam',
+            'public_comment' => 'Spam network',
+        ], $cookies, $csrf);
+        self::assertSame(201, $blocked->status);
+        self::assertSame('bad.example', $this->decoded($blocked)['action']['target']);
+        self::assertSame('Spam network', $this->decoded($blocked)['action']['public_comment']);
+
+        $blocks = $this->decoded($server->send('GET', '/api/v1/host/admin/domain-blocks', ['cookies' => $cookies]));
+        self::assertSame([[
+            'domain' => 'bad.example',
+            'digest' => hash('sha256', 'bad.example'),
+            'severity' => 'suspend',
+            'comment' => 'Spam network',
+        ]], $blocks['blocks']);
+
+        $payload = [
+            'entries' => [
+                'evil.example',
+                'bad.example',
+                'not a domain',
+                'evil.example',
+                ['domain' => 'worse.example', 'comment' => 'Repeated abuse'],
+            ],
+        ];
+        $dry = $this->decoded($server->json('POST', '/api/v1/host/admin/domain-blocks/import', $payload, $cookies, $csrf));
+        self::assertFalse($dry['applied']);
+        self::assertSame(['new' => 2, 'duplicate' => 1, 'already_blocked' => 1, 'invalid' => 1], $dry['counts']);
+        self::assertSame(0, $dry['applied_count']);
+
+        $stillOne = $this->decoded($server->send('GET', '/api/v1/host/admin/moderation', ['cookies' => $cookies]));
+        self::assertSame(1, $stillOne['active']);
+
+        $applied = $this->decoded($server->json(
+            'POST',
+            '/api/v1/host/admin/domain-blocks/import',
+            $payload + ['apply' => true],
+            $cookies,
+            $csrf,
+        ));
+        self::assertTrue($applied['applied']);
+        self::assertSame(2, $applied['applied_count']);
+
+        $after = $this->decoded($server->send('GET', '/api/v1/host/admin/moderation', ['cookies' => $cookies]));
+        self::assertSame(3, $after['active']);
+
+        $listed = $this->decoded($server->send('GET', '/api/v1/host/admin/domain-blocks', ['cookies' => $cookies]));
+        self::assertSame(
+            ['bad.example', 'evil.example', 'worse.example'],
+            array_column($listed['blocks'], 'domain'),
+        );
+        $worse = array_values(array_filter($listed['blocks'], static fn (array $b): bool => $b['domain'] === 'worse.example'))[0];
+        self::assertSame('Repeated abuse', $worse['comment']);
+
+        $audit = $this->decoded($server->send('GET', '/api/v1/host/admin/audit', ['cookies' => $cookies]));
+        self::assertContains('moderation.import', array_column($audit['entries'], 'action'));
+    }
+
     public function testWorkerHeartbeatMarksTheWorkerOnline(): void
     {
         $server = new TestServer();

@@ -140,6 +140,24 @@ final class MastodonInstanceTest extends TestCase
         ));
     }
 
+    public function testDomainBlocksStayPrivateUnlessPublished(): void
+    {
+        $hidden = $this->server->send('GET', self::PREFIX . '/instance/domain_blocks');
+        self::assertSame(404, $hidden->status);
+
+        $server = new TestServer(['mastodon_api' => true, 'publish_domain_blocks' => true]);
+        $server->runtime->admin->applyModeration('admin1', 'block_domain', 'evil.example', null, 'Spam network');
+
+        $response = $server->send('GET', self::PREFIX . '/instance/domain_blocks');
+        self::assertSame(200, $response->status, $response->body);
+        self::assertSame([[
+            'domain' => 'evil.example',
+            'digest' => hash('sha256', 'evil.example'),
+            'severity' => 'suspend',
+            'comment' => 'Spam network',
+        ]], json_decode($response->body, true));
+    }
+
     public function testSubroutesRequireGetAndEnabledApi(): void
     {
         $post = $this->server->send('POST', self::PREFIX . '/instance/peers');

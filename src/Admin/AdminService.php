@@ -45,6 +45,7 @@ use function arsort;
 use function basename;
 use function count;
 use function explode;
+use function hash;
 use function file_exists;
 use function filesize;
 use function in_array;
@@ -52,6 +53,7 @@ use function is_array;
 use function is_dir;
 use function is_file;
 use function is_readable;
+use function is_scalar;
 use function is_string;
 use function is_writable;
 use function max;
@@ -64,6 +66,7 @@ use function rawurlencode;
 use function round;
 use function rtrim;
 use function sprintf;
+use function str_contains;
 use function str_starts_with;
 use function strstr;
 use function strtolower;
@@ -911,7 +914,8 @@ final class AdminService
     {
         $limit = max(1, min(250, $limit));
         $rows = $this->db->fetchAll(
-            'SELECT id, kind, target, report_id, moderator_id, note, created_at, reversed_at, reversed_by, reversal_note'
+            'SELECT id, kind, target, report_id, moderator_id, note, public_comment, created_at,'
+            . ' reversed_at, reversed_by, reversal_note'
             . ' FROM social_moderation_action ORDER BY created_at DESC LIMIT ' . $limit,
         );
 
@@ -922,6 +926,7 @@ final class AdminService
             'report_id' => $row['report_id'] === null ? null : (string) $row['report_id'],
             'moderator_id' => (string) $row['moderator_id'],
             'note' => $row['note'] === null ? null : (string) $row['note'],
+            'public_comment' => $row['public_comment'] === null ? null : (string) $row['public_comment'],
             'created_at' => (string) $row['created_at'],
             'reversed_at' => $row['reversed_at'] === null ? null : (string) $row['reversed_at'],
             'reversed_by' => $row['reversed_by'] === null ? null : (string) $row['reversed_by'],
@@ -934,8 +939,13 @@ final class AdminService
     /**
      * @return array<string, mixed>
      */
-    public function applyModeration(string $adminId, string $kind, string $target, ?string $note = null): array
-    {
+    public function applyModeration(
+        string $adminId,
+        string $kind,
+        string $target,
+        ?string $note = null,
+        ?string $publicComment = null,
+    ): array {
         $actionKind = ModerationActionKind::tryFrom(strtolower(trim($kind)));
         if ($actionKind === null) {
             throw AdminException::invalid('Unknown moderation action.', [
@@ -945,11 +955,7 @@ final class AdminService
 
         $target = trim($target);
         if ($actionKind === ModerationActionKind::BlockDomain) {
-            $host = parse_url(str_contains($target, '://') ? $target : 'https://' . $target, PHP_URL_HOST);
-            $target = is_string($host) ? strtolower($host) : '';
-            if ($target === '' || preg_match('/^[a-z0-9.-]+$/', $target) !== 1) {
-                throw AdminException::invalid('Enter a valid domain.', ['target' => 'For example example.com.']);
-            }
+            $target = $this->normalizeDomain($target);
         } elseif (preg_match('#^https?://#i', $target) !== 1) {
             throw AdminException::invalid('Enter the actor URL to moderate.', [
                 'target' => 'Use an absolute http(s) actor URL.',
@@ -969,6 +975,13 @@ final class AdminService
             throw AdminException::invalid('The note is too long.', ['note' => 'At most 2000 characters.']);
         }
 
+        $publicComment = $publicComment === null ? null : trim($publicComment);
+        if ($publicComment !== null && mb_strlen($publicComment) > ModerationAction::MAX_PUBLIC_COMMENT_LENGTH) {
+            throw AdminException::invalid('The public comment is too long.', [
+                'public_comment' => 'At most 500 characters; it may be published.',
+            ]);
+        }
+
         $action = new ModerationAction(
             id: $this->newId(),
             kind: $actionKind,
@@ -977,6 +990,7 @@ final class AdminService
             moderatorId: $adminId,
             note: $note === '' ? null : $note,
             createdAt: $this->clock->now(),
+            publicComment: $publicComment === '' ? null : $publicComment,
         );
         (new PdoModerationActionRepository($this->db))->insert($action);
         $this->record(
@@ -1015,6 +1029,113 @@ final class AdminService
             'kind' => (string) $row['kind'],
             'target' => (string) $row['target'],
             'reversed_at' => $now,
+        ];
+    }
+
+    /**
+     * Active domain blocks projected for public listing. `note` never leaves
+     * the admin surface; only `public_comment` — a reason the moderator
+     * explicitly marked publishable — may appear.
+     *
+     * @return list<array{domain: string, digest: string, severity: string, comment: string}>
+     */
+    public function domainBlocks(): array
+    {
+        $rows = $this->db->fetchAll(
+            "SELECT target, public_comment FROM social_moderation_action"
+            . " WHERE kind = 'block_domain' AND reversed_at IS NULL ORDER BY target",
+        );
+
+        return array_map(static fn (array $row): array => [
+            'domain' => (string) $row['target'],
+            'digest' => hash('sha256', (string) $row['target']),
+            'severity' => 'suspend',
+            'comment' => (string) ($row['public_comment'] ?? ''),
+        ], $rows);
+    }
+
+    /**
+     * Bulk domain-block import with a mandatory dry run. `apply` is false by
+     * default: the caller gets a per-domain verdict first and only repeats
+     * the call with apply=true to write. Entries may be bare domains or
+     * `{domain, comment}` pairs; invalid, duplicate and already-blocked
+     * domains are reported, never silently dropped.
+     *
+     * @param list<mixed> $entries
+     *
+     * @return array<string, mixed>
+     */
+    public function importDomainBlocks(string $adminId, array $entries, bool $apply): array
+    {
+        if (count($entries) === 0 || count($entries) > 5000) {
+            throw AdminException::invalid('The import needs between 1 and 5000 entries.', [
+                'entries' => 'Paste up to 5000 domains.',
+            ]);
+        }
+
+        $seen = [];
+        $verdicts = [];
+        foreach ($entries as $entry) {
+            $raw = is_array($entry) ? ($entry['domain'] ?? null) : $entry;
+            $comment = is_array($entry) ? ($entry['comment'] ?? null) : null;
+            $verdict = ['input' => is_scalar($raw) ? (string) $raw : '', 'status' => 'invalid', 'domain' => null];
+
+            try {
+                $domain = $this->normalizeDomain(is_scalar($raw) ? (string) $raw : '');
+                $comment = is_string($comment) ? trim($comment) : null;
+                if ($comment !== null && mb_strlen($comment) > ModerationAction::MAX_PUBLIC_COMMENT_LENGTH) {
+                    throw AdminException::invalid('The public comment is too long.');
+                }
+            } catch (AdminException) {
+                $verdicts[] = $verdict;
+
+                continue;
+            }
+
+            $verdict['domain'] = $domain;
+            if (isset($seen[$domain])) {
+                $verdict['status'] = 'duplicate';
+            } elseif ($this->domainBlockActive($domain)) {
+                $verdict['status'] = 'already_blocked';
+            } else {
+                $seen[$domain] = true;
+                $verdict['status'] = 'new';
+            }
+            $verdict['comment'] = $comment === '' ? null : $comment;
+            $verdicts[] = $verdict;
+        }
+
+        $counts = ['new' => 0, 'duplicate' => 0, 'already_blocked' => 0, 'invalid' => 0];
+        foreach ($verdicts as $verdict) {
+            ++$counts[$verdict['status']];
+        }
+
+        $applied = 0;
+        if ($apply) {
+            foreach ($verdicts as $verdict) {
+                if ($verdict['status'] !== 'new' || $verdict['domain'] === null) {
+                    continue;
+                }
+                $this->applyModeration(
+                    $adminId,
+                    ModerationActionKind::BlockDomain->value,
+                    $verdict['domain'],
+                    null,
+                    $verdict['comment'] ?? null,
+                );
+                ++$applied;
+            }
+            $this->record($adminId, 'moderation.import', 'domain', null, [
+                'entries' => count($entries),
+                'applied' => $applied,
+            ]);
+        }
+
+        return [
+            'applied' => $apply,
+            'counts' => $counts,
+            'applied_count' => $applied,
+            'entries' => $verdicts,
         ];
     }
 
@@ -1153,6 +1274,9 @@ final class AdminService
                 'description' => $this->config->instanceDescription,
                 'contact_email' => $this->config->contactEmail,
             ],
+            'moderation' => [
+                'publish_domain_blocks' => $this->config->publishDomainBlocks,
+            ],
             'jetstream' => $this->config->atprotoJetstreamUrl,
             'restart_required' => false,
         ];
@@ -1257,6 +1381,7 @@ final class AdminService
             'ALOHASOCIAL_INSTANCE_DESCRIPTION' => $instanceDescription,
             'ALOHASOCIAL_CONTACT_EMAIL' => $contactEmail,
             'ALOHASOCIAL_ATPROTO_JETSTREAM' => $jetstream,
+            'ALOHASOCIAL_PUBLISH_DOMAIN_BLOCKS' => $bool($input['publish_domain_blocks'] ?? null, $this->config->publishDomainBlocks) ? 'true' : 'false',
         ]);
 
         $registrations = $bool($input['registrations'] ?? null, $this->config->registrations);
@@ -1281,6 +1406,10 @@ final class AdminService
         $settings['instance']['name'] = $instanceName;
         $settings['instance']['description'] = $instanceDescription;
         $settings['instance']['contact_email'] = $contactEmail;
+        $settings['moderation']['publish_domain_blocks'] = $bool(
+            $input['publish_domain_blocks'] ?? null,
+            $this->config->publishDomainBlocks,
+        );
         $settings['jetstream'] = $jetstream;
         $settings['restart_required'] = true;
 
@@ -1400,6 +1529,30 @@ final class AdminService
     private function activeAdminCount(): int
     {
         return $this->accounts->activeAdminCount();
+    }
+
+    /**
+     * Normalizes a domain-block target to a bare lowercase host. Throws the
+     * same validation error applyModeration reports for a bad domain.
+     */
+    private function normalizeDomain(string $target): string
+    {
+        $host = parse_url(str_contains($target, '://') ? $target : 'https://' . $target, PHP_URL_HOST);
+        $domain = is_string($host) ? strtolower($host) : '';
+        if ($domain === '' || preg_match('/^[a-z0-9.-]+$/', $domain) !== 1) {
+            throw AdminException::invalid('Enter a valid domain.', ['target' => 'For example example.com.']);
+        }
+
+        return $domain;
+    }
+
+    private function domainBlockActive(string $domain): bool
+    {
+        return (int) $this->db->fetchValue(
+            "SELECT COUNT(*) FROM social_moderation_action WHERE kind = 'block_domain'"
+            . ' AND target = :target AND reversed_at IS NULL',
+            ['target' => $domain],
+        ) > 0;
     }
 
     /**
