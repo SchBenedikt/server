@@ -151,6 +151,10 @@ const replyAuthor = computed(() => replyTo.value === null ? '' : displayAuthor(r
 const replyHandle = computed(() => replyTo.value === null ? '' : handleLabel(replyTo.value.object_author_id ?? replyTo.value.author_id));
 const replyId = computed(() => replyTo.value === null ? null : postReplyTargetId(replyTo.value));
 const isRemoteReply = computed(() => replyId.value !== null && isRemoteId(replyId.value));
+// A remote parent this deployment cannot address (an at:// record, a
+// deleted or restricted target) leaves no reply id; say so instead of
+// leaving the submit button silently disabled.
+const replyTargetUnavailable = computed(() => isReply.value && replyId.value === null);
 
 const length = computed(() => Array.from(content.value).length);
 const warningLength = computed(() => Array.from(contentWarning.value).length);
@@ -760,6 +764,9 @@ async function submit(): Promise<void> {
 					<strong>{{ replyAuthor }}</strong>
 					<span v-if="replyAuthor !== replyHandle">{{ replyHandle }}</span>
 					<p>{{ truncate(replyTo.content, 160) }}</p>
+					<p v-if="replyTargetUnavailable" class="a-composer__hint">
+						This post can't be replied to from here.
+					</p>
 				</div>
 			</div>
 

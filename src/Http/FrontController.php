@@ -866,7 +866,7 @@ final class FrontController
             $replyBody = json_decode($request->body, true);
             if (is_array($replyBody)
                 && is_string($replyBody['in_reply_to_id'] ?? null)
-                && preg_match('#^https?://#i', trim($replyBody['in_reply_to_id'])) === 1
+                && preg_match('#^(https?://|at://)#i', trim($replyBody['in_reply_to_id'])) === 1
             ) {
                 return $this->remoteReply($request, $userId);
             }
