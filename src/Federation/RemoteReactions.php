@@ -129,17 +129,33 @@ final class RemoteReactions
         $this->ensure($objectId);
 
         try {
-            $authorized = $this->service()->remotePostFor($userId, $objectId);
+            return $this->service()->remotePostFor($userId, $objectId);
         } catch (ReactionException $exception) {
-            throw $exception;
+            // A cached row without a stored audience keeps the old follow
+            // gate. Give the origin one chance to prove the object public
+            // before reporting the refusal.
+            if ($exception->reason !== 'remote_post_not_followed' || $this->importer === null) {
+                throw $exception;
+            }
+
+            $this->importer->refreshAudience($objectId);
+
+            try {
+                return $this->service()->remotePostFor($userId, $objectId);
+            } catch (ReactionException $retry) {
+                throw $retry;
+            } catch (Throwable) {
+                throw new ReactionException(
+                    'authorization_unavailable',
+                    'Remote interaction authorization is temporarily unavailable.',
+                );
+            }
         } catch (Throwable) {
             throw new ReactionException(
                 'authorization_unavailable',
                 'Remote interaction authorization is temporarily unavailable.',
             );
         }
-
-        return $authorized;
     }
 
     /**

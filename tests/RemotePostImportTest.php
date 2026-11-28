@@ -30,7 +30,7 @@ final class RemotePostImportTest extends TestCase
         $this->server = new TestServer([], $this->http, new class implements HostResolver {
             public function resolve(string $host): array
             {
-                return $host === 'peer.example' ? ['8.8.8.8'] : [];
+                return in_array($host, ['peer.example', 'mastodon.example'], true) ? ['8.8.8.8'] : [];
             }
         });
         $this->server->createAccount('alice');
@@ -155,7 +155,7 @@ final class RemotePostImportTest extends TestCase
         $server = new TestServer(['mastodon_api' => true], $http, new class implements HostResolver {
             public function resolve(string $host): array
             {
-                return $host === 'peer.example' ? ['8.8.8.8'] : [];
+                return in_array($host, ['peer.example', 'mastodon.example'], true) ? ['8.8.8.8'] : [];
             }
         });
         $server->createAccount('alice');
@@ -337,5 +337,115 @@ final class RemotePostImportTest extends TestCase
             'SELECT object_id FROM social_remote_post WHERE object_id = :object',
             ['object' => self::OBJECT],
         ));
+    }
+
+    public function testLikeImportsAPostFoundThroughTheMastodonApi(): void
+    {
+        $object = 'https://mastodon.example/users/bob/statuses/42';
+        $this->http->json('https://mastodon.example/api/v1/statuses/42', [
+            'id' => '42',
+            'uri' => $object,
+            'url' => 'https://mastodon.example/@bob/42',
+            'content' => '<p>Hello from Mastodon.</p>',
+            'visibility' => 'public',
+            'created_at' => '2026-11-21T09:00:00Z',
+            'account' => [
+                'uri' => self::ACTOR,
+                'acct' => 'bob@mastodon.example',
+                'display_name' => 'Bob',
+            ],
+        ]);
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($object) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $stored = $this->server->runtime->database->fetchOne(
+            'SELECT object_id, actor_id, content FROM social_remote_post WHERE object_id = :object',
+            ['object' => $object],
+        );
+        self::assertSame($object, $stored['object_id'] ?? null);
+        self::assertSame('Hello from Mastodon.', $stored['content'] ?? null);
+    }
+
+    public function testLikeHealsALegacyRowWithoutAudienceWhenOriginProvesPublic(): void
+    {
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at)',
+            [
+                'activity_id' => 'https://peer.example/activities/legacy-1',
+                'object_id' => self::OBJECT,
+                'author' => self::ACTOR,
+                'actor' => self::ACTOR,
+                'content' => '<p>Legacy cached post.</p>',
+                'published_at' => '2026-11-01T10:00:00Z',
+            ],
+        );
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode(self::OBJECT) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $stored = $this->server->runtime->database->fetchOne(
+            'SELECT audience FROM social_remote_post WHERE object_id = :object',
+            ['object' => self::OBJECT],
+        );
+        self::assertSame('public', $stored['audience'] ?? null);
+    }
+
+    public function testLikeKeepsTheFollowGateWhenOriginCannotProvePublic(): void
+    {
+        $this->http->json(self::OBJECT, [
+            'id' => self::OBJECT,
+            'type' => 'Note',
+            'attributedTo' => self::ACTOR,
+            'content' => '<p>Followers only.</p>',
+            'published' => '2026-11-20T10:00:00Z',
+            'to' => ['https://remote.example/users/bob/followers'],
+        ]);
+        $this->server->runtime->database->execute(
+            'INSERT INTO social_remote_post'
+            . ' (activity_id, object_id, object_author_id, actor_id, kind, object_type, content, published_at)'
+            . ' VALUES (:activity_id, :object_id, :author, :actor, \'post\', \'note\', :content, :published_at)',
+            [
+                'activity_id' => 'https://peer.example/activities/legacy-2',
+                'object_id' => self::OBJECT,
+                'author' => self::ACTOR,
+                'actor' => self::ACTOR,
+                'content' => '<p>Legacy cached post.</p>',
+                'published_at' => '2026-11-01T10:00:00Z',
+            ],
+        );
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode(self::OBJECT) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(403, $response->status, $response->body);
+        $stored = $this->server->runtime->database->fetchOne(
+            'SELECT audience FROM social_remote_post WHERE object_id = :object',
+            ['object' => self::OBJECT],
+        );
+        self::assertIsArray($stored);
+        self::assertNull($stored['audience']);
     }
 }
