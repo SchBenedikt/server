@@ -4,6 +4,7 @@
  */
 import type { HostBridge, UiMethod } from '@alohasocial/ui';
 import { ApiError } from './api';
+import { t } from './i18n';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -893,20 +894,17 @@ export const REPORT_CATEGORIES: { id: ReportCategory; label: string; hint: strin
 ];
 
 export function reportCategoryLabel(category: string): string {
-	return REPORT_CATEGORIES.find((entry) => entry.id === category)?.label ?? category;
+	const key = `report.cat.${category}.label`;
+	const translated = t(key);
+	return translated === key
+		? (REPORT_CATEGORIES.find((entry) => entry.id === category)?.label ?? category)
+		: translated;
 }
 
 export function reportStateLabel(state: string): string {
-	switch (state) {
-		case 'open':
-			return 'Open';
-		case 'resolved':
-			return 'Resolved';
-		case 'dismissed':
-			return 'Dismissed';
-		default:
-			return state;
-	}
+	const key = `report.state.${state}`;
+	const translated = t(key);
+	return translated === key ? state : translated;
 }
 
 export function bytesLabel(bytes: number): string {

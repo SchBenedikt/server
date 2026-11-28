@@ -7,6 +7,8 @@ import { ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { getApi } from '../lib/api';
 import type { PostRevisionData } from '../lib/types';
+import { t } from '../lib/i18n';
+import { absoluteTime } from '../lib/format';
 
 const props = defineProps<{
 	open: boolean;
@@ -29,7 +31,7 @@ watch(() => props.open, async (open) => {
 	try {
 		data.value = await getApi().postRevisions(props.postId);
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The edit history could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('rev.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -47,21 +49,21 @@ function close(): void {
 				<header class="a-profile-edit__head">
 					<div>
 						<p class="a-profile-edit__eyebrow">Post</p>
-						<h2 id="a-revision-title">Edit history</h2>
+						<h2 id="a-revision-title">{{ t('rev.title') }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close dialog" @click="close">
+					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" @click="close">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
-				<p v-if="loading" class="a-muted">Loading history…</p>
+				<p v-if="loading" class="a-muted">{{ t('rev.loading') }}</p>
 				<p v-else-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 
 				<template v-else-if="data !== null">
 					<section class="a-revision a-revision--current">
 						<header>
-							<strong>Version {{ data.current_revision }}</strong>
-							<span>Current</span>
+							<strong>{{ t('rev.version', { number: data.current_revision }) }}</strong>
+							<span>{{ t('rev.current') }}</span>
 						</header>
 						<p v-if="data.current.content_warning" class="a-revision__warning">
 							<AppIcon name="alert" :size="13" />
@@ -70,12 +72,12 @@ function close(): void {
 						<p class="a-revision__content">{{ data.current.content }}</p>
 					</section>
 
-					<p v-if="data.revisions.length === 0" class="a-muted">This post has not been edited yet.</p>
+					<p v-if="data.revisions.length === 0" class="a-muted">{{ t('rev.unedited') }}</p>
 
 					<section v-for="revision in [...data.revisions].reverse()" :key="revision.revision" class="a-revision">
 						<header>
-							<strong>Version {{ revision.revision }}</strong>
-							<span>{{ new Date(revision.edited_at).toLocaleString('en-US') }}</span>
+							<strong>{{ t('rev.version', { number: revision.revision }) }}</strong>
+							<span>{{ absoluteTime(revision.edited_at) }}</span>
 						</header>
 						<p v-if="revision.content_warning" class="a-revision__warning">
 							<AppIcon name="alert" :size="13" />
