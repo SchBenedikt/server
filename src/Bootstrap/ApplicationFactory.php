@@ -68,6 +68,7 @@ use AlohaSocial\Server\Accounts\AccountProfileProvider;
 use AlohaSocial\Server\Accounts\AccountRepository;
 use AlohaSocial\Server\Accounts\EmailChangeService;
 use AlohaSocial\Server\Accounts\EmailVerificationService;
+use AlohaSocial\Server\Accounts\Invitations;
 use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
 use AlohaSocial\Server\Auth\LoginThrottle;
@@ -312,6 +313,7 @@ final class ApplicationFactory
             $clock,
             $this->config->instanceUrl,
         );
+        $invitations = new Invitations($database, $clock);
         $emailChange = new EmailChangeService(
             $database,
             $accounts,
@@ -353,7 +355,9 @@ final class ApplicationFactory
                 $passwordHasher,
                 $database,
                 $emailVerification,
+                $invitations,
             ),
+            invitations: $invitations,
             emailVerification: $emailVerification,
             emailChange: $emailChange,
             sessions: $sessions,
@@ -392,6 +396,7 @@ final class ApplicationFactory
                 $emailChange,
                 $instancePages,
                 $mailer,
+                $invitations,
             ),
             instancePages: $instancePages,
             pushSubscriptions: $pushSubscriptions,

@@ -18,6 +18,7 @@ export type AdminSection =
 	| 'settings'
 	| 'announcements'
 	| 'pages'
+	| 'invitations'
 	| 'audit';
 
 export interface AdminSectionDefinition {
@@ -38,6 +39,7 @@ export const ADMIN_SECTIONS: AdminSectionDefinition[] = [
 	{ id: 'settings', label: 'Instance', icon: 'settings', hint: 'Runtime, limits and configuration warnings' },
 	{ id: 'announcements', label: 'Announcements', icon: 'bell', hint: 'Publish notices as a banner on the home page' },
 	{ id: 'pages', label: 'Pages', icon: 'pen', hint: 'Rules, terms and other public pages readers can open' },
+	{ id: 'invitations', label: 'Invitations', icon: 'mail', hint: 'Registration codes that bypass closed sign-up and approval' },
 	{ id: 'audit', label: 'Audit log', icon: 'shield', hint: 'Every administrative change, fully traceable' },
 ];
 
@@ -444,6 +446,27 @@ export interface AdminInstancePage {
 	updated_by: string;
 }
 
+export type InvitationState = 'active' | 'revoked' | 'expired' | 'exhausted' | string;
+
+export interface AdminInvitation {
+	id: string;
+	code_prefix: string;
+	max_uses: number;
+	uses: number;
+	expires_at: string | null;
+	note: string | null;
+	created_at: string;
+	created_by: string;
+	created_by_handle: string | null;
+	revoked_at: string | null;
+	state: InvitationState;
+}
+
+export interface CreateInvitationResult {
+	invitation: AdminInvitation;
+	code: string;
+}
+
 export interface AdminApi {
 	overview(): Promise<AdminOverview>;
 	preflight(external?: boolean): Promise<PreflightReport>;
@@ -490,6 +513,9 @@ export interface AdminApi {
 	instancePages(): Promise<AdminInstancePage[]>;
 	saveInstancePage(slug: string, payload: { title: string; body: string; published: boolean }): Promise<AdminInstancePage>;
 	deleteInstancePage(slug: string): Promise<void>;
+	invitations(): Promise<AdminInvitation[]>;
+	createInvitation(payload: { max_uses?: number; expires_in_days?: number | null; note?: string | null }): Promise<CreateInvitationResult>;
+	revokeInvitation(id: string): Promise<void>;
 	audit(limit?: number): Promise<AuditEntry[]>;
 	createReport(payload: ReportPayload): Promise<AdminReport>;
 }
@@ -793,6 +819,28 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 
 		async deleteInstancePage(slug): Promise<void> {
 			await request<unknown>('DELETE', `/api/v1/host/admin/pages/${encodeURIComponent(slug)}`);
+		},
+
+		async invitations(): Promise<AdminInvitation[]> {
+			const data = await request<{ invitations?: AdminInvitation[] }>('GET', '/api/v1/host/admin/invitations');
+
+			return Array.isArray(data.invitations) ? data.invitations : [];
+		},
+
+		async createInvitation(payload): Promise<CreateInvitationResult> {
+			return request<CreateInvitationResult>(
+				'POST',
+				'/api/v1/host/admin/invitations',
+				undefined,
+				payload,
+			);
+		},
+
+		async revokeInvitation(id): Promise<void> {
+			await request<unknown>(
+				'POST',
+				`/api/v1/host/admin/invitations/${encodeURIComponent(id)}/revoke`,
+			);
 		},
 
 		async audit(limit = 100): Promise<AuditEntry[]> {

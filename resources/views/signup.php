@@ -49,6 +49,11 @@ $error = $errors['_form'] ?? null;
                value="<?= $escape($values['display_name'] ?? '') ?>">
         <?php if (isset($errors['display_name'])): ?><p class="error"><?= $escape($errors['display_name']) ?></p><?php endif; ?>
 
+        <label for="invite">Invitation code <span class="muted">(optional)</span></label>
+        <input id="invite" name="invite" autocomplete="off" spellcheck="false"
+               value="<?= $escape($values['invite'] ?? '') ?>">
+        <?php if (isset($errors['invite'])): ?><p class="error"><?= $escape($errors['invite']) ?></p><?php endif; ?>
+
         <label for="password">Password</label>
         <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
         <?php if (isset($errors['password'])): ?><p class="error"><?= $escape($errors['password']) ?></p><?php endif; ?>

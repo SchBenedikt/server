@@ -30,6 +30,7 @@ final class RegistrationService
         private readonly PasswordHasher $hasher,
         private readonly ?Connection $db = null,
         private readonly ?EmailVerificationService $verification = null,
+        private readonly ?Invitations $invitations = null,
     ) {
     }
 
@@ -56,9 +57,15 @@ final class RegistrationService
         string $email,
         string $password,
         ?string $displayName = null,
+        ?string $inviteCode = null,
     ): Account {
-        if (!$this->enabled()) {
+        $inviteCode = $inviteCode === null ? null : trim($inviteCode);
+
+        if (($inviteCode === null || $inviteCode === '') && !$this->enabled()) {
             throw new RegistrationException('Registration is closed on this instance.');
+        }
+        if ($inviteCode !== null && $inviteCode !== '' && $this->invitations === null) {
+            throw new RegistrationException('This instance does not accept invitations.');
         }
 
         $handle = strtolower(trim($handle));
@@ -88,17 +95,31 @@ final class RegistrationService
         }
 
         $verify = $this->emailVerificationRequired();
-        $create = function () use ($handle, $email, $password, $displayName, $verify): Account {
-            // Approval-required or unverified accounts are inserted disabled.
-            // There is no active intermediate state for a concurrent login to
-            // observe and no second write that could fail open.
+        $create = function () use ($handle, $email, $password, $displayName, $verify, $inviteCode): Account {
+            // The invite use and the account row commit or roll back
+            // together: a rejected registration never burns a use, and a
+            // redeemed invite is the administrator's pre-approval, so it
+            // also satisfies a closed registration and the approval queue.
+            $invited = false;
+            if ($inviteCode !== null && $inviteCode !== '') {
+                $redeemed = $this->invitations?->redeem($inviteCode);
+                if ($redeemed === null) {
+                    throw new RegistrationException(
+                        'This invitation is invalid, expired or already used.',
+                        422,
+                        ['invite' => 'Check the invitation code and try again.'],
+                    );
+                }
+                $invited = true;
+            }
+
             $account = $this->accounts->create(
                 $handle,
                 $email,
                 $this->hasher->hash($password),
                 Account::ROLE_USER,
                 $displayName,
-                $this->approvalRequired() || $verify,
+                $verify || ($this->approvalRequired() && !$invited),
             );
 
             if ($verify) {

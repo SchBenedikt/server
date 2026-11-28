@@ -2260,6 +2260,7 @@ final class FrontController
             'handle' => trim((string) ($params['handle'] ?? '')),
             'email' => trim((string) ($params['email'] ?? '')),
             'display_name' => trim((string) ($params['display_name'] ?? '')),
+            'invite' => trim((string) ($params['invite'] ?? '')),
         ];
 
         if (!$this->runtime->sessions->csrfMatches($session, (string) ($params['_csrf'] ?? ''))) {
@@ -2280,6 +2281,7 @@ final class FrontController
                 $values['email'],
                 (string) ($params['password'] ?? ''),
                 $values['display_name'] === '' ? null : $values['display_name'],
+                $values['invite'] === '' ? null : $values['invite'],
             );
         } catch (RegistrationException $exception) {
             $errors = $exception->fields;
@@ -2294,7 +2296,11 @@ final class FrontController
             return $this->redirect('/login?verify=1');
         }
 
-        return $this->redirect($this->runtime->registration->approvalRequired()
+        // A redeemed invitation is the administrator's pre-approval, so it
+        // skips the pending-review notice (email verification still applies).
+        $approved = $values['invite'] !== '';
+
+        return $this->redirect($this->runtime->registration->approvalRequired() && !$approved
             ? '/login?pending=1'
             : '/login?registered=1');
     }
