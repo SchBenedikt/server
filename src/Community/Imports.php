@@ -9,18 +9,33 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Community;
 
+use AlohaSocial\Core\Domain\Filter\FilterAction;
+use AlohaSocial\Core\Domain\Filter\FilterContext;
+use AlohaSocial\Core\Domain\Filter\FilterKeyword;
+use AlohaSocial\Core\Domain\Filter\PdoFilterRuleRepository;
+use AlohaSocial\Core\Domain\Timeline\PdoFollowedHashtagRepository;
+use AlohaSocial\Core\Platform\Clock\Clock;
+use AlohaSocial\Core\Platform\Db\Connection;
+use AlohaSocial\Core\Service\FilterService;
+use AlohaSocial\Core\Service\FollowedHashtagService;
+use AlohaSocial\Core\Support\RandomIdGenerator;
+use AlohaSocial\Server\Accounts\Account;
+
 use function array_key_exists;
+use function array_fill_keys;
+use function array_map;
 use function count;
 use function in_array;
 use function is_array;
 use function is_string;
+use function sprintf;
 
 /**
- * Dry-run analysis of an `aloha-account-export` payload before any import
- * writes happen. The report classifies every section as `local` (row data a
- * future apply can take without identity resolution) or `deferred` (the rows
- * reference source-instance accounts, posts, attachments or external
- * identity and need the canonical-identity mapping a later slice provides).
+ * Dry-run analysis and sectioned apply for an `aloha-account-export`
+ * payload. Sections are classified `local` when their rows carry no
+ * source-instance object references and `deferred` when they do; only local
+ * sections are ever written, each independently so a partial failure is
+ * reported per section instead of aborting the whole import.
  */
 final class Imports
 {
@@ -95,11 +110,147 @@ final class Imports
     ];
 
     /**
+     * Preference keys safe to copy: display, notification and discovery
+     * choices. Mirror and onboarding state describe the source instance or
+     * this browser's progress and must not be claimed by an import.
+     *
+     * @var list<string>
+     */
+    private const PREFERENCE_KEYS = [
+        'default_visibility',
+        'default_quote_policy',
+        'dm_policy',
+        'show_boosts',
+        'discoverable',
+        'locked',
+        'notify_follows',
+        'notify_favourites',
+        'notify_boosts',
+        'notify_mentions',
+    ];
+
+    private readonly FollowedHashtagService $hashtags;
+
+    private readonly FilterService $filters;
+
+    public function __construct(
+        private readonly Connection $db,
+        private readonly Clock $clock,
+        private readonly Preferences $preferences,
+        private readonly FeaturedTags $featuredTags,
+    ) {
+        $this->hashtags = new FollowedHashtagService(
+            new PdoFollowedHashtagRepository($db),
+            $clock,
+        );
+        $this->filters = new FilterService(
+            new PdoFilterRuleRepository($db),
+            $clock,
+            new RandomIdGenerator(),
+        );
+    }
+
+    /**
      * @param array<string, mixed> $payload decoded export document
      *
      * @return array<string, mixed>
      */
     public function preview(array $payload): array
+    {
+        $analysis = $this->analyze($payload);
+
+        return [
+            'format' => self::FORMAT,
+            'version' => self::SUPPORTED_VERSION,
+            'source' => $analysis['source'],
+            'sections' => $analysis['sections'],
+            'not_transferred' => $analysis['not_transferred'],
+            'totals' => $analysis['totals'],
+            'apply' => [
+                'available' => true,
+                'note' => 'Only local sections are applied; deferred and unknown sections are reported and skipped.',
+            ],
+        ];
+    }
+
+    /**
+     * Applies the `local` sections of an export to the signed-in account.
+     * Each section is independent: a failure is reported on that section and
+     * the remaining sections still run. Re-running is safe — hashtags dedupe,
+     * filters skip existing names, featured tags merge, preferences overwrite
+     * only the whitelisted keys.
+     *
+     * @param array<string, mixed> $payload decoded export document
+     * @param list<string>|null $sections restrict the apply to these section names
+     *
+     * @return array<string, mixed>
+     */
+    public function apply(Account $account, array $payload, ?array $sections = null): array
+    {
+        $analysis = $this->analyze($payload);
+        $wanted = $sections === null ? null : array_fill_keys($sections, true);
+
+        $results = [];
+        foreach ($analysis['sections'] as $section) {
+            $name = $section['name'];
+            if ($wanted !== null && !isset($wanted[$name])) {
+                $results[] = [
+                    'name' => $name,
+                    'disposition' => $section['disposition'],
+                    'status' => 'skipped',
+                    'reason' => 'Not selected for this import.',
+                ];
+
+                continue;
+            }
+            if ($section['disposition'] !== 'local') {
+                $results[] = [
+                    'name' => $name,
+                    'disposition' => $section['disposition'],
+                    'status' => 'skipped',
+                    'reason' => $section['reason'],
+                ];
+
+                continue;
+            }
+
+            try {
+                $outcome = $this->applySection($account->id, $name, $payload[$name]);
+                $results[] = [
+                    'name' => $name,
+                    'disposition' => 'local',
+                    'status' => 'applied',
+                    'rows' => $outcome['rows'],
+                    'skipped_rows' => $outcome['skipped'],
+                    'detail' => $outcome['detail'],
+                ];
+            } catch (\Throwable $caught) {
+                $results[] = [
+                    'name' => $name,
+                    'disposition' => 'local',
+                    'status' => 'failed',
+                    'reason' => $caught->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'format' => self::FORMAT,
+            'version' => self::SUPPORTED_VERSION,
+            'source' => $analysis['source'],
+            'results' => $results,
+            'not_transferred' => $analysis['not_transferred'],
+        ];
+    }
+
+    /**
+     * Validates the envelope and classifies every top-level member.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return array{source: array<string, mixed>, sections: list<array<string, mixed>>, not_transferred: list<array<string, mixed>>, totals: array<string, int>}
+     */
+    private function analyze(array $payload): array
     {
         $format = $payload['format'] ?? null;
         if ($format !== self::FORMAT) {
@@ -159,8 +310,6 @@ final class Imports
         }
 
         return [
-            'format' => self::FORMAT,
-            'version' => self::SUPPORTED_VERSION,
             'source' => [
                 'instance_url' => is_string($instance['url'] ?? null) ? $instance['url'] : null,
                 'instance_name' => is_string($instance['name'] ?? null) ? $instance['name'] : null,
@@ -170,10 +319,239 @@ final class Imports
             'sections' => $sections,
             'not_transferred' => $notTransferred,
             'totals' => $totals,
-            'apply' => [
-                'available' => false,
-                'note' => 'Import apply is not available yet; this preview reports what a future import would cover.',
-            ],
         ];
+    }
+
+    /**
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applySection(string $accountId, string $name, mixed $value): array
+    {
+        return match ($name) {
+            'preferences' => $this->applyPreferences($accountId, is_array($value) ? $value : []),
+            'followed_hashtags' => $this->applyHashtags($accountId, is_array($value) ? $value : []),
+            'filters' => $this->applyFilters($accountId, is_array($value) ? $value : []),
+            'featured_tags' => $this->applyFeaturedTags($accountId, is_array($value) ? $value : []),
+            default => throw CommunityException::invalid('This section cannot be imported.', [
+                'section' => 'Only local sections are applicable.',
+            ]),
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $preferences
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyPreferences(string $accountId, array $preferences): array
+    {
+        $payload = [];
+        $applied = 0;
+        foreach (self::PREFERENCE_KEYS as $key) {
+            if (array_key_exists($key, $preferences)) {
+                $payload[$key] = $preferences[$key];
+                ++$applied;
+            }
+        }
+        if ($applied === 0) {
+            return ['rows' => 0, 'skipped' => 0, 'detail' => 'No importable preference keys found.'];
+        }
+
+        $this->preferences->update($accountId, $payload);
+
+        return ['rows' => $applied, 'skipped' => 0, 'detail' => 'Preferences updated.'];
+    }
+
+    /**
+     * @param array<array-key, mixed> $rows
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyHashtags(string $accountId, array $rows): array
+    {
+        $added = 0;
+        $skipped = 0;
+        foreach ($rows as $row) {
+            $tag = is_array($row) ? ($row['hashtag'] ?? $row['tag'] ?? null) : $row;
+            if (!is_string($tag) || trim($tag) === '') {
+                ++$skipped;
+
+                continue;
+            }
+            try {
+                [, $isNew] = $this->hashtags->follow($accountId, $tag);
+                if ($isNew) {
+                    ++$added;
+                }
+            } catch (\Throwable) {
+                ++$skipped;
+            }
+        }
+
+        return [
+            'rows' => $added,
+            'skipped' => $skipped,
+            'detail' => sprintf('%d hashtag(s) followed, %d skipped.', $added, $skipped),
+        ];
+    }
+
+    /**
+     * @param array<array-key, mixed> $rows
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyFilters(string $accountId, array $rows): array
+    {
+        $existing = [];
+        foreach ($this->filters->forUser($accountId) as $rule) {
+            $existing[$rule->name] = true;
+        }
+
+        $created = 0;
+        $skipped = 0;
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                ++$skipped;
+
+                continue;
+            }
+            try {
+                $name = is_string($row['name'] ?? null) ? $row['name'] : '';
+                $action = FilterAction::fromString(is_string($row['action'] ?? null) ? $row['action'] : '');
+                $contexts = $this->filterContexts($row['contexts'] ?? []);
+                $keywords = $this->filterKeywords($row['keywords'] ?? []);
+                $expiresAt = $this->filterExpiry($row['expires_at'] ?? null);
+
+                if ($name === '' || $contexts === [] || $keywords === [] || isset($existing[$name])) {
+                    ++$skipped;
+
+                    continue;
+                }
+                if ($expiresAt !== null && $expiresAt <= $this->clock->now()) {
+                    ++$skipped;
+
+                    continue;
+                }
+
+                $this->filters->create($accountId, $name, $action, $contexts, $keywords, $expiresAt);
+                $existing[$name] = true;
+                ++$created;
+            } catch (\Throwable) {
+                ++$skipped;
+            }
+        }
+
+        return [
+            'rows' => $created,
+            'skipped' => $skipped,
+            'detail' => sprintf('%d filter(s) created, %d skipped.', $created, $skipped),
+        ];
+    }
+
+    /**
+     * @param array<array-key, mixed> $rows
+     *
+     * @return array{rows: int, skipped: int, detail: string}
+     */
+    private function applyFeaturedTags(string $accountId, array $rows): array
+    {
+        $current = array_map(
+            static fn (array $entry): string => (string) ($entry['tag'] ?? ''),
+            $this->featuredTags->forAccount($accountId),
+        );
+        $merged = $current;
+        $seen = array_fill_keys($current, true);
+        $skipped = 0;
+
+        foreach ($rows as $row) {
+            $tag = is_array($row) ? ($row['tag'] ?? null) : $row;
+            if (!is_string($tag)) {
+                ++$skipped;
+
+                continue;
+            }
+            $normalized = $this->featuredTags->normalize($tag);
+            if ($normalized === '' || isset($seen[$normalized])) {
+                ++$skipped;
+
+                continue;
+            }
+            $seen[$normalized] = true;
+            $merged[] = $normalized;
+        }
+
+        $this->featuredTags->replace($accountId, $merged);
+
+        return [
+            'rows' => count($merged) - count($current),
+            'skipped' => $skipped,
+            'detail' => sprintf('%d tag(s) added to %d total.', count($merged) - count($current), count($merged)),
+        ];
+    }
+
+    /**
+     * @return list<FilterContext>
+     */
+    private function filterContexts(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+        $contexts = [];
+        $seen = [];
+        foreach ($value as $context) {
+            if (is_string($context)) {
+                try {
+                    $parsed = FilterContext::fromString($context);
+                } catch (\Throwable) {
+                    continue;
+                }
+                if (!isset($seen[$parsed->value])) {
+                    $seen[$parsed->value] = true;
+                    $contexts[] = $parsed;
+                }
+            }
+        }
+
+        return $contexts;
+    }
+
+    /**
+     * @return list<FilterKeyword>
+     */
+    private function filterKeywords(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+        $keywords = [];
+        foreach ($value as $keyword) {
+            try {
+                if (is_string($keyword)) {
+                    $keywords[] = new FilterKeyword($keyword);
+                } elseif (is_array($keyword) && is_string($keyword['text'] ?? null)) {
+                    $keywords[] = new FilterKeyword(
+                        $keyword['text'],
+                        ($keyword['whole_word'] ?? false) === true,
+                    );
+                }
+            } catch (\Throwable) {
+                // Invalid keywords are dropped individually.
+            }
+        }
+
+        return $keywords;
+    }
+
+    private function filterExpiry(mixed $value): ?\DateTimeImmutable
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+        try {
+            return new \DateTimeImmutable($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

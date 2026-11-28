@@ -505,8 +505,14 @@ and which are `deferred` because their rows reference source-instance
 accounts, posts or attachments that need canonical identity mapping.
 Unrecognized sections are reported as `unknown`, and `core_archive` /
 `linked_bluesky_account` are listed under `not_transferred` — core-owned
-data and external identity never move. Applying an import is not available
-yet; the preview's `apply.available` flag stays `false` until it is.
+data and external identity never move.
+
+`POST /api/v1/host/import/apply` writes the `local` sections — preferences
+(whitelisted keys only; mirror and onboarding state never transfer),
+followed hashtags, keyword filters (through the core `FilterService`,
+deduplicated by name) and featured tags (merged, never replaced) — while
+deferred and unknown sections are reported and skipped. An optional
+`sections` list restricts the apply; re-running is idempotent.
 
 ## Reading lists and text stories
 
