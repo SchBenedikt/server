@@ -80,6 +80,11 @@ final readonly class AccountErasureCleanup
                 'DELETE FROM email_verification WHERE account_id = :account_id',
                 $user,
             );
+            $delete(
+                'email_changes',
+                'DELETE FROM email_change WHERE account_id = :account_id',
+                $user,
+            );
             $delete('atproto_sessions', 'DELETE FROM atproto_session WHERE account_id = :account_id', $user);
             $delete(
                 'linked_bluesky_credentials',

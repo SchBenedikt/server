@@ -19,6 +19,7 @@ use AlohaSocial\Core\Platform\Db\PdoConnection;
 use AlohaSocial\Server\Accounts\AccountErasureCleanup;
 use AlohaSocial\Server\Accounts\AccountDirectory;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Accounts\EmailChangeService;
 use AlohaSocial\Server\Accounts\EmailVerificationService;
 use AlohaSocial\Server\Accounts\RegistrationService;
 use AlohaSocial\Server\Admin\AdminService;
@@ -81,6 +82,7 @@ final readonly class Runtime
         public AccountDirectory $directory,
         public RegistrationService $registration,
         public EmailVerificationService $emailVerification,
+        public EmailChangeService $emailChange,
         public SessionManager $sessions,
         public LoginThrottle $throttle,
         public PasswordHasher $passwordHasher,

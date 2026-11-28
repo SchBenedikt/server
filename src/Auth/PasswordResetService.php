@@ -14,6 +14,7 @@ use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 use AlohaSocial\Server\Accounts\Account;
 use AlohaSocial\Server\Accounts\AccountRepository;
+use AlohaSocial\Server\Accounts\EmailChangeService;
 use AlohaSocial\Server\Mail\MailOutbox;
 
 use function base64_encode;
@@ -56,6 +57,7 @@ final class PasswordResetService
         private readonly MailOutbox $outbox,
         private readonly Clock $clock,
         private readonly string $instanceUrl,
+        private readonly ?EmailChangeService $emailChange = null,
     ) {
     }
 
@@ -271,6 +273,9 @@ final class PasswordResetService
             // Invalidate every other link only after this exact token was
             // claimed. A failed reset rolls this deletion back as well.
             $this->db->execute('DELETE FROM password_reset WHERE account_id = :account', ['account' => $account->id]);
+            // A credential change invalidates any in-flight email move: the
+            // pending address was reserved under the old credential.
+            $this->emailChange?->cancelForAccount($account->id);
             $this->db->execute(
                 'INSERT INTO admin_audit (id, actor_id, action, target_type, target_id, details, created_at)'
                 . ' VALUES (:id, :actor, :action, :target_type, :target_id, :details, :created_at)',

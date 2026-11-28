@@ -43,6 +43,15 @@ final class MailOutbox
 
     public const KIND_EMAIL_VERIFICATION = 'email_verification';
 
+    public const KIND_EMAIL_CHANGE = 'email_change';
+
+    /**
+     * Alert to the previous address that a change was requested. Carries no
+     * token, so it has no applicability check of its own; superseded notices
+     * are cancelled together with their confirm mail.
+     */
+    public const KIND_EMAIL_CHANGE_NOTICE = 'email_change_notice';
+
     private const DEFAULT_MAX_ATTEMPTS = 8;
 
     private const BASE_RETRY_SECONDS = 60;
@@ -204,6 +213,7 @@ final class MailOutbox
         $table = match ((string) $row['kind']) {
             self::KIND_PASSWORD_RESET => 'password_reset',
             self::KIND_EMAIL_VERIFICATION => 'email_verification',
+            self::KIND_EMAIL_CHANGE => 'email_change',
             default => null,
         };
         if ($table === null) {

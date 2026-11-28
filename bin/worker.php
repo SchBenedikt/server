@@ -87,6 +87,7 @@ function dispatchMailOutbox(Runtime $runtime): void
     try {
         $runtime->passwordReset->prune();
         $runtime->emailVerification->prune();
+        $runtime->emailChange->prune();
         $runtime->mailOutbox->prune();
         $result = $runtime->mailOutbox->dispatch(10);
         if ($result['failed'] > 0) {
