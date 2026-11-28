@@ -13,7 +13,8 @@ import MediaGrid from './MediaGrid.vue';
 import SourceDialog from './SourceDialog.vue';
 import ReportDialog from './ReportDialog.vue';
 import RichText from './RichText.vue';
-import { accountName, handleLabel, isLocalPostId, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
+import { accountName, absoluteTime, handleLabel, isLocalPostId, isRemoteId, postRouteId, relativeTime, visibilityLabel } from '../lib/format';
+import { t } from '../lib/i18n';
 import { hostDisplayName } from '../lib/account';
 import { getApi } from '../lib/api';
 import { announcePostDeleted } from '../lib/events';
@@ -68,7 +69,7 @@ const profileTarget = computed(() => {
 });
 const profileHref = computed(() => `#/u/${encodeURIComponent(profileTarget.value)}`);
 const time = computed(() => relativeTime(props.post.published_at));
-const absolute = computed(() => new Date(props.post.published_at).toLocaleString('en-US'));
+const absolute = computed(() => absoluteTime(props.post.published_at));
 const isMine = computed(() => !isRemoteAuthor.value && appState.session.user?.handle === authorId.value);
 const canEdit = computed(() => (
 	isMine.value
@@ -77,7 +78,7 @@ const canEdit = computed(() => (
 	&& postRouteId(props.post) !== null
 ));
 const editedAbsolute = computed(() => (
-	props.post.edited_at ? new Date(props.post.edited_at).toLocaleString('en-US') : ''
+	props.post.edited_at ? absoluteTime(props.post.edited_at) : ''
 ));
 const localId = computed(() => postRouteId(props.post));
 const canPublishToBluesky = computed(() => isMine.value && localId.value !== null && hostBridge.capabilities().atproto);
@@ -111,11 +112,11 @@ const quoteLoading = ref(false);
 const quoteStateLabel = computed(() => {
 	switch (props.post.quote_state) {
 		case 'pending':
-			return 'Quote approval is still pending';
+			return t('card.quotePending');
 		case 'rejected':
-			return 'Quote was rejected';
+			return t('card.quoteRejected');
 		case 'revoked':
-			return 'Quote approval was revoked';
+			return t('card.quoteRevoked');
 		default:
 			return '';
 	}
@@ -272,10 +273,10 @@ const retryingAtprotoMirror = ref(false);
 
 function atprotoMirrorProblem(status: AtprotoMirrorStatus | null): string | null {
 	if (status === null || status.state === 'published' || status.state === 'removed') return null;
-	if (status.state === 'unavailable' || status.reason === 'atproto_disabled') return 'Bluesky mirroring is unavailable.';
-	if (status.reason === 'atproto_account_not_connected') return 'the linked Bluesky account needs to be connected again.';
-	if (status.retryable) return 'a temporary Bluesky publishing error occurred.';
-	return 'Bluesky publishing failed.';
+	if (status.state === 'unavailable' || status.reason === 'atproto_disabled') return t('card.mirrorUnavailable');
+	if (status.reason === 'atproto_account_not_connected') return t('card.mirrorReconnect');
+	if (status.retryable) return t('card.mirrorTemp');
+	return t('card.mirrorFailed');
 }
 const sharing = ref(false);
 const deleting = ref(false);
@@ -469,7 +470,7 @@ async function submitVote(): Promise<void> {
 	try {
 		const pollId = poll.id ?? (localId.value === null ? '' : `poll-${localId.value}`);
 		if (pollId === '') {
-			throw new Error('This poll cannot be voted on here.');
+			throw new Error(t('card.pollCannotVote'));
 		}
 
 		const saved = await getApi().votePoll(pollId, selectedChoices.value);
@@ -481,9 +482,9 @@ async function submitVote(): Promise<void> {
 		} else {
 			pollState.value = { ...poll, voted: true, own_votes: [...selectedChoices.value] };
 		}
-		showToast('Vote saved.', 'success');
+		showToast(t('card.voteSaved'), 'success');
 	} catch (error) {
-		pollError.value = error instanceof Error ? error.message : 'The vote could not be saved.';
+		pollError.value = error instanceof Error ? error.message : t('card.voteFailed');
 	} finally {
 		voting.value = false;
 	}
@@ -535,11 +536,12 @@ async function toggleBoost(): Promise<void> {
 		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
 		showToast(
 			mirrorProblem !== null
-				? `Boost saved locally, but ${mirrorProblem}`
-				: (
+				? t('card.boostLocalOnly', { problem: mirrorProblem })
+				: t(
 					localId.value === null
-						? (nextBoosted ? 'Remote boost queued.' : 'Remote boost removal queued.')
-						: (nextBoosted ? 'Post boosted.' : 'Boost removed.')),
+						? (nextBoosted ? 'card.boostRemoteQueued' : 'card.boostRemoteRemovalQueued')
+						: (nextBoosted ? 'card.boosted' : 'card.boostRemoved'),
+				),
 			mirrorProblem !== null ? 'error' : 'success',
 		);
 		try {
@@ -550,7 +552,7 @@ async function toggleBoost(): Promise<void> {
 	} catch (error) {
 		boosted.value = before.reblogged;
 		rememberInteraction(id, before);
-		showToast(error instanceof Error ? error.message : 'The post could not be boosted.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.boostFailed'), 'error');
 	} finally {
 		boosting.value = false;
 	}
@@ -599,16 +601,17 @@ async function toggleLike(): Promise<void> {
 		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
 		showToast(
 			mirrorProblem !== null
-				? `Like saved locally, but ${mirrorProblem}`
-				: (
+				? t('card.likeLocalOnly', { problem: mirrorProblem })
+				: t(
 					id === remoteTarget.value
-						? (saved.favourited ? 'Remote like queued.' : 'Remote unlike queued.')
-						: (saved.favourited ? 'Post liked.' : 'Like removed.')),
+						? (saved.favourited ? 'card.likeRemoteQueued' : 'card.unlikeRemoteQueued')
+						: (saved.favourited ? 'card.liked' : 'card.likeRemoved'),
+				),
 			mirrorProblem !== null ? 'error' : 'success',
 		);
 	} catch (error) {
 		rememberInteraction(id, before);
-		showToast(error instanceof Error ? error.message : 'The like could not be saved.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.likeFailed'), 'error');
 	} finally {
 		liking.value = false;
 	}
@@ -627,9 +630,9 @@ async function retryAtprotoMirror(): Promise<void> {
 			atprotoMirrorStatus.value = boosted.value ? await getApi().boostPost(id) : await getApi().unboostPost(id);
 		}
 		const mirrorProblem = atprotoMirrorProblem(atprotoMirrorStatus.value);
-		showToast(mirrorProblem === null ? 'Bluesky mirror updated.' : `Bluesky mirror retry failed: ${mirrorProblem}`, mirrorProblem === null ? 'success' : 'error');
+		showToast(mirrorProblem === null ? t('card.mirrorUpdated') : t('card.mirrorRetryFailed', { problem: mirrorProblem }), mirrorProblem === null ? 'success' : 'error');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The Bluesky mirror could not be retried.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.mirrorRetryFailedToast'), 'error');
 	} finally { retryingAtprotoMirror.value = false; }
 }
 
@@ -650,18 +653,18 @@ async function toggleBookmark(): Promise<void> {
 		if (bookmarked.value) {
 			await getApi().unbookmarkPost(localId.value);
 			bookmarked.value = false;
-			showToast('Bookmark removed.', 'success');
+			showToast(t('card.bookmarkRemoved'), 'success');
 		} else {
 			await getApi().bookmarkPost(localId.value);
 			bookmarked.value = true;
-			showToast('Post bookmarked.', 'success');
+			showToast(t('card.bookmarked'), 'success');
 		}
 		if (interaction.value !== undefined) {
 			rememberInteraction(localId.value, { ...interaction.value, bookmarked: bookmarked.value });
 		}
 		emit('bookmark', bookmarked.value);
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The bookmark could not be changed.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.bookmarkFailed'), 'error');
 	} finally {
 		bookmarking.value = false;
 	}
@@ -679,15 +682,15 @@ async function togglePin(): Promise<void> {
 			await getApi().unpinPost(localId.value);
 			isPinned.value = false;
 			emit('pinned', false);
-			showToast('Post unpinned.', 'success');
+			showToast(t('card.unpinned'), 'success');
 		} else {
 			await getApi().pinPost(localId.value);
 			isPinned.value = true;
 			emit('pinned', true);
-			showToast('Post pinned to the top of your profile.', 'success');
+			showToast(t('card.pinned'), 'success');
 		}
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The post could not be pinned.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.pinFailed'), 'error');
 	} finally {
 		pinning.value = false;
 	}
@@ -702,9 +705,9 @@ async function archive(): Promise<void> {
 	menuOpen.value = false;
 	try {
 		await getApi().archivePost(localId.value);
-		showToast('Post archived. You can find it under “Archive”.', 'success');
+		showToast(t('card.archived'), 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The post could not be archived.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.archiveFailed'), 'error');
 	} finally {
 		archiving.value = false;
 	}
@@ -719,12 +722,12 @@ async function share(): Promise<void> {
 	try {
 		if (navigator.clipboard?.writeText !== undefined) {
 			await navigator.clipboard.writeText(shareUrl.value);
-			showToast('Link copied to clipboard.', 'success');
+			showToast(t('card.linkCopied'), 'success');
 		} else {
-			window.prompt('Link to post', shareUrl.value);
+			window.prompt(t('card.linkToPost'), shareUrl.value);
 		}
 	} catch {
-		window.prompt('Link to post', shareUrl.value);
+		window.prompt(t('card.linkToPost'), shareUrl.value);
 	} finally {
 		sharing.value = false;
 		menuOpen.value = false;
@@ -739,12 +742,9 @@ async function sendFeedback(kind: 'less' | 'more'): Promise<void> {
 	menuOpen.value = false;
 	try {
 		await getApi().forYouFeedback(localId.value, kind);
-		showToast(
-			kind === 'less' ? 'You will see less of this.' : 'You will see more of this.',
-			'success',
-		);
+		showToast(t(kind === 'less' ? 'card.feedbackLess' : 'card.feedbackMore'), 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The feedback could not be saved.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.feedbackFailed'), 'error');
 	}
 }
 
@@ -758,20 +758,20 @@ async function publishToBluesky(): Promise<void> {
 	try {
 		const status = await getApi().atprotoIdentity();
 		if (!status.publish) {
-			showToast('Bluesky publishing is disabled on this instance.', 'error');
+			showToast(t('card.bskyDisabled'), 'error');
 			return;
 		}
 		const accountDid = status.identity?.did || (status.external.connected ? status.external.did : undefined);
 		if (accountDid === undefined || accountDid === '') {
-			showToast('Connect a Bluesky account in Settings before publishing.', 'info');
+			showToast(t('card.bskyConnect'), 'info');
 			return;
 		}
 		blueskyPublication.value = await getApi().publishToBluesky(localId.value, accountDid);
 		blueskyDeliveryState.value = 'published';
 		blueskyDeliveryAttempts.value = 0;
-		showToast('Post published to Bluesky.', 'success');
+		showToast(t('card.bskyPublishedToast'), 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The post could not be published to Bluesky.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.bskyPublishFailed'), 'error');
 	} finally {
 		publishingBluesky.value = false;
 	}
@@ -810,7 +810,7 @@ async function loadBlueskyPublication(): Promise<void> {
 		if (lookup === blueskyPublicationLookup && menuOpen.value) {
 			blueskyPublicationError.value = error instanceof Error
 				? error.message
-				: 'The Bluesky publication status could not be loaded.';
+				: t('card.bskyStatusFailed');
 		}
 	} finally {
 		if (lookup === blueskyPublicationLookup) {
@@ -832,7 +832,7 @@ async function loadActivityPubDelivery(): Promise<void> {
 		if (lookup === activityPubDeliveryLookup && menuOpen.value) activityPubDelivery.value = status;
 	} catch (error) {
 		if (lookup === activityPubDeliveryLookup && menuOpen.value) {
-			activityPubDeliveryError.value = error instanceof Error ? error.message : 'Delivery status could not be loaded.';
+			activityPubDeliveryError.value = error instanceof Error ? error.message : t('card.deliveryStatusFailed');
 		}
 	} finally {
 		if (lookup === activityPubDeliveryLookup) activityPubDeliveryLoading.value = false;
@@ -845,9 +845,9 @@ async function retryActivityPubDelivery(): Promise<void> {
 	try {
 		const result = await getApi().retryActivityPubDelivery(localId.value);
 		activityPubDelivery.value = result;
-		showToast(result.retried > 0 ? `Retry queued for ${result.retried} remote delivery attempt(s).` : 'There are no retryable remote deliveries.', result.retried > 0 ? 'success' : 'info');
+		showToast(result.retried > 0 ? t(result.retried === 1 ? 'card.deliveryQueuedToastOne' : 'card.deliveryQueuedToast', { count: result.retried }) : t('card.deliveryNoRetry'), result.retried > 0 ? 'success' : 'info');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'Remote delivery could not be retried.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.deliveryRetryFailed'), 'error');
 	} finally {
 		retryingActivityPubDelivery.value = false;
 	}
@@ -877,14 +877,21 @@ async function remove(): Promise<void> {
 	try {
 		await getApi().deletePost(localId.value);
 		announcePostDeleted(localId.value);
-		showToast('Post deleted.', 'success');
+		showToast(t('card.postDeleted'), 'success');
 	} catch (error) {
-		showToast(error instanceof Error ? error.message : 'The post could not be deleted.', 'error');
+		showToast(error instanceof Error ? error.message : t('card.deleteFailed'), 'error');
 	} finally {
 		deleting.value = false;
 		confirmingDelete.value = false;
 		menuOpen.value = false;
 	}
+}
+
+function deliveryRetryLabel(failed: number, attempts: number): string {
+	const key = attempts > 0
+		? (failed === 1 ? 'card.retryFailedOne' : 'card.retryFailed')
+		: (failed === 1 ? 'card.retryFailedNoAttemptsOne' : 'card.retryFailedNoAttempts');
+	return t(key, { count: failed, attempts: t('card.attempts', { count: attempts }) });
 }
 
 function onDocumentClick(event: MouseEvent): void {
@@ -924,15 +931,15 @@ onUnmounted(() => {
 		ref="rootEl"
 		class="a-post"
 		:class="{ 'a-post--detail': detail, 'a-post--boost': post.kind === 'boost' }"
-		:aria-label="`Post by ${handle}`"
+		:aria-label="t('card.postBy', { handle })"
 	>
 		<p v-if="post.kind === 'boost' && post.boosted_by" class="a-post__boosted-by">
 			<AppIcon name="repeat" :size="15" />
-			<span><a :href="`#/u/${encodeURIComponent(post.boosted_by)}`">{{ handleLabel(post.boosted_by) }}</a> boosted</span>
+			<span><a :href="`#/u/${encodeURIComponent(post.boosted_by)}`">{{ handleLabel(post.boosted_by) }}</a> {{ t('card.boostedSuffix') }}</span>
 		</p>
 
 		<header class="a-post__header">
-			<a :href="profileHref" class="a-post__avatar-link" :aria-label="`Profile of ${displayName}`">
+			<a :href="profileHref" class="a-post__avatar-link" :aria-label="t('card.profileOf', { name: displayName })">
 				<Avatar :id="authorId" :name="displayName" :src="post.author_avatar" :size="detail ? 52 : 44" />
 			</a>
 
@@ -953,7 +960,7 @@ onUnmounted(() => {
 						:title="absolute"
 					>{{ time }}</a>
 					<time v-else class="a-post__time" :datetime="post.published_at" :title="absolute">{{ time }}</time>
-					<span v-if="post.edited_at" class="a-post__edited" :title="`Edited: ${editedAbsolute}`">· edited</span>
+					<span v-if="post.edited_at" class="a-post__edited" :title="t('card.editedTitle', { time: editedAbsolute })">· {{ t('card.edited') }}</span>
 					<span v-if="detail" class="a-post__visibility">
 						<AppIcon :name="post.visibility === 'public' ? 'globe' : post.visibility === 'followers' ? 'users' : 'lock'" :size="13" />
 						{{ visibilityLabel(post.visibility) }}
@@ -965,7 +972,7 @@ onUnmounted(() => {
 				<button
 					type="button"
 					class="a-icon-btn a-post__menu-button"
-					aria-label="More actions"
+					:aria-label="t('card.moreActions')"
 					:aria-expanded="menuOpen"
 					@click.stop="menuOpen = !menuOpen"
 				>
@@ -977,16 +984,16 @@ onUnmounted(() => {
 						v-if="isMine && localId && activityPubDeliveryLoading"
 						type="button" role="menuitem" disabled
 					>
-						<AppIcon name="refresh" :size="15" class="a-spin" /> Checking remote delivery…
+						<AppIcon name="refresh" :size="15" class="a-spin" /> {{ t('card.checkingDelivery') }}
 					</button>
 					<button
 						v-if="isMine && localId && activityPubDelivery?.state === 'pending'"
 						type="button" role="menuitem" disabled
 					>
-						<AppIcon name="refresh" :size="15" class="a-spin" /> Queued for {{ activityPubDelivery.pending }} remote server(s)
+						<AppIcon name="refresh" :size="15" class="a-spin" /> {{ t(activityPubDelivery.pending === 1 ? 'card.queuedForOne' : 'card.queuedFor', { count: activityPubDelivery.pending }) }}
 					</button>
 					<p v-if="isMine && localId && activityPubDelivery?.state === 'failed' && activityPubDelivery.pending > 0" class="a-post__menu-error" role="status">
-						{{ activityPubDelivery.pending }} other remote delivery(s) are still queued.
+						{{ t(activityPubDelivery.pending === 1 ? 'card.deliveryStillQueuedOne' : 'card.deliveryStillQueued', { count: activityPubDelivery.pending }) }}
 					</p>
 					<button
 						v-if="isMine && localId && activityPubDelivery?.state === 'failed' && activityPubDelivery.retryable"
@@ -994,23 +1001,23 @@ onUnmounted(() => {
 						@click.stop="retryActivityPubDelivery"
 					>
 						<AppIcon :name="retryingActivityPubDelivery ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': retryingActivityPubDelivery }" />
-						Retry {{ activityPubDelivery.failed }} failed remote delivery(s){{ activityPubDelivery.attempts > 0 ? ` · ${activityPubDelivery.attempts} attempts` : '' }}
+						{{ deliveryRetryLabel(activityPubDelivery.failed, activityPubDelivery.attempts) }}
 					</button>
 					<p v-if="isMine && localId && activityPubDelivery?.state === 'failed' && !activityPubDelivery.retryable" class="a-post__menu-error" role="status">
-						{{ activityPubDelivery.failed }} remote delivery(s) failed and cannot be retried automatically.
+						{{ t(activityPubDelivery.failed === 1 ? 'card.deliveryFailedFinalOne' : 'card.deliveryFailedFinal', { count: activityPubDelivery.failed }) }}
 					</p>
 					<p v-if="isMine && localId && activityPubDeliveryError !== ''" class="a-post__menu-error" role="status">
 						{{ activityPubDeliveryError }}
 					</p>
 					<button v-if="localId" type="button" role="menuitem" :disabled="bookmarking" @click.stop="toggleBookmark">
 						<AppIcon name="bookmark" :size="15" />
-						{{ bookmarked ? 'Remove bookmark' : 'Bookmark post' }}
+						{{ t(bookmarked ? 'card.unbookmark' : 'card.bookmark') }}
 					</button>
 					<button type="button" role="menuitem" @click.stop="share">
-						<AppIcon name="share" :size="15" /> Copy link
+						<AppIcon name="share" :size="15" /> {{ t('card.copyLink') }}
 					</button>
 					<button v-if="canQuote" type="button" role="menuitem" @click.stop="quote(); menuOpen = false">
-						<AppIcon name="quote" :size="15" /> Quote post
+						<AppIcon name="quote" :size="15" /> {{ t('card.quote') }}
 					</button>
 					<button
 						v-if="localId"
@@ -1018,7 +1025,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="collectionOpen = true; menuOpen = false"
 					>
-						<AppIcon name="list" :size="15" /> Add to collection
+						<AppIcon name="list" :size="15" /> {{ t('card.addToCollection') }}
 					</button>
 					<button
 						v-if="localId && post.revision !== undefined && post.revision > 1"
@@ -1026,7 +1033,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="historyOpen = true; menuOpen = false"
 					>
-						<AppIcon name="clock" :size="15" /> Edit history
+						<AppIcon name="clock" :size="15" /> {{ t('card.editHistory') }}
 					</button>
 					<button
 						v-if="isMine && localId"
@@ -1034,7 +1041,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="sourceOpen = true; menuOpen = false"
 					>
-						<AppIcon name="code" :size="15" /> View source
+						<AppIcon name="code" :size="15" /> {{ t('card.viewSource') }}
 					</button>
 					<button
 						v-if="isMine && localId"
@@ -1044,7 +1051,7 @@ onUnmounted(() => {
 						@click.stop="togglePin"
 					>
 						<AppIcon :name="isPinned ? 'x' : 'pin'" :size="15" />
-						{{ isPinned ? 'Unpin' : 'Pin to profile' }}
+						{{ t(isPinned ? 'card.unpin' : 'card.pin') }}
 					</button>
 					<button
 						v-if="isMine && localId"
@@ -1053,7 +1060,7 @@ onUnmounted(() => {
 						:disabled="archiving"
 						@click.stop="archive"
 					>
-						<AppIcon name="archive" :size="15" /> Archive
+						<AppIcon name="archive" :size="15" /> {{ t('card.archive') }}
 					</button>
 					<button
 						v-if="forYou && localId"
@@ -1061,7 +1068,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="sendFeedback('less')"
 					>
-						<AppIcon name="bellOff" :size="15" /> Show less of this
+						<AppIcon name="bellOff" :size="15" /> {{ t('card.showLess') }}
 					</button>
 					<button
 						v-if="forYou && localId"
@@ -1069,7 +1076,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="sendFeedback('more')"
 					>
-						<AppIcon name="sparkles" :size="15" /> Show more of this
+						<AppIcon name="sparkles" :size="15" /> {{ t('card.showMore') }}
 					</button>
 					<button
 						v-if="canPublishToBluesky && blueskyPublicationLoading"
@@ -1077,7 +1084,7 @@ onUnmounted(() => {
 						role="menuitem"
 						disabled
 					>
-						<AppIcon name="refresh" :size="15" class="a-spin" /> Checking Bluesky publication…
+						<AppIcon name="refresh" :size="15" class="a-spin" /> {{ t('card.checkingBsky') }}
 					</button>
 					<a
 						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyPublication !== null"
@@ -1088,7 +1095,7 @@ onUnmounted(() => {
 						@click="menuOpen = false"
 					>
 						<AppIcon name="check" :size="15" />
-						{{ blueskyDeliveryState === 'published' ? 'Published on Bluesky · View post' : 'Last confirmed on Bluesky · View post' }}
+						{{ t(blueskyDeliveryState === 'published' ? 'card.bskyPublished' : 'card.bskyConfirmed') }}
 					</a>
 					<button
 						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyDeliveryState === 'pending'"
@@ -1096,7 +1103,7 @@ onUnmounted(() => {
 						role="menuitem"
 						disabled
 					>
-						<AppIcon name="refresh" :size="15" class="a-spin" /> Queued for Bluesky delivery
+						<AppIcon name="refresh" :size="15" class="a-spin" /> {{ t('card.bskyQueued') }}
 					</button>
 					<button
 						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyDeliveryState === 'failed'"
@@ -1106,7 +1113,7 @@ onUnmounted(() => {
 						@click.stop="publishToBluesky"
 					>
 						<AppIcon :name="publishingBluesky ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': publishingBluesky }" />
-						Retry Bluesky delivery{{ blueskyDeliveryAttempts > 0 ? ` · ${blueskyDeliveryAttempts} attempts` : '' }}
+						{{ blueskyDeliveryAttempts > 0 ? t('card.bskyRetryAttempts', { count: blueskyDeliveryAttempts }) : t('card.bskyRetry') }}
 					</button>
 					<button
 						v-if="canPublishToBluesky && !blueskyPublicationLoading && blueskyDeliveryState === 'not_queued'"
@@ -1116,13 +1123,13 @@ onUnmounted(() => {
 						@click.stop="publishToBluesky"
 					>
 						<AppIcon :name="publishingBluesky ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': publishingBluesky }" />
-						Publish to Bluesky
+						{{ t('card.publishBsky') }}
 					</button>
 					<p v-if="canPublishToBluesky && blueskyPublicationError !== ''" class="a-post__menu-error" role="status">
 						{{ blueskyPublicationError }}
 					</p>
 					<button v-if="canReport" type="button" role="menuitem" @click.stop="openReport">
-						<AppIcon name="flag" :size="15" /> Report post
+						<AppIcon name="flag" :size="15" /> {{ t('card.report') }}
 					</button>
 					<a
 						v-if="external"
@@ -1132,7 +1139,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click="menuOpen = false"
 					>
-						<AppIcon name="external" :size="15" /> Open original
+						<AppIcon name="external" :size="15" /> {{ t('card.openOriginal') }}
 					</a>
 					<button
 						v-if="canEdit"
@@ -1140,7 +1147,7 @@ onUnmounted(() => {
 						role="menuitem"
 						@click.stop="edit"
 					>
-						<AppIcon name="pen" :size="15" /> Edit post
+						<AppIcon name="pen" :size="15" /> {{ t('card.edit') }}
 					</button>
 					<button
 						v-if="isMine"
@@ -1149,7 +1156,7 @@ onUnmounted(() => {
 						class="a-post__menu-danger"
 						@click.stop="confirmingDelete = true; menuOpen = false"
 					>
-						<AppIcon name="trash" :size="15" /> Delete post
+						<AppIcon name="trash" :size="15" /> {{ t('card.delete') }}
 					</button>
 				</div>
 			</div>
@@ -1157,23 +1164,23 @@ onUnmounted(() => {
 
 		<p v-if="replyContext" class="a-post__reply-context">
 			<AppIcon name="reply" :size="14" />
-			<a :href="replyContext">{{ isRemotePost ? 'Reply to an external post' : 'Reply to a post' }}</a>
+			<a :href="replyContext">{{ t(isRemotePost ? 'card.replyExternal' : 'card.replyToPost') }}</a>
 		</p>
 
 		<div v-if="confirmingDelete" class="a-post__confirm" role="alert">
-			<span>Delete this post?</span>
+			<span>{{ t('card.deleteConfirm') }}</span>
 			<div>
 				<button type="button" class="a-btn a-btn--danger a-btn--small" :disabled="deleting" @click="remove">
-					{{ deleting ? 'Deleting…' : 'Delete' }}
+					{{ deleting ? t('card.deleting') : t('story.delete') }}
 				</button>
-				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="confirmingDelete = false">Cancel</button>
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="confirmingDelete = false">{{ t('common.cancel') }}</button>
 			</div>
 		</div>
 
 		<details v-if="post.content_warning" class="a-post__cw">
 			<summary>
 				<AppIcon name="info" :size="14" />
-				Content warning: <strong>{{ post.content_warning }}</strong>
+				{{ t('scheduled.contentWarningLabel') }}: <strong>{{ post.content_warning }}</strong>
 			</summary>
 			<RichText :text="post.content" :allow-markup="post.is_remote === true" />
 		</details>
@@ -1224,7 +1231,7 @@ onUnmounted(() => {
 						class="a-quote-embed__media a-quote-embed__media--audio"
 					>
 						<AppIcon name="music" :size="16" />
-						{{ quoteMedia(quotedPost)!.alt_text || 'Audio-attachment' }}
+						{{ quoteMedia(quotedPost)!.alt_text || t('card.audioAttachment') }}
 					</span>
 					<img
 						v-else
@@ -1235,9 +1242,9 @@ onUnmounted(() => {
 					/>
 				</template>
 			</a>
-			<p v-else-if="quoteLoading" class="a-quote-embed__missing">Loading quoted post…</p>
+			<p v-else-if="quoteLoading" class="a-quote-embed__missing">{{ t('card.quoteLoading') }}</p>
 			<p v-else class="a-quote-embed__missing">
-				The quoted post is no longer publicly available.
+				{{ t('card.quoteMissing') }}
 			</p>
 		</article>
 
@@ -1250,8 +1257,8 @@ onUnmounted(() => {
 		<div v-if="pollState" class="a-post__poll">
 			<p class="a-post__poll-head">
 				<AppIcon name="hash" :size="15" />
-				{{ pollState.multiple ? 'poll · Multiple choice' : 'poll' }}
-				<span>{{ pollTotal }} {{ pollTotal === 1 ? 'vote' : 'Votes' }}</span>
+				{{ t(pollState.multiple ? 'card.pollMultiple' : 'card.poll') }}
+				<span>{{ t(pollTotal === 1 ? 'card.vote' : 'card.votes', { count: pollTotal }) }}</span>
 			</p>
 			<ul>
 				<li v-for="(option, index) in pollState.options" :key="index">
@@ -1276,9 +1283,9 @@ onUnmounted(() => {
 				</li>
 			</ul>
 			<div class="a-post__poll-foot">
-				<span v-if="pollState.voted">You voted.</span>
-				<span v-else-if="pollState.expired || !pollOpen">Poll ended.</span>
-				<span v-else>{{ pollState.voters_count }} voters · ends {{ relativeTime(pollState.expires_at) }}</span>
+				<span v-if="pollState.voted">{{ t('card.youVoted') }}</span>
+				<span v-else-if="pollState.expired || !pollOpen">{{ t('card.pollEnded') }}</span>
+				<span v-else>{{ t('card.votersEnds', { count: pollState.voters_count, time: relativeTime(pollState.expires_at) }) }}</span>
 				<button
 					v-if="canVote"
 					type="button"
@@ -1286,14 +1293,14 @@ onUnmounted(() => {
 					:disabled="selectedChoices.length === 0 || voting"
 					@click="submitVote"
 				>
-					{{ voting ? 'Saving…' : 'Vote' }}
+					{{ voting ? t('common.saving') : t('card.voteSubmit') }}
 				</button>
 			</div>
 			<p v-if="pollError" class="a-form-error" role="alert">{{ pollError }}</p>
 		</div>
 
 		<ul v-if="emojiReactions.length > 0" class="a-post__reactions">
-			<li v-for="reaction in emojiReactions" :key="reaction.emoji" :title="`${reaction.count} reaction(s)`">
+			<li v-for="reaction in emojiReactions" :key="reaction.emoji" :title="t(reaction.count === 1 ? 'card.reactionsTitleOne' : 'card.reactionsTitle', { count: reaction.count })">
 				<span>{{ reaction.emoji }}</span>
 				<strong>{{ reaction.count }}</strong>
 			</li>
@@ -1304,8 +1311,8 @@ onUnmounted(() => {
 				v-if="canReplyHere"
 				type="button"
 				class="a-post__action"
-				:aria-label="`Replies${replyCount > 0 ? ` (${replyCount})` : ''}`"
-				:title="`Replies${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:aria-label="replyCount > 0 ? `${t('card.replies')} (${replyCount})` : t('card.replies')"
+				:title="replyCount > 0 ? `${t('card.replies')} (${replyCount})` : t('card.replies')"
 				@click="reply"
 			>
 				<AppIcon name="reply" :size="18" />
@@ -1317,13 +1324,13 @@ onUnmounted(() => {
 				target="_blank"
 				rel="noopener noreferrer"
 				class="a-post__action"
-				:aria-label="`Reply on the original server${replyCount > 0 ? ` (${replyCount})` : ''}`"
-				:title="`Reply on the original server${replyCount > 0 ? ` (${replyCount})` : ''}`"
+				:aria-label="replyCount > 0 ? `${t('card.replyOriginal')} (${replyCount})` : t('card.replyOriginal')"
+				:title="replyCount > 0 ? `${t('card.replyOriginal')} (${replyCount})` : t('card.replyOriginal')"
 			>
 				<AppIcon name="reply" :size="18" />
 				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</a>
-			<span v-else class="a-post__action a-post__action--static" :title="`${replyCount} Replies`">
+			<span v-else class="a-post__action a-post__action--static" :title="t('card.repliesCount', { count: replyCount })">
 				<AppIcon name="reply" :size="18" />
 				<b v-if="replyCount > 0" class="a-post__action-count">{{ replyCount }}</b>
 			</span>
@@ -1333,8 +1340,8 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action"
 				:class="{ 'a-post__action--active': boosted }"
-				:aria-label="boosted ? 'Remove repost' : 'Repost'"
-				:title="boosted ? 'Remove boost' : 'Boost post'"
+				:aria-label="t(boosted ? 'card.unrepost' : 'card.repost')"
+				:title="t(boosted ? 'card.unboost' : 'card.boost')"
 				:disabled="boosting"
 				@click="toggleBoost"
 			>
@@ -1344,7 +1351,7 @@ onUnmounted(() => {
 			<span
 				v-else
 				class="a-post__action a-post__action--static"
-				:title="`${boostCount} boosts on ${handle}`"
+				:title="t('card.boostsOn', { count: boostCount, handle })"
 			>
 				<AppIcon name="repeat" :size="18" />
 				<b v-if="boostCount > 0" class="a-post__action-count">{{ boostCount }}</b>
@@ -1354,8 +1361,8 @@ onUnmounted(() => {
 				v-if="canQuote"
 				type="button"
 				class="a-post__action"
-				aria-label="Quote post"
-				title="Quote post"
+				:aria-label="t('card.quote')"
+				:title="t('card.quote')"
 				@click="quote"
 			>
 				<AppIcon name="quote" :size="18" />
@@ -1366,9 +1373,9 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action a-post__action--like"
 				:class="{ 'a-post__action--liked': liked }"
-				:aria-label="liked ? 'Unlike post' : 'Like post'"
+				:aria-label="t(liked ? 'card.unlike' : 'card.like')"
 				:aria-pressed="liked"
-				:title="liked ? 'Unlike post' : 'Like post'"
+				:title="t(liked ? 'card.unlike' : 'card.like')"
 				:disabled="liking"
 				@click="toggleLike"
 			>
@@ -1378,7 +1385,7 @@ onUnmounted(() => {
 			<span
 				v-else
 				class="a-post__action a-post__action--static"
-				:title="`${likeCount} likes on ${handle}`"
+				:title="t('card.likesOn', { count: likeCount, handle })"
 			>
 				<AppIcon name="heart" :size="18" />
 				<b v-if="likeCount > 0" class="a-post__action-count">{{ likeCount }}</b>
@@ -1389,7 +1396,7 @@ onUnmounted(() => {
 				type="button"
 				class="a-post__action"
 				:class="{ 'a-post__action--active': bookmarked }"
-				:aria-label="bookmarked ? 'Remove bookmark' : 'Bookmark post'"
+				:aria-label="t(bookmarked ? 'card.unbookmark' : 'card.bookmark')"
 				:aria-pressed="bookmarked"
 				:title="bookmarked ? 'Remove bookmark' : 'Bookmark post'"
 				:disabled="bookmarking"
@@ -1402,14 +1409,14 @@ onUnmounted(() => {
 				v-if="canReport"
 				type="button"
 				class="a-post__action"
-				aria-label="Report post"
-				title="Report post"
+				:aria-label="t('card.report')"
+				:title="t('card.report')"
 				@click="openReport"
 			>
 				<AppIcon name="flag" :size="18" />
 			</button>
 
-			<button type="button" class="a-post__action" aria-label="Share link" title="Share link" @click="share">
+			<button type="button" class="a-post__action" :aria-label="t('card.shareLink')" :title="t('card.shareLink')" @click="share">
 				<AppIcon name="share" :size="18" />
 			</button>
 
@@ -1417,16 +1424,16 @@ onUnmounted(() => {
 				v-if="detailHref && !detail"
 				:href="detailHref"
 				class="a-post__action a-post__action--link"
-				aria-label="Open post"
-				title="Open post"
+				:aria-label="t('card.openPost')"
+				:title="t('card.openPost')"
 			>
 				<AppIcon name="external" :size="17" />
 			</a>
 		</footer>
 		<p v-if="atprotoMirrorProblem(atprotoMirrorStatus)" class="a-form-error a-post__mirror-status" role="status">
-			{{ atprotoMirrorProblem(atprotoMirrorStatus) }}{{ atprotoMirrorStatus?.retryable ? ' You can retry this action.' : ' This action cannot be retried automatically.' }}
+			{{ atprotoMirrorProblem(atprotoMirrorStatus) }}{{ atprotoMirrorStatus?.retryable ? t('card.mirrorRetryHint') : t('card.mirrorNoRetryHint') }}
 			<button v-if="atprotoMirrorStatus.retryable" type="button" class="a-btn a-btn--small" :disabled="retryingAtprotoMirror" @click="retryAtprotoMirror">
-				{{ retryingAtprotoMirror ? 'Retrying…' : 'Retry Bluesky mirror' }}
+				{{ retryingAtprotoMirror ? t('card.retrying') : t('card.retryMirror') }}
 			</button>
 		</p>
 
