@@ -79,9 +79,26 @@ export class ApiError extends Error {
 		public readonly code: string,
 		message: string,
 		public readonly fields: Record<string, string> = {},
+		public readonly requestId: string | null = null,
 	) {
 		super(message);
 		this.name = 'ApiError';
+	}
+
+	/**
+	 * Transport classification so views can tell "the server answered with an
+	 * error" apart from "no response arrived at all" without inspecting
+	 * status codes themselves.
+	 */
+	public get kind(): 'network' | 'invalid_response' | 'http' {
+		if (this.status === 0) {
+			return 'network';
+		}
+		if (this.code === 'invalid_response') {
+			return 'invalid_response';
+		}
+
+		return 'http';
 	}
 }
 
@@ -442,7 +459,7 @@ function normalizeActivityPubDelivery(value: unknown): ActivityPubDeliveryLookup
 	};
 }
 
-function errorMessage(body: string, status: number): { code: string; message: string; fields: Record<string, string> } {
+function errorMessage(body: string, status: number): { code: string; message: string; fields: Record<string, string>; requestId: string | null } {
 	try {
 		const parsed: unknown = JSON.parse(body);
 		if (isRecord(parsed) && isRecord(parsed.error)) {
@@ -458,8 +475,11 @@ function errorMessage(body: string, status: number): { code: string; message: st
 					}
 				}
 			}
+			const requestId = typeof parsed.error.request_id === 'string' && parsed.error.request_id !== ''
+				? parsed.error.request_id
+				: null;
 
-			return { code, message, fields };
+			return { code, message, fields, requestId };
 		}
 	} catch {
 		// A non-JSON error body falls through to the generic message.
@@ -471,6 +491,7 @@ function errorMessage(body: string, status: number): { code: string; message: st
 			? 'You are not signed in.'
 			: `The request failed (${status}).`,
 		fields: {},
+		requestId: null,
 	};
 }
 
@@ -1351,7 +1372,7 @@ export function createApi(bridge: HostBridge, uploadMedia: MediaUploader): Api {
 
 			if (response.status < 200 || response.status >= 300) {
 				const error = errorMessage(response.body, response.status);
-				throw new ApiError(response.status, error.code, error.message, error.fields);
+				throw new ApiError(response.status, error.code, error.message, error.fields, error.requestId);
 			}
 
 			return parsed as T;
