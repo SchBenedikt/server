@@ -368,8 +368,23 @@ export interface ReportPayload {
 	comment?: string;
 }
 
+export interface PreflightCheck {
+	id: string;
+	group: 'local' | 'external';
+	status: 'ok' | 'warn' | 'fail' | 'skip';
+	summary: string;
+	detail: string | null;
+	remediation: string | null;
+}
+
+export interface PreflightReport {
+	checks: PreflightCheck[];
+	summary: { ok: number; warn: number; fail: number; skip: number };
+}
+
 export interface AdminApi {
 	overview(): Promise<AdminOverview>;
+	preflight(external?: boolean): Promise<PreflightReport>;
 	users(query?: string, page?: number, perPage?: number): Promise<AdminUserPage>;
 	createUser(payload: CreateUserPayload): Promise<AdminUser>;
 	updateUser(id: string, payload: { display_name?: string; role?: 'admin' | 'user' }): Promise<AdminUser>;
@@ -466,6 +481,10 @@ export function createAdminApi(bridge: HostBridge): AdminApi {
 	return {
 		async overview(): Promise<AdminOverview> {
 			return request<AdminOverview>('GET', '/api/v1/host/admin/overview');
+		},
+
+		async preflight(external = true): Promise<PreflightReport> {
+			return request<PreflightReport>('GET', '/api/v1/host/admin/preflight', external ? undefined : { external: '0' });
 		},
 
 		async users(query = '', page = 1, perPage = 20): Promise<AdminUserPage> {

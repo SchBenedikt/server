@@ -5,7 +5,7 @@
  */
 import { computed, onMounted, ref } from 'vue';
 import AppIcon from '../../components/AppIcon.vue';
-import { bytesLabel, getAdminApi, type AdminInstance, type AdminSettingsData } from '../../lib/admin';
+import { bytesLabel, getAdminApi, type AdminInstance, type AdminSettingsData, type PreflightReport } from '../../lib/admin';
 import { absoluteTime } from '../../lib/format';
 
 const data = ref<AdminInstance | null>(null);
@@ -29,6 +29,33 @@ const form = ref({
 	atproto_plc_url: 'https://plc.directory',
 	atproto_jetstream: '',
 });
+
+const preflight = ref<PreflightReport | null>(null);
+const preflightLoading = ref(false);
+const preflightError = ref('');
+
+const preflightCounts = computed(() => {
+	const counts = { ok: 0, warn: 0, fail: 0, skip: 0 };
+	for (const check of preflight.value?.checks ?? []) {
+		counts[check.status] += 1;
+	}
+	return counts;
+});
+
+async function runPreflight(): Promise<void> {
+	if (preflightLoading.value) {
+		return;
+	}
+	preflightLoading.value = true;
+	preflightError.value = '';
+	try {
+		preflight.value = await getAdminApi().preflight();
+	} catch (caught) {
+		preflightError.value = caught instanceof Error ? caught.message : 'The preflight could not be run.';
+	} finally {
+		preflightLoading.value = false;
+	}
+}
 
 const checks = computed(() => {
 	const source = data.value?.checks ?? {};
@@ -300,6 +327,45 @@ onMounted(() => {
 					</div>
 				</article>
 			</div>
+
+			<section class="a-admin-card">
+				<header class="a-admin-card__head">
+					<div>
+						<h3>Federation readiness</h3>
+						<p>
+							Verifies this install locally and, on demand, fetches the public
+							origin, NodeInfo and WebFinger. External checks use bounded
+							requests and never expose secrets.
+						</p>
+					</div>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="preflightLoading" @click="runPreflight">
+						<AppIcon name="refresh" :size="15" :class="{ 'a-spin': preflightLoading }" />
+						{{ preflight === null ? 'Run checks' : 'Run again' }}
+					</button>
+				</header>
+
+				<p v-if="preflightError !== ''" class="a-form-error" role="alert">{{ preflightError }}</p>
+
+				<template v-if="preflight">
+					<span class="a-admin-pill" :class="preflightCounts.fail > 0 ? 'a-admin-pill--error' : preflightCounts.warn > 0 ? 'a-admin-pill--warn' : 'a-admin-pill--ok'">
+						{{ preflightCounts.ok }} OK<span v-if="preflightCounts.warn > 0"> · {{ preflightCounts.warn }} Warning</span><span v-if="preflightCounts.fail > 0"> · {{ preflightCounts.fail }} Failed</span><span v-if="preflightCounts.skip > 0"> · {{ preflightCounts.skip }} Skipped</span>
+					</span>
+					<ul class="a-admin-health">
+						<li v-for="check in preflight.checks" :key="check.id" class="a-admin-health__item">
+							<span class="a-admin-dot" :class="`a-admin-dot--${check.status === 'fail' ? 'error' : check.status}`" aria-hidden="true" />
+							<div>
+								<strong>{{ check.summary }}</strong>
+								<small>
+									{{ check.group === 'external' ? 'External · ' : '' }}{{ check.detail ?? '' }}
+									<template v-if="check.remediation"> — {{ check.remediation }}</template>
+								</small>
+							</div>
+							<span class="a-admin-health__state">{{ check.status === 'ok' ? 'OK' : check.status === 'warn' ? 'Warning' : check.status === 'fail' ? 'Failed' : 'Skipped' }}</span>
+						</li>
+					</ul>
+				</template>
+				<p v-else class="a-admin-muted">Run the checks to verify database, worker, mail, storage and public federation reachability.</p>
+			</section>
 
 			<div class="a-admin-columns">
 				<section class="a-admin-card">
