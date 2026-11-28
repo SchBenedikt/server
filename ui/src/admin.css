@@ -358,6 +358,11 @@
 	box-shadow: none;
 }
 
+.a-admin-dot--skip {
+	background: var(--a-faint);
+	box-shadow: none;
+}
+
 /* ------------------------------------------------------------------ facts */
 
 .a-admin-facts {
