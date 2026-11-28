@@ -93,16 +93,21 @@ final class FrontController
         $this->mastodonInstance = new MastodonInstanceController($runtime);
     }
 
+    private ?string $requestId = null;
+
     /**
      * @param array<string, string> $cookies the request's cookies
      */
     public function handle(Request $request, array $cookies = [], ?string $userAgent = null, ?string $ip = null): Response
     {
+        $this->requestId = $this->resolveRequestId($request);
+        $request = $request->withAttribute('request_id', $this->requestId);
+
         if (($request->attributes['request_body_too_large'] ?? false) === true) {
             return $this->withDynamicCachePolicy(Response::json(
                 ['error' => ['code' => 'payload_too_large', 'message' => 'The request body exceeds the 64 MiB limit.']],
                 413,
-            ));
+            ))->withHeader('X-Request-Id', $this->requestId);
         }
 
         $started = microtime(true);
@@ -126,7 +131,22 @@ final class FrontController
             'route' => $route,
         ]);
 
-        return $response;
+        return $response->withHeader('X-Request-Id', $this->requestId);
+    }
+
+    /**
+     * A client-supplied correlation id is echoed back only when it is a
+     * bounded token — anything else is replaced so the header and error
+     * payloads can never carry markup or oversized values.
+     */
+    private function resolveRequestId(Request $request): string
+    {
+        $incoming = $request->header('X-Request-Id');
+        if (is_string($incoming) && preg_match('/\A[A-Za-z0-9_-]{8,64}\z/', $incoming) === 1) {
+            return $incoming;
+        }
+
+        return 'req_' . bin2hex(random_bytes(8));
     }
 
     /**
@@ -2887,6 +2907,9 @@ final class FrontController
     private function apiError(int $status, string $code, string $message, array $fields = []): Response
     {
         $error = ['code' => $code, 'message' => $message];
+        if ($this->requestId !== null) {
+            $error['request_id'] = $this->requestId;
+        }
         if ($fields !== []) {
             $error['fields'] = $fields;
         }
