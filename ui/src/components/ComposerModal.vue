@@ -655,6 +655,27 @@ function removeImage(key: number): void {
 	images.value.splice(index, 1);
 }
 
+function moveExisting(index: number, delta: number): void {
+	const target = index + delta;
+	if (target < 0 || target >= existing.value.length) {
+		return;
+	}
+
+	const [attachment] = existing.value.splice(index, 1);
+	existing.value.splice(target, 0, attachment);
+}
+
+function moveImage(key: number, delta: number): void {
+	const index = images.value.findIndex((image) => image.key === key);
+	const target = index + delta;
+	if (index < 0 || target < 0 || target >= images.value.length) {
+		return;
+	}
+
+	const [image] = images.value.splice(index, 1);
+	images.value.splice(target, 0, image);
+}
+
 function removeExisting(id: string): void {
 	existing.value = existing.value.filter((attachment) => attachment.id !== id);
 }
@@ -1084,7 +1105,27 @@ async function submit(): Promise<void> {
 					</button>
 				</p>
 				<div v-if="images.length > 0 || existing.length > 0" class="a-composer__images">
-					<figure v-for="attachment in existing" :key="attachment.id" class="a-composer__image">
+					<figure v-for="(attachment, index) in existing" :key="attachment.id" class="a-composer__image">
+						<span v-if="existing.length > 1" class="a-composer__image-order">
+							<button
+								type="button"
+								class="a-btn a-btn--ghost a-btn--small"
+								:disabled="index === 0"
+								aria-label="Move attachment earlier"
+								@click="moveExisting(index, -1)"
+							>
+								<AppIcon name="arrowLeft" :size="13" />
+							</button>
+							<button
+								type="button"
+								class="a-btn a-btn--ghost a-btn--small"
+								:disabled="index === existing.length - 1"
+								aria-label="Move attachment later"
+								@click="moveExisting(index, 1)"
+							>
+								<AppIcon name="arrowRight" :size="13" />
+							</button>
+						</span>
 						<img
 							v-if="attachment.media_type === 'image'"
 							:src="attachment.url"
@@ -1113,6 +1154,26 @@ async function submit(): Promise<void> {
 						<span class="a-composer__image-note">Existing attachment</span>
 					</figure>
 					<figure v-for="(image, index) in images" :key="image.key" class="a-composer__image">
+						<span v-if="images.length > 1" class="a-composer__image-order">
+							<button
+								type="button"
+								class="a-btn a-btn--ghost a-btn--small"
+								:disabled="index === 0"
+								aria-label="Move attachment earlier"
+								@click="moveImage(image.key, -1)"
+							>
+								<AppIcon name="arrowLeft" :size="13" />
+							</button>
+							<button
+								type="button"
+								class="a-btn a-btn--ghost a-btn--small"
+								:disabled="index === images.length - 1"
+								aria-label="Move attachment later"
+								@click="moveImage(image.key, 1)"
+							>
+								<AppIcon name="arrowRight" :size="13" />
+							</button>
+						</span>
 						<video
 							v-if="image.kind === 'video'"
 							:src="image.preview"
