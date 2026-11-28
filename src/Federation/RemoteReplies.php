@@ -119,17 +119,30 @@ final class RemoteReplies
         try {
             $authorized = $this->authorization?->remotePostFor($userId, $target);
         } catch (ReactionException $exception) {
-            [$status, $code, $message] = match ($exception->reason) {
-                'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
-                'remote_post_not_found', 'remote_post_not_followed' => [
-                    404,
-                    'remote_post_not_found',
-                    'This post is no longer available.',
-                ],
-                default => [403, 'remote_interaction_not_allowed', 'You may not reply to this post.'],
-            };
+            // A cached row without a stored audience keeps the old follow
+            // gate; let the origin prove the object public once before
+            // reporting the refusal.
+            if ($exception->reason === 'remote_post_not_followed' && $this->importer !== null) {
+                $this->importer->refreshAudience($target);
 
-            throw new RemoteReplyException($status, $code, $message);
+                try {
+                    $authorized = $this->authorization?->remotePostFor($userId, $target);
+                } catch (ReactionException $retry) {
+                    [$status, $code, $message] = $this->replyDenial($retry);
+
+                    throw new RemoteReplyException($status, $code, $message);
+                } catch (Throwable) {
+                    throw new RemoteReplyException(
+                        503,
+                        'remote_reply_authorization_unavailable',
+                        'Remote reply authorization is temporarily unavailable.',
+                    );
+                }
+            } else {
+                [$status, $code, $message] = $this->replyDenial($exception);
+
+                throw new RemoteReplyException($status, $code, $message);
+            }
         } catch (Throwable) {
             throw new RemoteReplyException(
                 503,
@@ -193,5 +206,21 @@ final class RemoteReplies
         }
 
         return is_string($inbox) && trim($inbox) !== '' ? trim($inbox) : null;
+    }
+
+    /**
+     * @return array{0: int, 1: string, 2: string}
+     */
+    private function replyDenial(ReactionException $exception): array
+    {
+        return match ($exception->reason) {
+            'blocked_actor' => [403, 'blocked_actor', $exception->getMessage()],
+            'remote_post_not_found', 'remote_post_not_followed' => [
+                404,
+                'remote_post_not_found',
+                'This post is no longer available.',
+            ],
+            default => [403, 'remote_interaction_not_allowed', 'You may not reply to this post.'],
+        };
     }
 }

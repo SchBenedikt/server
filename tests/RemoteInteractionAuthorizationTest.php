@@ -79,8 +79,8 @@ final class RemoteInteractionAuthorizationTest extends TestCase
             ['actor' => self::ACTOR],
         );
 
-        self::assertSame(404, $this->like()->status);
-        self::assertSame(404, $this->boost()->status);
+        self::assertSame(403, $this->like()->status);
+        self::assertSame(403, $this->boost()->status);
         self::assertSame(404, $this->reply()->status);
         $this->assertNoWrites();
     }
@@ -92,8 +92,8 @@ final class RemoteInteractionAuthorizationTest extends TestCase
             ['audience' => 'followers', 'object' => self::OBJECT],
         );
 
-        self::assertSame(404, $this->like()->status);
-        self::assertSame(404, $this->boost()->status);
+        self::assertSame(403, $this->like()->status);
+        self::assertSame(403, $this->boost()->status);
         self::assertSame(404, $this->reply()->status);
         $this->assertNoWrites();
     }

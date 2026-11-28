@@ -12,6 +12,7 @@ namespace AlohaSocial\Server\Federation;
 use AlohaSocial\Core\Domain\Federation\PdoRemotePostRepository;
 use AlohaSocial\Core\Domain\Federation\RemotePost;
 use AlohaSocial\Core\Domain\Federation\RemotePostKind;
+use AlohaSocial\Core\Domain\Federation\RemotePostSchema;
 use AlohaSocial\Core\Domain\Post\Visibility;
 use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
@@ -145,5 +146,58 @@ final class RemotePostImporter implements \AlohaSocial\Core\Domain\Federation\Re
         }
 
         return $post;
+    }
+
+    /**
+     * Learns the audience of a cached row that predates audience tracking.
+     *
+     * Rows written before the audience column existed carry NULL, which the
+     * interaction policy treats as followers-only out of caution. When the
+     * origin now proves the object is public or unlisted, the stored audience
+     * is upgraded so a legitimate like or boost is not refused. Anything else
+     * — a private object, a fetch failure — leaves the row untouched and the
+     * fail-closed gate in place.
+     */
+    public function refreshAudience(string $objectId): void
+    {
+        $objectId = trim($objectId);
+        if ($objectId === ''
+            || preg_match('#^https?://#i', $objectId) !== 1
+            || filter_var($objectId, FILTER_VALIDATE_URL) === false
+        ) {
+            return;
+        }
+
+        $cached = $this->posts->findPostByObjectId($objectId);
+        if ($cached === null || $cached->audience !== null || $cached->deletedAt !== null) {
+            return;
+        }
+
+        try {
+            $data = $this->directory->remoteObject($objectId);
+        } catch (Throwable) {
+            return;
+        }
+
+        $visibility = is_array($data) ? ($data['visibility'] ?? null) : null;
+        $audience = match ($visibility) {
+            'public' => Visibility::Public,
+            'unlisted' => Visibility::Unlisted,
+            default => null,
+        };
+        if ($audience === null) {
+            return;
+        }
+
+        $this->db->execute(
+            'UPDATE ' . RemotePostSchema::TABLE . ' SET audience = :audience'
+            . ' WHERE object_id = :object_id AND kind = :kind'
+            . ' AND audience IS NULL AND deleted_at IS NULL',
+            [
+                'audience' => $audience->value,
+                'object_id' => $objectId,
+                'kind' => RemotePostKind::Post->value,
+            ],
+        );
     }
 }
