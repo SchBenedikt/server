@@ -278,7 +278,12 @@ function startWith(account: Account): void {
 				<p v-else class="a-muted">Type a name to find an account.</p>
 			</div>
 
-			<p v-if="error !== ''" class="a-feed__inline-error">{{ error }}</p>
+			<p v-if="error !== ''" class="a-feed__inline-error">
+				{{ error }}
+				<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="load">
+					Try again
+				</button>
+			</p>
 
 			<TimelineSkeleton v-if="loading && conversations.length === 0" :count="3" />
 
