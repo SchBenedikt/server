@@ -1302,6 +1302,12 @@
 	font-size: 10.5px;
 }
 
+.a-admin-select--role {
+	width: auto;
+	padding: 4px 7px;
+	font-size: 11px;
+}
+
 .a-admin-textarea {
 	width: 100%;
 	padding: 10px 12px;

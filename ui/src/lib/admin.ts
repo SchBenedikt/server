@@ -411,7 +411,7 @@ export interface CreateUserPayload {
 	handle: string;
 	email: string;
 	password: string;
-	role: 'admin' | 'user';
+	role: 'admin' | 'moderator' | 'user';
 	display_name?: string;
 }
 
@@ -472,7 +472,7 @@ export interface AdminApi {
 	preflight(external?: boolean): Promise<PreflightReport>;
 	users(query?: string, page?: number, perPage?: number): Promise<AdminUserPage>;
 	createUser(payload: CreateUserPayload): Promise<AdminUser>;
-	updateUser(id: string, payload: { display_name?: string; role?: 'admin' | 'user' }): Promise<AdminUser>;
+	updateUser(id: string, payload: { display_name?: string; role?: 'admin' | 'moderator' | 'user' }): Promise<AdminUser>;
 	setUserDisabled(id: string, disabled: boolean): Promise<AdminUser>;
 	resetPassword(id: string, password: string): Promise<number>;
 	revokeSessions(id: string): Promise<number>;

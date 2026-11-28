@@ -309,11 +309,16 @@ bundle through the router fallback in `public/index.php`.
 
 ## Administration and moderation
 
-Accounts with the `admin` role see an **Administration** entry in the sidebar
-and in the profile menu. `/admin` redirects to `/app#/admin`; the page and every
-`/api/v1/host/admin/*` route require an admin session, so a normal account gets
-`403` and a signed-out visitor gets `401`. The interface is host-owned because
-the core deliberately has no administration API.
+Accounts with the `admin` or `moderator` role see an **Administration** entry
+in the sidebar and in the profile menu. `/admin` redirects to
+`/app#/admin`; the page requires a staff session. Admins reach every
+`/api/v1/host/admin/*` route; moderators are limited to the moderation
+console — reports (list, assign, resolve, reopen), moderation actions and
+reversals, and the read-only domain-block list. Settings, accounts, pages,
+invitations, audit, federation and bulk blocklist imports answer `403` for
+moderators, and a normal account gets `403` everywhere while a signed-out
+visitor gets `401`. The interface is host-owned because the core
+deliberately has no administration API.
 
 | Section | What it does |
 | --- | --- |

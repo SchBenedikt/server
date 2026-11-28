@@ -40,7 +40,7 @@ const loggingOut = ref(false);
 
 function canAccess(item: SidebarItem): boolean {
 	return (item.requiresAuth !== true || signedIn.value)
-		&& (item.adminOnly !== true || appState.session.admin);
+		&& (item.adminOnly !== true || (appState.session.admin || appState.session.moderator));
 }
 
 function itemHref(item: SidebarItem): string {
@@ -94,7 +94,7 @@ const moreGroups = computed(() => {
 	const instanceItems: SidebarItem[] = [
 		{ id: 'about', label: 'About this instance', icon: 'info', href: '#/about', group: 'instance' },
 	];
-	if (appState.session.admin) {
+	if ((appState.session.admin || appState.session.moderator)) {
 		instanceItems.unshift({ id: 'admin', label: 'Administration', icon: 'shield', href: '#/admin', group: 'instance', adminOnly: true });
 	}
 	instanceItems.push({ id: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/', group: 'instance' });
@@ -296,7 +296,7 @@ onUnmounted(() => {
 				<a :href="`#/u/${encodeURIComponent(handle)}`" role="menuitem" @click="menuOpen = false">
 					<AppIcon name="user" :size="16" /> My profile
 				</a>
-				<a v-if="appState.session.admin" href="#/admin" role="menuitem" @click="menuOpen = false">
+				<a v-if="(appState.session.admin || appState.session.moderator)" href="#/admin" role="menuitem" @click="menuOpen = false">
 					<AppIcon name="shield" :size="16" /> administration
 				</a>
 				<button type="button" role="menuitem" @click="toggleTheme">

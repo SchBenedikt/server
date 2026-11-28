@@ -100,12 +100,13 @@ final class TestServer
         ?string $email = null,
         string $password = self::PASSWORD,
         bool $admin = false,
+        ?string $role = null,
     ): Account {
         return $this->runtime->accounts->create(
             $handle,
             $email ?? $handle . '@example.test',
             (new PasswordHasher())->hash($password),
-            $admin ? Account::ROLE_ADMIN : Account::ROLE_USER,
+            $role ?? ($admin ? Account::ROLE_ADMIN : Account::ROLE_USER),
         );
     }
 

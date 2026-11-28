@@ -6,7 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useHostBridge } from '@alohasocial/ui';
 import type { AlohaHostBridge } from './bridge';
-import { adminSession } from './bridge';
+import { adminSession, moderatorSession } from './bridge';
 import AppIcon from './components/AppIcon.vue';
 import Avatar from './components/Avatar.vue';
 import ComposerModal from './components/ComposerModal.vue';
@@ -217,7 +217,7 @@ async function bootstrap(): Promise<void> {
 			// The host data is enough to show the signed-in identity.
 		}
 
-		setSession(user, profile, adminSession);
+		setSession(user, profile, adminSession, moderatorSession);
 		await refreshUnread();
 	} catch {
 		setSession(null);

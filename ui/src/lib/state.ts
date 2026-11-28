@@ -59,6 +59,7 @@ export const appState = reactive({
 		user: null as SessionUser | null,
 		profile: null as Account | null,
 		admin: false,
+		moderator: false,
 	},
 	instance: null as InstanceInfo | null,
 	instanceError: false,
@@ -218,10 +219,11 @@ export function setInstance(instance: InstanceInfo | null): void {
 	appState.instanceError = instance === null;
 }
 
-export function setSession(user: SessionUser | null, profile: Account | null = null, admin = false): void {
+export function setSession(user: SessionUser | null, profile: Account | null = null, admin = false, moderator = false): void {
 	appState.session.user = user;
 	appState.session.profile = profile;
 	appState.session.admin = user !== null && admin;
+	appState.session.moderator = user !== null && moderator;
 	appState.session.ready = true;
 }
 

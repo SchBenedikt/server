@@ -90,8 +90,11 @@ This also revokes all existing sessions for the account.
 ## Administration and moderation
 
 The admin interface is part of the host app and lives at `/admin`, which
-redirects to `/app#/admin`. Only accounts with the `admin` role can open it or
-call `/api/v1/host/admin/*`. Another account gets `403`; a signed-out request
+redirects to `/app#/admin`. Accounts with the `admin` role can open every
+section and call all of `/api/v1/host/admin/*`; accounts with the
+`moderator` role reach only the moderation console (reports, moderation
+actions and reversals, read-only domain blocks) — every other admin route
+answers `403` for them. Another account gets `403`; a signed-out request
 gets `401`.
 
 ```shell

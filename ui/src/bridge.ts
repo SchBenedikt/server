@@ -11,6 +11,7 @@ const displayName = mount?.dataset.displayName ?? '';
 const csrf = mount?.dataset.csrf ?? '';
 const instance = mount?.dataset.instance ?? 'Aloha Social';
 const isAdmin = mount?.dataset.isAdmin === '1';
+const isModerator = mount?.dataset.isModerator === '1';
 const atproto = mount?.dataset.atproto === '1';
 const media = mount?.dataset.media === '1';
 
@@ -134,3 +135,4 @@ export const instanceName = instance;
 export const currentHandle = handle;
 export const signedIn = handle !== '';
 export const adminSession = isAdmin;
+export const moderatorSession = isModerator;

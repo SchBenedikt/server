@@ -81,7 +81,7 @@ const sheetGroups = computed(() => {
 	const instanceItems = [
 		{ name: 'about', label: 'About this instance', icon: 'info', href: '#/about' },
 	];
-	if (appState.session.admin) {
+	if ((appState.session.admin || appState.session.moderator)) {
 		instanceItems.unshift({ name: 'admin', label: 'Administration', icon: 'shield', href: '#/admin' });
 	}
 			instanceItems.push({ name: 'dashboard', label: 'Server dashboard', icon: 'server', href: '/' });

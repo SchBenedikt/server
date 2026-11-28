@@ -29,6 +29,7 @@ use function json_decode;
 use function max;
 use function min;
 use function preg_match;
+use function preg_quote;
 use function rawurldecode;
 use function str_starts_with;
 use function trim;
@@ -65,7 +66,11 @@ final class AdminApiController
             return $this->error(401, 'not_authenticated', 'You must be signed in for this action.');
         }
 
-        if ($isAdmin && $session?->account?->isAdmin() !== true) {
+        $account = $session?->account;
+        if ($isAdmin
+            && $account?->isAdmin() !== true
+            && !($account?->isModerator() === true && self::moderatorRoute($request->method, $path))
+        ) {
             return $this->error(403, 'admin_required', 'This page is reserved for the administration.');
         }
 
@@ -106,6 +111,34 @@ final class AdminApiController
         } catch (Throwable) {
             return $this->error(500, 'admin_action_failed', 'The action could not be completed.');
         }
+    }
+
+    /**
+     * The moderation console is the only admin surface a moderator may use:
+     * reports, actor/domain actions and reversals, plus the read-only
+     * domain-block list for context. Settings, accounts, pages, invitations,
+     * audit, federation and bulk imports stay administrator-only.
+     */
+    private static function moderatorRoute(string $method, string $path): bool
+    {
+        $prefix = self::PREFIX;
+
+        if ($method === 'GET' && ($path === $prefix . '/reports' || $path === $prefix . '/moderation' || $path === $prefix . '/domain-blocks')) {
+            return true;
+        }
+
+        if ($method === 'POST' && $path === $prefix . '/moderation') {
+            return true;
+        }
+
+        if ($method === 'POST' && preg_match(
+            '#^' . preg_quote($prefix, '#') . '/(?:reports/[^/]+/(?:resolve|assign|reopen)|moderation/[^/]+/reverse)$#',
+            $path,
+        ) === 1) {
+            return true;
+        }
+
+        return false;
     }
 
     private function admin(Request $request, string $userId): Response

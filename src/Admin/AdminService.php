@@ -330,7 +330,7 @@ final class AdminService
         if ($passwordError !== null) {
             $fields['password'] = $passwordError;
         }
-        if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
+        if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_MODERATOR, Account::ROLE_USER], true)) {
             $fields['role'] = 'Unknown role.';
         }
         if ($displayName !== null && mb_strlen($displayName) > 80) {
@@ -372,12 +372,12 @@ final class AdminService
 
         if ($role !== null) {
             $role = strtolower(trim($role));
-            if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_USER], true)) {
-                throw AdminException::invalid('Unknown role.', ['role' => 'admin or user.']);
+            if (!in_array($role, [Account::ROLE_ADMIN, Account::ROLE_MODERATOR, Account::ROLE_USER], true)) {
+                throw AdminException::invalid('Unknown role.', ['role' => 'admin, moderator or user.']);
             }
 
             if ($target->role === Account::ROLE_ADMIN
-                && $role === Account::ROLE_USER
+                && $role !== Account::ROLE_ADMIN
                 && $this->activeAdminCount() <= 1
             ) {
                 throw AdminException::conflict('The last active administrator cannot be demoted.');
