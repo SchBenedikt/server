@@ -7,6 +7,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { mediaUrl } from '../lib/format';
 import { appState, closeLightbox } from '../lib/state';
+import { t } from '../lib/i18n';
 
 const dialog = ref<HTMLDialogElement | null>(null);
 
@@ -79,13 +80,13 @@ watch(() => appState.lightbox.open, async (open) => {
 	<dialog
 		ref="dialog"
 		class="a-lightbox"
-		aria-label="Image view"
+		:aria-label="t('common.imageView')"
 		@close="closeLightbox"
 		@click="onBackdrop"
 		@keydown="onKeydown"
 	>
 		<div v-if="current" class="a-lightbox__inner">
-			<button type="button" class="a-icon-btn a-lightbox__close" aria-label="Close" @click="close">
+			<button type="button" class="a-icon-btn a-lightbox__close" :aria-label="t('common.close')" @click="close">
 				<AppIcon name="x" :size="22" />
 			</button>
 
@@ -93,7 +94,7 @@ watch(() => appState.lightbox.open, async (open) => {
 				v-if="multiple"
 				type="button"
 				class="a-icon-btn a-lightbox__nav a-lightbox__nav--prev"
-				aria-label="Previous Image"
+				:aria-label="t('common.previousImage')"
 				@click.stop="previous"
 			>
 				<AppIcon name="arrowLeft" :size="24" />
@@ -119,7 +120,7 @@ watch(() => appState.lightbox.open, async (open) => {
 				v-if="multiple"
 				type="button"
 				class="a-icon-btn a-lightbox__nav a-lightbox__nav--next"
-				aria-label="Next image"
+				:aria-label="t('common.nextImage')"
 				@click.stop="next"
 			>
 				<AppIcon name="arrowLeft" :size="24" />

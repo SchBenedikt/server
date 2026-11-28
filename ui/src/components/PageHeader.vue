@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import AppIcon from './AppIcon.vue';
+import { t } from '../lib/i18n';
 
 withDefaults(defineProps<{
 	title: string;
@@ -13,13 +14,12 @@ withDefaults(defineProps<{
 }>(), {
 	subtitle: '',
 	backHref: '',
-	backLabel: 'Back',
 });
 </script>
 
 <template>
 	<header class="a-page-header">
-		<a v-if="backHref" :href="backHref" class="a-icon-btn a-page-header__back" :aria-label="backLabel">
+		<a v-if="backHref" :href="backHref" class="a-icon-btn a-page-header__back" :aria-label="backLabel ?? t('common.back')">
 			<AppIcon name="arrowLeft" :size="20" />
 		</a>
 		<div class="a-page-header__copy">

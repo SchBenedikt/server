@@ -14,7 +14,7 @@ import {
 	setPrimarySidebar,
 } from '../lib/sidebar';
 import type { SidebarItem } from '../lib/sidebar';
-import { labelFor } from '../lib/i18n';
+import { labelFor, t } from '../lib/i18n';
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -53,7 +53,7 @@ function toggle(id: string): void {
 		return;
 	}
 	if (draft.value.length >= MAX_PRIMARY) {
-		showToast(`The main navigation holds at most ${MAX_PRIMARY} entries.`, 'error');
+		showToast(t('sidebar.maxReached', { max: MAX_PRIMARY }), 'error');
 		return;
 	}
 	draft.value = [...draft.value, id];
@@ -73,14 +73,14 @@ function move(id: string, delta: number): void {
 
 function save(): void {
 	setPrimarySidebar(draft.value);
-	showToast('Sidebar layout saved.', 'success');
+	showToast(t('sidebar.saved'), 'success');
 	emit('close');
 }
 
 function reset(): void {
 	resetSidebar();
 	draft.value = [...primarySidebarIds.value];
-	showToast('Sidebar reset to the default.', 'success');
+	showToast(t('sidebar.resetDone'), 'success');
 }
 
 function close(): void {
@@ -94,20 +94,20 @@ function close(): void {
 			<article class="a-management-dialog a-sidebar-settings" role="dialog" aria-modal="true" aria-labelledby="a-sidebar-settings-title">
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Customize</p>
-						<h2 id="a-sidebar-settings-title">Sidebar</h2>
+						<p class="a-profile-edit__eyebrow">{{ t('sidebar.customize') }}</p>
+						<h2 id="a-sidebar-settings-title">{{ t('sidebar.title') }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close dialog" @click="close">
+					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" @click="close">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
 				<p class="a-muted a-sidebar-settings__hint">
-					Choose up to {{ MAX_PRIMARY }} entries for the main navigation. Everything else stays reachable under “More”.
+					{{ t('sidebar.hint', { max: MAX_PRIMARY }) }}
 				</p>
 
 				<section class="a-sidebar-settings__section">
-					<h3>Main navigation</h3>
+					<h3>{{ t('sidebar.mainNav') }}</h3>
 					<ul v-if="ordered.length > 0" class="a-sidebar-settings__list">
 						<li v-for="(item, index) in ordered" :key="item.id">
 							<span class="a-sidebar-settings__label">
@@ -115,23 +115,23 @@ function close(): void {
 								{{ labelFor(item) }}
 							</span>
 							<span class="a-sidebar-settings__actions">
-								<button type="button" class="a-icon-btn" :disabled="index === 0" :aria-label="`Move ${labelFor(item)} up`" @click="move(item.id, -1)">
+								<button type="button" class="a-icon-btn" :disabled="index === 0" :aria-label="t('sidebar.moveUp', { name: labelFor(item) })" @click="move(item.id, -1)">
 									<AppIcon name="chevronDown" :size="16" class="a-sidebar-settings__up" />
 								</button>
-								<button type="button" class="a-icon-btn" :disabled="index === ordered.length - 1" :aria-label="`Move ${labelFor(item)} down`" @click="move(item.id, 1)">
+								<button type="button" class="a-icon-btn" :disabled="index === ordered.length - 1" :aria-label="t('sidebar.moveDown', { name: labelFor(item) })" @click="move(item.id, 1)">
 									<AppIcon name="chevronDown" :size="16" />
 								</button>
-								<button type="button" class="a-icon-btn a-icon-btn--danger" :aria-label="`Remove ${labelFor(item)} from the main navigation`" @click="toggle(item.id)">
+								<button type="button" class="a-icon-btn a-icon-btn--danger" :aria-label="t('sidebar.removeFromNav', { name: labelFor(item) })" @click="toggle(item.id)">
 									<AppIcon name="x" :size="16" />
 								</button>
 							</span>
 						</li>
 					</ul>
-					<p v-else class="a-muted">No entries pinned. Pick from the list below.</p>
+					<p v-else class="a-muted">{{ t('sidebar.empty') }}</p>
 				</section>
 
 				<section v-if="remaining.length > 0" class="a-sidebar-settings__section">
-					<h3>More entries</h3>
+					<h3>{{ t('sidebar.moreEntries') }}</h3>
 					<ul class="a-sidebar-settings__list">
 						<li v-for="item in remaining" :key="item.id">
 							<span class="a-sidebar-settings__label">
@@ -140,7 +140,7 @@ function close(): void {
 							</span>
 							<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="draft.length >= MAX_PRIMARY" @click="toggle(item.id)">
 								<AppIcon name="plus" :size="14" />
-								Pin
+								{{ t('sidebar.pin') }}
 							</button>
 						</li>
 					</ul>
@@ -149,11 +149,11 @@ function close(): void {
 				<footer class="a-sidebar-settings__footer">
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="reset">
 						<AppIcon name="refresh" :size="15" />
-						Reset
+						{{ t('sidebar.reset') }}
 					</button>
 					<div class="a-sidebar-settings__footer-actions">
-						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="close">Cancel</button>
-						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="save">Save</button>
+						<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="close">{{ t('common.cancel') }}</button>
+						<button type="button" class="a-btn a-btn--primary a-btn--small" @click="save">{{ t('common.save') }}</button>
 					</div>
 				</footer>
 			</article>
