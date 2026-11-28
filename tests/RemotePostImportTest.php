@@ -203,6 +203,115 @@ final class RemotePostImportTest extends TestCase
         self::assertSame('https://peer.example/notes/notification-1', $remote['post_id'] ?? null);
     }
 
+    public function testAudienceLessLiveObjectIsNotImported(): void
+    {
+        $this->http->json(self::OBJECT, [
+            'id' => self::OBJECT,
+            'type' => 'Note',
+            'attributedTo' => self::ACTOR,
+            'content' => '<p>No audience declared.</p>',
+            'published' => '2026-11-20T10:00:00Z',
+        ]);
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode(self::OBJECT) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(404, $response->status, $response->body);
+        self::assertNull($this->server->runtime->database->fetchOne(
+            'SELECT object_id FROM social_remote_post WHERE object_id = :object',
+            ['object' => self::OBJECT],
+        ));
+    }
+
+    public function testDirectedLiveObjectIsNotImported(): void
+    {
+        $this->http->json(self::OBJECT, [
+            'id' => self::OBJECT,
+            'type' => 'Note',
+            'attributedTo' => self::ACTOR,
+            'content' => '<p>Addressed to one actor only.</p>',
+            'published' => '2026-11-20T10:00:00Z',
+            'to' => [self::ACTOR],
+        ]);
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode(self::OBJECT) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(404, $response->status, $response->body);
+        self::assertNull($this->server->runtime->database->fetchOne(
+            'SELECT object_id FROM social_remote_post WHERE object_id = :object',
+            ['object' => self::OBJECT],
+        ));
+    }
+
+    public function testMastodonStatusWithoutVisibilityIsNotImported(): void
+    {
+        $url = 'https://peer.example/@bob/42';
+        $this->http->json('https://peer.example/api/v1/statuses/42', [
+            'uri' => self::OBJECT,
+            'url' => $url,
+            'content' => '<p>Status without a visibility field.</p>',
+            'created_at' => '2026-11-20T10:00:00Z',
+            'account' => ['uri' => self::ACTOR, 'acct' => 'bob'],
+        ]);
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($url) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(404, $response->status, $response->body);
+        self::assertNull($this->server->runtime->database->fetchOne(
+            'SELECT object_id FROM social_remote_post WHERE object_id = :object',
+            ['object' => $url],
+        ));
+    }
+
+    public function testMastodonUnlistedStatusImportsAsUnlisted(): void
+    {
+        $url = 'https://peer.example/@bob/43';
+        $this->http->json('https://peer.example/api/v1/statuses/43', [
+            'uri' => self::OBJECT,
+            'url' => $url,
+            'content' => '<p>Link-only post.</p>',
+            'visibility' => 'unlisted',
+            'created_at' => '2026-11-20T10:00:00Z',
+            'account' => ['uri' => self::ACTOR, 'acct' => 'bob'],
+        ]);
+        $alice = $this->server->signIn('alice');
+
+        $response = $this->server->json(
+            'POST',
+            '/api/v1/posts/' . rawurlencode($url) . '/like',
+            [],
+            $alice['cookies'],
+            $alice['csrf'],
+        );
+
+        self::assertSame(200, $response->status, $response->body);
+        $stored = $this->server->runtime->database->fetchOne(
+            'SELECT audience FROM social_remote_post WHERE object_id = :object',
+            ['object' => $url],
+        );
+        self::assertSame('unlisted', $stored['audience'] ?? null);
+    }
+
     public function testAPrivateLiveObjectIsNotImported(): void
     {
         $this->http->json(self::OBJECT, [
