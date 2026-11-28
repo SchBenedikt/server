@@ -6130,6 +6130,62 @@ dialog.a-modal::backdrop {
 	line-height: 1.55;
 }
 
+.a-import {
+	display: grid;
+	gap: 10px;
+	padding: 12px;
+	border: 1px solid var(--a-border);
+	border-radius: 12px;
+	background: var(--a-bg-soft);
+}
+
+.a-import__sections {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.a-import__section {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+	font-size: 13px;
+}
+
+.a-import__name {
+	font-weight: 600;
+}
+
+.a-import__rows,
+.a-import__reason {
+	color: var(--a-muted);
+}
+
+.a-import__badge {
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	background: var(--a-border);
+	color: var(--a-muted);
+}
+
+.a-import__badge--local,
+.a-import__badge--applied {
+	background: var(--a-mint-soft);
+	color: var(--a-mint);
+}
+
+.a-import__badge--failed {
+	background: var(--a-danger-soft);
+	color: var(--a-danger);
+}
+
 .a-settings__fieldset {
 	display: grid;
 	gap: 8px;

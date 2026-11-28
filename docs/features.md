@@ -523,6 +523,12 @@ deduplicated by name) and featured tags (merged, never replaced) — while
 deferred and unknown sections are reported and skipped. An optional
 `sections` list restricts the apply; re-running is idempotent.
 
+Settings → Your data exposes the workflow in the UI: **Import data**
+accepts an export JSON file, shows the preview (per-section row counts,
+`local`/`deferred`/`unknown` disposition and skip reasons, plus the
+`not_transferred` list), and **Apply import** writes the local sections
+with a per-section applied/skipped/failed report.
+
 ## Reading lists and text stories
 
 Both surfaces now persist in the core tables; there is no second host table

@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import PageHeader from '../components/PageHeader.vue';
-import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type EmailChangeStatus, type HostSession, type MfaEnrollment, type MfaStatus } from '../lib/api';
+import { getApi, type AccountMoveStatus, type AtprotoIdentityData, type EmailChangeStatus, type HostSession, type ImportPreview, type ImportResult, type MfaEnrollment, type MfaStatus } from '../lib/api';
 import { disablePush, enablePush, pushSupport, subscribed as pushSubscribed } from '../lib/push';
 import { appState, setSession, showToast } from '../lib/state';
 import type {
@@ -22,6 +22,12 @@ const loading = ref(false);
 const saving = ref(false);
 const exporting = ref(false);
 const deleting = ref(false);
+const importFile = ref<HTMLInputElement | null>(null);
+const importBusy = ref(false);
+const importPreview = ref<ImportPreview | null>(null);
+const importDocument = ref<unknown>(null);
+const importResult = ref<ImportResult | null>(null);
+const importError = ref('');
 const confirmDeletion = ref(false);
 const error = ref('');
 const preferences = ref<AccountPreferences | null>(null);
@@ -362,6 +368,59 @@ async function exportAccount(): Promise<void> {
 	} finally {
 		exporting.value = false;
 	}
+}
+
+async function pickImportFile(event: Event): Promise<void> {
+	const input = event.target as HTMLInputElement;
+	const file = input.files?.[0];
+	input.value = '';
+	if (file === undefined || importBusy.value) {
+		return;
+	}
+
+	importBusy.value = true;
+	importError.value = '';
+	importPreview.value = null;
+	importResult.value = null;
+	importDocument.value = null;
+	try {
+		const document = JSON.parse(await file.text()) as unknown;
+		importDocument.value = document;
+		importPreview.value = await getApi().importPreview(document);
+	} catch (caught) {
+		importError.value = caught instanceof Error ? caught.message : 'The export file could not be read.';
+	} finally {
+		importBusy.value = false;
+	}
+}
+
+async function applyImport(): Promise<void> {
+	if (importDocument.value === null || importBusy.value) {
+		return;
+	}
+
+	importBusy.value = true;
+	importError.value = '';
+	try {
+		importResult.value = await getApi().importApply(importDocument.value);
+		const applied = importResult.value.results.filter((result) => result.status === 'applied');
+		const failed = importResult.value.results.filter((result) => result.status === 'failed');
+		if (failed.length > 0) {
+			showToast(`Import finished with ${failed.length} failed section${failed.length === 1 ? '' : 's'}.`, 'error');
+		} else {
+			showToast(`Import applied ${applied.length} section${applied.length === 1 ? '' : 's'}.`, 'success');
+		}
+	} catch (caught) {
+		importError.value = caught instanceof Error ? caught.message : 'The import could not be applied.';
+	} finally {
+		importBusy.value = false;
+	}
+}
+
+function importSourceLabel(preview: ImportPreview): string {
+	const parts = [preview.source.instance_name ?? preview.source.instance_url, preview.source.handle]
+		.filter((part): part is string => typeof part === 'string' && part !== '');
+	return parts.length > 0 ? parts.join(' · ') : 'Unknown source';
 }
 
 async function deleteAccount(): Promise<void> {
@@ -1160,6 +1219,64 @@ watch(signedIn, (value) => {
 					<AppIcon :name="exporting ? 'refresh' : 'share'" :size="15" :class="{ 'a-spin': exporting }" />
 					{{ exporting ? 'Creating…' : 'Data export' }}
 				</button>
+				<p class="a-settings__hint">
+					Import restores settings from an export file — preferences, followed
+					hashtags, filters and featured tags. Posts, follows and media are not
+					transferred yet and are listed as skipped.
+				</p>
+				<input
+					ref="importFile"
+					type="file"
+					accept="application/json,.json"
+					class="a-visually-hidden"
+					@change="pickImportFile"
+				/>
+				<button
+					type="button"
+					class="a-btn a-btn--ghost a-btn--small"
+					:disabled="importBusy"
+					@click="importFile?.click()"
+				>
+					<AppIcon :name="importBusy ? 'refresh' : 'archive'" :size="15" :class="{ 'a-spin': importBusy }" />
+					{{ importBusy ? 'Working…' : 'Import data' }}
+				</button>
+				<p v-if="importError !== ''" class="a-form-error" role="alert">{{ importError }}</p>
+				<div v-if="importPreview !== null" class="a-import">
+					<p class="a-settings__hint">
+						Export from {{ importSourceLabel(importPreview) }} —
+						{{ importPreview.totals.local_rows }} of {{ importPreview.totals.rows }} rows can be applied.
+					</p>
+					<ul class="a-import__sections">
+						<li v-for="section in importPreview.sections" :key="section.name" class="a-import__section">
+							<span class="a-import__name">{{ section.name }}</span>
+							<span class="a-import__rows">{{ section.rows }} row{{ section.rows === 1 ? '' : 's' }}</span>
+							<span class="a-import__badge" :class="`a-import__badge--${section.disposition}`">
+								{{ section.disposition }}
+							</span>
+							<span v-if="section.reason !== null" class="a-import__reason">{{ section.reason }}</span>
+						</li>
+					</ul>
+					<button
+						type="button"
+						class="a-btn a-btn--small"
+						:disabled="importBusy || !importPreview.apply.available"
+						@click="applyImport"
+					>
+						{{ importBusy ? 'Importing…' : 'Apply import' }}
+					</button>
+				</div>
+				<div v-if="importResult !== null" class="a-import">
+					<ul class="a-import__sections">
+						<li v-for="result in importResult.results" :key="result.name" class="a-import__section">
+							<span class="a-import__name">{{ result.name }}</span>
+							<span class="a-import__badge" :class="`a-import__badge--${result.status}`">{{ result.status }}</span>
+							<span v-if="result.status === 'applied'" class="a-import__rows">
+								{{ result.rows ?? 0 }} applied<template v-if="(result.skipped_rows ?? 0) > 0">, {{ result.skipped_rows }} skipped</template>
+							</span>
+							<span v-else-if="result.reason !== undefined" class="a-import__reason">{{ result.reason }}</span>
+						</li>
+					</ul>
+				</div>
 				<p class="a-settings__hint">
 					Deleting your account permanently removes its local posts, follows, media and credentials.
 					Remote copies may remain on other servers.
