@@ -223,6 +223,8 @@ export interface AdminJob {
 	available_at: string;
 	reserved_at: string | null;
 	dead_at: string | null;
+	last_error: string | null;
+	retryable: boolean;
 	payload: Record<string, unknown>;
 }
 

@@ -150,9 +150,10 @@
             + '<button class="admin-button" data-action="queue-run">Run one batch</button>'
             + '<button class="admin-button admin-button--quiet" data-action="queue-retry">Retry dead</button>'
             + '<button class="admin-button admin-button--danger" data-action="queue-purge">Purge dead</button></div>'
-            + table(['Type', 'State', 'Attempts', 'Available', 'Payload'], data.jobs.map((job) =>
+            + table(['Type', 'State', 'Attempts', 'Available', 'Last error', 'Payload'], data.jobs.map((job) =>
                 '<tr><td class="admin-mono">' + esc(job.type) + '</td><td>' + esc(job.state) + '</td><td>' + esc(job.attempts)
                 + '</td><td class="admin-mono">' + esc(job.available_at) + '</td><td class="admin-pre">'
+                + esc(job.last_error || '') + '</td><td class="admin-pre">'
                 + esc(JSON.stringify(job.payload).slice(0, 300)) + '</td></tr>').join(''))
             + '</section>';
     }

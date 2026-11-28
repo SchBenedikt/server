@@ -288,6 +288,7 @@ onBeforeUnmount(() => {
 						<td>
 							<strong class="a-admin-mono">{{ job.type }}</strong>
 							<small class="a-admin-mono a-admin-muted">{{ job.id.slice(0, 12) }}</small>
+							<small v-if="job.last_error" class="a-admin-muted a-admin-job-error">{{ job.last_error }}</small>
 						</td>
 						<td>
 							<span class="a-admin-badge" :class="`a-admin-badge--${stateTone(job.state)}`">{{ stateLabel(job.state) }}</span>
@@ -305,7 +306,7 @@ onBeforeUnmount(() => {
 						</td>
 						<td>
 							<div class="a-admin-row-actions">
-								<button type="button" class="a-icon-btn" title="Retry job" aria-label="Retry job" :disabled="busy !== ''" @click="retry(job)">
+								<button type="button" class="a-icon-btn" title="Retry job" aria-label="Retry job" :disabled="busy !== '' || !job.retryable" @click="retry(job)">
 									<AppIcon name="refresh" :size="16" />
 								</button>
 								<button type="button" class="a-icon-btn a-icon-btn--danger" title="Delete job" aria-label="Delete job" :disabled="busy !== ''" @click="remove(job)">

@@ -428,4 +428,55 @@ final class AdminTest extends TestCase
         self::assertStringContainsString('admin.css', $console->body);
         self::assertStringContainsString('admin.js', $console->body);
     }
+
+    public function testDeadJobsExposeTheirLastErrorAndRetryOnlyWhenDead(): void
+    {
+        ['server' => $server, 'cookies' => $cookies, 'csrf' => $csrf] = $this->admin();
+        $db = $server->runtime->database;
+        $now = '2026-11-28T00:00:00Z';
+
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts, reserved_at, dead_at,'
+            . ' subject_type, subject_id, last_error)'
+            . " VALUES ('job-dead', 'deliver', '{}', :now, 5, NULL, :now, NULL, NULL,"
+            . " 'RuntimeException: remote inbox rejected the activity')",
+            ['now' => $now],
+        );
+        $db->execute(
+            'INSERT INTO social_job (id, type, payload, available_at, attempts, reserved_at, dead_at,'
+            . ' subject_type, subject_id, last_error)'
+            . " VALUES ('job-live', 'deliver', '{}', :now, 0, NULL, NULL, NULL, NULL, NULL)",
+            ['now' => $now],
+        );
+
+        $dead = $server->send('GET', '/api/v1/host/admin/jobs?state=dead', ['cookies' => $cookies]);
+        self::assertSame(200, $dead->status);
+        $jobs = $this->decoded($dead)['jobs'];
+        $byId = array_column($jobs, null, 'id');
+        self::assertArrayHasKey('job-dead', $byId);
+        self::assertSame('RuntimeException: remote inbox rejected the activity', $byId['job-dead']['last_error']);
+        self::assertTrue($byId['job-dead']['retryable']);
+
+        // A live job cannot be "retried" — there is nothing to recover.
+        $live = $server->send('POST', '/api/v1/host/admin/jobs/job-live/retry', [
+            'cookies' => $cookies,
+            'headers' => ['X-CSRF-Token' => $csrf],
+        ]);
+        self::assertSame(409, $live->status, $live->body);
+        self::assertSame('conflict', $this->decoded($live)['error']['code']);
+
+        $retry = $server->send('POST', '/api/v1/host/admin/jobs/job-dead/retry', [
+            'cookies' => $cookies,
+            'headers' => ['X-CSRF-Token' => $csrf],
+        ]);
+        self::assertSame(200, $retry->status, $retry->body);
+        self::assertSame('pending', $this->decoded($retry)['job']['state']);
+        self::assertSame(0, (int) $db->fetchValue(
+            'SELECT attempts FROM social_job WHERE id = :id',
+            ['id' => 'job-dead'],
+        ));
+        self::assertSame(1, (int) $db->fetchValue(
+            "SELECT COUNT(*) FROM admin_audit WHERE action = 'job.retry' AND target_id = 'job-dead'",
+        ));
+    }
 }

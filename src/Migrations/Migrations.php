@@ -78,6 +78,7 @@ final class Migrations
             new Version202611280021EmailVerification(),
             new Version202611280022EmailChange(),
             new Version202611280023SchemaMigrationProvenance(),
+            new Version202611280024JobLastError(),
         ];
     }
 }
