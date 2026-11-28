@@ -6,7 +6,8 @@
 	"description": "Standalone host page that mounts the shared @alohasocial/ui package through a HostBridge.",
 	"scripts": {
 		"build": "node scripts/prepare-shared.mjs && vite build",
-		"build:shared": "node scripts/prepare-shared.mjs"
+		"build:shared": "node scripts/prepare-shared.mjs",
+		"test": "vitest run"
 	},
 	"dependencies": {
 		"@alohasocial/ui": "file:./shared-ui",
@@ -14,6 +15,7 @@
 	},
 	"devDependencies": {
 		"@vitejs/plugin-vue": "^5.2.1",
-		"vite": "^6.0.0"
+		"vite": "^6.0.0",
+		"vitest": "^3.2.7"
 	}
 }

@@ -12,11 +12,19 @@ import type { Announcement } from '../lib/types';
 
 const announcements = ref<Announcement[]>([]);
 const dismissed = ref<Set<string>>(new Set());
-const storageKey = 'aloha.dismissed-announcements';
+const guestStorageKey = 'aloha.dismissed-announcements';
+
+// Dismissals are account data once signed in; keying the browser copy by
+// handle keeps one account's choices from leaking into the next session on
+// a shared browser.
+function storageKey(): string {
+	const handle = appState.session.user?.handle;
+	return handle ? `${guestStorageKey}.${handle}` : guestStorageKey;
+}
 
 function readDismissed(): Set<string> {
 	try {
-		const raw = localStorage.getItem(storageKey);
+		const raw = localStorage.getItem(storageKey());
 		const values: unknown = raw === null ? [] : JSON.parse(raw);
 		return new Set(Array.isArray(values) ? values.filter((value): value is string => typeof value === 'string') : []);
 	} catch {
@@ -26,7 +34,7 @@ function readDismissed(): Set<string> {
 
 function persistLocal(): void {
 	try {
-		localStorage.setItem(storageKey, JSON.stringify([...dismissed.value]));
+		localStorage.setItem(storageKey(), JSON.stringify([...dismissed.value]));
 	} catch {
 		// The banner stays hidden for this page.
 	}
