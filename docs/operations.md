@@ -213,6 +213,7 @@ php bin/backup.php                 # var/backups/, 10 newest kept
 php bin/backup.php --keep=30
 php bin/backup.php --json          # machine-readable path and account count
 php bin/backup.php --verify=FILE   # re-check an existing backup's checksum
+php bin/backup.php --verify-manifest=FILE  # re-check blobs + DB against the manifest
 ```
 
 SQLite backups use `VACUUM INTO`, so they are consistent while WAL is active.
@@ -228,7 +229,9 @@ inventory — database checksum and driver, every media blob with size and (for
 the local store) SHA-256, the secret-key fingerprint, and the core/schema
 versions. It is the anchor for the encrypted off-host export and the restore
 rehearsal; copy the `.sqlite`/`.dump`, `.json`, `.manifest.json` and your
-secret key together. The backup directory lives inside `var/`, so move it to a
+secret key together. `--verify-manifest` re-hashes every recorded blob and the
+database file against the manifest (read-only; S3 objects are reported as
+unchecked). The backup directory lives inside `var/`, so move it to a
 second disk or copy it off-host as part of your normal backup job.
 
 The key and the database belong together: the instance signing key in the

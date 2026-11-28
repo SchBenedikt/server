@@ -60,6 +60,63 @@ final class InstanceManifestTest extends TestCase
         self::assertSame(basename($snapshot['path']), $manifest['database']['file']);
     }
 
+    public function testVerifyAcceptsAnIntactManifest(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+
+        $storage = StorageFactory::create($server->config);
+        $storage->blobStore->put('media/one.jpg', 'first-bytes');
+
+        $backup = new DatabaseBackup($server->runtime->database, $server->config);
+        $snapshot = $backup->create($server->config->varDirectory . '/backups');
+        $result = (new InstanceManifest($backup, $server->config, $storage->blobStore))
+            ->create($snapshot['path'], $snapshot['metadata_path']);
+
+        $check = (new InstanceManifest($backup, $server->config, $storage->blobStore))
+            ->verify($result['path']);
+
+        self::assertTrue($check['ok'], implode('; ', $check['problems']));
+        self::assertSame(1, $check['objects']);
+        self::assertSame(0, $check['unchecked']);
+    }
+
+    public function testVerifyDetectsChangedAndMissingBlobs(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+
+        $storage = StorageFactory::create($server->config);
+        $storage->blobStore->put('media/one.jpg', 'first-bytes');
+        $storage->blobStore->put('media/two.jpg', 'second-bytes');
+
+        $backup = new DatabaseBackup($server->runtime->database, $server->config);
+        $snapshot = $backup->create($server->config->varDirectory . '/backups');
+        $manifest = new InstanceManifest($backup, $server->config, $storage->blobStore);
+        $result = $manifest->create($snapshot['path'], $snapshot['metadata_path']);
+
+        $storage->blobStore->put('media/one.jpg', 'tampered!');
+        $storage->blobStore->delete('media/two.jpg');
+
+        $check = $manifest->verify($result['path']);
+        self::assertFalse($check['ok']);
+        self::assertCount(2, $check['problems']);
+    }
+
+    public function testVerifyRejectsAManifestThatIsNotOne(): void
+    {
+        $server = new TestServer();
+        $server->createAccount('alice');
+
+        $storage = StorageFactory::create($server->config);
+        $backup = new DatabaseBackup($server->runtime->database, $server->config);
+        $path = $server->config->varDirectory . '/not-a-manifest.json';
+        file_put_contents($path, '{"hello":"world"}');
+
+        $check = (new InstanceManifest($backup, $server->config, $storage->blobStore))->verify($path);
+        self::assertFalse($check['ok']);
+    }
+
     public function testManifestPruningRemovesTheSidecarWithItsBackup(): void
     {
         $server = new TestServer();

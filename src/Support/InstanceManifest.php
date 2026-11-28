@@ -17,6 +17,8 @@ use Throwable;
 use function basename;
 use function chmod;
 use function count;
+use function dirname;
+use function file_get_contents;
 use function file_put_contents;
 use function hash_file;
 use function is_file;
@@ -129,6 +131,85 @@ final class InstanceManifest
         @chmod($path, 0o600);
 
         return ['path' => $path, 'objects' => count($objects), 'bytes' => $totalBytes];
+    }
+
+    /**
+     * Read-only check of a manifest against the live instance: the database
+     * checksum must match the recorded backup, and every local blob must
+     * still hash to its recorded value. Remote stores cannot be re-hashed
+     * cheaply and are reported as unchecked.
+     *
+     * @return array{ok: bool, problems: list<string>, objects: int, unchecked: int}
+     */
+    public function verify(string $manifestPath): array
+    {
+        $problems = [];
+        $unchecked = 0;
+
+        if (!is_file($manifestPath)) {
+            return ['ok' => false, 'problems' => ['The manifest file is missing: ' . $manifestPath], 'objects' => 0, 'unchecked' => 0];
+        }
+
+        $decoded = json_decode((string) file_get_contents($manifestPath), true);
+        if (!is_array($decoded) || ($decoded['format'] ?? null) !== 'alohasocial.instance-manifest') {
+            return ['ok' => false, 'problems' => ['The file is not an Aloha Social instance manifest: ' . $manifestPath], 'objects' => 0, 'unchecked' => 0];
+        }
+
+        $objects = $decoded['blobs']['objects'] ?? [];
+        if (!is_array($objects)) {
+            $objects = [];
+        }
+
+        $localRoot = $this->config->storageDriver === 'local' ? rtrim($this->config->blobDirectory, '/') : null;
+        $hashed = ($decoded['blobs']['hashes'] ?? null) === 'sha256';
+
+        foreach ($objects as $object) {
+            if (!is_array($object) || !is_string($object['path'] ?? null)) {
+                continue;
+            }
+            $path = $object['path'];
+            $expected = $object['sha256'] ?? null;
+
+            if ($localRoot === null || !$hashed || !is_string($expected)) {
+                $unchecked++;
+                continue;
+            }
+
+            $full = $localRoot . '/' . $path;
+            if (!is_file($full)) {
+                $problems[] = 'Missing blob: ' . $path;
+                continue;
+            }
+            $actual = @hash_file('sha256', $full);
+            if (!is_string($actual)) {
+                $problems[] = 'Unreadable blob: ' . $path;
+            } elseif (!hash_equals($expected, $actual)) {
+                $problems[] = 'Blob content changed since the manifest: ' . $path;
+            }
+        }
+
+        $database = $decoded['database'] ?? [];
+        $dbFile = is_array($database) && is_string($database['file'] ?? null)
+            ? dirname($manifestPath) . '/' . $database['file']
+            : null;
+        $dbSha = is_array($database) ? ($database['sha256'] ?? null) : null;
+        if (is_string($dbSha) && $dbSha !== '') {
+            if ($dbFile === null || !is_file($dbFile)) {
+                $problems[] = 'The manifest database file is missing.';
+            } else {
+                $actual = @hash_file('sha256', $dbFile);
+                if (!is_string($actual) || !hash_equals($dbSha, $actual)) {
+                    $problems[] = 'The manifest database file does not match its recorded checksum.';
+                }
+            }
+        }
+
+        return [
+            'ok' => $problems === [],
+            'problems' => $problems,
+            'objects' => count($objects),
+            'unchecked' => $unchecked,
+        ];
     }
 
     private function manifestPathFor(string $metadataPath): string

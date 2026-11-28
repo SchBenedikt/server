@@ -20,6 +20,7 @@ $outputDirectory = null;
 $keep = 10;
 $json = false;
 $verify = null;
+$verifyManifest = null;
 
 foreach (array_slice($argv, 1) as $option) {
     if (str_starts_with($option, '--output=')) {
@@ -29,6 +30,11 @@ foreach (array_slice($argv, 1) as $option) {
 
     if (str_starts_with($option, '--keep=')) {
         $keep = max(1, (int) substr($option, 7));
+        continue;
+    }
+
+    if (str_starts_with($option, '--verify-manifest=')) {
+        $verifyManifest = substr($option, 19);
         continue;
     }
 
@@ -43,7 +49,7 @@ foreach (array_slice($argv, 1) as $option) {
     }
 
     if ($option === '--help' || $option === '-h') {
-        fwrite(STDOUT, "Usage: php bin/backup.php [--output=directory] [--keep=10] [--json] [--verify=backup-file]\n");
+        fwrite(STDOUT, "Usage: php bin/backup.php [--output=directory] [--keep=10] [--json] [--verify=backup-file] [--verify-manifest=manifest-file]\n");
         exit(0);
     }
 
@@ -55,6 +61,21 @@ try {
     $config = HostConfig::load($root);
     $database = PdoFactory::connect($config);
     $service = new DatabaseBackup($database, $config);
+    $storage = StorageFactory::create($config);
+
+    if ($verifyManifest !== null) {
+        $result = (new InstanceManifest($service, $config, $storage->blobStore))->verify($verifyManifest);
+
+        if ($json) {
+            fwrite(STDOUT, json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+            exit($result['ok'] ? 0 : 1);
+        }
+
+        fwrite($result['ok'] ? STDOUT : STDERR, $result['ok']
+            ? 'Manifest verified: ' . $verifyManifest . " ({$result['objects']} objects" . ($result['unchecked'] > 0 ? ", {$result['unchecked']} unchecked" : '') . ")\n"
+            : "Manifest verification failed for {$verifyManifest}:\n  - " . implode("\n  - ", $result['problems']) . "\n");
+        exit($result['ok'] ? 0 : 1);
+    }
 
     if ($verify !== null) {
         $result = $service->verify($verify);
@@ -75,7 +96,7 @@ try {
         $keep,
     );
 
-    $manifest = (new InstanceManifest($service, $config, StorageFactory::create($config)->blobStore))
+    $manifest = (new InstanceManifest($service, $config, $storage->blobStore))
         ->create($backup['path'], $backup['metadata_path']);
 
     if ($json) {
