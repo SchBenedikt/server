@@ -13,10 +13,17 @@ use AlohaSocial\Core\Platform\Clock\Clock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Support\Time;
 
+use function array_filter;
 use function array_key_exists;
+use function array_values;
+use function count;
 use function in_array;
+use function is_array;
 use function is_bool;
 use function is_string;
+use function json_decode;
+use function json_encode;
+use function preg_match;
 use function trim;
 
 /**
@@ -65,6 +72,7 @@ final class Preferences
      *     mirror_atproto_account_did: string|null,
      *     onboarding_dismissed: bool,
      *     onboarding_dismissed_at: string|null,
+     *     dismissed_announcements: list<string>,
      *     updated_at: string|null
      * }
      */
@@ -105,6 +113,7 @@ final class Preferences
                 && $row['onboarding_dismissed_at'] !== '',
             'onboarding_dismissed_at' => is_string($row['onboarding_dismissed_at'] ?? null)
                 && $row['onboarding_dismissed_at'] !== '' ? (string) $row['onboarding_dismissed_at'] : null,
+            'dismissed_announcements' => $this->decodeAnnouncementIds($row['dismissed_announcements'] ?? null),
             'updated_at' => is_string($row['updated_at'] ?? null) ? (string) $row['updated_at'] : null,
         ];
     }
@@ -167,6 +176,11 @@ final class Preferences
             $next['mirror_atproto_account_did'] = $did;
         }
 
+        $dismissedIds = $current['dismissed_announcements'];
+        if (array_key_exists('dismissed_announcements', $payload)) {
+            $dismissedIds = $this->announcementIds($payload['dismissed_announcements']);
+        }
+
         $dismissedAt = $current['onboarding_dismissed_at'];
         if (array_key_exists('onboarding_dismissed', $payload)) {
             if (!is_bool($payload['onboarding_dismissed'])) {
@@ -185,9 +199,9 @@ final class Preferences
         $now = Time::format($this->clock->now());
         $this->db->execute(
             'INSERT INTO account_preference (account_id, default_visibility, default_quote_policy, dm_policy,'
-            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, mirror_atproto_account_did, onboarding_dismissed_at, updated_at)'
+            . ' show_boosts, discoverable, locked, notify_follows, notify_favourites, notify_boosts, notify_mentions, mirror_likes_to_atproto, mirror_boosts_to_atproto, mirror_atproto_account_did, onboarding_dismissed_at, dismissed_announcements, updated_at)'
             . ' VALUES (:account_id, :default_visibility, :default_quote_policy, :dm_policy,'
-            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :mirror_atproto_account_did, :onboarding_dismissed_at, :updated_at)'
+            . ' :show_boosts, :discoverable, :locked, :notify_follows, :notify_favourites, :notify_boosts, :notify_mentions, :mirror_likes_to_atproto, :mirror_boosts_to_atproto, :mirror_atproto_account_did, :onboarding_dismissed_at, :dismissed_announcements, :updated_at)'
             . ' ON CONFLICT (account_id) DO UPDATE SET'
             . ' default_visibility = excluded.default_visibility,'
             . ' default_quote_policy = excluded.default_quote_policy,'
@@ -203,6 +217,7 @@ final class Preferences
             . ' mirror_boosts_to_atproto = excluded.mirror_boosts_to_atproto,'
             . ' mirror_atproto_account_did = excluded.mirror_atproto_account_did,'
             . ' onboarding_dismissed_at = excluded.onboarding_dismissed_at,'
+            . ' dismissed_announcements = excluded.dismissed_announcements,'
             . ' updated_at = excluded.updated_at',
             [
                 'account_id' => $accountId,
@@ -220,6 +235,7 @@ final class Preferences
                 'mirror_boosts_to_atproto' => $next['mirror_boosts_to_atproto'] ? 1 : 0,
                 'mirror_atproto_account_did' => $next['mirror_atproto_account_did'],
                 'onboarding_dismissed_at' => $dismissedAt,
+                'dismissed_announcements' => $dismissedIds === [] ? null : json_encode($dismissedIds),
                 'updated_at' => $now,
             ],
         );
@@ -249,8 +265,58 @@ final class Preferences
             'mirror_atproto_account_did' => null,
             'onboarding_dismissed' => false,
             'onboarding_dismissed_at' => null,
+            'dismissed_announcements' => [],
             'updated_at' => null,
         ];
+    }
+
+    /**
+     * Announcement ids are 24 lowercase hex chars; anything else is rejected
+     * so the column can never accumulate arbitrary client strings.
+     *
+     * @return list<string>
+     */
+    private function announcementIds(mixed $value): array
+    {
+        if (!is_array($value) || count($value) > 200) {
+            throw CommunityException::invalid(
+                'This setting is invalid.',
+                ['dismissed_announcements' => 'Please send a list of announcement ids.'],
+            );
+        }
+
+        $ids = [];
+        foreach ($value as $id) {
+            if (!is_string($id) || preg_match('/\A[0-9a-f]{24}\z/', $id) !== 1) {
+                throw CommunityException::invalid(
+                    'This setting is invalid.',
+                    ['dismissed_announcements' => 'Announcement ids must be 24 hex characters.'],
+                );
+            }
+            $ids[$id] = $id;
+        }
+
+        return array_values($ids);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function decodeAnnouncementIds(mixed $value): array
+    {
+        if (!is_string($value) || $value === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $decoded,
+            static fn ($id): bool => is_string($id) && preg_match('/\A[0-9a-f]{24}\z/', $id) === 1,
+        ));
     }
 
     /**

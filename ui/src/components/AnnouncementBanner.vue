@@ -7,6 +7,7 @@ import { onMounted, ref } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { getApi } from '../lib/api';
 import { relativeTime } from '../lib/format';
+import { appState } from '../lib/state';
 import type { Announcement } from '../lib/types';
 
 const announcements = ref<Announcement[]>([]);
@@ -23,12 +24,24 @@ function readDismissed(): Set<string> {
 	}
 }
 
-function dismiss(id: string): void {
-	dismissed.value = new Set([...dismissed.value, id]);
+function persistLocal(): void {
 	try {
 		localStorage.setItem(storageKey, JSON.stringify([...dismissed.value]));
 	} catch {
 		// The banner stays hidden for this page.
+	}
+}
+
+function dismiss(id: string): void {
+	dismissed.value = new Set([...dismissed.value, id]);
+	persistLocal();
+
+	// Signed-in users keep dismissals on the account so they follow across
+	// browsers; guests only have this browser's localStorage.
+	if (appState.session.user !== null) {
+		void getApi().updatePreferences({ dismissed_announcements: [...dismissed.value] }).catch(() => {
+			// The local copy already hides it; the next save retries.
+		});
 	}
 }
 
@@ -38,6 +51,15 @@ onMounted(async () => {
 		announcements.value = await getApi().announcements();
 	} catch {
 		announcements.value = [];
+	}
+
+	if (appState.session.user !== null) {
+		try {
+			const preferences = await getApi().preferences();
+			dismissed.value = new Set([...dismissed.value, ...preferences.dismissed_announcements]);
+		} catch {
+			// Local dismissals still apply.
+		}
 	}
 });
 </script>

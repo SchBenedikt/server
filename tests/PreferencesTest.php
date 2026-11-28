@@ -190,6 +190,46 @@ final class PreferencesTest extends TestCase
         self::assertSame(422, $invalid->status);
     }
 
+    public function testDismissedAnnouncementsPersistPerAccount(): void
+    {
+        $initial = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $this->aliceCookies]),
+        )['preferences'];
+        self::assertSame([], $initial['dismissed_announcements']);
+
+        $id = str_repeat('a', 24);
+        $saved = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'dismissed_announcements' => [$id],
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $saved->status);
+        self::assertSame([$id], $this->decoded($saved)['preferences']['dismissed_announcements']);
+
+        // A later unrelated save keeps the dismissal list.
+        $kept = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'show_boosts' => false,
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $kept->status);
+        self::assertSame([$id], $this->decoded($kept)['preferences']['dismissed_announcements']);
+
+        // Bob's list is untouched.
+        $bob = $this->server->signIn('bob');
+        $bobPreferences = $this->decoded(
+            $this->server->send('GET', '/api/v1/host/preferences', ['cookies' => $bob['cookies']]),
+        )['preferences'];
+        self::assertSame([], $bobPreferences['dismissed_announcements']);
+
+        $cleared = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'dismissed_announcements' => [],
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(200, $cleared->status);
+        self::assertSame([], $this->decoded($cleared)['preferences']['dismissed_announcements']);
+
+        $invalid = $this->server->json('PATCH', '/api/v1/host/preferences', [
+            'dismissed_announcements' => ['not-an-id'],
+        ], $this->aliceCookies, $this->aliceCsrf);
+        self::assertSame(422, $invalid->status);
+    }
+
     public function testExportContainsOnlyTheViewersOwnData(): void
     {
         foreach (['alice', 'bob'] as $handle) {
