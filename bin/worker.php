@@ -10,6 +10,7 @@ declare(strict_types=1);
 use AlohaSocial\Server\Bootstrap\ApplicationFactory;
 use AlohaSocial\Server\Bootstrap\Runtime;
 use AlohaSocial\Server\Config\HostConfig;
+use AlohaSocial\Server\Support\RestoreHold;
 
 /**
  * Pull one bounded AT Protocol page and project stored records into social tables.
@@ -127,7 +128,16 @@ try {
     exit(1);
 }
 
+// A completed `bin/restore.php --apply` leaves var/restore.pending behind:
+// the worker must not deliver outbound federation or mail on top of freshly
+// restored state until an operator confirms with `bin/restore.php --confirm`.
+$restoreHold = static fn (): bool => RestoreHold::active($runtime->config);
+
 if ($once) {
+    if ($restoreHold()) {
+        fwrite(STDOUT, "Restore hold active — worker tick skipped. Confirm with bin/restore.php --confirm.\n");
+        exit(0);
+    }
     $runtime->admin->heartbeat();
     finalizeAccountErasures($runtime);
     dispatchMailOutbox($runtime);
@@ -174,6 +184,13 @@ while (!$stop) {
             $envStamp = $newStamp;
             fwrite(STDERR, 'Configuration reload failed; keeping the previous runtime: ' . $exception->getMessage() . "\n");
         }
+    }
+
+    if ($restoreHold()) {
+        // No heartbeat is written while held, so monitoring reports the
+        // worker as stale — that is the intended "paused" signal.
+        sleep(5);
+        continue;
     }
 
     // A non-empty batch is drained immediately; an empty one sleeps, so the

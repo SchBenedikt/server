@@ -11,6 +11,7 @@ use AlohaSocial\Server\Config\HostConfig;
 use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Support\InstanceExport;
 use AlohaSocial\Server\Support\InstanceRestore;
+use AlohaSocial\Server\Support\RestoreHold;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -18,6 +19,8 @@ require $root . '/vendor/autoload.php';
 $export = null;
 $staging = null;
 $passphraseFile = null;
+$apply = false;
+$confirm = false;
 
 foreach (array_slice($argv, 1) as $option) {
     if (str_starts_with($option, '--export=')) {
@@ -35,14 +38,29 @@ foreach (array_slice($argv, 1) as $option) {
         continue;
     }
 
+    if ($option === '--apply') {
+        $apply = true;
+        continue;
+    }
+
+    if ($option === '--confirm') {
+        $confirm = true;
+        continue;
+    }
+
     if ($option === '--help' || $option === '-h') {
-        fwrite(STDOUT, "Usage: php bin/restore.php --export=FILE --staging=DIR [--passphrase-file=PATH]\n"
+        fwrite(STDOUT, "Usage: php bin/restore.php --export=FILE --staging=DIR [--passphrase-file=PATH] [--apply]\n"
+            . "       php bin/restore.php --confirm\n"
             . "\n"
-            . "Decrypts the export into the staging directory and runs the read-only\n"
-            . "restore preflight: manifest, database checksum, blob hashes, secret key\n"
-            . "and origin checks against this instance. Nothing is written to the\n"
-            . "live database or blob store.\n"
-            . "The passphrase comes from ALOHASOCIAL_EXPORT_PASSPHRASE or --passphrase-file.\n");
+            . "Without --apply, decrypts the export into the staging directory and runs\n"
+            . "the read-only restore preflight: manifest, database checksum, blob hashes,\n"
+            . "secret key and origin checks against this instance. Nothing is written to\n"
+            . "the live database or blob store.\n"
+            . "\n"
+            . "--apply additionally installs the staged backup onto this instance. The\n"
+            . "target must hold no accounts; afterwards the worker stays paused until\n"
+            . "--confirm releases it. The passphrase comes from\n"
+            . "ALOHASOCIAL_EXPORT_PASSPHRASE or --passphrase-file.\n");
         exit(0);
     }
 
@@ -59,6 +77,17 @@ if ($passphraseFile !== null) {
 }
 
 try {
+    $config = HostConfig::load($root);
+
+    if ($confirm) {
+        if (RestoreHold::release($config)) {
+            fwrite(STDOUT, "Restore hold released — the worker resumes on its next tick.\n");
+            exit(0);
+        }
+        fwrite(STDERR, "No restore hold is active.\n");
+        exit(1);
+    }
+
     if ($export === null || $staging === null) {
         fwrite(STDERR, "restore.php needs --export=FILE and --staging=DIR.\n");
         exit(2);
@@ -71,20 +100,31 @@ try {
     $written = InstanceExport::open($export, $passphrase, $staging);
     fwrite(STDOUT, 'Decrypted ' . count($written) . " files into {$staging}\n");
 
-    $config = HostConfig::load($root);
     $database = PdoFactory::connect($config);
-    $report = (new InstanceRestore($database, $config))->preflight($staging);
+    $restore = new InstanceRestore($database, $config);
+    $report = $apply ? $restore->apply($staging) : $restore->preflight($staging);
 
     foreach ($report['checks'] as $check) {
         fwrite($check['ok'] ? STDOUT : STDERR, ($check['ok'] ? '[ok]   ' : '[FAIL] ') . $check['name'] . ': ' . $check['detail'] . "\n");
     }
+    foreach ($report['steps'] ?? [] as $step) {
+        fwrite($step['ok'] ? STDOUT : STDERR, ($step['ok'] ? '[ok]   ' : '[FAIL] ') . $step['name'] . ': ' . $step['detail'] . "\n");
+    }
+
+    if ($apply) {
+        fwrite($report['ok'] ? STDOUT : STDERR, $report['ok']
+            ? "Restore applied. The worker is paused until you verify the instance\n"
+            . "and run: php bin/restore.php --confirm\n"
+            : "Restore refused — the live instance was not modified.\n");
+        exit($report['ok'] ? 0 : 1);
+    }
 
     fwrite($report['ok'] ? STDOUT : STDERR, $report['ok']
         ? "Preflight passed. The staging directory is ready for a restore rehearsal;\n"
-        . "the live instance was not modified.\n"
+        . "the live instance was not modified. Add --apply to install it onto an empty target.\n"
         : "Preflight failed — do not restore this export onto this instance.\n");
     exit($report['ok'] ? 0 : 1);
 } catch (Throwable $exception) {
-    fwrite(STDERR, 'Restore preflight failed: ' . $exception->getMessage() . "\n");
+    fwrite(STDERR, 'Restore failed: ' . $exception->getMessage() . "\n");
     exit(1);
 }

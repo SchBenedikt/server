@@ -267,7 +267,7 @@ final class DatabaseBackup
 
     private function backupPostgres(string $path): void
     {
-        [$host, $port, $database] = $this->postgresTarget();
+        [$host, $port, $database] = self::postgresTarget($this->config->databaseDsn);
         $command = [
             'pg_dump',
             '--format=custom',
@@ -329,9 +329,8 @@ final class DatabaseBackup
     /**
      * @return array{0: string, 1: string, 2: string}
      */
-    private function postgresTarget(): array
+    public static function postgresTarget(string $dsn): array
     {
-        $dsn = $this->config->databaseDsn;
         $values = [];
         foreach (explode(';', substr($dsn, strlen('pgsql:'))) as $part) {
             if (!str_contains($part, '=')) {
@@ -344,7 +343,7 @@ final class DatabaseBackup
 
         $database = $values['dbname'] ?? '';
         if ($database === '') {
-            throw new RuntimeException('The PostgreSQL DSN has no dbname; cannot create a backup.');
+            throw new RuntimeException('The PostgreSQL DSN has no dbname.');
         }
 
         return [$values['host'] ?? '', $values['port'] ?? '', $database];

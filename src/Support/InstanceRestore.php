@@ -13,17 +13,34 @@ use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Server\Config\HostConfig;
 
 use function basename;
+use function chmod;
+use function copy;
 use function count;
 use function dirname;
+use function fclose;
+use function file_get_contents;
 use function glob;
 use function hash_file;
 use function hash_equals;
 use function is_array;
+use function is_dir;
 use function is_file;
 use function is_string;
 use function json_decode;
+use function mkdir;
+use function proc_close;
+use function proc_open;
+use function rename;
+use function rtrim;
 use function sort;
 use function sprintf;
+use function stream_get_contents;
+use function substr;
+use function tempnam;
+use function trim;
+use function unlink;
+
+use Throwable;
 
 /**
  * Read-only preflight for a restore: validates a decrypted export staging
@@ -52,7 +69,7 @@ final class InstanceRestore
 
         $this->checkDatabase($stagingDirectory, $manifest, $checks);
         $this->checkBlobs($stagingDirectory, $manifest, $checks);
-        $this->checkSecretKey($manifest, $checks);
+        $this->checkSecretKey($stagingDirectory, $manifest, $checks);
         $this->checkOrigin($manifest, $checks);
         $this->checkSchema($manifest, $checks);
 
@@ -183,7 +200,7 @@ final class InstanceRestore
      * @param array<string, mixed> $manifest
      * @param list<array{name: string, ok: bool, detail: string}> $checks
      */
-    private function checkSecretKey(array $manifest, array &$checks): void
+    private function checkSecretKey(string $stagingDirectory, array $manifest, array &$checks): void
     {
         $expected = $manifest['secret_key_fingerprint'] ?? null;
         if (!is_string($expected) || $expected === '') {
@@ -194,7 +211,15 @@ final class InstanceRestore
 
         $actual = SecretKeyFile::fingerprint($this->config);
         if ($actual === null) {
-            $checks[] = ['name' => 'secret_key', 'ok' => false, 'detail' => 'No secret key is configured on this instance.'];
+            // A target without a key yet (fresh install) is restorable: the
+            // staged secret.key must carry the same identity material.
+            $staged = SecretKeyFile::fingerprintFile($stagingDirectory . '/secret.key');
+            if ($staged !== null && hash_equals($expected, $staged)) {
+                $checks[] = ['name' => 'secret_key', 'ok' => true, 'detail' => 'No key on this instance; the staged key matches the export and will be installed on apply.'];
+
+                return;
+            }
+            $checks[] = ['name' => 'secret_key', 'ok' => false, 'detail' => 'No secret key is configured on this instance and the export carries no matching staged key.'];
 
             return;
         }
@@ -244,5 +269,311 @@ final class InstanceRestore
             'detail' => 'Export schema ' . ($exported ?? 'unknown') . ', target ' . ($current ?? 'not installed')
                 . ' — migrations run on first boot after restore.',
         ];
+    }
+
+    /**
+     * Applies a staged, preflight-verified export to this instance.
+     *
+     * The target must hold no accounts — restoring over a populated instance
+     * is refused rather than attempted as a merge. The database, local blobs
+     * and (when missing) the secret key are installed, then a restore hold
+     * pauses the worker until `confirm()` releases it.
+     *
+     * @return array{ok: bool, checks: list<array{name: string, ok: bool, detail: string}>, steps: list<array{name: string, ok: bool, detail: string}>}
+     */
+    public function apply(string $stagingDirectory): array
+    {
+        $preflight = $this->preflight($stagingDirectory);
+        $steps = [];
+        if (!$preflight['ok']) {
+            return ['ok' => false, 'checks' => $preflight['checks'], 'steps' => $steps];
+        }
+
+        $candidates = glob($stagingDirectory . '/backup/*.manifest.json') ?: [];
+        sort($candidates);
+        $manifest = $candidates === []
+            ? null
+            : json_decode((string) file_get_contents($candidates[0]), true);
+        if (!is_array($manifest)) {
+            return ['ok' => false, 'checks' => $preflight['checks'], 'steps' => $steps];
+        }
+
+        $exportedDriver = $manifest['database']['driver'] ?? null;
+        $driverOk = is_string($exportedDriver) && $exportedDriver === $this->database->driver();
+        $this->step(
+            $steps,
+            'driver',
+            $driverOk,
+            $driverOk
+                ? 'Export driver ' . $exportedDriver . ' matches the target.'
+                : 'The export is a ' . (is_string($exportedDriver) ? $exportedDriver : 'unknown')
+                    . ' backup but this instance uses ' . $this->database->driver() . ' — restores cannot convert between drivers.',
+        );
+        if ($steps[array_key_last($steps)]['ok'] !== true) {
+            return $this->applyResult(false, $preflight['checks'], $steps);
+        }
+
+        $accounts = $this->targetAccountCount();
+        $emptyOk = $accounts === 0;
+        $this->step(
+            $steps,
+            'empty_target',
+            $emptyOk,
+            $emptyOk
+                ? 'The target holds no accounts.'
+                : 'The target already holds ' . $accounts . ' account(s) — restore only onto an empty instance.',
+        );
+        if ($steps[array_key_last($steps)]['ok'] !== true) {
+            return $this->applyResult(false, $preflight['checks'], $steps);
+        }
+
+        $this->installSecretKey($stagingDirectory, $steps);
+        if ($steps[array_key_last($steps)]['ok'] !== true) {
+            return $this->applyResult(false, $preflight['checks'], $steps);
+        }
+
+        $this->applyDatabase($stagingDirectory, $manifest, $steps);
+        if ($steps[array_key_last($steps)]['ok'] !== true) {
+            return $this->applyResult(false, $preflight['checks'], $steps);
+        }
+
+        $this->applyBlobs($stagingDirectory, $manifest, $steps);
+        if ($steps[array_key_last($steps)]['ok'] !== true) {
+            return $this->applyResult(false, $preflight['checks'], $steps);
+        }
+
+        RestoreHold::engage($this->config, basename((string) $candidates[0]));
+        $steps[] = [
+            'name' => 'worker_hold',
+            'ok' => true,
+            'detail' => 'Worker paused at ' . RestoreHold::path($this->config) . ' — run bin/restore.php --confirm after verifying the restored instance.',
+        ];
+
+        return $this->applyResult(true, $preflight['checks'], $steps);
+    }
+
+    /**
+     * Releases the post-restore worker hold. Returns false when no hold was
+     * engaged.
+     */
+    public function confirm(): bool
+    {
+        return RestoreHold::release($this->config);
+    }
+
+    /**
+     * @param list<array{name: string, ok: bool, detail: string}> $steps
+     */
+    private function step(array &$steps, string $name, bool $ok, string $detail): bool
+    {
+        $steps[] = ['name' => $name, 'ok' => $ok, 'detail' => $detail];
+
+        return $ok;
+    }
+
+    private function targetAccountCount(): int
+    {
+        try {
+            return (int) $this->database->fetchValue('SELECT COUNT(*) FROM account');
+        } catch (Throwable) {
+            // No account table at all: the schema was never installed, which
+            // is the emptiest possible target.
+            return 0;
+        }
+    }
+
+    /**
+     * @param list<array{name: string, ok: bool, detail: string}> $steps
+     */
+    private function installSecretKey(string $stagingDirectory, array &$steps): void
+    {
+        $targetMissing = $this->config->secretKey === null && !is_file($this->config->secretKeyFile);
+        if (!$targetMissing) {
+            $this->step($steps, 'secret_key', true, 'A matching secret key is already configured.');
+
+            return;
+        }
+
+        $staged = $stagingDirectory . '/secret.key';
+        $target = $this->config->secretKeyFile;
+        $directory = dirname($target);
+        if (!is_dir($directory) && !mkdir($directory, 0o770, true) && !is_dir($directory)) {
+            $this->step($steps, 'secret_key', false, 'Cannot create the key directory: ' . $directory);
+
+            return;
+        }
+
+        if (!is_file($staged) || !@copy($staged, $target)) {
+            $this->step($steps, 'secret_key', false, 'The staged secret.key is missing; the export cannot restore identity material.');
+
+            return;
+        }
+        @chmod($target, 0o600);
+
+        $this->step($steps, 'secret_key', true, 'Installed the exported secret key.');
+    }
+
+    /**
+     * @param array<string, mixed> $manifest
+     * @param list<array{name: string, ok: bool, detail: string}> $steps
+     */
+    private function applyDatabase(string $stagingDirectory, array $manifest, array &$steps): void
+    {
+        $file = $manifest['database']['file'] ?? null;
+        if (!is_string($file)) {
+            $this->step($steps, 'database', false, 'The manifest has no database file entry.');
+
+            return;
+        }
+
+        $source = $stagingDirectory . '/backup/' . $file;
+        try {
+            if ($this->database->driver() === 'sqlite') {
+                $detail = $this->applySqlite($source);
+            } else {
+                $detail = $this->applyPostgres($source);
+            }
+            $this->step($steps, 'database', true, $detail);
+        } catch (Throwable $exception) {
+            $this->step($steps, 'database', false, $exception->getMessage());
+        }
+    }
+
+    private function applySqlite(string $source): string
+    {
+        $target = substr($this->config->databaseDsn, strlen('sqlite:'));
+        if ($target === '' || $target === ':memory:') {
+            throw new \RuntimeException('Cannot restore onto an in-memory or empty SQLite DSN.');
+        }
+
+        $directory = dirname($target);
+        if (!is_dir($directory)) {
+            throw new \RuntimeException('The database directory does not exist: ' . $directory);
+        }
+
+        // Stale WAL sidecars would be replayed into the restored file.
+        foreach ([$target . '-wal', $target . '-shm', $target . '-journal'] as $sidecar) {
+            if (is_file($sidecar)) {
+                @unlink($sidecar);
+            }
+        }
+
+        $temporary = tempnam($directory, '.restore-');
+        if ($temporary === false || !@copy($source, $temporary)) {
+            if (is_string($temporary)) {
+                @unlink($temporary);
+            }
+            throw new \RuntimeException('Cannot stage the database file in ' . $directory);
+        }
+        @chmod($temporary, 0o600);
+        if (!@rename($temporary, $target)) {
+            @unlink($temporary);
+            throw new \RuntimeException('Cannot replace the database file: ' . $target);
+        }
+
+        return basename($target) . ' replaced from ' . basename($source) . '.';
+    }
+
+    private function applyPostgres(string $source): string
+    {
+        [$host, $port, $database] = DatabaseBackup::postgresTarget($this->config->databaseDsn);
+
+        $command = [
+            'pg_restore',
+            '--clean',
+            '--if-exists',
+            '--no-owner',
+            '--no-acl',
+            '--dbname=' . $database,
+        ];
+        if ($host !== '') {
+            $command[] = '--host=' . $host;
+        }
+        if ($port !== '') {
+            $command[] = '--port=' . $port;
+        }
+        if ($this->config->databaseUser !== null) {
+            $command[] = '--username=' . $this->config->databaseUser;
+        }
+        $command[] = $source;
+
+        $environment = getenv();
+        if (!is_array($environment)) {
+            $environment = [];
+        }
+        if ($this->config->databasePassword !== null) {
+            $environment['PGPASSWORD'] = $this->config->databasePassword;
+        }
+
+        $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $process = @proc_open($command, $descriptors, $pipes, null, $environment);
+        if (!is_resource($process)) {
+            throw new \RuntimeException('pg_restore is not available. Install the PostgreSQL client tools.');
+        }
+
+        fclose($pipes[0]);
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $status = proc_close($process);
+
+        if ($status !== 0) {
+            $detail = trim((string) $stderr);
+            if ($detail === '') {
+                $detail = trim((string) $stdout);
+            }
+            throw new \RuntimeException('pg_restore failed: ' . ($detail !== '' ? $detail : 'exit code ' . $status));
+        }
+
+        return 'pg_restore completed into ' . $database . '.';
+    }
+
+    /**
+     * @param array<string, mixed> $manifest
+     * @param list<array{name: string, ok: bool, detail: string}> $steps
+     */
+    private function applyBlobs(string $stagingDirectory, array $manifest, array &$steps): void
+    {
+        $blobs = $manifest['blobs'] ?? [];
+        if (!is_array($blobs) || ($blobs['driver'] ?? 'local') !== 'local') {
+            $this->step($steps, 'blobs', true, 'Remote object storage — copy the bucket separately per the export runbook.');
+
+            return;
+        }
+
+        $objects = is_array($blobs['objects'] ?? null) ? $blobs['objects'] : [];
+        $root = rtrim($this->config->blobDirectory, '/');
+        $copied = 0;
+
+        foreach ($objects as $object) {
+            $path = is_array($object) ? ($object['path'] ?? null) : null;
+            if (!is_string($path) || str_contains($path, '..')) {
+                continue;
+            }
+            $source = $stagingDirectory . '/blobs/' . $path;
+            $target = $root . '/' . $path;
+            $directory = dirname($target);
+            if (!is_dir($directory) && !mkdir($directory, 0o770, true) && !is_dir($directory)) {
+                $this->step($steps, 'blobs', false, 'Cannot create blob directory: ' . $directory);
+
+                return;
+            }
+            if (is_file($source) && @copy($source, $target)) {
+                $copied++;
+            }
+        }
+
+        $this->step($steps, 'blobs', true, $copied . ' blob(s) installed into ' . $root . '.');
+    }
+
+    /**
+     * @param list<array{name: string, ok: bool, detail: string}> $checks
+     * @param list<array{name: string, ok: bool, detail: string}> $steps
+     * @return array{ok: bool, checks: list<array{name: string, ok: bool, detail: string}>, steps: list<array{name: string, ok: bool, detail: string}>}
+     */
+    private function applyResult(bool $ok, array $checks, array $steps): array
+    {
+        return ['ok' => $ok, 'checks' => $checks, 'steps' => $steps];
     }
 }

@@ -260,9 +260,44 @@ the instance origin — against this instance's configuration. A failed check
 (for example a foreign key or origin) means the export does not belong on
 this instance; nothing is written to the live database or blob store.
 
+`--apply` turns the rehearsal into a real restore **onto an empty target**
+(one with no accounts):
+
+```shell
+php bin/restore.php --export=instance-….alohasocial-export \
+  --staging=/srv/restore-staging --apply
+# verify the instance, then:
+php bin/restore.php --confirm
+```
+
+Apply re-runs the full preflight, refuses populated targets and driver
+mismatches, installs the database (SQLite file swap or `pg_restore
+--clean` for PostgreSQL dumps), local blobs and — when the target has no
+key yet — the exported `secret.key`. It then writes `var/restore.pending`,
+which pauses the worker: no outbound federation or mail delivery and no
+heartbeat until `--confirm` releases it, so nothing federates from
+unverified restored state. Restoring over a populated instance is
+intentionally unsupported — there is no merge path.
+
 The key and the database belong together: the instance signing key in the
 database is sealed with the secret key. Restoring one without the other leaves
 the instance unable to use its federation identity.
+
+### Scheduled backups
+
+`bin/backup.php` is safe to run from cron while the instance serves traffic
+(SQLite uses `VACUUM INTO`, PostgreSQL shells out to `pg_dump`). A daily
+schedule keeping the newest 30 snapshots is a reasonable default:
+
+```cron
+# /etc/cron.d/aloha-backup — database snapshot + manifest, 30 kept
+17 3 * * * aloha cd /srv/aloha && php bin/backup.php --keep=30 >> /var/log/aloha-backup.log 2>&1
+```
+
+Pair it with a weekly `bin/export.php` to off-host storage for the encrypted
+full-instance bundle, and run `bin/backup.php --verify-manifest` on a copy
+before trusting a snapshot in an incident. `bin/update.php` also takes a
+verified backup before every migration.
 
 ### SQLite
 
@@ -295,6 +330,11 @@ Keep at least one off-host copy, encrypt backups at rest, and test a restore
 on a separate host. A backup that has never been restored is only a hope.
 
 ### Restore checklist
+
+For an export bundle, prefer the guarded path: `bin/restore.php --apply`
+onto an empty target installs database, blobs and key, then holds the
+worker until `--confirm`. The manual path below remains for bare database
+dumps:
 
 1. Stop the worker and PHP-FPM (or put the site in maintenance mode).
 2. Restore the database.

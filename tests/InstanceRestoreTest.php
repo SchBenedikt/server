@@ -9,10 +9,13 @@ declare(strict_types=1);
 
 namespace AlohaSocial\Server\Tests;
 
+use AlohaSocial\Server\Db\PdoFactory;
 use AlohaSocial\Server\Storage\StorageFactory;
 use AlohaSocial\Server\Support\DatabaseBackup;
 use AlohaSocial\Server\Support\InstanceManifest;
 use AlohaSocial\Server\Support\InstanceRestore;
+use AlohaSocial\Server\Support\RestoreHold;
+use AlohaSocial\Server\Support\SecretKeyFile;
 use AlohaSocial\Server\Tests\Support\TestServer;
 use PHPUnit\Framework\TestCase;
 
@@ -147,6 +150,111 @@ final class InstanceRestoreTest extends TestCase
 
         self::assertFalse($report['ok']);
         self::assertSame('manifest', $report['checks'][0]['name']);
+    }
+
+    public function testApplyRestoresIntoAnEmptyTarget(): void
+    {
+        $source = new TestServer();
+        $source->createAccount('alice');
+
+        $storage = StorageFactory::create($source->config);
+        $storage->blobStore->put('media/one.jpg', 'first-bytes');
+
+        $backup = new DatabaseBackup($source->runtime->database, $source->config);
+        $snapshot = $backup->create($source->config->varDirectory . '/backups');
+        $manifest = new InstanceManifest($backup, $source->config, $storage->blobStore)
+            ->create($snapshot['path'], $snapshot['metadata_path']);
+
+        $this->stage($source, $snapshot, $manifest['path']);
+        copy($source->config->secretKeyFile, $this->directory . '/staging/secret.key');
+
+        $target = new TestServer();
+        // A fresh target has no identity material yet; remove the key the
+        // boot may already have created so apply installs the exported one.
+        if (is_file($target->config->secretKeyFile)) {
+            unlink($target->config->secretKeyFile);
+        }
+
+        $report = (new InstanceRestore($target->runtime->database, $target->config))
+            ->apply($this->directory . '/staging');
+
+        self::assertTrue($report['ok'], json_encode($report['steps'] ?? $report['checks']));
+        self::assertContains('worker_hold', array_column($report['steps'], 'name'));
+        self::assertTrue(RestoreHold::active($target->config));
+
+        // Verify through a fresh connection: the target's runtime connection
+        // still points at the replaced SQLite inode.
+        $restored = PdoFactory::connect($target->config);
+        self::assertSame(1, (int) $restored->fetchValue('SELECT COUNT(*) FROM account'));
+        self::assertSame('alice', $restored->fetchValue('SELECT handle FROM account'));
+
+        $blob = rtrim($target->config->blobDirectory, '/') . '/media/one.jpg';
+        self::assertFileExists($blob);
+        self::assertSame('first-bytes', file_get_contents($blob));
+
+        self::assertSame(
+            SecretKeyFile::fingerprint($source->config),
+            SecretKeyFile::fingerprint($target->config),
+        );
+
+        $restore = new InstanceRestore($restored, $target->config);
+        self::assertTrue($restore->confirm());
+        self::assertFalse(RestoreHold::active($target->config));
+    }
+
+    public function testApplyRefusesAPopulatedTarget(): void
+    {
+        $source = new TestServer();
+        $source->createAccount('alice');
+
+        $storage = StorageFactory::create($source->config);
+        $backup = new DatabaseBackup($source->runtime->database, $source->config);
+        $snapshot = $backup->create($source->config->varDirectory . '/backups');
+        $manifest = new InstanceManifest($backup, $source->config, $storage->blobStore)
+            ->create($snapshot['path'], $snapshot['metadata_path']);
+
+        $this->stage($source, $snapshot, $manifest['path']);
+        copy($source->config->secretKeyFile, $this->directory . '/staging/secret.key');
+
+        $target = new TestServer();
+        $target->createAccount('bob');
+        // Same identity material, so preflight passes and the populated
+        // target is refused by the empty-target guard specifically.
+        copy($source->config->secretKeyFile, $target->config->secretKeyFile);
+
+        $report = (new InstanceRestore($target->runtime->database, $target->config))
+            ->apply($this->directory . '/staging');
+
+        self::assertFalse($report['ok']);
+        $empty = array_values(array_filter($report['steps'], static fn ($s) => $s['name'] === 'empty_target'))[0];
+        self::assertFalse($empty['ok']);
+        self::assertFalse(RestoreHold::active($target->config));
+        self::assertSame(1, (int) $target->runtime->database->fetchValue('SELECT COUNT(*) FROM account'));
+    }
+
+    public function testApplyRefusesWhenPreflightFails(): void
+    {
+        $source = new TestServer();
+        $source->createAccount('alice');
+
+        $storage = StorageFactory::create($source->config);
+        $backup = new DatabaseBackup($source->runtime->database, $source->config);
+        $snapshot = $backup->create($source->config->varDirectory . '/backups');
+        $manifest = new InstanceManifest($backup, $source->config, $storage->blobStore)
+            ->create($snapshot['path'], $snapshot['metadata_path']);
+
+        $this->stage($source, $snapshot, $manifest['path']);
+
+        $target = new TestServer();
+
+        $report = (new InstanceRestore($target->runtime->database, $target->config))
+            ->apply($this->directory . '/staging');
+
+        // No staged secret.key and no key on the fresh target: identity
+        // material cannot be proven, so apply must refuse before writing.
+        self::assertFalse($report['ok']);
+        self::assertSame([], $report['steps']);
+        self::assertFalse(RestoreHold::active($target->config));
     }
 
     /**
