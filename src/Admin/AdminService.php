@@ -17,6 +17,7 @@ use AlohaSocial\Core\Domain\Moderation\ModerationActionKind;
 use AlohaSocial\Core\Domain\Moderation\PdoModerationActionRepository;
 use AlohaSocial\Core\Domain\Post\PostNotFoundException;
 use AlohaSocial\Core\Platform\Clock\Clock;
+use AlohaSocial\Core\Platform\Clock\SystemClock;
 use AlohaSocial\Core\Platform\Db\Connection;
 use AlohaSocial\Core\Platform\Storage\S3CompatibleClient;
 use AlohaSocial\Core\Support\Time;
@@ -34,6 +35,8 @@ use AlohaSocial\Server\Community\InstancePages;
 use AlohaSocial\Server\Mail\MailException;
 use AlohaSocial\Server\Mail\Mailer;
 use AlohaSocial\Server\Migrations\CoreSchemaFingerprint;
+use AlohaSocial\Server\Migrations\MigrationRunner;
+use AlohaSocial\Server\Migrations\Migrations;
 use AlohaSocial\Server\Support\CoreVersion;
 use AlohaSocial\Server\Support\EnvFile;
 use AlohaSocial\Server\Support\LogRedactor;
@@ -42,7 +45,9 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use Throwable;
 
+use function array_diff;
 use function array_is_list;
+use function array_keys;
 use function array_map;
 use function array_slice;
 use function arsort;
@@ -2023,6 +2028,7 @@ final class AdminService
             : null;
 
         $adminsWithoutMfa = (int) ($stats['accounts']['admins_without_mfa'] ?? 0);
+        $schema = $this->schemaStatus();
 
         return [
             [
@@ -2030,6 +2036,12 @@ final class AdminService
                 'label' => 'Database',
                 'status' => $this->dbReachable() ? 'ok' : 'error',
                 'detail' => $this->databaseDriver(),
+            ],
+            [
+                'id' => 'schema',
+                'label' => 'Database schema',
+                'status' => $schema['status'],
+                'detail' => $schema['detail'],
             ],
             [
                 'id' => 'worker',
@@ -2098,6 +2110,36 @@ final class AdminService
                 'detail' => $this->config->debug ? 'Error details are exposed' : 'Disabled',
             ],
         ];
+    }
+
+    /**
+     * Pending-migration and fingerprint state for the health grid. Versions
+     * are operator-facing here (admin-only), unlike the public boot page.
+     *
+     * @return array{status: string, detail: string}
+     */
+    private function schemaStatus(): array
+    {
+        try {
+            $all = Migrations::all();
+            $applied = (new MigrationRunner($this->db, new SystemClock(), $all))->applied();
+            $pending = count(array_diff(
+                array_map(static fn ($migration): string => $migration->version(), $all),
+                array_keys($applied),
+            ));
+
+            CoreSchemaFingerprint::assertCurrent($this->db);
+        } catch (Throwable) {
+            return ['status' => 'error', 'detail' => 'Schema check failed — run php bin/update.php'];
+        }
+
+        if ($pending > 0) {
+            return ['status' => 'warn', 'detail' => $pending . ' pending — run php bin/update.php'];
+        }
+
+        $latest = $applied === [] ? 'none' : (string) max(array_keys($applied));
+
+        return ['status' => 'ok', 'detail' => count($applied) . ' applied · latest ' . $latest];
     }
 
     /**
