@@ -7,6 +7,7 @@ import { ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { getApi } from '../lib/api';
 import { showToast } from '../lib/state';
+import { t } from '../lib/i18n';
 import type { Collection } from '../lib/types';
 
 const props = defineProps<{
@@ -36,7 +37,7 @@ watch(() => props.open, async (open) => {
 	try {
 		collections.value = await getApi().collections();
 	} catch (caught) {
-		error.value = caught instanceof Error ? caught.message : 'The collections could not be loaded.';
+		error.value = caught instanceof Error ? caught.message : t('coll.loadFailed');
 	} finally {
 		loading.value = false;
 	}
@@ -50,11 +51,11 @@ async function add(collection: Collection): Promise<void> {
 	busy.value = collection.id;
 	try {
 		await getApi().addCollectionItem(collection.id, props.postId);
-		showToast(`Added to “${collection.title}”.`, 'success');
+		showToast(t('coll.added', { title: collection.title }), 'success');
 		emit('added', collection.id);
 		emit('close');
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The post could not be added.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('coll.addFailed'), 'error');
 	} finally {
 		busy.value = '';
 	}
@@ -73,7 +74,7 @@ async function create(): Promise<void> {
 		creating.value = false;
 		await add(collection);
 	} catch (caught) {
-		showToast(caught instanceof Error ? caught.message : 'The collection could not be created.', 'error');
+		showToast(caught instanceof Error ? caught.message : t('coll.createFailed'), 'error');
 	} finally {
 		saving.value = false;
 	}
@@ -94,15 +95,15 @@ function close(): void {
 			<article class="a-management-dialog a-collection-picker" role="dialog" aria-modal="true" aria-labelledby="a-collection-picker-title">
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">collections</p>
-						<h2 id="a-collection-picker-title">Add to collection</h2>
+						<p class="a-profile-edit__eyebrow">{{ t('coll.eyebrow') }}</p>
+						<h2 id="a-collection-picker-title">{{ t('coll.title') }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close dialog" @click="close">
+					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" @click="close">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
-				<p v-if="loading" class="a-muted">Loading collections…</p>
+				<p v-if="loading" class="a-muted">{{ t('coll.loading') }}</p>
 				<p v-else-if="error !== ''" class="a-feed__inline-error" role="alert">{{ error }}</p>
 
 				<ul v-else-if="collections.length > 0" class="a-collection-picker__list">
@@ -112,26 +113,26 @@ function close(): void {
 								<AppIcon :name="collection.is_public ? 'globe' : 'lock'" :size="14" />
 								<strong>{{ collection.title }}</strong>
 							</span>
-							<small>{{ collection.item_count }} {{ collection.item_count === 1 ? 'Post' : 'Posts' }}</small>
+							<small>{{ t(collection.item_count === 1 ? 'coll.post' : 'coll.posts', { count: collection.item_count }) }}</small>
 						</button>
 					</li>
 				</ul>
 
-				<p v-else-if="!creating" class="a-muted">You don't have any collections yet.</p>
+				<p v-else-if="!creating" class="a-muted">{{ t('coll.empty') }}</p>
 
 				<form v-if="creating" class="a-collection-picker__create" @submit.prevent="create">
-					<input v-model="title" maxlength="100" required placeholder="Name of the new collection" />
+					<input v-model="title" maxlength="100" required :placeholder="t('coll.namePlaceholder')" />
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || title.trim() === ''">
-						{{ saving ? 'Create …' : 'Create & add' }}
+						{{ saving ? t('coll.creating') : t('coll.create') }}
 					</button>
 				</form>
 
 				<footer class="a-collection-picker__footer">
 					<button v-if="!creating" type="button" class="a-btn a-btn--ghost a-btn--small" @click="creating = true">
 						<AppIcon name="plus" :size="15" />
-						New collection
+						{{ t('coll.new') }}
 					</button>
-					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="close">Close</button>
+					<button type="button" class="a-btn a-btn--ghost a-btn--small" @click="close">{{ t('common.close') }}</button>
 				</footer>
 			</article>
 		</div>

@@ -12,6 +12,7 @@ import {
 	type ReportCategory,
 } from '../lib/admin';
 import { showToast } from '../lib/state';
+import { t } from '../lib/i18n';
 
 const props = withDefaults(defineProps<{
 	open: boolean;
@@ -31,7 +32,7 @@ const error = ref('');
 const fieldErrors = ref<Record<string, string>>({});
 
 const targetName = computed(() => (
-	props.targetType === 'post' ? 'this post' : 'this profile'
+	props.targetType === 'post' ? t('report.introPost') : t('report.introProfile')
 ));
 const label = computed(() => props.targetLabel !== '' ? props.targetLabel : props.targetId);
 
@@ -57,11 +58,11 @@ async function submit(): Promise<void> {
 		return;
 	}
 	if (props.targetId.trim() === '') {
-		error.value = 'The report target is missing.';
+		error.value = t('report.targetMissing');
 		return;
 	}
 	if (comment.value.length > 1000) {
-		error.value = 'A comment may be at most 1000 characters long.';
+		error.value = t('report.commentTooLong');
 		return;
 	}
 
@@ -75,7 +76,7 @@ async function submit(): Promise<void> {
 			category: category.value,
 			comment: comment.value.trim() === '' ? undefined : comment.value.trim(),
 		});
-		showToast('Report received. The administration will review it.', 'success');
+		showToast(t('report.received'), 'success');
 		emit('submitted');
 		emit('close');
 	} catch (caught) {
@@ -83,7 +84,7 @@ async function submit(): Promise<void> {
 			error.value = caught.message;
 			fieldErrors.value = caught.fields;
 		} else {
-			error.value = caught instanceof Error ? caught.message : 'The report could not be sent.';
+			error.value = caught instanceof Error ? caught.message : t('report.sendFailed');
 		}
 	} finally {
 		saving.value = false;
@@ -109,21 +110,20 @@ async function submit(): Promise<void> {
 			>
 				<header class="a-profile-edit__head">
 					<div>
-						<p class="a-profile-edit__eyebrow">Moderation</p>
-						<h2 id="a-report-title">{{ targetType === 'post' ? 'Report post' : 'Report profile' }}</h2>
+						<p class="a-profile-edit__eyebrow">{{ t('report.eyebrow') }}</p>
+						<h2 id="a-report-title">{{ targetType === 'post' ? t('report.titlePost') : t('report.titleProfile') }}</h2>
 					</div>
-					<button type="button" class="a-icon-btn" aria-label="Close dialog" :disabled="saving" @click="close">
+					<button type="button" class="a-icon-btn" :aria-label="t('common.closeDialog')" :disabled="saving" @click="close">
 						<AppIcon name="x" :size="19" />
 					</button>
 				</header>
 
 				<p class="a-admin-report-dialog__intro">
-					You are reporting {{ targetName }} <strong>{{ label }}</strong>. The report is not visible to other
-					users.
+					{{ targetName }} <strong>{{ label }}</strong>{{ t('report.introSuffix') }}
 				</p>
 
 				<fieldset class="a-admin-report-dialog__categories">
-					<legend class="a-profile-edit__label">Reason</legend>
+					<legend class="a-profile-edit__label">{{ t('report.reason') }}</legend>
 					<label
 						v-for="entry in REPORT_CATEGORIES"
 						:key="entry.id"
@@ -132,34 +132,34 @@ async function submit(): Promise<void> {
 					>
 						<input v-model="category" type="radio" name="report-category" :value="entry.id">
 						<span>
-							<strong>{{ entry.label }}</strong>
-							<small>{{ entry.hint }}</small>
+							<strong>{{ t(`report.cat.${entry.id}.label`) }}</strong>
+							<small>{{ t(`report.cat.${entry.id}.hint`) }}</small>
 						</span>
 					</label>
 				</fieldset>
 				<p v-if="fieldErrors.category" class="a-form-error" role="alert">{{ fieldErrors.category }}</p>
 
-				<label class="a-profile-edit__label" for="a-report-comment">Additional details <span class="a-admin-muted">(optional)</span></label>
+				<label class="a-profile-edit__label" for="a-report-comment">{{ t('report.details') }} <span class="a-admin-muted">{{ t('report.optional') }}</span></label>
 				<textarea
 					id="a-report-comment"
 					v-model="comment"
 					class="a-admin-textarea"
 					maxlength="1000"
 					rows="4"
-					placeholder="What exactly is the problem? Links or context help with the review."
+					:placeholder="t('report.detailsHint')"
 				/>
-				<p class="a-profile-edit__hint">{{ comment.length }} / 1000 characters</p>
+				<p class="a-profile-edit__hint">{{ t('report.chars', { count: comment.length }) }}</p>
 				<p v-if="fieldErrors.comment" class="a-form-error" role="alert">{{ fieldErrors.comment }}</p>
 				<p v-if="error !== ''" class="a-form-error" role="alert">{{ error }}</p>
 
 				<footer class="a-profile-edit__actions">
 					<button type="button" class="a-btn a-btn--ghost a-btn--small" :disabled="saving" @click="close">
-						Cancel
+						{{ t('common.cancel') }}
 					</button>
 					<button type="submit" class="a-btn a-btn--primary a-btn--small" :disabled="saving || targetId === ''">
 						<AppIcon v-if="saving" name="refresh" :size="15" class="a-spin" />
 						<AppIcon v-else name="flag" :size="15" />
-						{{ saving ? 'Sending…' : 'Send report' }}
+						{{ saving ? t('report.sending') : t('report.send') }}
 					</button>
 				</footer>
 			</form>
